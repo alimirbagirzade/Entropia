@@ -4941,6 +4941,60 @@ sayısı DEĞİŞMEDİ (üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 32
 
 ---
 
+## ADIM 33 — RC §6.7 / P9-F1: frontend build reproducibility landed (PR pending)
+
+**Tip:** build tesisatı. **`backend/src` ve `frontend/src` DEĞİŞMEDİ**, migration yok,
+`ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`. Route path, react-query
+key, OCC token, Idempotency-Key, hook, SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**.
+**`package.json` / `package-lock.json` İÇERİĞİ bilerek değişmedi.** ADIM 32'nin "P9-F1 ve
+P11-1 bilerek dışarıda" notundaki **ilk yarısı** bu dalgada kapandı; **P11-1 hâlâ açık ve
+ELE ALINMADI** (repo ayarı, insan kararı).
+
+**Ne indi.** `frontend/Dockerfile`: `COPY package.json package-lock.json ./` (**glob'suz**)
++ `RUN npm ci`. `frontend/.dockerignore` (**YENİ**): `node_modules`, `dist`, `coverage`,
+`e2e`, `.env*`, `public/mockup_v18.html`. Üçüncüsü kozmetik değil — `COPY . .` install'dan
+**sonra** geldiği için host `node_modules`'ü image'inkinin üstüne biner ve `npm ci`'yi süs
+hâline getirir (ADIM 32'de yerel build'de yaşandı); dosya olmadan `npm ci` **uygulanabilir
+değildir**.
+
+**Önce ölçüldü.** İddia doğruydu ama **bugün etkisi yok**: `npm install` lockfile'ı bit-bit
+değiştirmiyor ve `npm ci` ile **bit-bit aynı bundle'ı** üretiyor (dört `dist/` dosyası da
+aynı sha256). **Bu bir davranış değişikliği DEĞİL, bir garanti değişikliğidir** — ve P9'un
+kendi kaydıyla (`P9_security.md` §F-1) tutarlıdır.
+
+**Isırdığının kanıtı (her negatif, kontrolüyle).** Lockfile yokken sevk edilen **exit 1**
+(`"/package-lock.json": not found`), eski glob **exit 0** (sessizce lockfile'sız devam) ·
+lockfile'da olmayan dep bildirildiğinde `npm ci` **exit 1** (`Missing: left-pad@1.3.0 from
+lock file`), `npm install` **exit 0** ve lockfile'ı **yeniden yazdı**. `.dockerignore` ile
+zehirli host ağacının beş parçası da dışarıda, dosyasız beşi de içeride.
+
+**Reuse anchor'ları (tam adlarıyla):** `frontend/.dockerignore` — yeni bir build girdisi
+eklerken **buraya bak**, çünkü `COPY . .` her şeyi alır; `frontend/Dockerfile` içinde
+`COPY package.json package-lock.json ./` (glob **ekleme** — fail-closed olması bunun
+sayesinde) ve `RUN npm ci` (`npm install`'a **geri dönme**). CSP tarafındaki
+`__API_ORIGIN__` sed bloğu ve `scripts/spa-security-headers-gate.sh::EXPECTED_HEADERS`
+ADIM 32'den **değişmeden** duruyor.
+
+**Ölçüldü.** `docker build --no-cache` **exit 0 / 84 MB** (2026-08-07 ölçümü de 84 MB) ·
+sevk edilen bundle host `npm ci` referansıyla **bit-bit aynı** · zehir image'a **girmedi** ·
+**ADIM 32'nin CSP kapısı** canlı konteynerde **10/10 PASS** ve yanlış origin'de **exit 1**.
+Ölçüm sırasında **rapor satırında olmayan** bir kusur bulundu: dev-only v18 mockup kopyası
+`public/` → `dist/` yoluyla **production image'ına** sızıp `/mockup_v18.html` adresinden
+sunulabiliyordu; `.dockerignore` bunu kapatır.
+
+**Dürüst sınır.** Frontend **ve** backend birim suite'leri **koşulmadı** (tek satır
+Python/TS kaynağı değişmedi; gerekçedir, ölçüm değil — otorite CI'dır) · bu bir
+**tedarik-zinciri savunması değildir** (lockfile'a sadakati zorlar, içeriğini denetlemez;
+`npm audit`'in 3 high-severity bulgusu **ele alınmadı**) · `npm ci` build'i **hızlandırmaz**
+(588,9 s'lik build'in 579,1 s'i) · `e2e/` istenen üç alt yol yerine **bütün olarak**
+dışlandı (bilinçli, gerekçesi PROJECT_HISTORY §ADIM 33'te) · ADIM 32'nin başlığı bu iki
+belgede hâlâ `(PR pending)` diyor ama o dalga **#655** olarak indi — `docs-history-guard.py`
+başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi**.
+**RC verdict'i BLOCKED kalır, blocker sayısı DEĞİŞMEDİ (üç).** Tam kayıt:
+`docs/PROJECT_HISTORY.md` §ADIM 33.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 **Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 a11y-hazırlık, ADIM 29 RC-kanıt,

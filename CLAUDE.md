@@ -179,17 +179,19 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `169cfaa`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `979094e`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 32 (RC §6.7 / P9-F2, güvenlik-başlık):** SPA origin'i artık CSP
-> veriyor — `default-src 'none'` tabanlı, **`unsafe-inline`/`unsafe-eval` YOK** (sevk edilen
-> `dist/`'ten ölçüldü); `connect-src`'nin API origin'i Vite'ın bundle'a gömdüğü aynı arg'dan
-> **build zamanında** türetilir (yer tutucu kalırsa build **durur**).
-> `spa-security-headers-gate.sh` **canlı yanıtı** assert eder (config'i değil), `/` **ve**
-> hash'li bundle'da; `install-acceptance.yml` `fresh-install`'a **negatifiyle** bağlandı.
-> e2e 39/0, kimlikli 9 route'ta **0 CSP ihlali**. **Ürün kodu değişmedi. Blocker sayısı
-> DEĞİŞMEDİ (üç); RC verdict'i BLOCKED kalır.** Tam kayıt: `PROJECT_HISTORY.md` §ADIM 32.
-> Öncesinde ADIM 31 (RC blocker 3 — fail-closed bildirim yolu; blocker 4→3),
+> **Son dalga — ADIM 33 (RC §6.7 / P9-F1, build tesisatı):** `frontend/Dockerfile` artık
+> `npm ci` + **glob'suz** `COPY package.json package-lock.json ./` — lockfile yoksa build
+> **durur**. **YENİ `frontend/.dockerignore`**: `COPY . .` install'dan SONRA geldiği için
+> host `node_modules`'ü image'inkini eziyordu; o dosya olmadan `npm ci` uygulanabilir değil.
+> Fail-closed olduğu **iki negatifte, her biri kontrolüyle** ölçüldü; image **84 MB**, bundle
+> host `npm ci` referansıyla bit-bit aynı, ADIM 32'nin CSP kapısı **10/10 PASS**. Bugün
+> `npm install` da aynı bundle'ı veriyor → bu bir davranış değil, **garanti** değişikliği.
+> **Ürün kodu ve lockfile İÇERİĞİ değişmedi. Blocker sayısı DEĞİŞMEDİ (üç); RC verdict'i
+> BLOCKED kalır.** Tam kayıt: `PROJECT_HISTORY.md` §ADIM 33.
+> Öncesinde ADIM 32 (P9-F2 — SPA origin'inde CSP, #655),
+> ADIM 31 (RC blocker 3 — fail-closed bildirim yolu; blocker 4→3),
 > ADIM 30 (RC blocker 2, harness — `flows` 60/0/2, ama **CI kapısı değil**),
 > ADIM 29 (RC verification, #632–#636; P9-B1 düzeltmesi #637), ADIM 29 (A-08 kayıt
 > uzlaştırması, #631), ADIM 28 (#628/#630), ADIM 27

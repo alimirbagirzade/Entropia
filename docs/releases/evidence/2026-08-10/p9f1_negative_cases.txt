@@ -1,0 +1,27 @@
+P9-F1 / ADIM 33 — the two negative cases, each against a matched control (2026-08-10)
+docker 29.4.0. Context = frontend/ at 979094e plus the two files this slice adds.
+
+########## NEGATIVE 1: lockfile ABSENT ##########
+--- FIXED Dockerfile (COPY package.json package-lock.json ./) => build STOPS ---
+#9 ERROR: failed to calculate checksum of ref pj3yz2c34568fwwbvi8s1xu4s::w1aqk315kgktagct4g0riuqm6: "/package-lock.json": not found
+ERROR: failed to build: failed to solve: failed to compute cache key: failed to calculate checksum of ref pj3yz2c34568fwwbvi8s1xu4s::w1aqk315kgktagct4g0riuqm6: "/package-lock.json": not found
+docker build exit = 1
+
+--- CONTROL, the OLD glob (COPY package.json package-lock.json* ./) => build CONTINUES ---
+#7 [3/4] COPY package.json package-lock.json* ./
+#8 [4/4] RUN ls -1 /app && test ! -f /app/package-lock.json && echo "CONTROL: glob matched nothing, build CONTINUED with no lockfile"
+#8 0.325 CONTROL: glob matched nothing, build CONTINUED with no lockfile
+docker build exit = 0   <-- the glob matched nothing and said nothing
+
+########## NEGATIVE 2: package.json declares a dep the lockfile lacks ##########
+--- FIXED Dockerfile (RUN npm ci) => build STOPS ---
+#10 2.803 npm error code EUSAGE
+#10 2.813 npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+#10 2.813 npm error Missing: left-pad@1.3.0 from lock file
+#10 ERROR: process "/bin/sh -c npm ci" did not complete successfully: exit code: 1
+docker build exit = 1
+
+--- CONTROL, the OLD RUN npm install => build CONTINUES, lockfile silently rewritten ---
+#8 [4/4] RUN npm install --no-audit --no-fund > /tmp/i.log 2>&1; echo "npm install exit=$?";     grep -q '"node_modules/left-pad"' package-lock.json       && echo "CONTROL: npm install SUCCEEDED and rewrote the lockfile to add left-pad"
+#8 14.70 npm install exit=0
+docker build exit = 0

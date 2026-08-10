@@ -1,0 +1,66 @@
+P9-F1 / ADIM 33 — the shipped image still builds, and ADIM 32's CSP gate still bites (2026-08-10)
+
+########## docker build --no-cache -t entropia-web:p9f1 . => exit 0 ##########
+The poisoned host tree from p9f1_dockerignore.txt was STILL PRESENT in this context, so the
+exclusion is proven by the real build and not only by the probe image.
+image size: 84MB  (RC 2026-08-07 baseline for entropia-web:ci was also 84 MB)
+
+--- served tree: no dist/STALE.txt, no public/mockup_v18.html ---
+/usr/share/nginx/html/50x.html
+/usr/share/nginx/html/assets/index-3Ltp7ple.js
+/usr/share/nginx/html/assets/index-XKVdEXBv.css
+/usr/share/nginx/html/favicon.svg
+/usr/share/nginx/html/index.html
+
+--- sha256 of the served bundle (50x.html comes from the nginx base image, not from dist) ---
+876766b4e80133fd490603e073d3567425b88794828a9292104244c9e40875ed  ./50x.html
+2ddbed007aa8adedf64308d96d004264354cebc07e7cee3e9f3a5adca5bbd943  ./assets/index-3Ltp7ple.js
+83f35ba35f9837af977e1d22b9cde50917da6831786dd2e1ce2b28f47dd6149c  ./assets/index-XKVdEXBv.css
+2f521d38a3fa963d037a20edd1d3b53a5a1015c0cf7893a651cb3a5ac1e77a3e  ./favicon.svg
+3e91d96a6528b6c1f1f7dce7eae0e724334c89c769f9ad7d2861cefc778c8a8b  ./index.html
+
+--- reference: same files built on the host with npm ci (copy B) ---
+2ddbed007aa8adedf64308d96d004264354cebc07e7cee3e9f3a5adca5bbd943  ./assets/index-3Ltp7ple.js
+83f35ba35f9837af977e1d22b9cde50917da6831786dd2e1ce2b28f47dd6149c  ./assets/index-XKVdEXBv.css
+2f521d38a3fa963d037a20edd1d3b53a5a1015c0cf7893a651cb3a5ac1e77a3e  ./favicon.svg
+3e91d96a6528b6c1f1f7dce7eae0e724334c89c769f9ad7d2861cefc778c8a8b  ./index.html
+=> js / css / favicon / index.html match byte for byte.
+
+########## ADIM 32 CSP gate, live container from THIS image ##########
+docker run --read-only --tmpfs /tmp --security-opt no-new-privileges:true --cap-drop ALL -p 8080:8080
+
+--- positive: exit 0 ---
+== SPA origin security headers (http://localhost:8080) ==
+   expected connect-src API origin: http://localhost:8000
+  PASS  /: content-security-policy
+  PASS  /: x-content-type-options
+  PASS  /: x-frame-options
+  PASS  /: referrer-policy
+  PASS  /: permissions-policy
+  PASS  /assets/index-3Ltp7ple.js: content-security-policy
+  PASS  /assets/index-3Ltp7ple.js: x-content-type-options
+  PASS  /assets/index-3Ltp7ple.js: x-frame-options
+  PASS  /assets/index-3Ltp7ple.js: referrer-policy
+  PASS  /assets/index-3Ltp7ple.js: permissions-policy
+
+SPA SECURITY HEADERS OK — CSP and the four companion headers ride both the shell and the bundle.
+
+--- negative (wrong connect-src origin asserted): exit 1, red on the CSP comparison ---
+== SPA origin security headers (http://localhost:8080) ==
+   expected connect-src API origin: http://not-the-api.invalid
+  FAIL  /: content-security-policy
+        expected: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://not-the-api.invalid; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+        actual:   default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://localhost:8000; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+  PASS  /: x-content-type-options
+  PASS  /: x-frame-options
+  PASS  /: referrer-policy
+  PASS  /: permissions-policy
+  FAIL  /assets/index-3Ltp7ple.js: content-security-policy
+        expected: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://not-the-api.invalid; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+        actual:   default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' http://localhost:8000; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+  PASS  /assets/index-3Ltp7ple.js: x-content-type-options
+  PASS  /assets/index-3Ltp7ple.js: x-frame-options
+  PASS  /assets/index-3Ltp7ple.js: referrer-policy
+  PASS  /assets/index-3Ltp7ple.js: permissions-policy
+
+SPA SECURITY HEADERS FAILED — fix the FAIL lines above.

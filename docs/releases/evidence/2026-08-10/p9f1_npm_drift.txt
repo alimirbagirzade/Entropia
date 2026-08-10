@@ -1,0 +1,15 @@
+P9-F1 / ADIM 33 — npm ci breaks on drift, npm install reconciles it silently (2026-08-10)
+Drift injected: dependencies['left-pad']='^1.3.0' added to package.json; lockfile untouched.
+
+===== npm ci  =>  exit 1 =====
+npm error code EUSAGE
+npm error
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+npm error
+npm error Missing: left-pad@1.3.0 from lock file
+npm error
+
+===== npm install  =>  exit 0, lockfile REWRITTEN =====
+lockfile sha BEFORE: a8979c984e09bdbd76402e491087f3de1436b29d2dcf0546c8dace23bebfdd70
+lockfile sha AFTER : 3d8c1b664564f2a99e226cb7d6434ce83b79d1c8644f7e4ebe15f14ae92ce919
+left-pad entries added to package-lock.json by npm install: 1

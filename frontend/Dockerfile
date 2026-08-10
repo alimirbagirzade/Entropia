@@ -6,8 +6,21 @@ WORKDIR /app
 ARG VITE_API_BASE_URL=http://localhost:8000/api/v1
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-COPY package.json package-lock.json* ./
-RUN npm install
+# No glob on package-lock.json. `package-lock.json*` matched zero files without
+# complaint, so a context missing its lockfile still built — npm then resolved
+# the `^` ranges in package.json freely, and the image's dependency tree became
+# whatever had been published that morning. Naming the file exactly turns the
+# missing-lockfile case into a hard COPY failure instead of silent re-resolution.
+COPY package.json package-lock.json ./
+# `npm ci`, not `npm install`: ci installs the lockfile as written and exits
+# non-zero when package.json and the lockfile disagree, where install quietly
+# reconciles them and rewrites the lock. Measured on this tree today the two
+# produce byte-identical bundles — the point is that only one of them is
+# guaranteed to keep doing so.
+RUN npm ci
+# COPY . . lands AFTER the install and can overwrite /app/node_modules with a
+# host copy. frontend/.dockerignore is what prevents that; without it the
+# `npm ci` above is cosmetic.
 COPY . .
 RUN npm run build
 

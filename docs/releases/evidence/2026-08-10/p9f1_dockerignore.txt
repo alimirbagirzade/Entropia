@@ -1,0 +1,24 @@
+P9-F1 / ADIM 33 — frontend/.dockerignore, with and without (2026-08-10)
+
+A developer's tree was simulated inside the build context: node_modules/POISONED/marker.txt,
+dist/STALE.txt, e2e/node_modules, .env (pointing VITE_API_BASE_URL at http://evil.example/api)
+and public/mockup_v18.html. The probe image runs COPY . . and reports what arrived.
+
+===== WITH frontend/.dockerignore (shipped) =====
+#8 [4/4] RUN set -eu;     for p in node_modules dist e2e .env public/mockup_v18.html; do       if [ -e "$p" ]; then echo "LEAKED: $p"; else echo "excluded OK: $p"; fi;     done
+#8 0.328 excluded OK: node_modules
+#8 0.328 excluded OK: dist
+#8 0.328 excluded OK: e2e
+#8 0.329 excluded OK: .env
+#8 0.329 excluded OK: public/mockup_v18.html
+
+===== CONTROL: .dockerignore removed =====
+#8 [4/4] RUN set -eu;     for p in node_modules dist e2e .env public/mockup_v18.html; do       if [ -e "$p" ]; then echo "LEAKED: $p"; else echo "excluded OK: $p"; fi;     done
+#8 0.211 LEAKED: node_modules
+#8 0.211 LEAKED: dist
+#8 0.211 LEAKED: e2e
+#8 0.211 LEAKED: .env
+#8 0.211 LEAKED: public/mockup_v18.html
+
+This is why the file is load-bearing rather than hygiene: COPY . . runs AFTER npm ci, so a
+host node_modules lands on top of the lockfile-pinned tree and npm ci becomes decoration.

@@ -4794,7 +4794,7 @@ Doğrulama: gate exit 0, `npm ci` exit 0, lint/typecheck/build exit 0, vitest **
 
 ---
 
-## ADIM 30 — RC Blocker 2 kabul akışı harness kapsamı landed (PR pending)
+## ADIM 30 — RC Blocker 2 kabul akışı harness kapsamı landed (PR #647)
 
 **Tip:** harness/test. **Ürün kodu değişmedi**, migration yok, lockfile değişmedi,
 `ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
@@ -4836,6 +4836,61 @@ sunucu katmanındaki regresyon sessizce geri gelebilir. Bunu kapıya bağlamak (
 SKIP açık iştir: pozitif ESP activate→deprecate (test vektörü gerekiyor) ve Tool Gateway
 çağrı günlüğü (taze yığında agent task yok). **RC verdict'i BLOCKED kalır; §6.2 "kısmen
 kapandı" der.** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 30.
+
+---
+
+## ADIM 31 — RC Blocker 3: fail-closed bildirim yolu landed (PR #649)
+
+**Tip:** ops/CI. **`backend/src` ve `frontend/` DEĞİŞMEDİ**, migration yok, lockfile
+değişmedi, `ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`.
+
+**Ne indi.** ADIM 25/26 alarm kuralları **doğru**ydu ama **kimseye ulaşmıyordu** — 11 kural,
+7'si `severity: page`, sıfır receiver. RC raporu §6.3 bunu blocker sayıyordu. Kapanış **(A)**
+seçildi (sevk), **(B) imzalı sapma değil**: eksik olan bir on-call *organizasyonu* değil,
+bildirim *yolunun kendisiydi*.
+
+**Reuse anchor'ları (tam sembol/dosya adlarıyla):**
+
+| Sembol / dosya | Ne yapar |
+|---|---|
+| `ops/alertmanager/alertmanager.yml` | routing ağacı — `page` → `entropia-page` (repeat 1h), `ticket` → `entropia-ticket` (repeat 12h), **kök receiver GERÇEK** (eşleşmeyen alarm page eder), 3 aşağı-yönlü inhibit |
+| `ops/alertmanager/entrypoint.sh::require_url` | **FAIL-CLOSED seam.** `ALERTMANAGER_NOTIFY_URL` unset/boş/http(s) değilse **exit 78**, Alertmanager başlamaz |
+| `ops/prometheus/entrypoint.sh` | `ENTROPIA_METRICS_TOKEN` zorunlu + config'i **`cp -R` ile birebir** stage eder (şablonlama provenance hash'ini kırardı) |
+| `ops/prometheus/prometheus.yml` → `alerting:` | ateşleyen alarmı Alertmanager'a verir |
+| `docker-compose.yml` `prometheus` / `alertmanager` | **`profiles: ["observability"]`** — düz `docker compose up` etkilenmez |
+| `scripts/alert-notification-gate.sh` | CI: `amtool check-config` + **`amtool config routes test`** (page/ticket/etiketsiz üç çözümleme) |
+| `scripts/alert-notification-proof.sh` | 4 faz uçtan uca; **CI kapısı DEĞİL** |
+| `backend/tests/contract/test_alert_notification_contract.py` | 21 yapısal test |
+| `ops/alertmanager/notification_catcher.py` + `docker-compose.proof.yml` | test receiver, yalnız proof overlay'inde |
+| `docs/runbooks/alert-notification.md` | yol + silence + **§5 beş açık artık** |
+
+**Ölçüm (2026-08-10):** promtool **exit 0** (11 kural) · amtool gate **exit 0** · contract
+**79 passed** (21 yeni + 58 mevcut) · backend tam suite **3987 passed / 1 xfailed / 0 failed**,
+coverage **%93.53** · ruff/format/mypy/repository-facts **exit 0** · proof **exit 0** — faz 1 boş hedefte **exit 78**, faz 3 sha256 üçlü eşleşme
+(`f1c1949c…`) + `--config.file` + 11=11 kural, faz 4 gerçek `EntropiaApiDown` alıcıya
+**`entropia-page` / `severity=page`** olarak ulaştı. Kanıt:
+`docs/releases/evidence/2026-08-10/P10B_alert_notification_path.md`.
+
+**Üç ölçülmüş tuzak (tekrarlama):**
+1. **`GET /api/v1/status/config` byte-diff'i ASLA geçmez** — Prometheus config'i
+   *marshalled* döndürür (`scrape_protocols`, `runtime.gogc` enjekte, yorumlar silinir).
+   İlk provenance kapısı bu yüzden kırmızı verdi. Zincir: sha256 + `--config.file` + parse.
+2. **`amtool check-config`, notifier config'i OLMAYAN bir receiver'a SUCCESS döner** (v0.28.1'de
+   ölçüldü). "Placeholder receiver" tam olarak bu şekildir — contract testi onu reddeder.
+3. **`docker compose logs | grep -q` `pipefail` altında tuzaktır** — grep ilk eşleşmede çıkar,
+   docker SIGPIPE alır, pipeline başarısız görünür. Gerçekleşmiş bir teslimat "gelmedi" diye
+   okundu (exit 255). Log'u **önce dosyaya yaz**, sonra grep'le.
+
+**Neden `${VAR:?...}` kullanılmadı:** compose'un zorunlu-değişken işareti **tüm dosyanın**
+interpolation'ını iptal eder → profil kapalı olsa bile repo'daki her `docker compose up`
+kırılırdı. Ret konteynerin **içinde** yaşıyor.
+
+**Deferred / dürüst sınır:** §6.3'ün **BİRİNCİ** doğrulanmamış noktası **KAPANMADI** —
+kurallar gerçek production serilerine karşı hiç değerlendirilmedi (yalnız sentetik seri +
+tek yapısal `up == 0`). Bu repo içinde kapatılamaz; **imzalı sapma DEĞİLDİR**. Ayrıca
+**delivery proof'u bir CI kapısı değil** (P10-B3), **monitörü izleyen yok** (P10-B4),
+**on-call rotasyonu/ack yok** (P10-B5). **RC verdict'i BLOCKED kalır**; blocker sayısı
+**4 → 3** (1, 2, 4 açık). Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 31.
 
 ---
 

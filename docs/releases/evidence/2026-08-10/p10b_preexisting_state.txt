@@ -1,0 +1,50 @@
+ADIM 31 — pre-existing state of the notification path, measured on origin/main (20108af)
+Purpose: the RC readiness report §6.3 asserts these facts. They are RE-MEASURED here
+rather than copied, per the slice's instruction not to trust the report's numbers.
+Date: 2026-08-10
+
+=== 1. Does ops/prometheus/prometheus.yml carry an 'alerting:' block on main? ===
+$ git show origin/main:ops/prometheus/prometheus.yml | grep -n '^alerting:'
+(no match — NO alerting block)
+
+=== 2. Does docker-compose.yml declare a Prometheus or Alertmanager service on main? ===
+$ git show origin/main:docker-compose.yml | grep -nE '^  (prometheus|alertmanager):'
+(no match — NEITHER service exists)
+
+=== 3. Repo-wide search for a receiver / routing tree / silence config / on-call integration ===
+$ git grep -lniE 'alertmanager|receiver|on-call|pagerduty|opsgenie' origin/main -- ops/ scripts/ .github/ backend/src/
+origin/main:ops/alerts/entropia.rules.test.yml
+origin/main:ops/alerts/entropia.rules.yml
+origin/main:ops/prometheus/prometheus.yml
+
+READ THE HITS, NOT THE FILE LIST. Three files match, and a bare list looks like it
+contradicts "no notification configuration exists". Every hit is a COMMENT saying so:
+
+origin/main:ops/alerts/entropia.rules.test.yml:252:  #    alert's identity and its grouping in any receiver.
+origin/main:ops/alerts/entropia.rules.yml:62:          escalation: "Page the on-call operator immediately; this alert means the product is unavailable."
+origin/main:ops/prometheus/prometheus.yml:15:# deliberately NO `alerting:` block: the repo ships no Alertmanager, so
+origin/main:ops/prometheus/prometheus.yml:17:# receiver. Nothing here pages anyone. Wiring notification routing is a separate,
+origin/main:ops/prometheus/prometheus.yml:18:# larger decision (retention, storage, HA, on-call integration) and is out of
+
+Not one of them is configuration. There is no receiver, no route, no silence, no
+on-call integration on origin/main — only prose recording that there is none.
+
+=== 4. The promtool gate: which CI job, how many rules, what exit code? ===
+$ git show origin/main:.github/workflows/ci.yml | grep -n -A2 'alerts:'
+170:  alerts:
+171-    name: Alert rules — promtool
+172-    runs-on: ubuntu-latest
+173-    steps:
+
+$ git show origin/main:ops/alerts/entropia.rules.yml | grep -c '^      - alert:'
+11
+   (rules total)
+
+$ severity breakdown
+   7 severity: page
+   4 severity: ticket
+
+=== 5. So: what did 'severity' reach on main? ===
+Nothing. There is no alerting block (1), no Alertmanager process (2), no receiver
+anywhere in the tree (3). The promtool job (4) proves 11 rules are CORRECT — 7 of
+them severity: page — and never asks who receives them.

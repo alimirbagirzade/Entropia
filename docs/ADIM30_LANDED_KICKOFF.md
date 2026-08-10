@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 > Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
 > (üretilmiş, CI'da `--check` ile kapılı). Bu belge **bir sonraki slice'ın tohumudur**;
 > içindeki sayılar 2026-08-10 ADIM 30 koşusunun değerleridir.

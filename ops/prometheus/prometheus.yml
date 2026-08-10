@@ -1,4 +1,4 @@
-# Entropia — Prometheus scrape configuration (ADIM 26).
+# Entropia — Prometheus scrape and alerting configuration (ADIM 26, ADIM 31).
 #
 # WHY THIS FILE EXISTS AT ALL. ops/alerts/entropia.rules.yml shipped in ADIM 25
 # with four rules keyed on `job="entropia-api"`. That name was asserted by a
@@ -10,18 +10,27 @@
 # test_alert_rules_contract.py::test_every_job_matcher_names_a_declared_scrape_job
 # fails the build if a rule ever names a job this config does not declare.
 #
-# WHAT IT IS NOT. This is a validation-anchored scrape config, not a monitoring
-# stack. No Prometheus service is added to docker-compose.yml and there is
-# deliberately NO `alerting:` block: the repo ships no Alertmanager, so
-# `severity: page` and `severity: ticket` are labels with no configured
-# receiver. Nothing here pages anyone. Wiring notification routing is a separate,
-# larger decision (retention, storage, HA, on-call integration) and is out of
-# this slice's scope — see docs/runbooks/METRIC_ALERT_MATRIX.md §4.
+# WHAT CHANGED IN ADIM 31. Between ADIM 26 and ADIM 31 this file carried, in this
+# spot, a paragraph explaining that it deliberately had NO `alerting:` block
+# because the repo shipped no Alertmanager — so `severity: page` and
+# `severity: ticket` were labels with no configured receiver and nothing here
+# paged anyone. That gap was recorded as a release blocker
+# (docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md §6.3: eleven validated
+# rules, seven of them paging, none of them reaching a human) and ADIM 31 closed
+# it. The `alerting:` block below is that closure. Everything above it — the
+# scrape job name, the relative paths, the credential — is unchanged.
 #
-# HOW AN OPERATOR USES IT. Mount the whole `ops/` tree into a Prometheus you run
-# yourself and point it at ops/prometheus/prometheus.yml. Both `rule_files` and
-# `credentials_file` below are RELATIVE, and Prometheus resolves relative paths
-# against the config file's own directory, so the tree relocates as one unit.
+# HOW AN OPERATOR USES IT. Two ways, and they are the same config:
+#   * `docker compose --profile observability up -d prometheus alertmanager`
+#     runs the shipped pair. The Prometheus service mounts this whole `ops/` tree
+#     and ops/prometheus/entrypoint.sh stages a VERBATIM copy of it — which is
+#     what lets scripts/alert-notification-proof.sh read the loaded config back
+#     out of GET /api/v1/status/config and diff it against this file.
+#   * Or mount `ops/` into a Prometheus you run yourself and point it here. Both
+#     `rule_files` and `credentials_file` below are RELATIVE, and Prometheus
+#     resolves relative paths against the config file's own directory, so the
+#     tree relocates as one unit.
+# See docs/runbooks/alert-notification.md for the delivery path end to end.
 
 global:
   # Matches SCHEDULER_TICK_SECONDS (config/settings.py). Every threshold in the
@@ -35,6 +44,28 @@ global:
 
 rule_files:
   - ../alerts/entropia.rules.yml
+
+# THE HALF THAT WAS MISSING UNTIL ADIM 31. Rule evaluation without this block
+# ends at "the alert is firing" — a state visible only to whoever is already
+# looking at Prometheus's own UI. This is what carries a fired alert out of the
+# evaluator and into ops/alertmanager/alertmanager.yml, which routes it by
+# `severity` to a destination that ops/alertmanager/entrypoint.sh refuses to
+# fabricate.
+alerting:
+  alertmanagers:
+    # The compose service name and container port (docker-compose.yml
+    # `alertmanager`, profile `observability`). A static target and not service
+    # discovery: one Alertmanager, resolved by the compose network's DNS.
+    #
+    # NOTE ON THE FAILURE MODE THIS DOES NOT COVER. If Alertmanager is
+    # unreachable, Prometheus retries and increments
+    # `prometheus_notifications_errors_total` — on its OWN /metrics, which
+    # nothing in this deployment scrapes. A notification path cannot alert on its
+    # own absence from inside itself; that is a monitoring-the-monitor problem
+    # and it stays open, recorded in docs/runbooks/alert-notification.md §5
+    # rather than papered over here.
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   # The job name four alert rules match on. Changing it here without changing

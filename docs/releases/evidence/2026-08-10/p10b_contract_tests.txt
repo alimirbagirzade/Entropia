@@ -1,0 +1,44 @@
+$ cd backend && uv run pytest tests/contract/test_alert_notification_contract.py tests/contract/test_alert_rules_contract.py -v --no-cov
+Date: 2026-08-10
+
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/adim-21-post-validation-tasks-acaafc/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 79 items
+
+tests/contract/test_alert_notification_contract.py ..................... [ 26%]
+                                                                         [ 26%]
+tests/contract/test_alert_rules_contract.py ............................ [ 62%]
+..............................                                           [100%]
+
+============================== 79 passed in 1.99s ==============================
+
+BREAKDOWN
+  test_alert_notification_contract.py  ... 21 passed  (NEW in ADIM 31)
+  test_alert_rules_contract.py         ... 58 passed  (ADIM 25/26, UNCHANGED — no regression
+                                                       from the new `alerting:` block)
+  total                                     79 passed, exit 0
+
+WHAT THE 21 NEW TESTS PIN (see the file's own docstrings for the full reasoning):
+  routing      every routed receiver declared · no receiver nothing routes to ·
+               page and ticket must NOT collapse into one receiver ·
+               every severity the rules emit has a route · root receiver is REAL
+               (an unmatched alert pages, it does not vanish) · send_resolved on every webhook
+  black hole   no receiver may have zero notifier configs — `amtool check-config` returns
+               SUCCESS on that shape (MEASURED on v0.28.1), so amtool cannot catch it
+  secrets      no inlined webhook `url`; every endpoint via `url_file`
+  inhibition   every inhibit rule names alerts that exist ·
+               a ticket-severity alert may NEVER suppress a page
+  fail-closed  compose passes ALERTMANAGER_NOTIFY_URL with an EMPTY fallback (any default
+               rejected) · the service runs the tracked launcher, not the image entrypoint ·
+               the launcher really refuses (require_url + exit 78 + no `:-` default) ·
+               the config reads exactly the files the launcher writes ·
+               both services are profiled off so a plain `docker compose up` is unchanged
+  provenance   prometheus.yml has an `alerting:` block whose target is a real compose service ·
+               the prometheus service mounts the WHOLE ops/ tree ·
+               the launcher stages it with `cp -R` VERBATIM (templating would break the
+               hash comparison in scripts/alert-notification-proof.sh) and requires a
+               scrape credential

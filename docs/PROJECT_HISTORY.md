@@ -5297,3 +5297,109 @@ tutar; yeni bir koşu kuyruğa girdiğinde önceki pending koşuyu **iptal eder*
 
 Yani **iki merge edilmiş commit** tam CI kanıtı olmadan main'e indi. Kusur
 **kaydedildi, onarılmadı** — düzeltmesi bir CI politika kararıdır.
+
+---
+
+## ADIM 30 — RC Blocker 2: kabul akışı harness kapsamı (PR pending)
+
+**Dalganın tipi:** harness/test. **Ürün kodu değişmedi** — `backend/src` ve `frontend/src`
+bu dalgada hiç düzenlenmedi; migration yok, lockfile değişmedi, `ENGINE_VERSION` sabit.
+
+### Ne kapatıldı
+
+`docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` §6.2'nin **birinci ve asıl**
+blocker'ı: harness kapsam boşluğu. `scripts/acceptance.sh` bir konteyner sağlık kapısıydı,
+`scripts/e2e-acceptance.sh` bir auth/kimlik bootstrap harness'ıydı; beş kabul akışının
+hiçbirini uygulamıyorlardı.
+
+**Yeni harness İCAT EDİLMEDİ.** Mevcut script'e beşinci alt-komut (`flows`) eklendi, gövdesi
+`scripts/lib/acceptance-flows.sh`'e kondu; izolasyon sözleşmesi, hermetik env dosyası,
+`dc`/`req` helper'ları ve PASS/FAIL sayacı **aynen** yeniden kullanıldı. Proje
+`entropia-e2e-flows`, port bloğu 18030/18110/15462/16409/19030/19031 (a11y yığınının
+182xx bloğundan ayrı), tohum `SEED_E2E_GOLDEN` + `SEED_ESP_TA` + `SEED_RATIONALE`.
+
+### İki katman — biri diğerinin yerine geçmez
+
+* **Tarayıcı katmanı:** hâlihazırda var olan yolculuklar **yeniden yazılmadı, koşuldu** —
+  `05` + `18` (akış a), `20-library` (akış b), `06` (akış e'nin delete→purge ayağı),
+  `E2E_BASE_URL` + `E2E_API_BASE_URL` izole yığına yönlendirilerek.
+* **Sunucu katmanı:** hiçbir katmanın kapsamadığı her şey — ESP yaşam döngüsü + paket export
+  zarfı, Trading Signal / Agent tool yüzeyleri, akış e'nin **restore** ayağı (spec 06 onu
+  atlıyor), ve bir tarayıcının kanıtlayamayacağı dört değişmez.
+
+### Dört tavizsiz kural — varsayılmadı, iddia edildi
+
+1. **TS/TL Package değildir** — Library kataloğunda yok; paket kökü `GET /trading-signals/<pkg>` → **404**.
+2. **Run ≠ Result** — hazır olmayan kompozisyonda run **409**, Results düzlemi **0 → 0**.
+3. **UI gizleme authorization değildir** — **on** Admin/owner yüzeyi plain USER token'ı ile
+   yeniden saldırıya uğradı, hepsi **403** (koşu log'unda sayıldı, elle değil): run admission ·
+   library approve · library delete · ESP activate · agent runtime pause · `GET /trash-entries` ·
+   trash detay · restore-preflight · restore · purge.
+4. **Uzun iş durable kuyrukta** — directive **202**, purge **202** + `purge_job_id`,
+   `af_follow_run` gerçek worker'ı yokluyor, senkron kestirme yok.
+
+### Ölçüm (2026-08-10, `origin/main` @ `aabb85d` + dal)
+
+`./scripts/e2e-acceptance.sh flows` → **60 passed / 0 failed / 2 skipped**, **exit 0**;
+tarayıcı katmanı **5 passed (23.8s)**. O-30 doğrulandı: purge 202 gövdesinde
+`deletion_state` = `root_lifecycle_state` = `purge_pending`. O-12 doğrulandı: çelişkili dual
+token → **409 `OCC_TOKEN_CONFLICT`**. K-07 doğrulandı: `.exe` **ve** boş filename → **422
+`FILE_TYPE_NOT_ALLOWED`** (fail-closed).
+
+**İki SKIP, PASS değildir:** (i) pozitif ESP activate→deprecate koşulmadı — probe resolver
+`validation_state=failed / vectors_run=0` veriyor, harness test vektörü sentezlemiyor; onun
+yerine *doğrulanmamış resolver trusted-active'e yükseltilemiyor* iddia edildi (pozitif yol
+in-process: `backend/tests/integration/test_esp_persistence.py`). (ii) Tool Gateway çağrı
+günlüğü egzersiz edilmedi — taze yığında agent task yok.
+
+### Raporun iki iddiası yeniden ölçüldü ve kayıt düzeltildi
+
+1. **"Docker/OrbStack takılı (`docker ps` sürekli 124)" — yeniden üretilemedi.** Aynı makinede
+   `docker version`/`compose version`/`docker ps -q`/`docker images -q` dördü de **exit 0**,
+   anında. Raporun *kaynak baskısı* teşhisi doğru (host 8 GB, VM **3.89 GiB**, 18–21 konteyner,
+   load tepe **18.08**), ama **daemon takılı** sonucu geçerli değil.
+2. **"Beş akışın hiçbiri hiçbir katmanda doğrulanmadı" — (a) ve (b) için yanlıştı.** Terim
+   taraması yalnız iki shell dosyasını kapsıyordu; oradan "hiçbir katmanda" genellemesine
+   geçmek **tarayıcı katmanını atlamaktı**. Aday SHA'da E2E run **31364211010** (success)
+   spec 05 ✓, spec 20-library ✓, spec 06 ✓, spec 04 ✓, spec 18 ✓✓ koşmuştu — suite 39 passed.
+   Gerçekten kapsanmayanlar: **(c)**, **(d)**, **(e)'nin restore ayağı** ve dört değişmez.
+
+### Ölçüm bir kez daha kanıtladı: sayı kopyalanmaz, koşulur
+
+İki harness kusuru **ilk koşuda** ortaya çıktı ve düzeltildi, ikisi de ölçümle:
+`API_CORS_ORIGINS` (web origin API allowlist'inde olmadığından her tarayıcı yolculuğu
+düşüyordu — `OPTIONS /meta` Origin `:18110` ile **400** — oysa curl, Origin göndermediği için
+aynı API'yi sağlıklı raporluyordu; `a11y-audit-stack.sh` tam bu tuzağı belgeliyor) ve
+spec 05'in sabit-kodlu `http://localhost:8000/api/v1` yedeği (`utils/api.ts::API_BASE` ile
+değiştirildi; `E2E_API_BASE_URL` yokken **aynı literal** → CI davranışı birebir korunur).
+
+### P5'in bloke kalemleri de koşuldu (Docker çalıştığı için)
+
+| Kalem | Exit | Sonuç |
+|---|---:|---|
+| §9.4 session-clean | **0** | PASS — 27 passed / 0 failed |
+| §9.5 legacy-upgrade | **0** | PASS — 15 passed / 0 failed |
+| §9.6 dev-auth | **0** | PASS — 9 passed / 0 failed |
+| servis bazında health (`acceptance.sh`) | **0** | PASS — 15 servis, hiçbiri exited/restarted/unhealthy |
+| `smoke.sh` | **0** | PASS |
+| `worker-restart-smoke.sh` | **0** | PASS — 7 düzlem SIGKILL+restart, `package_root` 15→15, `audit_events` 69→69, `outbox_events` 40→40 |
+
+**P5 böylece "1 PASS / 3 BLOCKED" yerine 4/4 ölçülmüştür.**
+
+### Dürüst sınır — blocker neden AÇIK kalıyor
+
+**`flows` bir CI kapısı DEĞİLDİR.** Yerel bir komuttur; hiçbir workflow onu koşmaz, yani
+sunucu katmanındaki bir regresyon sessizce geri gelebilir. (Tarayıcı yarıları
+`.github/workflows/e2e.yml` ile kapılıdır; sunucu yarıları hiçbir yerde değil.) Kapıya
+bağlamak CI'da ikinci bir 12 konteynerlik yığın + koşu süresi demektir ve **bu slice'ta
+bilerek yapılmadı** — insan kararıdır. §6.2'deki iki SKIP de açık iştir. Bu yüzden kayıt
+"kapandı" değil, **"kısmen kapandı"**dır ve RC verdict'i **BLOCKED** kalır.
+
+### Değişen dosyalar
+
+`scripts/lib/acceptance-flows.sh` (YENİ, 625 satır) · `scripts/e2e-acceptance.sh`
+(`flows` alt-komutu, `API_CORS_ORIGINS`, SKIP sayacı) ·
+`frontend/e2e/specs/05-mainboard-ready-check-run.spec.ts` (API tabanı parametreleştirildi) ·
+`Makefile` (`e2e-flows`) · `README.md` · `docs/E2E_ACCEPTANCE.md` ·
+`docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` (§3/P5, §3/P6, §6.2, §6.2.1, §8, §9, §10) ·
+`docs/releases/evidence/2026-08-10/` (1 belge + 8 ham çıktı).

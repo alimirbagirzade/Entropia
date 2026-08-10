@@ -1,5 +1,8 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **AŞILDI — canlı kickoff artık `docs/ADIM30_LANDED_KICKOFF.md`'dir.** Bu belge ADIM 29
+> devrinin kaydıdır ve gövdesi **değiştirilmemiştir**. Aynı anda yalnız bir kickoff
+> `doc-status: current` olabilir; documentation-truth kapısı bunu zorlar.
+> Sayısal gerçekler için otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 29 kapanış devri — A-08 kaydı #514'ün kanıtsız kapatılmasıyla uzlaştırıldı

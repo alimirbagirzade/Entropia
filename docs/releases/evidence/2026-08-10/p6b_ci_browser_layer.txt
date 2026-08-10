@@ -1,0 +1,23 @@
+RC BLOCKER 2 — PRE-EXISTING BROWSER-LAYER COVERAGE AT THE CANDIDATE SHA
+GitHub Actions: workflow E2E, branch main, head 'docs(release): record V18 release-candidate evidence (#646)' = aabb85d
+run id 31364211010 — conclusion: success, 5m34s, 2026-08-10T07:01:38Z
+
+$ gh run list --workflow e2e.yml --branch main --limit 3
+completed	success	docs(release): record V18 release-candidate evidence (#646)	E2E	main	push	31364211010	5m34s	2026-08-10T07:01:38Z
+completed	success	docs(adim-29): record the P10 performance-budget and observability ev…	E2E	main	push	31359090626	10m32s	2026-08-10T05:35:41Z
+completed	cancelled	docs(adim-29): record the P11 visual and a11y gate evidence (#644)	E2E	main	push	31359081629	13s	2026-08-10T05:35:29Z
+
+Per-spec result lines extracted from the run log (the four journeys that
+implement acceptance flows (a), (b) and the delete->purge leg of (e)):
+E2E — real browser vs. Docker Compose stack (F-23)	Run the E2E suite	2026-08-10T07:03:49.7431956Z   ✓   6 [chromium] › specs/04-create-package-lifecycle.spec.ts:41:3 › Create Package lifecycle › drives a translate request from compose to published + usable in Library (10.7s)
+E2E — real browser vs. Docker Compose stack (F-23)	Run the E2E suite	2026-08-10T07:03:58.0104625Z   ✓   7 [chromium] › specs/05-mainboard-ready-check-run.spec.ts:32:3 › Golden path: inline Strategy -> Ready PASS -> RUN SUCCEEDED -> inline Result › builds a runnable strategy on the Mainboard and follows the run to a succeeded inline Result (8.2s)
+E2E — real browser vs. Docker Compose stack (F-23)	Run the E2E suite	2026-08-10T07:04:00.3010761Z   ✓   8 [chromium] › specs/06-trash-reauth.spec.ts:15:3 › Trash — soft-delete then re-auth purge › moves a work object to Trash and requests its permanent deletion (2.3s)
+E2E — real browser vs. Docker Compose stack (F-23)	Run the E2E suite	2026-08-10T07:05:32.4844024Z   ✓  36 [chromium] › specs/18-result-artifacts-drilldown.spec.ts:34:3 › Result artifact drill-down: Filtered Events is its own artifact (I-02) › serves filtered_events separately from signal_events, with a terminating cursor and a checksum (1.1s)
+E2E — real browser vs. Docker Compose stack (F-23)	Run the E2E suite	2026-08-10T07:05:33.4910534Z   ✓  37 [chromium] › specs/18-result-artifacts-drilldown.spec.ts:117:3 › Result artifact drill-down: Filtered Events is its own artifact (I-02) › rejects an unknown artifact type fail-closed instead of falling back (994ms)
+E2E — real browser vs. Docker Compose stack (F-23)	Run the E2E suite	2026-08-10T07:05:42.9964314Z   ✓  40 [chromium] › specs/20-library-request-validation.spec.ts:57:3 › Package Library — Request Validation › certifies a draft package from the Library and unlocks Request Approval (7.2s)
+
+Suite totals from the same run:
+E2E — real browser vs. Docker Compose stack (F-23)	Run the E2E suite	2026-08-10T07:05:43.1064099Z   39 passed (2.3m)
+E2E — real browser vs. Docker Compose stack (F-23)	Run the visual-regression gate	2026-08-10T07:07:04.7133546Z   8 passed (1.3m)
+A11Y — axe-core scan vs. the seeded stack (R2-14)	Run the axe-core a11y scan	2026-08-10T07:04:28.3591512Z   6 passed (54.4s)
+E2E — dev-auth acceptance (X-Actor-Id, no login)	Run the dev-auth acceptance spec	2026-08-10T07:03:26.0115097Z   1 passed (4.0s)

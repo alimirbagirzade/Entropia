@@ -1,0 +1,26 @@
+RC BLOCKER 2 — SEMANTIC TERM SCAN, BEFORE vs AFTER (2026-08-10, ADIM 30)
+
+The RC report finding was a term scan over the two named shell harnesses:
+  ready-check/readiness 0 · backtest-run|/runs 0 · backtest-result 0 · library 0
+  trading-signal/agent-task 0 · trash/purge 0 · Idempotency-Key/If-Match 0
+
+BEFORE = scripts/acceptance.sh + scripts/e2e-acceptance.sh as they stand on
+         origin/main @ aabb85d (read via git show, not from the working tree).
+AFTER  = the same two files on this branch PLUS scripts/lib/acceptance-flows.sh.
+
+term (case-insensitive, matching lines)    BEFORE    AFTER
+----------------------------------------   ------    -----
+ready-check|readiness                           0       17
+backtest-run|/runs                              0        4
+backtest-result                                 0        2
+library                                         0       32
+trading-signal|agent-task|agent-directive        0       10
+trash|purge                                     0       43
+restore                                         0       19
+Idempotency-Key                                 0       17
+If-Match                                        0        4
+embedded-system-package                         0        9
+X-Registry-Version                              0        6
+
+Counts are an indicator, not a proof of behaviour. The behavioural proof is the
+run log: docs/releases/evidence/2026-08-10/p6b_flows_run.txt (60 passed, 0 failed).

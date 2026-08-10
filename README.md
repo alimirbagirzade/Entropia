@@ -159,9 +159,12 @@ between them **preserves your data** — only `make nuke` deletes volumes.
   **any** service exited, restarted, or is unhealthy. Every long-running plane
   carries a healthcheck; the one-shots (`migrate`, `minio-setup`) must exit 0.
 - `make e2e` (`./scripts/e2e-acceptance.sh`) — real Docker E2E of the three
-  authentication acceptance flows (session-clean, legacy-upgrade, dev-auth),
-  each in an **isolated** Compose project + volumes that never touch your normal
-  stack. See [docs/E2E_ACCEPTANCE.md](docs/E2E_ACCEPTANCE.md).
+  authentication acceptance flows (session-clean, legacy-upgrade, dev-auth)
+  **plus the five product acceptance flows** (`make e2e-flows`: Strategy →
+  Ready-check → Run → Result · Library validation · ESP lifecycle + export ·
+  Agent / Trading Signal tools · Trash soft-delete → restore → purge), each in an
+  **isolated** Compose project + volumes that never touch your normal stack.
+  See [docs/E2E_ACCEPTANCE.md](docs/E2E_ACCEPTANCE.md).
 
 ### Authoritative test command
 

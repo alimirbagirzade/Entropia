@@ -1,0 +1,155 @@
+
+========== ACCEPTANCE FLOWS (a)-(e) ==========
+  project=entropia-e2e-flows  auth_mode=session  api=:18030  env=.env.e2e.flows
+
+— [flows] bring the isolated stack up
+  waiting for API health at :18030 (build + migrate can take a few minutes)
+  PASS  [flows] seed (SEED_E2E_GOLDEN + SEED_ESP_TA + SEED_RATIONALE) exit 0
+  PASS  [flows] plane worker-default broker-connected (health=healthy restarts=0)
+  PASS  [flows] plane worker-data broker-connected (health=healthy restarts=0)
+  PASS  [flows] plane worker-backtest broker-connected (health=healthy restarts=0)
+  PASS  [flows] plane worker-agent broker-connected (health=healthy restarts=0)
+  PASS  [flows] plane worker-agent-executor broker-connected (health=healthy restarts=0)
+  PASS  [flows] plane agent-coordinator broker-connected (health=healthy restarts=0)
+  PASS  [flows] plane scheduler broker-connected (health=healthy restarts=0)
+
+— [flows/0] bootstrap the two principals every flow needs (Admin + plain USER)
+  PASS  [0] Admin principal authenticated (is_admin=true)
+  PASS  [0] plain USER principal authenticated (is_admin=false)
+  PASS  [0] default mainboard composition resolved (mbws_01KZN9ZYSQF0M6XT3TY3GYKZ5M)
+
+========== (a) STRATEGY -> READY-CHECK -> RUN -> RESULT ==========
+
+— [a1] the composition's readiness projection is server-computed
+  PASS  [a1] GET .../readiness -> 200, state=not_checked (the client never computes this)
+
+— [a2] Ready Check is a real evaluation, and a STALE fingerprint creates NOTHING
+  PASS  [a2] stale expected_fingerprint -> 409 (no report minted on a stale composition)
+  PASS  [a2] empty composition has no fingerprint (composition_hash null, state not_checked) — nothing to certify, so nothing is certified
+  [a2] the positive Ready->RUN transition is asserted by specs/05-mainboard-ready-check-run.spec.ts, run below against this same stack
+
+— [a3] NON-NEGOTIABLE 2 — Backtest Run != Backtest Result
+  PASS  [a3] run refused (409) on a not-ready composition and minted NO Result (results 0 -> 0)
+  PASS  [a3] refusal answers the canonical ErrorBody envelope, not a bare failure
+  PASS  [a3] refusal carries the recovery block (remediation surfaced to the caller)
+
+— [a4] NON-NEGOTIABLE 3 — the plain USER is refused SERVER-SIDE, not by a hidden button
+  PASS  [a4] USER -> POST backtest-runs on another principal's composition = 403
+
+========== (b) LIBRARY VALIDATION ==========
+
+— [b1] the seeded, published package is served by the Library catalog
+  PASS  [b1] GET /library -> 200, package root pkg_01KZN9ZWK4W2J5B2KBBXRHXDS5 present (SEED_E2E_GOLDEN/SEED_ESP_TA)
+  PASS  [b1] GET /library/pkg_01KZN9ZWK4W2J5B2KBBXRHXDS5 -> 200 (head revision pkgrev_01KZN9ZWK73MRX8AT5526SE6Y9)
+
+— [b2] validation is head-matched — a mismatched head is refused, never raced
+  PASS  [b2] mismatched expected_head_revision_id -> 422 (precondition refused)
+
+— [b3] NON-NEGOTIABLE 3 — Library lifecycle actions are gated on the SERVER
+  PASS  [b3] USER -> POST /library/pkg_01KZN9ZWK4W2J5B2KBBXRHXDS5/approve = 403 (not a hidden button)
+  PASS  [b3] USER -> DELETE /library/pkg_01KZN9ZWK4W2J5B2KBBXRHXDS5 = 403
+
+========== (c) ESP LIFECYCLE + EXPORT ==========
+
+— [c1] create an Embedded System Package (resolver contract)
+  PASS  [c1] POST /embedded-system-packages -> 201 (pkg_01KZN9ZZ7CN4CDN5YVA3XQQ4AJ / pkgrev_01KZN9ZZ7G8493AAC6VFG0FAEG, trust=candidate)
+
+— [c2] resolver validation runs the declared test vectors
+  PASS  [c2] validate -> 200 (state=failed, vectors=0)
+
+— [c3] NON-NEGOTIABLE 3 — activation is Admin-only ON THE SERVER
+  PASS  [c3] USER -> activate = 403 (the registry cannot be moved by a hidden-button bypass)
+
+— [c4] the registry version is a real OCC token — a stale one is refused
+  PASS  [c4] stale X-Registry-Version 999999 -> 409 (activation refused)
+
+— [c5] a resolver whose validation FAILED cannot be promoted to trusted-active
+  PASS  [c5] at the current registry version the promotion is refused 409 RESOLVER_VALIDATION_REQUIRED — an UNVALIDATED resolver cannot become trusted-active
+  SKIP  [c5] positive activate->deprecate not driven here: it needs a resolver with runnable test vectors, which this harness does not synthesise (in-process coverage: backend/tests/integration/test_esp_persistence.py)
+
+— [c5b] the registry does reach trusted-active — the seeded canonical resolvers prove it
+  PASS  [c5b] GET /embedded-system-packages lists a trusted_active entry (SEED_ESP_TA)
+
+— [c6] package EXPORT carries its provenance envelope (G-02 schema v2 / G-05)
+  PASS  [c6] POST /library/pkg_01KZN9ZWK4W2J5B2KBBXRHXDS5/export -> 200
+  PASS  [c6] manifest declares export_schema_version (an importer can refuse an unknown one)
+  PASS  [c6] export is content-addressed (manifest_hash present)
+  PASS  [c6] the LIVE registry pointer travels beside the manifest, not inside it (G-05)
+
+========== (d) AGENT STRATEGY / TRADING SIGNAL TOOLS ==========
+
+— [d1] NON-NEGOTIABLE 1 — a Trading Signal is NOT a Package
+  PASS  [d1] the Library catalog contains no trading_signal / trade_log root (separate taxonomies)
+  PASS  [d1] a Package root is not addressable on the Trading Signal surface -> 404
+
+— [d2] the upload file-type gate is FAIL-CLOSED (K-07)
+  PASS  [d2] a .exe upload is refused -> 422 FILE_TYPE_NOT_ALLOWED
+  PASS  [d2] a blank filename is refused, not skipped -> 422 FILE_TYPE_NOT_ALLOWED
+
+— [d3] the Agent workspace and Tool Gateway read surfaces answer
+  PASS  [d3] GET /agent-workspace/overview -> 200
+  PASS  [d3] GET /agent-tasks -> 200
+  SKIP  [d3] no agent task exists on a freshly seeded stack — tool-call log not exercised
+
+— [d4] NON-NEGOTIABLE 4 — a directive is a DURABLE admission, not a synchronous call
+  PASS  [d4] POST /agent-directives -> 202 (queued for the coordinator, not executed inline)
+
+— [d5] NON-NEGOTIABLE 3 — agent runtime controls are role-gated ON THE SERVER
+  PASS  [d5] USER -> POST /agent-runtime/pause = 403
+
+========== (e) TRASH: SOFT-DELETE -> RESTORE -> PURGE ==========
+
+— [e1] create two disposable work objects (real strategy roots)
+  PASS  [e1] two work-object roots created (strat_01KZN9ZZQP9WQAHKF65NCW3CB1, strat_01KZN9ZZRSY1X40VA02Y1R6X6P)
+
+— [e2] the dual OCC tokens are ONE value — a disagreement is 409, never a silent pick (O-12)
+  PASS  [e2] body expected_row_version=1 vs If-Match rv-9 -> 409 OCC_TOKEN_CONFLICT
+
+— [e3] soft-delete moves the root into Trash (an entry MUST be written)
+  PASS  [e3] DELETE /entities/strat_01KZN9ZZQP9WQAHKF65NCW3CB1 -> 204
+  PASS  [e3] the deleted root reached Admin Trash as entry trash_01KZN9ZZTM42JYM2B4941A68X7 (K-06: no object vanishes silently)
+
+— [e4] RESTORE — the leg the browser suite never exercises
+  PASS  [e4] restore-preflight -> 200 (eligibility decided server-side before anything moves)
+  PASS  [e4] restore -> 200 (state=active status=restored)
+  PASS  [e4] the entry now reads RESTORED — Trash is recoverable, not a shredder
+
+— [e5] PURGE — real re-auth, and the O-30 body carries BOTH state names
+  PASS  [e5] a fabricated reauth_proof is refused -> 401 (purge is genuinely re-auth gated)
+  PASS  [e5] POST /auth/reauth minted a purpose-scoped proof (value withheld)
+  PASS  [e5] purge -> 202 (job=job_01KZNA0058W5CGYBHGD5K5XBYN) — an ADMISSION, the erase runs on a worker
+  PASS  [e5] O-30 holds: deletion_state=purge_pending AND root_lifecycle_state=purge_pending (two names, one value)
+
+— [e6] NON-NEGOTIABLE 3 — every Trash surface is Admin-gated ON THE SERVER
+  PASS  [e6] USER -> GET /trash-entries = 403
+  PASS  [e6] USER -> GET /trash-entries/trash_01KZN9ZZZ8G7MSM4Y925337ZAX = 403
+  PASS  [e6] USER -> GET /trash-entries/trash_01KZN9ZZZ8G7MSM4Y925337ZAX/restore-preflight = 403
+  PASS  [e6] USER -> POST restore = 403
+  PASS  [e6] USER -> POST purge = 403
+
+========== BROWSER LAYER — existing journeys, run against this stack ==========
+
+— [browser] install the Playwright project (once per machine)
+  PASS  [browser] npm ci ok (lockfile untouched)
+  PASS  [browser] chromium available
+
+— [browser] drive specs 05 + 18 (flow a), 20-library (flow b), 06 (flow e delete->purge)
+  PASS  [browser] all four journeys passed against this stack — 5 passed
+  E2E_KEEP_UP=1 — leaving entropia-e2e-flows up (web http://localhost:18110, api http://localhost:18030/api/v1)
+
+========== RESULT ==========
+  60 passed, 0 failed, 2 skipped
+  (2 step(s) SKIPPED — see the SKIP lines; they are NOT passes)
+E2E ACCEPTANCE OK — every asserted step passed.
+
+=== browser layer detail (playwright list reporter) ===
+
+Running 5 tests using 1 worker
+
+  ✓  1 [chromium] › specs/05-mainboard-ready-check-run.spec.ts:32:3 › Golden path: inline Strategy -> Ready PASS -> RUN SUCCEEDED -> inline Result › builds a runnable strategy on the Mainboard and follows the run to a succeeded inline Result (9.0s)
+  ✓  2 [chromium] › specs/06-trash-reauth.spec.ts:14:3 › Trash — soft-delete then re-auth purge › moves a work object to Trash and requests its permanent deletion (2.2s)
+  ✓  3 [chromium] › specs/18-result-artifacts-drilldown.spec.ts:23:3 › Result artifact drill-down: Filtered Events is its own artifact (I-02) › serves filtered_events separately from signal_events, with a terminating cursor and a checksum (883ms)
+  ✓  4 [chromium] › specs/18-result-artifacts-drilldown.spec.ts:89:3 › Result artifact drill-down: Filtered Events is its own artifact (I-02) › rejects an unknown artifact type fail-closed instead of falling back (830ms)
+  ✓  5 [chromium] › specs/20-library-request-validation.spec.ts:53:3 › Package Library — Request Validation › certifies a draft package from the Library and unlocks Request Approval (9.3s)
+
+  5 passed (23.8s)

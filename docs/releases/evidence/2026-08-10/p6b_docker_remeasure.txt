@@ -1,0 +1,25 @@
+RC BLOCKER 2 — DOCKER / HOST RE-MEASUREMENT (2026-08-10, ADIM 30)
+Purpose: reproduce the §6.2 claim "Docker/OrbStack takili (docker ps surekli 124)".
+
+$ docker version --format ...
+client=29.4.0 server=29.4.0 ctx=orbstack
+exit=0
+
+$ docker compose version
+Docker Compose version v5.1.2
+exit=0
+
+$ timeout 20 docker ps -q | wc -l      # the exact call the report recorded as 124
+       9
+exit=
+
+$ timeout 20 docker images -q | wc -l  # also recorded as 124 by the report
+      20
+exit=
+
+$ docker info
+CPUs=8 MemTotal=4180443136 Containers=33 Running=12
+
+HOST
+ncpu=8 mem_bytes=8589934592
+10:29  up 17 days, 15:44, 1 user, load averages: 18.08 9.88 9.21

@@ -100,10 +100,13 @@ accept: ## Acceptance gate for a RUNNING stack: fail if any service exited/resta
 accept-dev-auth: ## Acceptance gate against the dev-auth stack (DEP-05)
 	@COMPOSE_DEV_AUTH=1 bash scripts/acceptance.sh
 
-.PHONY: e2e e2e-session e2e-legacy e2e-dev-auth
+.PHONY: e2e e2e-session e2e-legacy e2e-dev-auth e2e-flows
 
-e2e: ## Real Docker E2E — all 3 isolated acceptance flows (audit §9.4/9.5/9.6, W7)
+e2e: ## Real Docker E2E — 3 auth flows + the 5 acceptance flows (§9.4/9.5/9.6 + RC §6.2)
 	@bash scripts/e2e-acceptance.sh all
+
+e2e-flows: ## E2E — the 5 acceptance flows (a)-(e) only (isolated project + volumes)
+	@bash scripts/e2e-acceptance.sh flows
 
 e2e-session: ## E2E §9.4 — clean session-mode bootstrap (isolated project + volumes)
 	@bash scripts/e2e-acceptance.sh session

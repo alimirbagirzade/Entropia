@@ -1,0 +1,33 @@
+=== P10 — N+1 kalintisi vs izleme issue durumu (2026-08-10) ===
+
+--- query_budgets.json: OPEN N+1 olarak kayitli iki satir ---
+readiness_check.market_data_leg -> n_small 1 n_large 11 queries_small 2 queries_large 12 per_item 1
+dependency_pins.ensure_pinned_resolvers_active -> n_small 1 n_large 11 queries_small 2 queries_large 22 per_item 2
+
+--- Kaynak: dongu ICINDE per-item await hala duruyor ---
+401:    for item in items:
+402-        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+403-            continue
+404-        revision = revisions.get(_market_pin(item))
+405-        root = (
+406-            await market_repo.get_dataset_root(session, revision.entity_id)
+407-            if revision is not None
+408-            else None
+409-        )
+--
+
+114:    for ref in pinned_resolver_refs(dependency_snapshot):
+115-        defect = await _pin_defect(session, ref)
+116-        if defect is None:
+117-            continue
+  -> _pin_defect icinde 2 await:
+80:    entry = await esp_repo.get_registry_by_key(session, key)
+91:    revision = await pkg_repo.get_revision(session, revision_id) if revision_id else None
+
+--- pytest -s ciktisinda 'came in under budget' satiri sayisi ---
+0
+  -> 0 => olculen sayilar butceye ESIT; N+1'ler duzeltilmemis.
+
+--- GitHub izleme issue durumu ---
+#617 CLOSED/COMPLETED created=2026-08-06T06:47:09Z closed=2026-08-06T08:55:15Z :: perf(ready-check): the market-data leg still reads one dataset root per Strategy item
+#618 CLOSED/COMPLETED created=2026-08-06T06:47:30Z closed=2026-08-07T03:53:21Z :: perf(approve-package): pinned ESP resolver re-validation costs 2 round trips per pin

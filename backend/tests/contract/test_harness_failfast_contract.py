@@ -104,11 +104,15 @@ def _run(
             env=env,
             cwd=REPO_ROOT,
         )
-    except subprocess.TimeoutExpired:
-        pytest.fail(
+    except subprocess.TimeoutExpired as exc:
+        # `raise`, not `pytest.fail`: both end the test, but only this one makes
+        # the exit obvious to a reader AND to static analysis. CodeQL does not
+        # model `pytest.fail` as NoReturn, so it read `proc` below as possibly
+        # unbound — 24 alerts from this one line and its twin in `_bash`.
+        raise AssertionError(
             f"{script.name} was STILL RUNNING after {SUBPROCESS_TIMEOUT_SECONDS}s — "
             "the harness hung instead of failing fast. This is the ADIM 34 regression."
-        )
+        ) from exc
     return proc, time.monotonic() - started
 
 
@@ -129,8 +133,10 @@ def _bash(snippet: str) -> tuple[subprocess.CompletedProcess[str], float]:
             timeout=SUBPROCESS_TIMEOUT_SECONDS,
             cwd=REPO_ROOT,
         )
-    except subprocess.TimeoutExpired:
-        pytest.fail("bounded_run itself hung — it is the thing that must not hang.")
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            "bounded_run itself hung — it is the thing that must not hang."
+        ) from exc
     return proc, time.monotonic() - started
 
 

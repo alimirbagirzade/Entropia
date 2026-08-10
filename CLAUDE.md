@@ -179,9 +179,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `970ec81`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `dd3136f`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 34 (RC §6.7 / P6-ek + P6-6, harness fail-fast):** asılı kalma temiz
+> **Son dalga — ADIM 35 (RC §6.7 / P6-ek + P6-6, harness fail-fast):** asılı kalma temiz
 > başarısızlığa çevrildi. **YENİ `scripts/lib/bounded.sh::bounded_run`** — kısa bir harici
 > sorguyu sınırlamanın tek yolu (GNU `timeout` macOS'ta yok); öldürdüğü komut için asla 0
 > dönmez. `e2e-acceptance.sh` preflight'ı takılı daemon'a **sınırlı sürede `exit 2`** verir
@@ -190,10 +190,11 @@ Before stopping a working session, produce **ALL** of the following:
 > İki kusur da düzeltmeden önce **yeniden üretildi**; testler ısırıyor (öncesi 5F/7P,
 > sonrası 12P) ve **CI kapısıdır**. **"Docker düzeldi" DEĞİL** — daemon'a dokunulmadı.
 > **Ürün kodu değişmedi. Blocker sayısı DEĞİŞMEDİ (üç); RC verdict'i BLOCKED kalır.**
-> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 34.
-> Öncesinde ADIM 33 (P9-F1 — `npm ci` + `.dockerignore`, #656),
-> ADIM 32 (P9-F2 — SPA origin'inde CSP, #655),
-> **Son dalga — ADIM 34 (RC §6.7 / P4-1 + P4-2, şema paritesi):** model↔migration index
+> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 35. **Numara notu:** bu slice önce `ADIM 34`
+> yazılmıştı; çalışma sürerken **#657 `ADIM 34` adıyla merge oldu**, bu yüzden merge
+> edilmemiş olan bu slice temiz biçimde **ADIM 35'e taşındı** (merge edilmiş başlık
+> değiştirilmez). Aynı sebeple rapor alt bölümü **§6.7.4**'tür, §6.7.3 #657'nindir.
+> **Öncesinde ADIM 34 (RC §6.7 / P4-1 + P4-2, şema paritesi, #657):** model↔migration index
 > ekseni **40 sapmadan 0'a** indi; alembic ve `create_all` yolları artık **BIT-IDENTICAL**
 > (361/361). Fix **DB'ye dokunmadan** yapıldı — sevk edilen ad kazandı, model ona hizalandı.
 > `scripts/schema_parity_gate.py` `ci.yml` backend job'ına bağlandı, **exit 0** ve

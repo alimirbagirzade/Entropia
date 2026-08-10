@@ -1,4 +1,4 @@
-"""A harness guard that can HANG is not a guard (ADIM 34, RC §6.7 P6-ek / P6-6).
+"""A harness guard that can HANG is not a guard (ADIM 35, RC §6.7 P6-ek / P6-6).
 
 Two acceptance scripts asked an external tool a yes/no question with no bound on
 the answer, and both defects survived because nobody notices a hang by hand —
@@ -111,7 +111,7 @@ def _run(
         # unbound — 24 alerts from this one line and its twin in `_bash`.
         raise AssertionError(
             f"{script.name} was STILL RUNNING after {SUBPROCESS_TIMEOUT_SECONDS}s — "
-            "the harness hung instead of failing fast. This is the ADIM 34 regression."
+            "the harness hung instead of failing fast. This is the ADIM 35 regression."
         ) from exc
     return proc, time.monotonic() - started
 

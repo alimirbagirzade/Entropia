@@ -39,7 +39,7 @@ All backend-observable numbered steps from the audit are asserted directly
 against the live API. Every flow prints `PASS`/`FAIL` per step and the script
 exits non-zero if any step fails.
 
-**Exit codes — three states, kept apart (ADIM 34):** `0` every asserted step
+**Exit codes — three states, kept apart (ADIM 35):** `0` every asserted step
 passed · `1` a step failed, or the stack never became healthy · `2` the harness
 could **not run at all**. The preflight distinguishes the two ways that happens:
 a daemon that refuses instantly ("not reachable") and a daemon that is **hung**

@@ -5767,7 +5767,7 @@ değildi, §6.7'nin blocker-olmayan kalemlerinden biriydi. **"READY" yazılmadı
 
 ---
 
-## ADIM 34 — RC §6.7 / P6-ek + P6-6: harness fail-fast dayanıklılığı (PR pending)
+## ADIM 35 — RC §6.7 / P6-ek + P6-6: harness fail-fast dayanıklılığı (PR pending)
 
 **Dalganın tipi:** harness/script. **Ürün kodu değişmedi** — `backend/src` ve `frontend/src`
 bu dalgada hiç düzenlenmedi; route path, react-query key, OCC token, Idempotency-Key, hook,
@@ -5855,10 +5855,22 @@ kendi semantiğidir ve o dosya bu slice'ta doğdu → bu üçü için "önce kı
 `documentation-truth` kapısı kırmızı verdi; `scripts/generate_repository_facts.py` yeniden
 üretildi ve **tek satır** oynadı: *Backend tests collected* `3432 in 330 files` →
 `3444 in 331 files` (alembic head, `ENGINE_VERSION`, tablo/FK, HTTP operation sayıları
-**değişmedi**). Kapı ikinci bir düzyazı kusuru daha yakaladı: `docs/ADIM32_LANDED_KICKOFF.md`
-hâlâ `doc-status: current`'tı ve ADIM 34'ün kickoff'u ikinci bir "canlı" belge yaratıyordu →
-ADIM 32 `historical`'a **indirildi** (içeriği silinmedi); canlı kickoff artık yalnız
-`docs/ADIM34_LANDED_KICKOFF.md`.
+**değişmedi**). Kapı ikinci bir düzyazı kusuru daha yakaladı: base `970ec81`'de
+`docs/ADIM32_LANDED_KICKOFF.md` hâlâ `doc-status: current`'tı ve bu slice'ın kickoff'u ikinci
+bir "canlı" belge yaratıyordu → `historical`'a **indirildi** (içeriği silinmedi). Sonradan
+#657 aynı düzeltmeyi main'de yaptı; canlı kickoff artık yalnız `docs/ADIM35_LANDED_KICKOFF.md`.
+
+**Numara çakışması ve bir belge onarımı (dürüst kayıt).** Bu slice önce **ADIM 34** olarak
+yazıldı. Çalışırken **#657 kendini ADIM 34 ilan ederek merge oldu** (o da çift-numaradan
+kaçınmak için ADIM 33 → ADIM 34'e taşınmıştı). Merge edilmiş bir başlık değiştirilmez, bu
+yüzden **taşınan bu slice oldu: ADIM 35**; rapor alt bölümü de §6.7.3 → **§6.7.4**. İkinci
+bir kusur daha vardı: dalın uzaktaki main-merge'ü (`d68fb45`)
+`docs/ADIM34_LANDED_KICKOFF.md` çakışmasını **iki belgeyi iç içe geçirerek** çözmüştü —
+#657'nin gövdesi bu slice'ın "Paste-ready resume prompt" başlığının altına yapışmış, bu
+slice'ın kendi resume prompt bloğu ise **silinmişti**. İkisi de git'teki temiz
+sürümlerinden **yeniden kuruldu**: `ADIM34_LANDED_KICKOFF.md` ← `origin/main` (#657, 133
+satır, `historical`'a indirildi), `ADIM35_LANDED_KICKOFF.md` ← `672ebe1` (bu slice, 107
+satır, `current`). Hiçbir kayıt kaybolmadı; ikisi de tekrar tek başlıklı ve tam.
 
 **Yerel kapılar:** `ruff check .` temiz · `ruff format --check .` 788 dosya formatlı ·
 `mypy src` 396 dosyada sorun yok · `pytest tests/contract/test_repository_facts_guard.py
@@ -5883,7 +5895,7 @@ blocker değildi, §6.7'nin blocker-olmayan kalemleriydi. **"READY" yazılmadı.
 
 Ham kanıt: `docs/releases/evidence/2026-08-10/P6FF_harness_failfast.md` +
 `p6ff_measurements.txt` · `p6ff_tests_before_fix.txt` · `p6ff_tests_after_fix.txt`.
-Kanonik rapor kaydı: `Entropia_V18_RC_Readiness_2026-08-07.md` **§6.7.3** (+ §6.2 notu).
+Kanonik rapor kaydı: `Entropia_V18_RC_Readiness_2026-08-07.md` **§6.7.4** (+ §6.2 notu).
 ## ADIM 34 — RC §6.7 / P4-1 + P4-2: model↔migration şema paritesi (PR #657)
 
 > **Numara notu:** bu slice önce `ADIM 33` olarak yazılmıştı; çalışma sürerken **#656

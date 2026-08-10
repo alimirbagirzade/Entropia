@@ -1,0 +1,92 @@
+=== P10 — sayfalama sinir kapilari (2026-08-10) ===
+
+--- Route katmaninda le= ile baglanan limit parametreleri ---
+      19
+src/entropia/apps/api/routes/create_package.py:112:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/sharing.py:60:    limit: int = Query(default=DEFAULT_SHARE_PAGE_LIMIT, ge=1, le=MAX_LIMIT),
+src/entropia/apps/api/routes/sharing.py:91:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/library.py:86:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/results_history.py:48:    limit: int = Query(default=_DEFAULT_HISTORY_LIMIT, ge=1, le=MAX_LIMIT),
+src/entropia/apps/api/routes/esp.py:116:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/strategy.py:219:    limit: int = Query(default=100, ge=1, le=500),
+src/entropia/apps/api/routes/manual.py:75:    limit: int | None = Query(default=None, ge=1, le=100),
+src/entropia/apps/api/routes/manual.py:85:    limit: int | None = Query(default=None, ge=1, le=100),
+src/entropia/apps/api/routes/audit.py:18:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/rationale.py:62:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/rationale.py:94:    limit: int = Query(default=rationale_query.SUGGEST_DEFAULT_LIMIT, ge=1, le=100),
+src/entropia/apps/api/routes/rationale.py:158:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/trash.py:137:    limit: int | None = Query(default=None, ge=1, le=100),
+src/entropia/apps/api/routes/research_data.py:373:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/market_data.py:287:    limit: int = Query(default=20, ge=1, le=100),
+src/entropia/apps/api/routes/result_export.py:60:    limit: int = Query(default=_DEFAULT_ARTIFACT_LIMIT, ge=1, le=MAX_LIMIT),
+src/entropia/apps/api/routes/backtest.py:104:    limit: int = Query(default=_DEFAULT_EVENT_LIMIT, ge=1, le=_MAX_EVENT_LIMIT),
+src/entropia/apps/api/routes/instrument.py:96:    limit: int = Query(default=20, ge=1, le=100),
+
+--- Route katmaninda le= TASIMAYAN limit parametreleri (9 adet) ---
+src/entropia/apps/api/routes/admin_panel.py:76:    limit: int | None = Query(default=None),
+src/entropia/apps/api/routes/admin_panel.py:135:    limit: int | None = Query(default=None),
+src/entropia/apps/api/routes/admin_panel.py:160:    limit: int | None = Query(default=None),
+src/entropia/apps/api/routes/capability.py:171:    limit: int | None = None,
+src/entropia/apps/api/routes/capability.py:189:    limit: int | None = None,
+src/entropia/apps/api/routes/agent_lab.py:93:    limit: int | None = Query(default=None),
+src/entropia/apps/api/routes/agent_lab.py:109:    limit: int | None = Query(default=None),
+src/entropia/apps/api/routes/agent_lab.py:128:    limit: int | None = Query(default=None),
+src/entropia/apps/api/routes/agent_lab.py:140:    limit: int | None = Query(default=None),
+
+--- Bunlarin sorgu katmanindaki kelepceleri (clamp) ---
+src/entropia/domain/agent_lab/cursor.py:52:def clamp_limit(limit: int | None) -> int:
+src/entropia/domain/agent_lab/cursor.py-53-    """Bound a client page size into ``[1, MAX_PAGE_LIMIT]`` (default 20)."""
+src/entropia/domain/agent_lab/cursor.py-54-    if limit is None:
+src/entropia/domain/agent_lab/cursor.py-55-        return DEFAULT_PAGE_LIMIT
+src/entropia/domain/agent_lab/cursor.py-56-    if limit < 1:
+src/entropia/domain/agent_lab/cursor.py-57-        return 1
+src/entropia/domain/agent_lab/cursor.py-58-    return min(limit, MAX_PAGE_LIMIT)
+src/entropia/domain/agent_lab/cursor.py-59-
+src/entropia/domain/agent_lab/cursor.py-60-
+src/entropia/domain/agent_lab/cursor.py:18:DEFAULT_PAGE_LIMIT = 20
+src/entropia/domain/agent_lab/cursor.py:19:MAX_PAGE_LIMIT = 100
+
+clamp_limit cagiran sorgu modulleri (agent_lab + capability + admin users):
+src/entropia/application/queries/agent_workspace.py:153:    page_size = clamp_limit(limit)
+src/entropia/application/queries/agent_workspace.py:218:    page_size = clamp_limit(limit)
+src/entropia/application/queries/agent_workspace.py:261:    page_size = clamp_limit(limit)
+src/entropia/application/queries/panel_backtest_log.py:52:def _clamp_limit(limit: int | None) -> int:
+src/entropia/application/queries/panel_backtest_log.py:166:    page_limit = _clamp_limit(limit)
+src/entropia/application/queries/manual.py:57:    page_limit = clamp_limit(limit)
+src/entropia/application/queries/manual.py:114:    page_limit = clamp_limit(limit)
+src/entropia/application/queries/log_projection.py:43:def _clamp_limit(limit: int | None) -> int:
+src/entropia/application/queries/log_projection.py:169:    page_limit = _clamp_limit(limit)
+src/entropia/application/queries/capability.py:212:    page_limit = clamp_limit(limit)
+src/entropia/application/queries/capability.py:265:    page_limit = clamp_limit(limit)
+src/entropia/application/queries/trash.py:102:    page_limit = clamp_limit(limit)
+src/entropia/application/queries/agent_tool_gateway.py:77:    page_limit = clamp_limit(limit)
+src/entropia/application/queries/user_registry.py:46:    page_limit = clamp_limit(limit)
+
+admin_panel loglari kendi _clamp_limit'ini tasiyor:
+src/entropia/application/queries/panel_backtest_log.py:52:def _clamp_limit(limit: int | None) -> int:
+src/entropia/application/queries/panel_backtest_log.py-53-    if limit is None:
+src/entropia/application/queries/panel_backtest_log.py-54-        return DEFAULT_BACKTEST_LOG_LIMIT
+src/entropia/application/queries/panel_backtest_log.py-55-    return max(1, min(limit, MAX_BACKTEST_LOG_LIMIT))
+src/entropia/application/queries/panel_backtest_log.py-56-
+src/entropia/application/queries/log_projection.py:43:def _clamp_limit(limit: int | None) -> int:
+src/entropia/application/queries/log_projection.py-44-    if limit is None:
+src/entropia/application/queries/log_projection.py-45-        return DEFAULT_LOG_LIMIT
+src/entropia/application/queries/log_projection.py-46-    return max(1, min(limit, MAX_LOG_LIMIT))
+src/entropia/application/queries/log_projection.py-47-
+src/entropia/application/queries/panel_backtest_log.py:40:MAX_BACKTEST_LOG_LIMIT = 100
+src/entropia/application/queries/log_projection.py:37:MAX_LOG_LIMIT = 100
+
+--- Ortak sayfalama sabitleri ---
+"""Cursor-pagination query parameters shared across list endpoints."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+DEFAULT_LIMIT = 20
+MAX_LIMIT = 100
+
+
+class PageParams(BaseModel):
+    cursor: str | None = Field(default=None, description="Opaque forward cursor.")
+    limit: int = Field(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT)

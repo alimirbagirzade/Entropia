@@ -1,0 +1,8 @@
+============================= test session starts ==============================
+collected 66 items
+
+tests/integration/test_query_budgets.py ........
+tests/contract/test_alert_rules_contract.py ..........................................................
+
+============================== 66 passed in 4.36s ==============================
+EXIT=0

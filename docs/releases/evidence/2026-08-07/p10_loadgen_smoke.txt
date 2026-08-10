@@ -1,0 +1,21 @@
+loadgen: wrote /Users/mirbagirzade/Development/Entropia/.claude/worktrees/perf-budgets-observability-e91c92/docs/releases/evidence/2026-08-07/p10_loadgen_smoke.json
+  meta                 n=5    err=0   p50=3.559ms p95=4.715ms p99=4.715ms
+  mainboard            n=5    err=0   p50=13.402ms p95=32.5ms p99=32.5ms
+  library              n=5    err=0   p50=11.524ms p95=41.284ms p99=41.284ms
+  library_shared       n=5    err=0   p50=9.395ms p95=35.465ms p99=35.465ms
+  results_history      n=5    err=0   p50=9.288ms p95=38.411ms p99=38.411ms
+  strategy_drafts      n=5    err=0   p50=7.005ms p95=10.343ms p99=10.343ms
+  market_datasets      n=5    err=0   p50=7.166ms p95=13.161ms p99=13.161ms
+  research_datasets    n=5    err=0   p50=9.429ms p95=14.623ms p99=14.623ms
+  instruments          n=5    err=0   p50=8.296ms p95=16.732ms p99=16.732ms
+  capabilities         n=5    err=0   p50=9.177ms p95=22.803ms p99=22.803ms
+  agent_tasks          n=5    err=0   p50=7.709ms p95=20.674ms p99=20.674ms
+  agent_overview       n=5    err=0   p50=11.264ms p95=25.523ms p99=25.523ms
+  hypotheses           n=5    err=0   p50=12.866ms p95=17.547ms p99=17.547ms
+  lab_messages         n=5    err=0   p50=6.974ms p95=19.639ms p99=19.639ms
+  audit_events         n=5    err=0   p50=7.42ms p95=23.818ms p99=23.818ms
+  admin_logs           n=5    err=0   p50=6.838ms p95=47.838ms p99=47.838ms
+  trash_entries        n=5    err=0   p50=9.036ms p95=24.235ms p99=24.235ms
+
+loadgen: OK
+EXIT=0

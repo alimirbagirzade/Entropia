@@ -5885,3 +5885,122 @@ listeliyordu, **bayattı**; bu dalgada düzeltildi.
 
 **RC verdict'i BLOCKED KALIR. Blocker sayısı DEĞİŞMEDİ (üç).** P4-1/P4-2 blocker değildi.
 **"READY" yazılmadı.**
+
+---
+
+## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu (PR pending)
+
+**Tip:** motor yolu, ama **containment'ın DIŞINDA** — yeni bir domain modülü + faz döngüsüne
+additive bir kayıt alanı. Migration **yok** (alembic head `0043_i08_registry_strategy_fks`
+değişmedi), `ENGINE_VERSION` **sabit**, `SHARED_ALLOCATION_STATUS` = `future_dev`, frontend
+**hiç dokunulmadı**, route/OCC/Idempotency/SSE yüzeyleri **hiç dokunulmadı**.
+
+### Neden bu slice, PR B değil
+
+`docs/ADIM16_STEPPER_LANDED_KICKOFF.md` §4.1 PR B'nin **literal kapsamıyla ulaşılabilir
+olmadığını** ölçmüştü ve üç engel bırakmıştı: **(a)** stepper bir barı bütün olarak ilerletir,
+faz döngüsü aynı barı P1/P3/PV/P4'e bölünmüş ister; **(b)** `entry` book-etmeyen bir
+değerlendirme girişi ister; **(c)** `PortfolioRun → EngineOutput` projeksiyonu **kod olarak yok**.
+(a) ve (b) `run_engine`'in bar gövdesine dokunur → ADR §16 insan kapısı **ve bir ADR
+amendment'ı** gerektirir. (c) gerektirmez, hangi yol seçilirse seçilsin gerekir ve tek başına
+test edilebilir. Kickoff'un üç seçeneğinden **3** seçildi. **(a) ve (b) bu dalgada KAPANMADI.**
+
+### Sözleşme boşluğu — ölçüldü, handoff'a körlemesine güvenilmedi
+
+- **`combine_item_runs`'ın yeri handoff'ta YANLIŞTI.** `jobs/backtest_engine.py:363` **call
+  site**'tır; tanım `domain/backtest/execution/portfolio.py:312`.
+- `PortfolioRun{ledger: PortfolioLedger, ticks: tuple[PortfolioTick, ...]}` ile
+  `EngineOutput{summary, trades, equity_points, signal_events, diagnostics, position_intervals,
+  filtered_events}` arasında hiçbir köprü yoktu. **Bu yüzden ADR §14'ün A4 ve A18 kriterleri
+  hiç değerlendirilemiyordu** — ikisi de "*identical `EngineOutput` digest*" diye yazılmıştır ve
+  o yolda digest alınacak bir artefakt yoktu.
+
+### KARAR — tek portföy-seviyesi `EngineOutput`, N adet öğe-seviyesi DEĞİL
+
+İki gerekçe de canon, tercih değil:
+
+1. **Eğriyi ters çevirirdi (A5).** `combine_item_runs` bileşik eğriyi her öğenin realized
+   ilerleyişini pin sırasında **birleştirerek** kurar; kendi ifşası
+   `portfolio_curve_sequential_not_unified_clock` ve ADR §14 A5'in ("*time-ordered by
+   construction*") kaldırmak için var olduğu kusur budur. Defterin eğrisi **zaten** zaman-sıralı;
+   sıralı fold'dan geçirmek sıralı bir seriden sırasız bir seri türetmek olurdu.
+2. **Bölünecek öğe-seviyesi equity YOK (ADR §7).** Havuz paylaşımlıdır ve *"a sleeve is a cap,
+   not a wallet"* — sermaye fiziksel olarak bölünmez. `E(t)`'yi N öğe eğrisine ayırmak canon'un
+   **tanımlamadığı** bir tahsis-atıf modeli olurdu. Defterin öğe başına kaydettiği şey
+   `ItemAttribution`'dır: bir net katkı, eğri değil, drawdown tabanı hiç değil.
+
+**Sonuç:** projeksiyon paylaşımlı yolda `combine_item_runs`'ı **beslemez, yerine geçer**. İkisi
+birbirini çağırmaz, sıralı fold'a tek satır dokunulmadı, dört `portfolio.combine*` golden digest'i
+**kımıldamadı**.
+
+### Ne indi
+
+**YENİ `domain/backtest/execution/portfolio_projection.py`** (597 satır, çoğu gerekçe docstring'i):
+`project_portfolio_run(run, *, items, execution_key, item_count) -> EngineOutput` (`:511`),
+`PinnedItem` (`:162` — worker'ın manifest'ten vereceği pinlenmiş metadata),
+`ABSENT_BY_CONSTRUCTION` (`:117`), üç fail-closed hata (`UnpinnedItemError`,
+`UnpairedCloseError`, `UnpricedIntentError`), `PORTFOLIO_PROJECTION_VERSION =
+"portfolio-projection-v1"`, `ENGINE_KIND = "v1_unified_clock_portfolio"` (sıralı fold'un
+`v1_bar_replay_composition`'ından **ayrı**, ki bir okuyucu eğriyi incelemeden ayırt edebilsin).
+
+**`domain/backtest/portfolio_engine.py` — additive, reporting-only:** yeni `BookedClose` (`:165`)
+ve `PortfolioTick.closes` (`:206`, varsayılan `()`). Gerekçe: döngü P3'te `MandatoryExit`'i
+**tüketip unutuyordu**; `tick.mandatory`'deki intent bir kapanışın *olduğunu* ve *hangi fiyattan*
+olduğunu kaydeder ama realize ettiği para yalnız `E(t)`'ye ve öğenin koşan attribution toplamına
+düşer, orada bir **işlem-başı** rakam artık geri alınamaz. `net_pnl` =
+`PortfolioLedger.book_trade`'in **dönüş değeri** (toplamı bir kez quantize eder) — `gross -
+commission`'ı yeniden hesaplamak yuvarlamanın ikinci bir uygulaması olurdu ve defterden bir kuruş
+sapabilirdi. **Hiçbir aritmetik değişmedi, hiçbir faz bu alana dallanmıyor.**
+
+### Fail-closed reddedilenler — sıfırla doldurulmadı, ADLANDIRILDI
+
+`diagnostics["warnings"]` = `ABSENT_BY_CONSTRUCTION`, beş kalem: `_DIAG_SUM_KEYS` öğe-yerel motor
+sayaçları (faz döngüsü bar gövdesi görmez; `0` yazmak "ölçüldü, sıfır" demek olurdu) ·
+filter-veto journal (`FILTERED_EVENT_TYPES` katılımcı hook'una hiç ulaşmaz) · `position_intervals`
+(`peak_notional` paylaşımlı defterde tutulmaz) · **Contribution bloğu** (leave-one-out'un
+dayandığı *"each item's simulation is independent"* varsayımı **paylaşımlı havuzda yanlıştır** —
+bir öğeyi çıkarmak her kardeşin `Ci(t)`'sini ve fill'lerini değiştirir; yeniden **simülasyon**
+ister) · `EquityPoint.exposure` **taban değişikliği** (öğe eğrisinde kapanan lot'un notional'ı,
+burada portföyün gross exposure'ı — alan adı sevk edilmiş artefaktın adı olduğu için ilan edilir).
+Ayrıca `composition.items` satırlarında öğe başına `initial_capital` / `final_equity` /
+`equity_curve` / `trade_seq_range` **yoktur** ve `per_item_basis` metni nedenini söyler.
+
+### Containment — genişledi mi? ÖLÇÜLDÜ
+
+`execution/*` modüllerinin her biri **tam importer listesiyle** pinli. Projeksiyon
+`execution.intents`'i (yalnız `ItemIntent` tipi için) import ediyor → `test_backtest_item_intents.py`
+listesi **bilerek** genişletildi, gerekçe docstring'e yazıldı, assertion **gevşetilmedi**.
+`clock` / `portfolio_ledger` / `arbitration` policy-version sabitleri **bilerek yayımlanmadı**:
+hiçbir tüketicinin okumadığı bir `diagnostics` alanı için üç containment listesi daha genişletmek
+pahalıydı — importlar silindi, `policy_versions` iki anahtara indi ve test **tam anahtar kümesi**
+olarak pinlendi. **`execution/` içindeki bir modül per-module importer kontrolünden muaftır**
+(`path.parent.name != "execution"`), bu yüzden projeksiyonun kendi containment iddiası
+`test_oracle_portfolio_containment_gate.py::test_the_result_projection_exists_but_no_production_path_reaches_it_either`
+olarak **ayrıca** yazıldı: tek modül tanımlar, üretim çağıranı yok, worker'da `portfolio_projection`
+geçmiyor.
+
+### Testler
+
+**YENİ `tests/unit/test_backtest_portfolio_projection.py`** — 23 test. Amiral gemisi, containment
+fixture'ının **kendi** trade set'i: sıralı fold'un `5000.00` dediği dört kapanış, projeksiyonda
+`summary["max_drawdown"] == 3000.00` olarak, yani Result'ın gerçekten okuduğu artefaktta.
+A4 (caller_order + `items` permütasyonu) ve A18 (batch 1/2/3) **tam çıktı digest'i** üzerinden.
+Hata yolları elle kurulmuş sentetik nesnelerle değil, **gerçek bir koşuyu `dataclasses.replace`
+ile tek alandan bozarak** provoke edilir. Projeksiyon modülü **%100 satır kapsamında**.
+Containment kapısına 1 test eklendi. `repository_facts` collected: **3432 → 3454**.
+
+### Honest boundary'ler
+
+- **Üretim yolu YOK ve bilerek yazılmadı.** Worker hâlâ item döngüsü + `combine_item_runs`;
+  `run_portfolio` ve `project_portfolio_run` ikisi de çağrısız. Bu slice **hiçbir sevk edilmiş
+  Result'ı değiştirmez** ve tek başına A4/A18'i "geçirmez" — kriterler artık *ölçülebilir*, ADIM 20
+  kabul matrisinin kalanı hâlâ açık.
+- **§4.1'in (a) ve (b) engelleri kapanmadı.** PR B hâlâ ADR §16 insan kapısının ve bir ADR
+  amendment'ının arkasında.
+- **`domain/backtest/` paketi `docs/CODEMAPS/BACKEND_LAYERS.md`'de HİÇ haritalı değil** — bu slice
+  öncesinde de öyleydi (domain tablosunda `backtest` satırı yok). Bu dalga endpoint / tablo / sayfa /
+  job eklemediği için codemap tazeleme tetiklenmedi; **eksik burada kaydedildi**, kapatılmadı.
+- **Frontend suite koşulmadı** — tek satır TS değişmedi. Gerekçedir, ölçüm değil; otorite CI'dır.
+- Projeksiyon `summary["period_start"]`/`period_end`'i (merged axis'in ilk/son tick'i) **doldurur**;
+  `combine_item_runs` bunları hiç yazmıyordu. Bilgi kazancıdır ama **sevk edilen hiçbir Result'ı
+  değiştirmez**, çünkü bu yol çağrısızdır.

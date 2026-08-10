@@ -4939,9 +4939,9 @@ backend/frontend birim suite'leri **koşulmadı** (tek satır Python/TS kaynağ�
 `generate_repository_facts.py --check` exit 0). **RC verdict'i BLOCKED kalır, blocker
 sayısı DEĞİŞMEDİ (üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 32.
 
-## Stage — ADIM 33: RC §6.7 / P4-1 + P4-2, model↔migration şema paritesi (PR pending)
+## Stage — ADIM 34: RC §6.7 / P4-1 + P4-2, model↔migration şema paritesi (PR pending)
 
-**Base** `979094e` (ADIM 32 / #655 merged). **alembic head DEĞİŞMEDİ**
+**Base** `970ec81` (ADIM 33 / #656 merged). **alembic head DEĞİŞMEDİ**
 (`0043_i08_registry_strategy_fks`) — bu dalgada **migration YOK**. `ENGINE_VERSION` sabit,
 `docs/openapi.json` değişmedi, ürün davranışı değişmedi. Route path, react-query key, OCC
 token, Idempotency-Key, SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**.
@@ -4974,7 +4974,7 @@ aileden gerçek bir ayrışma; **ölçüldü, düzeltilmedi** (ayrı karar, ayr�
 söyler (*index axis*). **P11-1 açık** olduğu için bu da required status check DEĞİL, job
 kapısı. `DATA_MODEL.md` tazelenmedi — kolon-seviyesi index detayı taşımadığını satır 290'da
 kendisi yazar ve head değişmedi. **RC verdict'i BLOCKED kalır, blocker sayısı DEĞİŞMEDİ
-(üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 33.
+(üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 34.
 
 ---
 
@@ -5028,7 +5028,7 @@ dışlandı (bilinçli, gerekçesi PROJECT_HISTORY §ADIM 33'te) · ADIM 32'nin 
 belgede hâlâ `(PR pending)` diyor ama o dalga **#655** olarak indi — `docs-history-guard.py`
 başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi**.
 **RC verdict'i BLOCKED kalır, blocker sayısı DEĞİŞMEDİ (üç).** Tam kayıt:
-`docs/PROJECT_HISTORY.md` §ADIM 33.
+`docs/PROJECT_HISTORY.md` §ADIM 34.
 
 ---
 

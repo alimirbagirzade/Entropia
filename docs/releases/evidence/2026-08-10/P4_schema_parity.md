@@ -1,6 +1,6 @@
 <!-- doc-status: current -->
 
-# RC §6.7 — P4-1 + P4-2 kapanış kanıtı (ADIM 33, 2026-08-10)
+# RC §6.7 — P4-1 + P4-2 kapanış kanıtı (ADIM 34, 2026-08-10)
 
 Ölçüm ortamı: yerel PostgreSQL 16 (`:5432`), `LC_ALL=en_US.UTF-8`, izole veritabanları
 (`entropia_adim33`, `entropia_adim33_ca`, `entropia_adim33_mig`, `entropia_adim33_tests`).

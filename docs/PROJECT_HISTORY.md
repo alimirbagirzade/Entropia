@@ -5764,3 +5764,124 @@ hâlâ kapı.
 
 **RC verdict'i BLOCKED KALIR. Blocker sayısı DEĞİŞMEDİ (üç: 1, 2, 4)** — P9-F1 bir blocker
 değildi, §6.7'nin blocker-olmayan kalemlerinden biriydi. **"READY" yazılmadı.**
+
+---
+
+## ADIM 34 — RC §6.7 / P4-1 + P4-2: model↔migration şema paritesi (PR #657)
+
+> **Numara notu:** bu slice önce `ADIM 33` olarak yazılmıştı; çalışma sürerken **#656
+> (P9-F1) `ADIM 33` adıyla merge oldu**. PR'ı henüz merge edilmediği için bu slice temiz
+> biçimde **ADIM 34'e taşındı** — `CLAUDE.md`'nin kaydettiği çift-numara sorunundan bir
+> tane daha üretmemek için. Merge edilmiş bir başlık değiştirilmedi.
+
+**Branch** `fix/rc-p4-schema-parity` · **base** `970ec81` (ADIM 33 / #656 merged) ·
+**alembic head DEĞİŞMEDİ** (`0043_i08_registry_strategy_fks`; bu dalgada migration YOK) ·
+`ENGINE_VERSION` değişmedi · `docs/openapi.json` değişmedi · **ürün davranışı değişmedi**.
+
+Kapsam **yalnız** RC §6.7'nin P4-1 ve P4-2 kalemleri. Dört blocker ve §6.7'nin diğer
+kalemleri girmedi.
+
+### Raporun iddiaları yeniden ölçüldü — dördü doğru, biri YANLIŞ
+
+İzole yerel Postgres, `LC_ALL=en_US.UTF-8`, boş şemadan `alembic upgrade head` (exit 0)
+sonrası `alembic check`: **exit 255** DOĞRU · `removed index` **39** / `added index` **39** /
+`changed index` **1** / `removed unique constraint` **1**, `added/removed column` **0**,
+`added/removed table` **0** DOĞRU · **40 gerçek sapma** DOĞRU · `.github/workflows/*.yml`
+içinde `alembic check` **yok**, sapma sahipsiz DOĞRU.
+
+**YANLIŞ:** §6.7'nin *"Emitlediği farkların tamamı index/constraint eksenindedir"* /
+*"tip/server-default değişimi = 0"* iddiası. Aynı koşu **60 `modify_default`** işlemi de
+emitliyor (40 tabloda 60 kolon). Rapor yalnız `compare.constraints`'in
+`Detected added/removed …` satırlarını saymış; `compare.server_defaults` farklı bir cümle
+kurar (`Dialect impl … detected server default on column X`) ve o taramaya takılmamış.
+Sapmalar `alembic check`'in **ERROR** satırındaki operasyon listesinde hep vardı.
+Rapora **P4-3** olarak yazıldı.
+
+### Fix tipi 1 — sevk edilmiş ad kazandı, DB'ye dokunulmadı
+
+39 sapmanın tamamı **yalnız adlandırma**: sevk edilen kısa ad (`ix_backtest_run_snapshot`)
+karşısında modelin `index=True`'dan türettiği SQLAlchemy varsayılanı
+(`ix_backtest_run_composition_snapshot_id`). Kolon kümesi, uniqueness ve partial-predicate
+**aynı**. Merdivenin ilk basamağı seçildi: **migration'lara ve DB'ye dokunulmadı**, model
+sevk edilen ada hizalandı — `__table_args__` içinde `Index("<sevk edilen ad>", "<kolon>")`,
+dosyaların **zaten kullandığı ev stili**. Sevk edilen adlar **DB'den `pg_index` ile okundu**,
+isim benzerliğinden tahmin edilmedi. `alembic revision --autogenerate` **koşulmadı**;
+üretilen diff index DROP/CREATE içerecekti.
+
+Dokunulan 9 model dosyası / 26 tablo: `agent_lab.py` (10), `backtest.py` (11),
+`metric_profile.py` (4), `research_data.py` (4), `agent_tool_gateway.py` (2), `export.py` (2),
+`create_package.py` (1), `instrument.py` (1), `market_data.py` (1). `index=True` sayısı
+**176 → 137** (tam 39). Hiçbir sütun adı, tipi, nullability'si, FK'si veya UNIQUE
+constraint'i değişmedi.
+
+### P4-2 — yapısal, ama yine model tarafında kapandı
+
+Migration 0016 `sa.Column("seq", …, unique=True)` **ve ayrıca**
+`op.create_index("ix_agent_event_seq", …)` yazıyor → DB'de `agent_event_seq_key` (UNIQUE)
+**artı** `ix_agent_event_seq` (non-unique). Model ise `unique=True, index=True`'yu birlikte
+bildiriyordu; SQLAlchemy bunu **tek bir unique index**'e çökertir. Model artık sevk edilen
+şekli bildiriyor: `unique=True` **ayrı**, `Index("ix_agent_event_seq", "seq")` **ayrı**.
+
+**Fonksiyonel etkisizlik deneysel kanıtlandı:** aynı `seq` ile iki satır eklendiğinde
+**iki yol da** reddediyor — alembic yolunda `agent_event_seq_key`, create_all yolunda
+`ix_agent_event_seq`. Ayrışan tek şey hata mesajındaki addır; `seq` zaten `Identity()` ile
+DB'den geldiği için ORM yolundan duplicate erişilebilir değil. Fazladan non-unique index
+**kaldırılmadı** — bir index'i düşürmek ya da uniqueness'ını çevirmek semantik bir
+değişikliktir, ayrı karar ve ayrı PR.
+
+### Kapanış ölçümü
+
+| Ölçüm | Önce | Sonra |
+|---|---|---|
+| `alembic check` index-ekseni operasyonu | **40** | **0** |
+| Kurulum yolu paritesi (alembic ↔ `create_all`) | DIVERGENT — 361 vs 360; 40/39/1 | **BIT-IDENTICAL** — 361 vs 361; 0/0/0 |
+| `add/remove column` · `add/remove table` | 0 · 0 | **0 · 0** |
+| `alembic check` exit | 255 | **255** (P4-3 yüzünden) |
+
+Tam backend suite **3987 passed / 1 xfailed / 0 failed**, coverage **%93.52** (kapı ≥90).
+Integration testleri şemayı `create_all` ile kurar — index adlarının değiştiği **tam o yol**
+— dolayısıyla suite bu değişikliğin gerçek regresyon testidir. `ruff` · `mypy` temiz,
+`generate_repository_facts.py --check` **exit 0**, tek head, `upgrade → downgrade -1 →
+upgrade` **4/4 exit 0**.
+
+### Kapı — ve neyi ölçmediği
+
+`scripts/schema_parity_gate.py` (YENİ), `ci.yml` `backend` job'ında **`alembic upgrade head`'in
+hemen ardından**. Assert ettikleri: (1) alembic yolu ile `create_all` yolunun index kümesi
+**bit-özdeş**; (2) autogenerate **sıfır** index/constraint operasyonu; (3) server-default
+sapma sayısı **60 tavanını** geçemez; (4) başka hiçbir şema drift'i yok. **Exit 0 doğrulandı.**
+
+Kapı `alembic check`'ten **daha güçlüdür**: alembic, operatör sınıfı taşıyan dört
+`audit_events` expression index'ini (`gin_trgm_ops`, `varchar_pattern_ops`) **atlayıp "eşit
+varsayar"**; kapı onları gerçek `pg_get_indexdef` üzerinden görür.
+
+**Negatifi kanıtlandı.** İki sapma tipi de geçici olarak geri konuldu; ikisinde de **exit 1**
+(P4-1 tipinde `remove_index`+`add_index`, P4-2 tipinde MIGRATION-ONLY `agent_event_seq_key`
++ DIFFERS). Geri alındıktan sonra kapı yeniden **exit 0**.
+
+CodeQL PR üzerinde iki bulgu verdi, **ikisi de bu betikte** ve ikisi de düzeltildi:
+`py/uninitialized-local-variable` (f-string içindeki koşullu ifadeler `_verdict()`
+yardımcısına çıkarıldı) ve `py/unused-import` (models paketi artık `MODEL_PACKAGE` adına
+bağlı ve bir başlangıç guard'ı tarafından **okunuyor** — import'un yan etkisi
+`Base.metadata`'yı doldurmaktır). Kapının assert ettikleri değişmedi.
+
+`ci.yml`'ın **concurrency kusuru zaten onarılmıştı** (satır 9–14) — `CLAUDE.md` onu açık
+listeliyordu, **bayattı**; bu dalgada düzeltildi.
+
+### Honest boundaries — bu slice'ta KAPANMAYAN
+
+- **`alembic check` hâlâ exit 255** ve ne kapı ne belge bunu sıfırmış gibi gösterir.
+  Sebep **P4-3**: 60 `modify_default` sapması. **Ölçüldü, düzeltilmedi** — modele
+  `server_default` eklemek `create_all`'ın kurduğu şemayı değiştirir (P4-2 ile aynı aileden
+  gerçek bir ayrışma), ayrı karar ve ayrı PR. Kapı sayıyı **tavana** bağladı: büyüyemez.
+- Kapı **`alembic check`'in exit code'unu assert etmez**; adı da bunu söyler (*index axis*).
+- **P11-1 hâlâ açık:** `main`'de branch protection / ruleset YOK → bu kapı da diğerleri gibi
+  **job kapısıdır, required status check DEĞİLDİR**. Repo ayarı, **insan kararı**.
+- `docs/CODEMAPS/DATA_MODEL.md` **tazelenmedi ve tazelenmesi gerekmiyor**: o harita
+  kolon-seviyesi index/constraint detayı taşımadığını satır 290'da açıkça yazar, alembic
+  head de değişmedi.
+
+### Verdict
+
+**RC verdict'i BLOCKED KALIR. Blocker sayısı DEĞİŞMEDİ (üç).** P4-1/P4-2 blocker değildi.
+**"READY" yazılmadı.**

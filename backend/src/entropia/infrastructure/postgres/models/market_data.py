@@ -16,6 +16,7 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -47,6 +48,7 @@ class MarketDatasetRevision(Base):
     __tablename__ = "market_dataset_revision"
     __table_args__ = (
         UniqueConstraint("entity_id", "revision_no", name="uq_market_dataset_revision_no"),
+        Index("ix_market_dataset_revision_state", "revision_state"),
     )
 
     revision_id: Mapped[str] = mapped_column(String(40), primary_key=True)
@@ -63,7 +65,6 @@ class MarketDatasetRevision(Base):
         enum_column(MarketRevisionState, "market_revision_state"),
         nullable=False,
         default=MarketRevisionState.DRAFT,
-        index=True,
     )
     validation_status: Mapped[ValidationStatus | None] = mapped_column(
         enum_column(ValidationStatus, "validation_status"), nullable=True

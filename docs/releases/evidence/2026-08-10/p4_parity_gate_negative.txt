@@ -1,0 +1,24 @@
+migrated database : entropia_adim33
+create_all probe  : entropia_adim33_create_all_probe
+
+[1] install-path index parity — 361 vs 360 indexes
+    MIGRATION-ONLY  agent_event.agent_event_seq_key  unique=True
+    DIFFERS         agent_event.ix_agent_event_seq  (False, 'public.agent_event USING btree (seq)') != (True, 'public.agent_event USING btree (seq)')
+    -> FAIL
+
+[2] model/migration index axis — 3 operation(s)
+    ('remove_constraint', UniqueConstraint(Column('seq', NullType(), table=<agent_event>)))
+    ('remove_index', Index('ix_agent_event_seq', Column('seq', BIGINT(), table=<agent_event>, nullable=False, server_default=Identity(start=1, increment=1, minvalue=1, maxvalue=9223372036854775807, cycle=False, cache=1))))
+    ('add_index', Index('ix_agent_event_seq', Column('seq', BigInteger(), table=<agent_event>, nullable=False, server_default=Identity()), unique=True))
+    -> FAIL
+
+[3] NOT owned by this gate — server-default deviations: 60
+    expected 60 (see module docstring);
+    `alembic check` stays non-zero because of these. Not asserted clean.
+    -> PASS (no growth)
+
+[4] no other schema drift — 0 operation(s)
+    -> PASS
+
+VERDICT: FAIL
+EXIT=1  (negative proof: P4-2 deviation reintroduced)

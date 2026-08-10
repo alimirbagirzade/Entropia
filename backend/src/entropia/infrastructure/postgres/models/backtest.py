@@ -42,6 +42,7 @@ from typing import Any
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -66,11 +67,17 @@ class BacktestRun(Base):
     """Mutable BacktestRun lifecycle root (doc 15 §9.1)."""
 
     __tablename__ = "backtest_run"
+    __table_args__ = (
+        Index("ix_backtest_run_workspace", "workspace_entity_id"),
+        Index("ix_backtest_run_snapshot", "composition_snapshot_id"),
+        Index("ix_backtest_run_fingerprint", "composition_fingerprint"),
+        Index("ix_backtest_run_retry_of", "retry_of_run_id"),
+    )
 
     run_id: Mapped[str] = mapped_column(String(40), primary_key=True)
-    workspace_entity_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    composition_snapshot_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    composition_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    workspace_entity_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    composition_snapshot_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    composition_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     manifest_id: Mapped[str] = mapped_column(String(40), nullable=False)
     manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     state: Mapped[BacktestRunState] = mapped_column(
@@ -83,7 +90,7 @@ class BacktestRun(Base):
         String(40), ForeignKey(_PRINCIPAL_FK), nullable=True
     )
     ready_report_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    retry_of_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    retry_of_run_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     job_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -157,11 +164,15 @@ class BacktestRunManifest(Base):
     """Immutable hash-pinned run manifest — the worker's only input (doc 15 §9.2)."""
 
     __tablename__ = "backtest_run_manifest"
+    __table_args__ = (
+        Index("ix_backtest_run_manifest_run", "run_id"),
+        Index("ix_backtest_run_manifest_exec", "execution_key"),
+    )
 
     manifest_id: Mapped[str] = mapped_column(String(40), primary_key=True)
-    run_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    run_id: Mapped[str] = mapped_column(String(40), nullable=False)
     manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    execution_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    execution_key: Mapped[str] = mapped_column(String(64), nullable=False)
     composition_snapshot_id: Mapped[str] = mapped_column(String(40), nullable=False)
     composition_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     engine_version: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -175,13 +186,17 @@ class BacktestResult(Base):
     """Immutable final output root; only a succeeded run creates one (CR-03)."""
 
     __tablename__ = "backtest_result"
+    __table_args__ = (
+        Index("ix_backtest_result_workspace", "workspace_entity_id"),
+        Index("ix_backtest_result_fingerprint", "composition_fingerprint"),
+    )
 
     result_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     run_id: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
     manifest_id: Mapped[str] = mapped_column(String(40), nullable=False)
     manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    workspace_entity_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    composition_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    workspace_entity_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    composition_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     engine_version: Mapped[str] = mapped_column(String(64), nullable=False)
     deletion_state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -217,11 +232,12 @@ class MetricValueRow(Base):
     __tablename__ = "metric_value"
     __table_args__ = (
         UniqueConstraint("result_id", "metric_key", name="uq_metric_value_result_key"),
+        Index("ix_metric_value_result", "result_id"),
     )
 
     metric_value_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     result_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False
     )
     metric_key: Mapped[str] = mapped_column(String(64), nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -239,11 +255,14 @@ class ResultEquityPoint(Base):
     """Immutable equity/drawdown/exposure curve point (doc 15 §3.2)."""
 
     __tablename__ = "result_equity_point"
-    __table_args__ = (UniqueConstraint("result_id", "seq", name="uq_result_equity_point_seq"),)
+    __table_args__ = (
+        UniqueConstraint("result_id", "seq", name="uq_result_equity_point_seq"),
+        Index("ix_result_equity_point_result", "result_id"),
+    )
 
     point_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     result_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     timestamp: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -256,11 +275,14 @@ class TradeLedgerRow(Base):
     """Immutable Trade Ledger root row (doc 15 §3.2, §14 Trade Root)."""
 
     __tablename__ = "trade_ledger_row"
-    __table_args__ = (UniqueConstraint("result_id", "seq", name="uq_trade_ledger_row_seq"),)
+    __table_args__ = (
+        UniqueConstraint("result_id", "seq", name="uq_trade_ledger_row_seq"),
+        Index("ix_trade_ledger_row_result", "result_id"),
+    )
 
     trade_row_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     result_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     entry_time: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -276,11 +298,14 @@ class SignalEventRow(Base):
     """Immutable decision-trace signal event (doc 15 §14). NOT a fill."""
 
     __tablename__ = "signal_event"
-    __table_args__ = (UniqueConstraint("result_id", "seq", name="uq_signal_event_seq"),)
+    __table_args__ = (
+        UniqueConstraint("result_id", "seq", name="uq_signal_event_seq"),
+        Index("ix_signal_event_result", "result_id"),
+    )
 
     signal_event_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     result_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False
     )
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     event_time: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -342,10 +367,11 @@ class DiagnosticArtifact(Base):
     """Immutable deterministic diagnostics artifact (doc 15 §3.2, §13)."""
 
     __tablename__ = "diagnostic_artifact"
+    __table_args__ = (Index("ix_diagnostic_artifact_result", "result_id"),)
 
     diagnostic_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     result_id: Mapped[str] = mapped_column(
-        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, index=True
+        String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
     content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
@@ -359,12 +385,13 @@ class ResultManifestSnapshot(Base):
     run/manifest rows (doc 15 §12 historical integrity)."""
 
     __tablename__ = "result_manifest_snapshot"
+    __table_args__ = (Index("ix_result_manifest_snapshot_hash", "manifest_hash"),)
 
     snapshot_id: Mapped[str] = mapped_column(String(40), primary_key=True)
     result_id: Mapped[str] = mapped_column(
         String(40), ForeignKey(_RESULT_FK, ondelete="CASCADE"), nullable=False, unique=True
     )
-    manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     execution_key: Mapped[str] = mapped_column(String(64), nullable=False)
     engine_version: Mapped[str] = mapped_column(String(64), nullable=False)
     manifest: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

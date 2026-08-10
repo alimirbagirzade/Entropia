@@ -1,0 +1,73 @@
+{
+  "pages": {
+    "mainboard": {
+      "color-contrast": 3
+    },
+    "strategy-details": {
+      "color-contrast": 2
+    },
+    "outsource-signal": {
+      "color-contrast": 3
+    },
+    "trading-signal": {
+      "color-contrast": 2
+    },
+    "trade-log": {
+      "color-contrast": 2
+    },
+    "create-package": {
+      "color-contrast": 1
+    },
+    "pre-check": {
+      "color-contrast": 1
+    },
+    "package-library": {
+      "color-contrast": 1
+    },
+    "embedded-packages": {
+      "color-contrast": 1
+    },
+    "rationale-families": {
+      "color-contrast": 2
+    },
+    "market-data": {
+      "color-contrast": 2
+    },
+    "research-data": {
+      "color-contrast": 2
+    },
+    "portfolio": {
+      "color-contrast": 2
+    },
+    "ready-check": {
+      "color-contrast": 2
+    },
+    "run-results": {
+      "color-contrast": 2
+    },
+    "results-history": {
+      "color-contrast": 1
+    },
+    "arrange-metrics": {
+      "color-contrast": 2
+    },
+    "analysis-lab": {
+      "color-contrast": 1
+    },
+    "panel-management": {
+      "color-contrast": 2
+    },
+    "panel-logs": {
+      "color-contrast": 2
+    },
+    "trash": {
+      "color-contrast": 1
+    },
+    "user-manual": {
+      "color-contrast": 1
+    },
+    "future-dev": {
+      "color-contrast": 7
+    }
+  }
+}

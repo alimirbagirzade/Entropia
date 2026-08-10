@@ -1,4 +1,9 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı). **Yerine geçen kickoff:**
+> `docs/ADIM35_LANDED_KICKOFF.md`.
 
 # ADIM 34 landed — kickoff for the next session
 

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'o=$(scripts/ultrareview-advisor.sh 2>&1); c=$?; [ $c -ne 1 ] && echo \"$o\"; exit 0'"
+          }
+        ]
+      }
+    ]
+  }
+}

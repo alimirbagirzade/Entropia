@@ -15,6 +15,7 @@ smallest command that discriminates between causes, then the fix.
 | [worker-down.md](worker-down.md) | A worker plane has stopped consuming | `EntropiaWorkerHeartbeatStale`, `EntropiaWorkerHeartbeatNeverRecorded` |
 | [stale-jobs.md](stale-jobs.md) | Stuck leases, queues that never drain, terminal failures | `EntropiaJobLeaseStuck`, `EntropiaQueueNeverDrains`, `EntropiaJobsFailingTerminally` |
 | [outbox-lag.md](outbox-lag.md) | Event relay behind; SSE stale | `EntropiaOutboxLagGrowing`, `EntropiaOutboxLagSevere` |
+| [alert-notification.md](alert-notification.md) | How any of the above reaches a human — routing, fail-closed startup, silencing, and what delivery still does not prove | *(all 11 — this is the path, not a rule)* |
 | [backtest.md](backtest.md) | A run is stuck, slow, or produced no Result | — (no metric; diagnosis is via `backtest_run_event`) |
 | [agent-coordinator.md](agent-coordinator.md) | Coordinator looping without progress, executor starved | — (no metric; logs only) |
 | [backup-restore.md](backup-restore.md) | Taking, verifying and restoring a backup | — (**backups are operator-initiated; nothing alerts on a missed one**) |

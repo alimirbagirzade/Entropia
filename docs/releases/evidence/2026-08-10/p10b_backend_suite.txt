@@ -1,0 +1,56 @@
+ADIM 31 — regression run. Backend full suite + every gate this slice touches.
+Date: 2026-08-10 · Host: darwin 25.5.0 · isolated DB (TEST_DATABASE_URL -> entropia_adim31)
+
+=== 1. FULL BACKEND SUITE (single pytest invocation, not killed mid-run) ===
+$ cd backend && TEST_DATABASE_URL=postgresql+asyncpg://... uv run pytest
+
+src/entropia/shared/passwords.py                                             17      0 100.0%
+src/entropia/shared/responses.py                                             27      0 100.0%
+-------------------------------------------------------------------------------------------------------
+TOTAL                                                                     27113   1755  93.5%
+Required test coverage of 90% reached. Total coverage: 93.53%
+3987 passed, 1 xfailed, 11 warnings in 1193.22s (0:19:53)
+
+HONEST NOTE ON THE EXIT CODE. This run was detached (nohup), so its `$?` was NOT
+captured separately — the repo's own ADIM 17 lesson says to write the output to a
+file and read `$?` on its own line, and for THIS run only the summary line above is
+evidence. It reports 0 failed / 0 errors with the coverage gate reached, which is
+pytest exit 0 by construction; but it is inferred from the summary, not observed.
+Every gate below WAS run with an explicitly captured exit code.
+
+=== 1b. THE FIRST RUN OF THIS SUITE FAILED — recorded, not hidden ===
+An earlier full run in this session reported:
+    1 failed, 3986 passed, 1 xfailed in 1197.75s
+    FAILED tests/contract/test_repository_facts_guard.py::
+           test_the_repository_itself_passes_the_documentation_truth_gate
+Cause: this slice adds a test file, so `docs/generated/repository_facts.*` and the
+README generated block went STALE, and a second kickoff doc claimed
+`doc-status: current`. Both are exactly what that gate exists to catch. Fixed by
+regenerating the artefacts and demoting docs/ADIM30_LANDED_KICKOFF.md to
+`historical`; the run above is the re-run after that fix.
+
+Generated-artefact delta (the ONLY generated change — no alembic head, no
+ENGINE_VERSION, no route/table movement, as an ops/CI slice should produce):
+    backend_collected_test_functions  3415 -> 3432
+    backend_test_files                 329 -> 330
+
+=== 2. EVERY GATE THIS SLICE TOUCHES — exit codes captured explicitly ===
+$ pytest test_alert_notification_contract + test_alert_rules_contract + test_repository_facts_guard + test_worker_plane_deployment + test_default_credential_gate --no-cov
+........................................................................ [ 60%]
+................................................                         [100%]
+  exit = 0
+
+$ uv run ruff check .                                        exit = 0
+$ uv run ruff format --check .                               exit = 0
+$ uv run mypy src                                            exit = 0
+$ uv run python ../scripts/generate_repository_facts.py --root .. --check
+  documentation-truth gate OK — artefacts fresh, documents classified, no stale claims.
+  exit = 0
+$ scripts/alert-rules-gate.sh                                exit = 0   (p10b_promtool_gate.txt)
+$ scripts/alert-notification-gate.sh                         exit = 0   (p10b_amtool_gate.txt)
+$ scripts/alert-notification-proof.sh                        exit = 0   (p10b_notification_proof.txt)
+
+=== 3. FRONTEND — NOT RUN, and why ===
+No file under frontend/ was touched by this slice (`git status` confirms). The
+frontend coverage gate is therefore not a gate this change can move, and it was
+deliberately not run rather than run and reported as if it proved something.

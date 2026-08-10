@@ -1,0 +1,19 @@
+$ scripts/alert-rules-gate.sh   (ADIM 31 branch — with the new alerting: block)
+
+==> promtool (v3.5.0) check config
+Checking /ops/prometheus/prometheus.yml
+  SUCCESS: 1 rule files found
+ SUCCESS: /ops/prometheus/prometheus.yml is valid prometheus config file syntax
+
+Checking /ops/alerts/entropia.rules.yml
+  SUCCESS: 11 rules found
+
+==> promtool check rules
+Checking /ops/alerts/entropia.rules.yml
+  SUCCESS: 11 rules found
+
+==> promtool test rules
+  SUCCESS
+
+==> alert rules OK
+exit=0

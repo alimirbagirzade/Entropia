@@ -181,21 +181,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **HEAD `169cfaa`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 30 (RC blocker 2, harness):** `scripts/e2e-acceptance.sh` **`flows`**
-> alt-komutu + `scripts/lib/acceptance-flows.sh` (YENİ) → beş kabul akışı **60 passed /
-> 0 failed / 2 skipped**, tarayıcı katmanı **5 passed**; P5'in bloke üç kalemi de koşuldu
-> (session 27/0 · legacy 15/0 · dev-auth 9/0 · health/smoke/worker-restart exit 0). **Ürün
-> kodu değişmedi.** Kanıt: `docs/releases/evidence/2026-08-10/`. **Blocker 2 KISMEN kapandı —
-> `flows` bir CI kapısı DEĞİL; RC verdict'i BLOCKED kalır.** Tam kayıt:
-> `PROJECT_HISTORY.md` §ADIM 30.
-> Öncesinde ADIM 29 (RC verification, #632–#636; P9-B1 düzeltmesi #637), ADIM 29 (A-08 kayıt
+> **Son dalga — ADIM 31 (RC blocker 3, ops/CI):** fail-closed bildirim yolu sevk edildi —
+> `ops/alertmanager/*` (routing: page↔ticket ayrı receiver, kök receiver **gerçek**),
+> `prometheus.yml` `alerting:` bloğu, compose'da `observability` **profili** (düz
+> `docker compose up` etkilenmez), `alert-notification-{gate,proof}.sh` + 21 contract testi.
+> Hedef env yoksa Alertmanager **exit 78, başlamaz**. Proof exit 0: sha256 provenance +
+> gerçek `EntropiaApiDown` alıcıya `entropia-page`/`severity=page` olarak **ULAŞTI**. **Ürün
+> kodu değişmedi.** **Blocker 3 KAPANDI → blocker 4→3; RC verdict'i BLOCKED kalır.** Tam
+> kayıt: `PROJECT_HISTORY.md` §ADIM 31.
+> Öncesinde ADIM 30 (RC blocker 2, harness — `flows` 60/0/2, ama **CI kapısı değil**),
+> ADIM 29 (RC verification, #632–#636; P9-B1 düzeltmesi #637), ADIM 29 (A-08 kayıt
 > uzlaştırması, #631), ADIM 28 (#628/#630), ADIM 27
 > (#626/#627), ADIM 26 (#624), ADIM 25 (#622) — **ADIM 23/24 artık `PROJECT_HISTORY.md`'de
 > KAYITLI** (borç kapandı).
 > **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
 > izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez · **P9-B2 imzasız** (react-router freeze'inde owner
-> yok — insan işi) · K-2..K-6 ölçüldü ama **düzeltilmedi** · Alertmanager YOK ·
+> yok — insan işi) · K-2..K-6 ölçüldü ama **düzeltilmedi** ·
+> **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
+> serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·
+> delivery proof'u **CI kapısı değil** · **monitörü izleyen yok** ·
 > **P5/P6 ADIM 30'da yeniden ölçülüp COMMIT EDİLDİ** (`evidence/2026-08-10/`) — ama
 > **`flows` CI'da koşmuyor**, sunucu katmanı regresyonu sessizce dönebilir ·
 > **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde) ·
@@ -229,9 +234,10 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler (2026-08-06, ADIM 25 / PR #622'de ölçüldü):** **otorite CI'dır.** Backend tam suite
-  **3912 passed / 1 xfailed / 0 failed**, exit 0, coverage **%93.52** (kapı ≥90); frontend
-  **721 passed / 70 dosya**, **%84.92 line**. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
+- **Testler (backend 2026-08-10 / ADIM 31'de ölçüldü; frontend 2026-08-06 / ADIM 25):**
+  **otorite CI'dır.** Backend tam suite **3987 passed / 1 xfailed / 0 failed**, coverage
+  **%93.53** (kapı ≥90) — ADIM 31 frontend'e dokunmadı, o yüzden frontend sayıları ADIM 25
+  ölçümüdür ve yeniden koşulmadı: **721 passed / 70 dosya**, **%84.92 line**. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
   koşusunda pytest'in özet satırı ve exit code'u yakalanmamıştı — çıktıyı dosyaya yaz, `$?`'i
   **ayrı** oku. **Bilinçli `xfail(strict)` sayısı 1'dir** (eskiden 4 yazıyordu — **bayat**):
   `test_research_point_in_time_parity.py:583`, tek issue **#558** (available-time policy pin'i

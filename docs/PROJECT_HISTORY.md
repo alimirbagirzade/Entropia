@@ -5403,3 +5403,131 @@ bilerek yapılmadı** — insan kararıdır. §6.2'deki iki SKIP de açık işti
 `Makefile` (`e2e-flows`) · `README.md` · `docs/E2E_ACCEPTANCE.md` ·
 `docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` (§3/P5, §3/P6, §6.2, §6.2.1, §8, §9, §10) ·
 `docs/releases/evidence/2026-08-10/` (1 belge + 8 ham çıktı).
+
+---
+
+## ADIM 31 — RC Blocker 3: fail-closed bildirim yolu (PR pending)
+
+**Dalganın tipi:** ops/CI. **Ürün kodu değişmedi** — `backend/src` ve `frontend/` bu dalgada
+hiç düzenlenmedi; migration yok, lockfile değişmedi, `ENGINE_VERSION` sabit,
+`SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI). Migration, imza, tag,
+release, issue açma/kapama **yok**.
+
+### Ne kapatıldı
+
+`docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` §6.3: **ateşleyen 11 alarm kuralının
+hiçbiri bir insana ulaşmıyordu.** ADIM 25 kuralları yazdı, ADIM 26 onların *doğru* olduğunu
+kanıtladı (promtool `check config` / `check rules` / `test rules`, bloklayıcı CI job'ı).
+İkisi de teslimata dokunmadı. `severity: page` ve `severity: ticket` **hiçbir şeyin okumadığı
+etiketlerdi** — ve o etiketlerin yedisi "ürün kullanılamaz", "Postgres erişilemez", "async
+düzlem hiç kurulmamış" diyor.
+
+### Karar: (A) sevk — (B) imzalı sapma SEÇİLMEDİ
+
+Eksik olan bir on-call *organizasyonu* değil, bildirim *yolunun kendisiydi*; o yol repo içi
+yapılandırmadır. Ayrıca: imzalayan verilmediği için agent zaten imza üretemez (D-10 ve
+`security-allowlist.json` disiplini imzayı **adı verilmiş bir insana** bağlar).
+
+### ÖNCE DOĞRULAMA — raporun beş iddiası yeniden ölçüldü
+
+`origin/main` (`20108af`) üzerinde: `alerting:` bloğu **yok** · compose'da Prometheus ve
+Alertmanager **yok** · `ops/ scripts/ .github/ backend/src/` içinde receiver/routing/silence/
+on-call **yok** (üç dosya eşleşiyor, **hepsi yokluğu anlatan yorum**) · **11 kural**,
+`page` **7** / `ticket` **4** · promtool job'ı `alerts` / `Alert rules — promtool`, **exit 0**.
+**Beşi de doğru.** Ham çıktı: `docs/releases/evidence/2026-08-10/p10b_preexisting_state.txt`.
+
+### Sevk edilen
+
+| Kalem | Dosya |
+|---|---|
+| Routing ağacı | `ops/alertmanager/alertmanager.yml` — `page` → `entropia-page` (group_wait 30s, repeat **1h**), `ticket` → `entropia-ticket` (group_wait 5m, repeat **12h**). **Kök receiver GERÇEK**: eşleşmeyen alarm düşürülmez, page eder. 3 inhibit, **hepsi aşağı yönlü** ve üçünde de kaynak alarm teslim edilir |
+| Fail-closed başlatıcı | `ops/alertmanager/entrypoint.sh` — `ALERTMANAGER_NOTIFY_URL` unset/boş/http(s) değilse **exit 78**. `ALERTMANAGER_NOTIFY_URL_TICKET` opsiyonel; boşsa ticket hattı page hedefine yönlenir ve **stdout'ta söylenir** (teslimat kaybı yok, yalnız granularite) |
+| Prometheus başlatıcı | `ops/prometheus/entrypoint.sh` — `ENTROPIA_METRICS_TOKEN` zorunlu (anonim scrape 403 → `up == 0` → sürekli sahte page); config'i **`cp -R` ile birebir** stage eder |
+| `alerting:` bloğu | `ops/prometheus/prometheus.yml` → `alertmanager:9093` |
+| Servisler | `docker-compose.yml` — `profiles: ["observability"]`, iki kalıcı volume (silence + notification log restart'ı atlatmalı) |
+| CI kapıları | `scripts/alert-notification-gate.sh` (amtool) + `backend/tests/contract/test_alert_notification_contract.py` (**21 test**). CI job'ı `Alert rules — promtool` → **`Alert rules and notification path`** olarak yeniden adlandırıldı |
+| Uçtan uca kanıt | `scripts/alert-notification-proof.sh` + `ops/alertmanager/notification_catcher.py` + `docker-compose.proof.yml` |
+| Runbook | `docs/runbooks/alert-notification.md` (YENİ) + `METRIC_ALERT_MATRIX.md` §4/§5 |
+
+### Ölçüm (2026-08-10)
+
+promtool **exit 0** (11 kural) · amtool gate **exit 0** · contract **79 passed** (21 yeni + 58 mevcut,
+regresyonsuz) · backend tam suite **3987 passed / 1 xfailed / 0 failed**, coverage **%93.53** ·
+ruff / ruff format / mypy / repository-facts **hepsi exit 0** · proof **exit 0**:
+
+* **Faz 1 (fail-closed):** boş hedef → **exit 78** + değişkeni adıyla anan mesaj; URL olmayan
+  değer → **exit 78**.
+* **Faz 3 (provenance):** çalışma ağacı / mount / staged sha256 **üçü de
+  `f1c1949c6d3382fa5450138604759509ac57262f93fbb219c3356b34e5be0e19`** ·
+  `--config.file=/tmp/ops/prometheus/prometheus.yml` · parse edilmiş config tracked dosyadan
+  okunan beş değeri taşıyor · yüklenen kural seti **11 = 11, diff boş**.
+* **Faz 4 (delivery):** `api` servisi hiç koşmadığı için `up{job="entropia-api"} == 0`
+  **basitçe doğru** — sentetik seri yok. `EntropiaApiDown` ateşledi ve alıcıya
+  **`"receiver": "entropia-page"`, `"alertname": "EntropiaApiDown"`, `"severity": "page"`**
+  olarak ulaştı.
+
+### ÜÇ ÖLÇÜLMÜŞ TUZAK — tekrarlanmasın
+
+1. **`GET /api/v1/status/config` byte-diff'i ASLA geçmez.** Prometheus config'i *marshalled*
+   döndürür: `scrape_protocols` ve `runtime.gogc` gibi varsayılanlar enjekte edilir, tüm
+   yorumlar silinir. İlk yazılan provenance kapısı tam bu yüzden kırmızı verdi — kapının
+   tasarım hatasıydı, ürünün değil. Yerine geçen zincir: **sha256 + `--config.file` flag +
+   parse edilmiş değerler + kural seti diff'i**.
+2. **`amtool check-config`, notifier config'i OLMAYAN bir receiver'a SUCCESS döner** (v0.28.1'de
+   ölçüldü). "Geçici placeholder receiver" tam olarak bu şekildir: yönlendirilen her alarmı
+   kabul eder, hiçbirini teslim etmez, ve kapı yeşil kalır. `test_no_receiver_is_a_silent_black_hole`
+   bu yüzden var.
+3. **`docker compose logs | grep -q`, `set -o pipefail` altında bir tuzaktır.** grep ilk
+   eşleşmede çıkar, docker SIGPIPE alır, pipeline başarısız görünür. **Gerçekleşmiş bir
+   teslimat "gelmedi" diye okundu** (proof exit 255, oysa bildirim çoktan alıcıdaydı).
+   Log'u önce dosyaya yaz, sonra grep'le.
+
+### Neden `${VAR:?...}` kullanılmadı
+
+Compose'un zorunlu-değişken işareti **tüm dosyanın** interpolation'ını iptal eder, yani
+`prometheus`/`alertmanager` profil kapalı olsa bile repo'daki **her** `docker compose up`
+kırılırdı (`acceptance.sh`, `e2e-acceptance.sh`, `a11y-audit-stack.sh`). Ret bu yüzden
+**konteynerin içinde** yaşıyor: compose değişkeni **boş fallback** ile geçirir
+(`${ALERTMANAGER_NOTIFY_URL:-}`), entrypoint reddeder. `test_the_alertmanager_service_has_no_default_destination`
+tam olarak bu yazımı pinler — herhangi bir varsayılan reddedilir.
+
+### Kendi hatam, kayda geçirildi
+
+Suite'in **ilk** koşusu **1 failed** verdi: `test_repository_facts_guard.py::test_the_repository_itself_passes_the_documentation_truth_gate`.
+Slice bir test dosyası eklediği için `docs/generated/repository_facts.*` + README'nin üretilmiş
+bloğu bayatladı ve ikinci bir kickoff `doc-status: current` iddia etti. **Kapı tam olarak bunun
+için var.** Artefaktlar yeniden üretildi (delta **yalnız** collection sayısı: 3415→3432, 329→330
+dosya — alembic head / `ENGINE_VERSION` / route / tablo **hareket etmedi**),
+`docs/ADIM30_LANDED_KICKOFF.md` `historical`'a indirildi, suite yeniden koşuldu.
+
+### Mevcut yığına etkisi — YOK (ölçüldü)
+
+Düz `docker compose up` iki yeni servisi **başlatmaz** (profil). `test_worker_plane_deployment.py`
+etkilenmez (yeni servislerde `--queues` yok, `image` farklı); `test_default_credential_gate.py`
+etkilenmez (`.env.example`'a yalnız ekleme yapıldı).
+
+### KAPANMAYAN ARTIK — dürüst sınır
+
+§6.3'ün **iki** doğrulanmamış noktası vardı; **ikincisi (provenance) kapandı**, **birincisi
+kapanmadı**: **kurallar gerçek production serilerine karşı hiç değerlendirilmedi** — yalnız
+sentetik seri, artı tek bir yapısal `up == 0`. Gerçek trafiğe göre yanlış ayarlanmış bir eşik
+hâlâ *doğru* görünür. Repo içindeki hiçbir kapı bunu kapatamaz; **kalıcı imzalı sapma
+DEĞİLDİR** ve öyle kaydedilmemiştir.
+
+Blocker olmayan üç kalem raporun §6.7'sine işlendi: **P10-B3** delivery proof'u bir CI kapısı
+değil · **P10-B4** monitörü izleyen yok (`prometheus_notifications_errors_total` Prometheus'un
+kendi `/metrics`'inde, onu kimse scrape etmiyor) · **P10-B5** on-call rotasyonu / escalation /
+acknowledgement yok (Alertmanager'ın ack kavramı yoktur; `repeat_interval` mekanizmanın
+tamamıdır). Beş maddelik tam liste: `docs/runbooks/alert-notification.md` §5.
+
+### Verdict
+
+**Blocker sayısı 4 → 3. RC verdict'i BLOCKED KALIR** — 1 (A-08), 2 (kabul akışları `flows`
+CI kapısı değil) ve 4 (react-router imzasız freeze) açıktır. Numaralandırma **bilerek
+korunmuştur**: kalanlar (1), (2), (4) olarak anılmaya devam eder — yeniden numaralandırmak
+bu belgeye atıf yapan merge edilmiş PR gövdelerini geçmişten koparırdı (ADIM 16 / ADIM 21
+çakışmasında verilen kararın aynısı). **"READY" yazılmadı.**
+
+Kanıt: `docs/releases/evidence/2026-08-10/P10B_alert_notification_path.md` +
+`p10b_preexisting_state.txt` · `p10b_promtool_gate.txt` · `p10b_amtool_gate.txt` ·
+`p10b_notification_proof.txt` · `p10b_contract_tests.txt` · `p10b_backend_suite.txt`.

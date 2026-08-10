@@ -251,7 +251,93 @@ services:
       retries: 5
       start_period: 10s
 
+  # ===========================================================================
+  # Observability plane (ADIM 31) — the notification path, behind a profile.
+  #
+  # WHY A PROFILE. `profiles:` means neither service starts on a plain
+  # `docker compose up`, so scripts/acceptance.sh, scripts/e2e-acceptance.sh and
+  # scripts/a11y-audit-stack.sh bring up exactly the stack they brought up
+  # before this slice. Start them deliberately:
+  #
+  #   docker compose --profile observability up -d prometheus alertmanager
+  #
+  # WHY THEY ARE HERE AND NOT IN A SEPARATE FILE. Until ADIM 31 the repo shipped
+  # alert RULES with no way to run them, and the release readiness report
+  # (docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md §6.3) counted eleven
+  # validated rules — seven of them paging — that reached nobody. A notification
+  # path that lives in a file the deployment does not use would have reproduced
+  # exactly that. These are the services an operator actually runs.
+  #
+  # NEITHER SERVICE HAS depends_on. That is deliberate: the pair must be able to
+  # come up while the API is down, because "the API is down" is the first thing
+  # they exist to report. It is also what lets
+  # scripts/alert-notification-proof.sh fire EntropiaApiDown for real — with no
+  # `api` service running, `up{job="entropia-api"} == 0` is true on the SHIPPED
+  # scrape config and the SHIPPED rule, with no synthetic fixture anywhere.
+  # ===========================================================================
+  prometheus:
+    # Pinned BY DIGEST, not by tag — the same supply-chain idiom as the promtool
+    # pin in scripts/alert-rules-gate.sh and the gitleaks/trivy pins in
+    # .github/workflows/security.yml. Prometheus v3.5.0 (LTS); bump the digest
+    # and that script's constant together, deliberately.
+    image: prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    profiles: ["observability"]
+    # ops/prometheus/entrypoint.sh refuses to exec Prometheus without
+    # ENTROPIA_METRICS_TOKEN: GET /metrics is fail-closed in production, so an
+    # unauthenticated scraper reads a healthy API as `up == 0` and pages forever.
+    entrypoint: ["/bin/sh", "/ops/prometheus/entrypoint.sh"]
+    environment:
+      ENTROPIA_METRICS_TOKEN: ${ENTROPIA_METRICS_TOKEN:-}
+    volumes:
+      # The WHOLE ops/ tree, read-only. `rule_files` in prometheus.yml is the
+      # relative path ../alerts/entropia.rules.yml, so mounting only the
+      # prometheus/ directory would load a config that resolves its rules to
+      # nothing — and load it successfully.
+      - ./ops:/ops:ro
+      - prometheusdata:/prometheus
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  alertmanager:
+    image: prom/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+    profiles: ["observability"]
+    # THE FAIL-CLOSED SEAM. There is no default destination here and there is no
+    # `${ALERTMANAGER_NOTIFY_URL:?...}` either: a required-variable marker would
+    # abort compose file interpolation for the WHOLE stack, breaking every
+    # `docker compose up` in the repo even though this service is profiled off.
+    # The refusal belongs in the container instead — ops/alertmanager/entrypoint.sh
+    # exits 78 when ALERTMANAGER_NOTIFY_URL is unset, empty, or not an http(s)
+    # URL, so an Alertmanager either has a real destination or has no process.
+    entrypoint: ["/bin/sh", "/ops/alertmanager/entrypoint.sh"]
+    environment:
+      ALERTMANAGER_NOTIFY_URL: ${ALERTMANAGER_NOTIFY_URL:-}
+      ALERTMANAGER_NOTIFY_URL_TICKET: ${ALERTMANAGER_NOTIFY_URL_TICKET:-}
+    volumes:
+      - ./ops:/ops:ro
+      - alertmanagerdata:/alertmanager
+    ports:
+      # Published so an operator can create a silence: several rules'
+      # `false_positives` annotations explicitly ask for one around a planned
+      # deploy or a debugging session. See docs/runbooks/alert-notification.md §4.
+      - "${ALERTMANAGER_HOST_PORT:-9093}:9093"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
+  # Alertmanager's notification log and silences must survive a restart: without
+  # it, a restart re-notifies every firing alert and forgets every silence an
+  # operator set. Prometheus's TSDB is here for the same reason at a lower
+  # stake — a fresh volume just loses history.
+  prometheusdata:
+  alertmanagerdata:

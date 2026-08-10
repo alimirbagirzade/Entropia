@@ -1,0 +1,42 @@
+# Entropia — end-to-end proof overlay for the notification path (ADIM 31).
+#
+# Layered on top of docker-compose.yml by scripts/alert-notification-proof.sh:
+#
+#   docker compose -f docker-compose.yml -f ops/alertmanager/docker-compose.proof.yml \
+#     --profile observability up -d prometheus alertmanager alert-catcher
+#
+# WHAT IT ADDS AND WHAT IT DOES NOT. It adds ONE service: a test receiver that
+# stands at the end of the path and prints what it was given. It overrides
+# NOTHING about prometheus or alertmanager — same images, same entrypoints, same
+# ops/ mount, same shipped ops/prometheus/prometheus.yml and
+# ops/alertmanager/alertmanager.yml. That is the point: a proof that runs against
+# a specially-relaxed configuration proves something nobody ships. The only thing
+# the proof script supplies from outside is ALERTMANAGER_NOTIFY_URL, pointed at
+# the catcher — which is exactly the one value a deployment supplies too.
+#
+# NOT REFERENCED BY docker-compose.yml. It has to be named with an explicit `-f`,
+# so `docker compose --profile observability up` in a real deployment can never
+# accidentally start a catcher and turn a page into a log line.
+
+services:
+  alert-catcher:
+    # Digest-pinned like every other tool image in this repo (see
+    # scripts/alert-rules-gate.sh for the reasoning). Stock python, no build
+    # step: ops/alertmanager/notification_catcher.py is standard library only.
+    image: python@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+    profiles: ["observability"]
+    command: ["python", "/ops/alertmanager/notification_catcher.py"]
+    volumes:
+      - ./ops:/ops:ro
+    environment:
+      CATCHER_PORT: "9099"
+    # Not published to the host. The proof asserts on `docker compose logs
+    # alert-catcher`, and an unpublished port keeps a throwaway receiver off the
+    # operator's machine.
+    expose:
+      - "9099"
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

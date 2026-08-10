@@ -168,7 +168,14 @@ jobs:
         run: node scripts/npm-audit-gate.mjs frontend frontend/e2e
 
   alerts:
-    name: Alert rules — promtool
+    # RENAMED IN ADIM 31, because the old name was being misread. "Alert rules —
+    # promtool" green was taken as "alerting works"; it never meant more than
+    # "the rules are correct", and eleven correct rules reaching nobody is
+    # exactly what docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md §6.3
+    # recorded as a release blocker. The job now covers the notification path's
+    # configuration too — and still does NOT prove delivery, which is
+    # scripts/alert-notification-proof.sh and is not a CI gate.
+    name: Alert rules and notification path
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -182,6 +189,14 @@ jobs:
         # the supply-chain reasoning, which matches the gitleaks and trivy pins
         # in security.yml.
         run: scripts/alert-rules-gate.sh
+      - name: Validate the notification routing config
+        # Same job, because it is the same shape of check against the same ops/
+        # tree with a digest-pinned image — a second job would pay another
+        # checkout for ~15 seconds of work. Runs `amtool check-config` plus
+        # `amtool config routes test`, which resolves concrete label sets through
+        # the routing tree: a matcher typo that sends every page down the ticket
+        # branch is valid config and amtool has no opinion about it until asked.
+        run: scripts/alert-notification-gate.sh
 
   docker:
     name: Docker — build images

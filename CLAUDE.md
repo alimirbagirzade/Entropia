@@ -183,13 +183,21 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **HEAD `66bdeb4`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 40 (RC §6.7 / P1-B1+B2 + P8-B1+B3):** elle yazılmış sayılar **silindi,
+> **Son dalga — ADIM 41 (RC §6.7 / P8-B2, durable admission status):** on üç admission ucu
+> **türetilerek** sınıflandırıldı (`enqueue_job` transitive closure; hepsi async, senkron uç
+> YOK). Kanonik **status veren** iki uç hizalandı — `../pre-check` ve `../generate-candidate`
+> artık **202** + tipli gövde; kanonik **sessiz** olan `../validate` ve `../baseline-parse`
+> **200 kaldı → PO kararı bekliyor** (raporun *"diğer dokuz 202"*'si de yanlıştı: **4×200 +
+> 1×201 + 8×202**). **Yeni admission ucu eklersen** `tests/contract/test_p8b2_admission_status.py`
+> sınıflandırmadan geçmeyeni kırmızıya çevirir. **Kanonik boşlukta sevk edilmiş desenden wire
+> contract türetme.** `PROJECT_HISTORY.md` §ADIM 41 · `docs/ADIM41_LANDED_KICKOFF.md` · §6.7.9.
+> Öncesinde ADIM 40 (RC §6.7 / P1-B1+B2 + P8-B1+B3): elle yazılmış sayılar **silindi,
 > sahipleri değişti** — katman sayıları üretiliyor (`repository_facts.md` §*Application modules*),
 > dual-token sayısının tek sahibi `BACKEND_ROUTES.md` §DUAL-TOKEN. **Sayı yazma:** yeni
 > application modülü / dramatiq aktörü eklersen **codemap satırı ZORUNLU** —
 > `generate_repository_facts.py::check_codemap_coverage` CI'da kırmızıya çevirir (aktör satırında
-> **kuyruk** da doğrulanır). **Satır numarası yazma, sembol adı kullan.** P8-B2 (200↔202) ve
-> **yeni P8-B3b** açık; **P8 KAPANMADI**. `PROJECT_HISTORY.md` §ADIM 40 · `docs/ADIM40_LANDED_KICKOFF.md`.
+> **kuyruk** da doğrulanır). **Satır numarası yazma, sembol adı kullan.** **P8-B3b** açık;
+> **P8 KAPANMADI** (P8-B2'nin PO yarısı da açık). `PROJECT_HISTORY.md` §ADIM 40.
 > Öncesinde ADIM 39 (P11-2, #665): görsel kapı **8 → 23 rota**, liste `screenshotMatrix.ts::TARGET_PAGES`
 > türevi (**elle liste yazma**). **Baseline üretirken sıra ZORUNLU:** `down -v` → seed → **`npm test`**
 > → `screenshots:update`; CI-dışı Linux runner'a EŞİT DEĞİL — **toleransı büyütme, maske icat etme,

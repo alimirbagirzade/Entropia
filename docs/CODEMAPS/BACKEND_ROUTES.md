@@ -430,22 +430,27 @@ sabitleri **kendi sorgu katmanının uyguladığı** değerlerden ver. Sınırs�
 
 ## create_package.py — OCC: **`X-Request-Version` düz int header** (`_request_version:33`)
 
+> **Satır numarası yok (bilerek).** Bu tablonun `:NN` değerleri ADIM 41'de **silindi** —
+> fonksiyon adı zaten sembolün kendisidir (`routes/create_package.py::<fonksiyon>`) ve
+> P8-B2'nin iki dekoratör değişikliği altındaki **on bir** numarayı birden kaydırmıştı.
+> Aynı karar ADIM 40'ta aktör tablosunda verilmişti.
+
 | METHOD path | fonksiyon | çağırdığı | OCC | Idem |
 |---|---|---|---|---|
-| POST `/create-package/requests` (201) | `create_request:85` | `cp_cmd.create_package_request` | yok | ✔ |
-| GET `/create-package/requests` | `list_requests:110` | `cp_query.list_package_requests` | yok | — |
-| GET `/create-package/requests/{request_id}` | `get_request:121` | `cp_query.get_package_request` | yok | — |
-| POST `../pre-check` | `run_pre_check:142` | `cp_cmd.run_precheck` → **admission + `default` aktör dispatch** (`_dispatch_create_package_job:128`) | `X-Request-Version` | ✔ |
-| POST `../generate-candidate` | `generate_candidate:160` | `cp_cmd.submit_candidate_generation` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
-| POST `../draft` | `create_draft:178` | `cp_cmd.create_draft_from_candidate` | **body `expected_candidate_hash`** | ✔ |
-| POST `../validate` | `run_validation:195` | `cp_cmd.start_package_validation_run` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
-| POST `../request-revision` | `request_revision:213` | `cp_cmd.request_package_revision` | `X-Request-Version` | ✔ |
-| POST `../baseline` (201) | `upload_baseline:229` | `cp_cmd.upload_baseline_asset` | `X-Request-Version` | ✔ |
-| POST `../baseline-parse` | `parse_baseline:257` | `cp_cmd.start_baseline_parse` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
-| POST `../approve` | `approve_request:278` | `cp_cmd.approve_and_publish` | **body `expected_head_revision_id`** | ✔ |
-| GET `/dependency-scans/{scan_id}` | `get_scan:296` | `cp_query.get_dependency_scan` | yok | — |
-| GET `/validation-runs/{validation_run_id}` | `get_validation_run:304` | `cp_query.get_validation_run` | yok | — |
-| GET `/baseline-assets/{baseline_asset_id}` | `get_baseline_asset:314` | `cp_query.get_baseline_asset` | yok | — |
+| POST `/create-package/requests` (201) | `create_request` | `cp_cmd.create_package_request` | yok | ✔ |
+| GET `/create-package/requests` | `list_requests` | `cp_query.list_package_requests` | yok | — |
+| GET `/create-package/requests/{request_id}` | `get_request` | `cp_query.get_package_request` | yok | — |
+| POST `../pre-check` (**202**, `PrecheckAcceptedResponse`) | `run_pre_check` | `cp_cmd.run_precheck` → **admission + `default` aktör dispatch** (`dispatch_create_package_job`) | `X-Request-Version` | ✔ |
+| POST `../generate-candidate` (**202**, `CandidateAcceptedResponse`) | `generate_candidate` | `cp_cmd.submit_candidate_generation` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
+| POST `../draft` | `create_draft` | `cp_cmd.create_draft_from_candidate` | **body `expected_candidate_hash`** | ✔ |
+| POST `../validate` (**200 — PO kararı bekliyor**) | `run_validation` | `cp_cmd.start_package_validation_run` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
+| POST `../request-revision` | `request_revision` | `cp_cmd.request_package_revision` | `X-Request-Version` | ✔ |
+| POST `../baseline` (201) | `upload_baseline` | `cp_cmd.upload_baseline_asset` | `X-Request-Version` | ✔ |
+| POST `../baseline-parse` (**200 — PO kararı bekliyor**) | `parse_baseline` | `cp_cmd.start_baseline_parse` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
+| POST `../approve` | `approve_request` | `cp_cmd.approve_and_publish` | **body `expected_head_revision_id`** | ✔ |
+| GET `/dependency-scans/{scan_id}` | `get_scan` | `cp_query.get_dependency_scan` | yok | — |
+| GET `/validation-runs/{validation_run_id}` | `get_validation_run` | `cp_query.get_validation_run` | yok | — |
+| GET `/baseline-assets/{baseline_asset_id}` | `get_baseline_asset` | `cp_query.get_baseline_asset` | yok | — |
 
 > **Async düzlem (F-01a + F-01b + F-01c).** Pre-Check / generate-candidate / validate /
 > baseline-parse artık **admission**'dır: durable QUEUED `jobs` satırı yazılır,
@@ -457,6 +462,31 @@ sabitleri **kendi sorgu katmanının uyguladığı** değerlerden ver. Sınırs�
 > metadata → `BASELINE_METADATA_INVALID`, `X-Request-Version` → 409). `PARSE_FAILED` artık
 > HTTP hatası değil, worker'ın yazdığı durable `failed` attempt'tir.
 > Ayrıntı: `JOBS_AND_EVENTS.md` §`default` kuyruğu.
+
+## §DURABLE-ADMISSION STATUS — RC P8-B2 adjudication (ADIM 41)
+
+**Durable admission** = QUEUED `jobs` satırı yazıp **iş bitmeden** dönen uç. Böyle **13**
+HTTP yüzeyi var ve üçü farklı status döndürüyordu. Küme **elle yazılmaz**: kanonik liste
+`application/` katmanında `enqueue_job`'a *transitively* ulaşan komutlardan türer ve
+`backend/tests/contract/test_p8b2_admission_status.py` **sınıflandırılmamış yeni bir
+admission ucunu kırmızıya çevirir** (negatifi kanıtlı).
+
+| Uç | Status | Neden |
+|---|---|---|
+| `../pre-check` | **202** | doc 07 §10.3 birebir: *"202 accepted … job/scan id, state precheck_pending/checking"* → ADIM 41'de **hizalandı** (200 idi) |
+| `../generate-candidate` | **202** | MTR §7.1 literal wire contract (`-> 202 Accepted`), §4.2 (*"202 Accepted + job_id döndür"*), doc 07 §10.3 → ADIM 41'de **hizalandı** (200 idi) |
+| `../validate` | **200** | **Kanonik status VERMİYOR** (doc 06 §7 ve doc 08 §7 yalnız async davranışı; MTR §13 "istek içinde tamamlanmaz" der, kod demez) → **PO kararı bekliyor**, kod değişmedi |
+| `../baseline-parse` | **200** | Kanonik **ucu bile** adlandırmıyor (doc 06 §7 tek baseline yüzeyi; MTR §10.2 yalnız `POST /package-revisions/{id}/baseline-assets`). Upload(201)/parse ayrımı sevk edilmiş bir ayrıştırma → hizalanacak bir şey yok → **PO kararı bekliyor** |
+| `POST /library/{entity_id}/validation-runs` | **201** | Sevk edilmiş; kanonik status vermiyor. `../validate` ile **aynı** run'ı sarar — iki sarmalayıcı iki farklı status döndürür, bu da PO kararının kapsamındadır |
+| `POST /mainboard-compositions/{id}/backtest-runs` | **202** | doc 15 §10 *"201/202"* |
+| `POST /trash-entries/{id}/purge` | **202** | doc 20 §7/§9.2 *"202 job reference"* |
+| `../retries` · `market-datasets/../analysis` · `research-datasets/../analysis` · `trade-logs/imports` · `trading-signals/imports` · `package-imports` | **202** | sevk edilmiş; kanonik status vermiyor |
+
+> **202 bu repoda "durable job" demek değildir.** `agent-directives`, `agent-runtime/pause`,
+> `agent-runtime/resume`, `agent-runs/{id}/stop` ve `backtest-runs/{id}/cancel` de **202**
+> döner ama `enqueue_job` çağırmaz — etkiyi worker sonradan uygular. Yani sevk edilmiş
+> desen "**etki yanıttan sonra iniyorsa 202**"tır. Bu bir **OLGU**, kanonik bir kural
+> DEĞİL — kanonik boşlukta ondan bir wire contract türetme.
 
 ## library.py · sharing.py · package_import.py
 

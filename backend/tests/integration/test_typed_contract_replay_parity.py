@@ -27,12 +27,15 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from entropia.application.commands import create_package as cp_cmd
 from entropia.application.commands import esp as esp_cmd
 from entropia.application.jobs import agent_tools
+from entropia.application.jobs import create_package as cp_jobs
 from entropia.application.queries import agent_tool_gateway as tg_query
 from entropia.application.queries import esp as esp_query
 from entropia.application.queries import library as library_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.routes import create_package as cp_routes
 from entropia.apps.api.routes import library as library_routes
 from entropia.domain.agent_lab.enums import (
     ALPHA_AGENT_ID,
@@ -41,6 +44,7 @@ from entropia.domain.agent_lab.enums import (
     RuntimeMode,
     RuntimeStatus,
 )
+from entropia.domain.create_package.enums import CreationMode, SourceLanguage
 from entropia.domain.esp.enums import RuntimeAdapter
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
@@ -57,7 +61,14 @@ from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.pagination import PageParams
 from tests.integration.test_library_validation_run import _library_head
+from tests.integration.test_validation_evidence import _INDICATOR_OUTPUT as CP_INDICATOR_OUTPUT
+from tests.integration.test_validation_evidence import _RSI_DEP as CP_RSI_DEP
 from tests.integration.test_validation_evidence import OWNER as CP_OWNER
+from tests.integration.test_validation_evidence import _seed_family as cp_seed_family
+from tests.integration.test_validation_evidence import _seed_principals as cp_seed_principals
+from tests.integration.test_validation_evidence import (
+    _seed_python_resolver as cp_seed_python_resolver,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -820,3 +831,102 @@ async def test_the_detail_provenance_block_survives_its_nested_models(app, sessi
         # The three per-call lists are Pre-Check-plane rows and stay open.
         assert isinstance(provenance["scan"]["resolved_refs"], list)
     assert detail.json()["revisions"] == raw["revisions"]
+
+
+# ---------------------------------------------------------------------------
+# Create Package — the two admissions RC P8-B2 aligned to 202
+# ---------------------------------------------------------------------------
+
+
+async def _cp_request(session) -> str:
+    """A fresh Create-Package request sitting right before Pre-Check."""
+    await cp_seed_principals(session)
+    await cp_seed_python_resolver(session)
+    family_id = await cp_seed_family(session)
+    created = await cp_cmd.create_package_request(
+        session,
+        CP_OWNER,
+        package_type="indicator",
+        creation_mode=CreationMode.TRANSLATE_EXISTING_CODE,
+        source_language=SourceLanguage.PINESCRIPT,
+        other_language_label=None,
+        target_runtime=RuntimeAdapter.PYTHON,
+        request_body="//@version=5\nindicator('rsi')\nta.rsi(close, 14)",
+        output_contract=CP_INDICATOR_OUTPUT,
+        rationale_family_id=family_id,
+        declared_dependencies=[CP_RSI_DEP],
+        equivalence_claim=False,
+    )
+    await session.flush()
+    return str(created["request_id"])
+
+
+@pytest.fixture
+def _no_cp_broker(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record the Create-Package hand-off instead of performing it (no broker in CI)."""
+    dispatched: list[str] = []
+    monkeypatch.setattr(cp_routes, "dispatch_create_package_job", dispatched.append)
+    return dispatched
+
+
+async def test_the_precheck_admission_body_matches_its_stored_envelope_and_replays(
+    app, session, _no_cp_broker: list[str]
+) -> None:
+    """P8-B2: the admission is now ``202`` AND its body is typed — prove typing dropped
+    nothing. ``run_idempotent`` stores the command's return value verbatim, so comparing
+    the HTTP body against that record proves the model neither drops nor invents a key,
+    and the replay proves the SAME dict comes back through the SAME DTO at the SAME
+    status (the status lives on the route, not in the stored envelope, so a replay of a
+    pre-P8-B2 record returns 202 too — there is nothing to backfill)."""
+    request_id = await _cp_request(session)
+
+    gen = _override(app, session, actor=CP_OWNER)
+    next(gen)
+    try:
+        async with _client(app) as client:
+            url = f"{_API}/create-package/requests/{request_id}/pre-check"
+            first = await client.post(url, headers={"Idempotency-Key": "p8b2-pre-1"})
+            replay = await client.post(url, headers={"Idempotency-Key": "p8b2-pre-1"})
+    finally:
+        next(gen, None)
+    await session.commit()
+
+    assert first.status_code == 202, first.text
+    assert first.json() == await _stored_envelope(session, "p8b2-pre-1")
+    assert replay.status_code == 202
+    assert replay.json() == first.json()
+    # Admission, never a result: an in-flight status and no scan yet.
+    assert first.json()["status"] == "checking"
+    assert first.json()["scan_id"] == ""
+    # Both calls hand the same durable job to the broker.
+    assert _no_cp_broker == [first.json()["job_id"], first.json()["job_id"]]
+
+
+async def test_the_candidate_admission_body_matches_its_stored_envelope_and_replays(
+    app, session, _no_cp_broker: list[str]
+) -> None:
+    """Same proof for Send (MTR §7.1's literal ``202 Accepted``). The Pre-Check gate runs
+    first, so this drives the real admission path rather than a stubbed one."""
+    request_id = await _cp_request(session)
+    queued = await cp_cmd.run_precheck(session, CP_OWNER, request_id=request_id)
+    await cp_jobs.run_create_package_job(session, queued["job_id"])
+    await session.flush()
+
+    gen = _override(app, session, actor=CP_OWNER)
+    next(gen)
+    try:
+        async with _client(app) as client:
+            url = f"{_API}/create-package/requests/{request_id}/generate-candidate"
+            first = await client.post(url, headers={"Idempotency-Key": "p8b2-cand-1"})
+            replay = await client.post(url, headers={"Idempotency-Key": "p8b2-cand-1"})
+    finally:
+        next(gen, None)
+    await session.commit()
+
+    assert first.status_code == 202, first.text
+    assert first.json() == await _stored_envelope(session, "p8b2-cand-1")
+    assert replay.status_code == 202
+    assert replay.json() == first.json()
+    # No candidate exists at admission — the empty hash is what blocks chaining a draft.
+    assert first.json()["state"] == "candidate_generating"
+    assert first.json()["candidate_hash"] == ""

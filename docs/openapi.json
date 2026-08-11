@@ -978,6 +978,40 @@
         "title": "CancelRunBody",
         "type": "object"
       },
+      "CandidateAcceptedResponse": {
+        "description": "Candidate-generation admission body — Master Technical Reference §7.1 spells this\nwire contract out literally (``-> 202 Accepted`` carrying the job id and the\n``CANDIDATE_GENERATING`` state) and doc 07 §10.3 repeats the status.\n\n``candidate_hash`` is empty ON PURPOSE: no candidate exists at admission, and an\nempty hash makes it impossible to chain a draft against one the worker has not\nproduced yet (see ``cp_cmd.submit_candidate_generation``).",
+        "properties": {
+          "candidate_hash": {
+            "title": "Candidate Hash",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "request_version": {
+            "title": "Request Version",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "state",
+          "candidate_hash",
+          "job_id",
+          "request_version"
+        ],
+        "title": "CandidateAcceptedResponse",
+        "type": "object"
+      },
       "ChangeRoleRequest": {
         "properties": {
           "role": {
@@ -4008,6 +4042,72 @@
           "name"
         ],
         "title": "PinnedRationaleFamilyRef",
+        "type": "object"
+      },
+      "PrecheckAcceptedResponse": {
+        "description": "Pre-Check admission body — doc 07 §10.3 names this response ``202 accepted``.\n\nNothing here is a Pre-Check RESULT: the scan does not exist yet. ``scan_id`` /\n``attempt_no`` / ``resolved`` / ``missing`` / ``warnings`` / ``registry_fingerprint``\nare the command's deliberate placeholders (see ``cp_cmd.run_precheck``) that keep the\nbody assignable to the client's ``PrecheckActionResult`` while the worker is still\nrunning — never a synthesized PASSED/BLOCKED. Declaring the model is what puts the\nshape into ``docs/openapi.json``; a bare ``dict`` kept the drift guard green while\nthe contract stayed invisible (O-30).",
+        "properties": {
+          "attempt_no": {
+            "title": "Attempt No",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "missing": {
+            "items": {},
+            "title": "Missing",
+            "type": "array"
+          },
+          "registry_fingerprint": {
+            "title": "Registry Fingerprint",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "request_version": {
+            "title": "Request Version",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "integer"
+          },
+          "scan_id": {
+            "title": "Scan Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {},
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_id",
+          "job_id",
+          "status",
+          "state",
+          "scan_id",
+          "attempt_no",
+          "resolved",
+          "missing",
+          "warnings",
+          "registry_fingerprint",
+          "request_version"
+        ],
+        "title": "PrecheckAcceptedResponse",
         "type": "object"
       },
       "PurgeAcceptedResponse": {
@@ -8986,7 +9086,7 @@
     },
     "/api/v1/create-package/requests/{request_id}/baseline-parse": {
       "post": {
-        "description": "Admit the head baseline's parse (F-01c). Returns ``parsing`` immediately; the\nstored CSV is read and the terminal passed/failed status written by the durable\n``default``-queue worker, so closing the tab never cancels it.",
+        "description": "Admit the head baseline's parse (F-01c). Returns ``parsing`` immediately; the\nstored CSV is read and the terminal passed/failed status written by the durable\n``default``-queue worker, so closing the tab never cancels it.\n\nSTILL 200 ON PURPOSE — same reason as ``run_validation`` (RC P8-B2). Canonical does\nnot merely omit a status for this endpoint, it does not name the ENDPOINT: doc 06\n§7 has one baseline surface (\"asset upload and parse are async\") and MTR §10.2\nlists only ``POST /package-revisions/{id}/baseline-assets``. Splitting upload (201)\nfrom parse is a shipped decomposition, so there is nothing to align TO. PO decision;\npinned by ``test_p8b2_admission_status.py``.",
         "operationId": "parse_baseline_api_v1_create_package_requests__request_id__baseline_parse_post",
         "parameters": [
           {
@@ -9185,13 +9285,11 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Generate Candidate Api V1 Create Package Requests  Request Id  Generate Candidate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CandidateAcceptedResponse"
                 }
               }
             },
@@ -9261,13 +9359,11 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Run Pre Check Api V1 Create Package Requests  Request Id  Pre Check Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PrecheckAcceptedResponse"
                 }
               }
             },
@@ -9368,6 +9464,7 @@
     },
     "/api/v1/create-package/requests/{request_id}/validate": {
       "post": {
+        "description": "STILL 200 ON PURPOSE — the sibling admissions above are 202 (RC P8-B2).\n\nThis is an admission exactly like pre-check / generate-candidate: it writes a\ndurable QUEUED job and returns before the run exists. What it does NOT have is a\ncanonical status: doc 06 §7 describes the behaviour (\"returns validation_run_id;\nrows show queued/running\") and doc 08 §7 lists the endpoint, but neither names a\ncode, and the Master Technical Reference §13 mandates only that long analyze/parse/\nvalidate work leaves the request. The repo's own 202 habit is a FACT, not a rule —\ninventing a wire contract in a canonical gap is what this project refuses to do,\nso the status stays as shipped and the decision sits with the PO. Do not \"fix\" the\nasymmetry without that decision; ``test_p8b2_admission_status.py`` pins it.",
         "operationId": "run_validation_api_v1_create_package_requests__request_id__validate_post",
         "parameters": [
           {

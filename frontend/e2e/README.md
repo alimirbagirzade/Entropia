@@ -179,6 +179,19 @@ not regenerated**, only the filenames changed.
 >   api python -m entropia.apps.seed
 > cd frontend/e2e && npm test && npm run screenshots:update
 > ```
+>
+> **A Linux host is necessary but not sufficient — only the runner is
+> authoritative.** Measured 2026-08-11: generating in
+> `mcr.microsoft.com/playwright:v1.55.1-noble` reproduced 22 of the 23 pages
+> exactly, but `analysis-lab` came out `1440x1496` there and `1440x1490` on
+> `ubuntu-latest`. That is not jitter — the runner produced byte-identical
+> captures on two consecutive attempts (`md5 12388809…`); it is a stable ~6 px
+> reflow, because that page's empty-state symbol glyphs (◇, ⧗) resolve to
+> different fonts in the two images. Its baseline was taken from the CI
+> `playwright-report` artifact instead. So if you regenerate off-runner, expect
+> CI to reject a page or two, and fix those by copying the runner's own
+> `test-results/**/<slug>-actual.png` over the baseline rather than by loosening
+> anything.
 
 **Only `-linux` baselines are committed, and that is enforced.** Playwright
 suffixes baselines with the platform that produced them and compares only

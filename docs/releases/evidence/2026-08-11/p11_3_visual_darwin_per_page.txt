@@ -1,0 +1,17 @@
+### macOS `npm run visual` vs the committed -chromium-darwin baselines
+# stack: docker compose (this repo, .env.example profile AUTH_MODE=session), seeded with
+#        SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1 — the SAME seed e2e.yml uses.
+# host : darwin 25.5.0 arm64, Playwright 1.55.1, chromium
+# note : specs/11 is describe.configure({mode:'serial'}), so a single run stops at the
+#        first red. Each page was therefore run on its own with --grep.
+
+mainboard                      FAIL   Expected an image 1440px by 1439px, received 1440px by 900px. 66126 pixels (ratio 0.04 of all image pixels) are different.
+strategy-standalone            FAIL   Expected an image 1440px by 1425px, received 1440px by 1135px.
+trading-signal-standalone      FAIL   Expected an image 1440px by 2376px, received 1440px by 2438px.
+trade-log-standalone           PASS   —
+market-data                    FAIL   Expected an image 1440px by 1205px, received 1440px by 900px.
+create-package                 FAIL   Expected an image 1440px by 1238px, received 1440px by 1396px. 51300 pixels (ratio 0.03 of all image pixels) are different.
+ready-check                    FAIL   Expected an image 1440px by 944px, received 1440px by 900px.
+run-result                     PASS   —
+
+6 FAIL / 2 PASS

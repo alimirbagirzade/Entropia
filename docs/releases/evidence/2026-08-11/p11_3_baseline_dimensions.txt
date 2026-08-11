@@ -1,0 +1,29 @@
+### darwin vs linux baseline dimensions — recorded BEFORE the -darwin set was deleted
+# Read straight out of each PNG's IHDR chunk (width/height at bytes 16..24).
+# Both sets are supposed to capture the SAME eight pages of the SAME app at a
+# fixed 1440-wide viewport, fullPage. They do not.
+
+page                          darwin (w x h, bytes)       linux (w x h, bytes)        height delta
+create-package                1440x1238  148,303          1440x1411  125,405          +173
+mainboard                     1440x1439  140,054          1440x929  90,465            -510
+market-data                   1440x1205  165,372          1440x900  99,231            -305
+ready-check                   1440x944  81,760            1440x947  79,463            +3
+run-result                    1440x900  56,031            1440x900  55,673            +0
+strategy-standalone           1440x1425  204,032          1440x900  96,514            -525
+trade-log-standalone          1440x2500  240,285          1440x2500  245,574          +0
+trading-signal-standalone     1440x2376  241,218          1440x2438  251,282          +62
+
+# Font rasterisation differs between platforms and can move a fullPage height by
+# a few px -- ready-check (+3) and trading-signal (+62) are that class. 510 and
+# 525 px are not: that is several table rows of content, i.e. a different page
+# state, not a different renderer.
+#
+# Control: the heights this machine (darwin) actually PRODUCED today land next
+# to the LINUX baselines, not the darwin ones --
+#   mainboard            actual  900   linux  929   darwin 1439
+#   market-data          actual  900   linux  900   darwin 1205
+#   ready-check          actual  900   linux  947   darwin  944
+#   create-package       actual 1396   linux 1411   darwin 1238
+#   trading-signal       actual 2438   linux 2438   darwin 2376
+#   strategy-standalone  actual 1135   linux  900   darwin 1425   <- matches neither
+# So the -darwin set is not a platform artefact. It is a stale artefact.

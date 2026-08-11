@@ -148,11 +148,26 @@ envelope @1440), `permission-denied` (plain user on adminOnly pages @1440).
 Flake controls for `npm run visual` (documented per R2-13 acceptance):
 animations disabled + caret hidden via injected CSS, volatile regions masked
 (`time`, `[data-e2e-volatile]`), `maxDiffPixelRatio: 0.02`, fixed 1440×900
-viewport, fullPage. Baselines are platform-suffixed by Playwright
-(`-darwin`/`-linux`). Both authoring-platform and Ubuntu CI baselines are
-committed. The E2E workflow runs `npm run visual` as a blocking PR/main gate.
-A new platform generates its own set once with `npm run screenshots:update`;
-CI never updates baselines automatically.
+viewport, fullPage. The E2E workflow runs `npm run visual` as a blocking
+PR/main gate; CI never updates baselines automatically.
+
+**Only `-linux` baselines are committed, and that is enforced.** Playwright
+suffixes baselines with the platform that produced them and compares only
+against the suffix matching the running platform. Every `runs-on:` in
+`.github/workflows` is `ubuntu-latest`, so `-linux` is the only set any job can
+read. A `-darwin` set used to sit here beside it; nothing asserted it, and by
+the time it was measured (RC §6.7 / P11-3, 2026-08-11) six of its eight
+baselines no longer matched what the app renders on darwin — height deltas of
+44–539 px, far outside the 2 % tolerance. It was deleted, and
+`scripts/visual-baseline-platform-gate.sh` (wired into the CI `frontend` job)
+now fails if a baseline for an unasserted platform is committed again.
+
+So **running `npm run visual` on macOS reports missing snapshots, not
+regressions.** That is the honest state: you have no baseline for your
+platform, rather than one that quietly lies to you. Do not "fix" it by running
+`npm run screenshots:update` and committing the result — the gate rejects it.
+To genuinely add a platform, add a CI job that runs the suite on it, *then* add
+it to `ASSERTED_PLATFORMS` in that script. In that order.
 
 Honest boundaries: `loading` freezes the genuine in-flight UI by stalling the
 API (deterministic, not a race); `empty` is a fresh user against the shared

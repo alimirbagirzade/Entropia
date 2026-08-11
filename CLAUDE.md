@@ -179,15 +179,21 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `881d273`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `98858da`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 37 (RC §6.7 / P10-B2, sayfalama sınırı):** 9 kelepçeli `limit`
-> parametresi artık sınırını **yayımlıyor** (YENİ `apps/api/pagination.py::clamped_limit_query`
-> → `x-clamp-default` / `x-clamp-maximum`; ölçülen 19 ENFORCING + 9 CLAMPING, **UNPUBLISHED 0**).
-> **Kalem KAPANMADI:** aşımın sessiz clamp mi 422 red mi olacağı **ürün kararıdır**, canonical
-> sessizdir → **PO kararı bekliyor** (rapor §6.7.5). Yeni `limit` eklerken sınırsız bırakma —
-> kelepçeliyorsa bu declarator'dan geçir, reddediyorsa `le=` yaz; kapı kırar. Tam kayıt:
-> `PROJECT_HISTORY.md` §ADIM 37; devir: `docs/ADIM37_LANDED_KICKOFF.md`.
+> **Son dalga — ADIM 38 (RC §6.7 / P11-3 + P11-6, kapı kapsamı):** 8 `-chromium-darwin.png`
+> baseline'ını **hiçbir job assert etmiyordu** ve macOS'ta **8'in 6'sı düşüyordu** → silindi;
+> geri dönüşü YENİ `scripts/visual-baseline-platform-gate.sh` (`ci.yml`→`frontend`) kırıyor,
+> negatifi kanıtlı. **Görsel baseline eklerken `-linux` dışı platform eki commit EDİLEMEZ.**
+> Tab sırası **3/23 → 23/23** (liste artık `screenshotMatrix.ts::TARGET_PAGES` türevi — **elle
+> liste yazma**). **P11 KAPANMADI:** P11-1/P11-2/P11-8 + YENİ **P11-6b** (sonda **Tab'a
+> basmıyor**, hiçbir rota onu kıramaz) ve **P11-3b** (`-linux` setinin seed hassasiyeti) açık.
+> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 38; devir: `docs/ADIM38_LANDED_KICKOFF.md`.
+> Öncesinde ADIM 37 (RC §6.7 / P10-B2, sayfalama sınırı, #663): 9 kelepçeli `limit` sınırını
+> **yayımlıyor** (`apps/api/pagination.py::clamped_limit_query` → `x-clamp-*`; UNPUBLISHED 0);
+> **kalem KAPANMADI** — aşımın clamp mi 422 mi olacağı **ürün kararı**, **PO bekliyor**
+> (rapor §6.7.5). Yeni `limit` eklerken sınırsız bırakma; kelepçeliyorsa o declarator'dan
+> geçir, reddediyorsa `le=` yaz.
 > Öncesinde ADIM 36 (RC §6.7 / P6-ek + P6-6, harness fail-fast, #658) ve
 > **ADIM 35** (`PortfolioRun` → composite `EngineOutput` projeksiyonu, #659): YENİ
 > `execution/portfolio_projection.py::project_portfolio_run`; **üretim yolu YOK ve bilerek

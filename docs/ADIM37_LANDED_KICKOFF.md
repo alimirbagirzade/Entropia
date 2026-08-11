@@ -1,6 +1,9 @@
-<!-- doc-status: current -->
-> Bu belge **ADIM 37 kapanışında** yazıldı. En altındaki *paste-ready resume prompt*
-> temiz bir oturuma yapıştırılacak devir tohumudur.
+<!-- doc-status: historical -->
+> **SUPERSEDED — canlı devir belgesi `docs/ADIM38_LANDED_KICKOFF.md`'dir.**
+> Bu belge **ADIM 37 kapanışında** yazıldı ve o anın kaydıdır. Aşağıdaki *paste-ready
+> resume prompt* artık **kullanılmamalıdır**: ADIM 38 landed olduğu için sıradaki iş
+> P11-2'dir (ADIM 39) ve tohumu ADIM 38 kickoff'unun altındadır. P10-B2'nin **PO kararı
+> bekleyen** yarısı hâlâ açıktır; kaydı burada ve raporun §6.7.5'inde durur.
 
 # ADIM 37 LANDED — RC §6.7 / P10-B2: sayfalama sınırının şemada yayımlanması
 

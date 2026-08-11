@@ -5138,7 +5138,45 @@ ayarı, insan kararı). **Blocker sayısı DEĞİŞMEDİ, verdict BLOCKED KALIR.
 
 ---
 
+## ADIM 38 — RC §6.7 / P11-3 + P11-6: kapının ölçtüğü ile iddia ettiği landed (PR pending)
+
+> Görev metni "ADIM 37" diyordu; o ad merge edilmiş **#663**'e bağlı ve değiştirilemez →
+> çift-ad hatasını tekrarlamamak için **ADIM 38**.
+
+**Ürün kodu DEĞİŞMEDİ**, migration yok, `ENGINE_VERSION` sabit. Verdict **BLOCKED**,
+blocker sayısı **üç**. **P11 KAPANMADI.**
+
+- **P11-3 KAPANDI.** 8 `-chromium-darwin.png` baseline'ını **hiçbir job assert etmiyordu**
+  (18 `runs-on:`'un 18'i `ubuntu-latest`, macOS runner yok) ve macOS'ta `e2e.yml`'in
+  seed'iyle koşulunca **8'in 6'sı düştü** (44–539 px). Kontrol deneyi bunun bir platform
+  farkı **olmadığını** gösterdi. → **silindi**; **YENİ**
+  `scripts/visual-baseline-platform-gate.sh` (`ci.yml` → `frontend`) geri dönüşü kırıyor,
+  **negatifi kanıtlı**. (a)'nın maliyeti (macOS 10×, ürün Linux konteyneri) reddedildi.
+- **P11-6 KAPANDI (kapsam ekseninde).** Tab sırası **3/23 → 23/23**, 0 N/A; liste artık
+  `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor. Daraltmanın gerekçesi ölçülerek
+  çürütüldü (**13.2 s**, job 1.2 dk). 0 sapma, 0 blocking, advisory **90** = ADIM 29.
+- **YENİ AÇIK KALEMLER:** **P11-6b** (sonda **Tab'a basmıyor** ve **hiçbir rota onu
+  kıramaz** — ölçüldü, düzeltilmedi; sınır `precheck-results.json::tab_order_probe`'a
+  yazıldı) · **P11-3b** (`strategy-standalone` bugün 1135 px, `-linux` baseline'ı 900 →
+  hayatta kalan setin **seed hassasiyeti** açık).
+- **DOKUNULMADI:** P11-1 (repo ayarı, **insan kararı**), P11-2 (ayrı PR), P11-8, K-2..K-6,
+  dört blocker. **A-08 ile karıştırılamaz** — defter BOŞ, `REMINDER: A-08 is
+  HUMAN-BLOCKED` satırı yerinde.
+
+Doğrulama: e2e tsc temiz · frontend eslint temiz · `ci.yml` ve precheck spec'i okuyan 94
+backend testi **passed** · `generate_repository_facts.py --check` **OK** · docs regresyonu
+**yok**. Ham kanıt: `docs/releases/evidence/2026-08-11/`. Tam kayıt:
+`PROJECT_HISTORY.md` §ADIM 38; devir: `docs/ADIM38_LANDED_KICKOFF.md`.
+**Linux `@visual` kapısının hâlâ yeşil olduğunu CI job LOG'undan doğrula** — bu makinede
+(darwin) koşulamadı.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
+
+> **ADIM 38 bunu DEĞİŞTİRMEDİ** — test/kapı slice'ıydı, motor eksenine dokunmadı.
+> Test ekseninde sıradaki iş **ADIM 39 = P11-2** (paste-ready resume prompt:
+> `docs/ADIM38_LANDED_KICKOFF.md` en altta).
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

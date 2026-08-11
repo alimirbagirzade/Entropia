@@ -82,7 +82,7 @@ This repository is built **stage by stage** from a canonical specification (see
 | Backend tests **collected** (static, not a pass count) | 3471 in 333 files |
 | Backend `xfail` markers | 1 (1 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 711 in 70 files |
-| E2E test **call sites** (static) | 81 in 21 specs |
+| E2E test **call sites** (static) | 80 in 21 specs |
 | Acceptance criteria mapped | 383 |
 | Acceptance clauses mapped | 1175 |
 

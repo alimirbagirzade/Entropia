@@ -179,16 +179,18 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `98858da`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `ed83688`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 38 (RC §6.7 / P11-3 + P11-6, kapı kapsamı):** 8 `-chromium-darwin.png`
-> baseline'ını **hiçbir job assert etmiyordu** ve macOS'ta **8'in 6'sı düşüyordu** → silindi;
-> geri dönüşü YENİ `scripts/visual-baseline-platform-gate.sh` (`ci.yml`→`frontend`) kırıyor,
-> negatifi kanıtlı. **Görsel baseline eklerken `-linux` dışı platform eki commit EDİLEMEZ.**
-> Tab sırası **3/23 → 23/23** (liste artık `screenshotMatrix.ts::TARGET_PAGES` türevi — **elle
-> liste yazma**). **P11 KAPANMADI:** P11-1/P11-2/P11-8 + YENİ **P11-6b** (sonda **Tab'a
-> basmıyor**, hiçbir rota onu kıramaz) ve **P11-3b** (`-linux` setinin seed hassasiyeti) açık.
-> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 38; devir: `docs/ADIM38_LANDED_KICKOFF.md`.
+> **Son dalga — ADIM 39 (RC §6.7 / P11-2, #665):** görsel kapı **8 → 23 rota**; liste artık
+> `screenshotMatrix.ts::TARGET_PAGES` türevi (**elle liste yazma**), runner'da **23/23 iki kez**,
+> `e2e` +2.6 dk. **Baseline üretirken sıra ZORUNLU:** `down -v` → seed → **`npm test`** →
+> `screenshots:update` — kapı journey-suite SONRASI durumu dondurur, salt-seed stack'te 4/8 düşer
+> (bu **P11-3b'yi cevaplar**). CI-dışı Linux runner'a EŞİT DEĞİL (`analysis-lab` 6 px saptı →
+> baseline CI artefaktından alındı); **toleransı büyütme, maske icat etme, rotayı çıkarma**.
+> Öncesinde ADIM 38 (P11-3 + P11-6): `-darwin` seti silindi, `scripts/visual-baseline-platform-gate.sh`
+> geri dönüşü kırıyor (**`-linux` dışı platform eki commit EDİLEMEZ**), tab sırası 3/23 → 23/23.
+> **P11 KAPANMADI:** P11-1 (branch protection — **insan kararı**), P11-6b, P11-8 açık.
+> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 39; devir: `docs/ADIM39_LANDED_KICKOFF.md`.
 > Öncesinde ADIM 37 (RC §6.7 / P10-B2, sayfalama sınırı, #663): 9 kelepçeli `limit` sınırını
 > **yayımlıyor** (`apps/api/pagination.py::clamped_limit_query` → `x-clamp-*`; UNPUBLISHED 0);
 > **kalem KAPANMADI** — aşımın clamp mi 422 mi olacağı **ürün kararı**, **PO bekliyor**

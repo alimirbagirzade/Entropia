@@ -6407,3 +6407,126 @@ Ham kanıt: `docs/releases/evidence/2026-08-11/`.
 
 **Linux tarafı bu makinede koşulamadı** — `@visual` kapısının `-linux` setiyle hâlâ yeşil
 olduğunu **CI job log'undan** doğrula (yeşil rozet yeterli değil).
+
+---
+
+## ADIM 39 — RC §6.7 / P11-2: görsel regresyon kapsamı 8 → 23 (PR #665)
+
+**ADIM 38'in bıraktığı soruyu kapatır.** ADIM 38 `-linux` setini temizlemişti ama kapının
+kendisi hâlâ **23 sayfanın 8'ini** assert ediyordu. Bu slice o boşluğu kapatır — **yalnız
+onu**. Dört blocker, P11-1 (branch protection, insan kararı) ve P11-8 (Lighthouse)
+**ele alınmadı**.
+
+### Ne sevk edildi
+
+- `specs/11-visual-regression.spec.ts` **elle yazılmış sayfa dizisini kaybetti**; liste
+  `utils/screenshotMatrix.ts::TARGET_PAGES`'ten türüyor — axe scan (specs/13), keyboard
+  sondaları (specs/20) ve screenshot matrisinin (specs/10) okuduğu **aynı** tekil kaynak.
+  İkinci bir elle listenin tek yapabileceği şey zamanla ayrışmaktı.
+- **15 yeni `-linux` baseline.** Sekiz mevcut baseline **YENİDEN ÜRETİLMEDİ**: yalnız
+  slug'a göre rename edildi (`strategy-standalone → strategy-details`,
+  `trading-signal-standalone → trading-signal`, `trade-log-standalone → trade-log`,
+  `run-result → run-results`) ve git bunları **saf rename** olarak kaydetti (`Bin`, byte
+  farkı yok). Eski sekiz sözleşme aynen duruyor.
+- `mode: "serial"` **kaldırıldı**. Yürütme zaten sıralıydı (`fullyParallel:false` +
+  `workers:1`) ve testler hiçbir şey paylaşmıyor; serial izolasyon satın almıyordu, tek
+  aldığı **sessizlikti** — bir hata grubun kalanını *skip* ediyordu. 23 sayfada bu, tek
+  regresyonun 22 rotayı "bilinmiyor"a çevirmesi demekti. Faydası aynı gün görüldü: ilk CI
+  koşusunda `analysis-lab` düşerken diğer 22 rota **yine ölçüldü ve raporlandı**.
+- `frontend/e2e/README.md` — kapsam + iki yeni yazılı önkoşul (aşağıda).
+
+### Kalibrasyon: konteynerin CI'a eşitliği VARSAYILMADI, ÖLÇÜLDÜ
+
+Bu makine darwin; `-linux` üretmek için `mcr.microsoft.com/playwright:v1.55.1-noble`
+kullanıldı. Konteynerin doğru pikseli ürettiği iddia edilmedi — **numune** mevcut sekiz
+baseline'dı: rename edilmiş ama byte-identical, dolayısıyla geçmeleri gerekiyordu.
+**8/8 geçtiler.** Onbeşini orada üretme yetkisi budur.
+
+### YAN BULGU (a) — yazılı olmayan önkoşul; **P11-3b'yi cevaplar**
+
+İlk kalibrasyon **4/8 düştü**. Sebep repoda hiçbir yerde yazmıyordu: **baseline'lar
+salt-seed stack'i değil, `npm test` SONRASI durumu tarif ediyor.** `e2e.yml` ikisini aynı
+job'da sırayla koşuyor, yani kapının fotoğrafladığı sayfalar journey suite'inin az önce
+yarattığı strateji / package request / kullanıcı / backtest sonuçlarını içeriyor.
+
+| Sayfa | Baseline | Salt seed | `npm test` sonrası |
+|---|---|---|---|
+| mainboard | 929 | **900 ✘** | ✓ |
+| ready-check | 947 | **900 ✘** | ✓ |
+| create-package | 1411 | **1396 ✘** | ✓ |
+| strategy-details | 900 | **1135 ✘** | ✓ |
+
+**P11-3b kapanır:** yükseklik **seed'e** değil **journey sonrası duruma** duyarlı ve CI o
+durumu her koşuda üretiyor; ayrıca P11-3b'nin macOS'ta ölçtüğü **1135 px Linux'ta da**
+çıktı → platform artefaktı **değil**. Yeniden üretim sırası artık README'de.
+
+### YAN BULGU (b) — "Linux" ile "runner" aynı şey değil
+
+Konteyner 23 sayfanın **22'sini** runner ile birebir verdi; `analysis-lab` vermedi:
+konteynerde `1440x1496`, `ubuntu-latest`'te `1440x1490`. **Jitter değil** — runner iki
+ardışık denemede **byte-identical** üretti (`md5 12388809…`); kararlı ~6 px reflow, sebebi
+o sayfanın boş-durum sembol glifleri (◇, ⧗) iki imajda farklı fontlara düşüyor. Baseline
+**CI artefaktından** alındı (`playwright-report` → `analysis-lab-actual.png`). Tolerans
+genişletilmedi, diğer 22 dosyaya dokunulmadı.
+
+### Kararlılık — runner'da İKİ KEZ, AYNI COMMIT'te
+
+| Koşu | Sonuç |
+|---|---|
+| `a75f5e7` | 22 passed · **1 failed (`analysis-lab`)** · 4.2 dk |
+| `fa0c6a2` | **23 passed** · 4.0 dk |
+| `fa0c6a2` **rerun** (taze stack + taze seed) | **23 passed** · 4.0 dk |
+
+Öncesinde yerel konteynerde iki tam döngü (`down -v` → rebuild → reseed → `npm test` →
+`npm run visual`), ikincisi **taze ULID / timestamp / rastgele kullanıcı adı** gördü.
+
+**Süre: `e2e` job'ında 1.4 dk → 4.0 dk (+2.6).** Test başına 10.5 s → 10.4 s; maliyet rota
+**sayısından**, rota başına maliyetten değil. Kapsam kısılmadı.
+
+### Maskelenmemiş oynak içerik — ölçüldü, maskelenmedi
+
+Altı yeni baseline oynak kimlik/zaman taşıyor (`panel-logs`/`results-history` ham
+`btres_…` + tarih, `pre-check` `pkgreq_…`, `portfolio` `mbws_…`/`mbi_…`,
+`rationale-families` 6 × `Created (UTC)`, `panel-management` 14 rastgele kullanıcı adı).
+Maske **eklenmedi** — bu yeni bir stabilizasyon deseni icat etmek olurdu. Bunun yerine
+ölçüldü: satır **sırası** ve **sayısı** deterministik olduğu için değişen yalnız glifler ve
+%2 toleransının altında kalıyor (üç runner koşusu bunu doğruladı).
+`panel-management`'ın sırası prefix'ten geliyor, rastgele kısım sonda → satırlar yeniden
+sıralanmıyor; sıralansaydı toleransı aşardı.
+
+### Yerelde görülüp CI'da üretilemeyen bir gözlem — kalem AÇILMADI
+
+Bu makinede `/backtest/ready-check` yüksekliği **946/947/950** arasında salınıyordu (tek
+testin kendi retry'ları arasında bile) ve iki yerel döngüde de tekrarladı; **runner'da üç
+koşunun üçünde de GEÇTİ**. CI'da flake **değildir**, öyle raporlanmadı, §6.7'ye kalem
+eklenmedi. Yalnız kanıt belgesine yazıldı ki CI-dışı bir Linux host'unda üretmeye çalışan
+bir sonraki kişi yanılmasın. Baseline değiştirilmedi, tolerans genişletilmedi, rota
+atlanmadı.
+
+### v18 uyum incelemesi — 15 baseline, TEK TEK
+
+Referans: kanonik v18 mockup + `frontend/e2e/screenshots/prototype/**` + adjudicated
+defter `docs/implementation/v18_visual_deviations.md` (A-06 derin kıyas, D-1 imzalı).
+**Toplu onay yok. Hiçbir YENİ, imzasız sapma dondurulmadı.** Zaten adjudicated olup artık
+kapı tarafından **dondurulan** açık kusurlar açıkça bildirildi: **F-2**
+(`package-library` makine-değeri etiketleri), **F-4** (`portfolio` "+ Add item" ham
+`mbi_…`), **F-07 sınıfı** ham `btres_…` (`panel-logs`, `results-history`). **F-7**
+`embedded-packages`'ta **FIXED** doğrulandı. **F-5** (`results-history` kapalı satırda
+headline metrik yok) görünüşe göre **kapanmış** — satır artık Net/ROMAD/DD/Win Rate
+gösteriyor; defter bunu hâlâ açık listeliyor, **ürün kararı** olarak PO'ya bırakıldı.
+D-10 (45 accent-blue düğüm) baseline'larda **beklendiği gibi** görünür — yeniden
+dosyalanmadı. Per-sayfa notlar: kanıt belgesi §7.
+
+### Sınırlar
+
+- **A-08 DEĞİL.** Piksel karşılaştırması ekran-okuyucu kanıtı değildir; hiçbir çıktısı
+  `docs/audit/a11y_screen_reader_audit_results.md` §1/§2'ye yazılamaz. Defter BOŞ, dört
+  kriter ☐, #514 durumu değişmedi.
+- Ürün kodu **değişmedi**: route, react-query key, OCC token, Idempotency-Key, hook, SSE
+  taksonomisi, `lib/*.ts`, `app/nav.ts` — hiçbiri.
+- Kapı **bloklayıcı** kaldı; advisory'ye düşürülmedi. `maxDiffPixelRatio 0.02` değişmedi.
+- **P11 KAPANMADI:** P11-1 (branch protection — repo ayarı, insan kararı), P11-6b, P11-8
+  açık. Blocker sayısı **üç**, §8 verdict **BLOCKED**.
+
+Ham kanıt: `docs/releases/evidence/2026-08-11/P11_2_visual_coverage.md` (+ yedi ham çıktı).
+Rapor: §6.7 tablosu (`P11-2` üstü çizili, `P11-3b` cevaplandı) + **§6.7.7**.

@@ -5172,11 +5172,60 @@ backend testi **passed** · `generate_repository_facts.py --check` **OK** · doc
 
 ---
 
+## ADIM 39 — RC §6.7 / P11-2: görsel regresyon kapsamı 8 → 23 landed (PR #665)
+
+**Kapsam 8 → 23.** `specs/11-visual-regression.spec.ts` elle yazılmış sayfa dizisini
+kaybetti; liste `utils/screenshotMatrix.ts::TARGET_PAGES`'ten türüyor — axe scan, keyboard
+sondaları ve screenshot matrisinin okuduğu **aynı** tekil kaynak. **15 yeni `-linux`
+baseline**; sekiz mevcut baseline **yeniden üretilmedi**, yalnız slug'a göre rename edildi
+(git `Bin` = byte-identical), yani eski sekiz sözleşme aynen duruyor.
+`mode: "serial"` kaldırıldı — bir hata artık grubun kalanını *skip* etmiyor (faydası aynı
+gün görüldü: `analysis-lab` düşerken diğer 22 rota yine ölçüldü).
+
+**Runner'da 23/23, İKİ KEZ, aynı commit'te** (`fa0c6a2` + rerun, taze stack + taze seed).
+Süre `e2e` job'ında **1.4 dk → 4.0 dk (+2.6)**. Tolerans (`maxDiffPixelRatio 0.02`)
+**değişmedi**, kapı **bloklayıcı** kaldı, hiçbir rota atlanmadı, **ürün kodu değişmedi**.
+
+**İki yazılı olmayan önkoşul bulundu ve README'ye yazıldı — yeni baseline üretecek
+herkesi ilgilendirir:**
+1. **Baseline'lar salt-seed stack'i tarif ETMİYOR.** `e2e.yml` görsel kapıyı `npm test`'ten
+   SONRA koşuyor; salt-seed bir stack'te mevcut sekiz baseline'ın **dördü** yalnız yükseklik
+   yüzünden düşüyor (929↔900, 947↔900, 1411↔1396, 900↔1135). **Bu P11-3b'yi cevaplar:**
+   hassasiyet seed'e değil **journey sonrası duruma**; aynı 1135 px Linux'ta da ölçüldü →
+   platform artefaktı değil.
+2. **"Linux" ile "runner" aynı şey değil.** `playwright:v1.55.1-noble` 23 sayfanın 22'sini
+   runner ile birebir verdi; `analysis-lab` 6 px saptı (konteyner 1496 / runner 1490,
+   runner iki denemede byte-identical → jitter değil, sembol glifi font farkı). O
+   baseline **CI artefaktından** alındı.
+
+**Yeni baseline eklerken:** listeyi elle yazma (TARGET_PAGES türetir), maske icat etme,
+toleransı büyütme; CI-dışı bir Linux'ta üretiyorsan bir-iki sayfanın reddedilmesini bekle ve
+runner'ın kendi `test-results/**/<slug>-actual.png` dosyasını baseline'ın üstüne kopyala.
+
+**Dondurulan bilinen kusurlar açıkça bildirildi** (F-2 `package-library` makine etiketleri,
+F-4 `portfolio` ham `mbi_…`, F-07 sınıfı ham `btres_…` `panel-logs`/`results-history`);
+F-7 `embedded-packages`'ta FIXED doğrulandı; **F-5 görünüşe göre kapanmış** (history satırı
+artık headline metrik gösteriyor) → defter hâlâ açık listeliyor, **PO kararı**.
+
+**Yerelde görülüp CI'da üretilemeyen bir gözlem:** bu makinede `/backtest/ready-check`
+yüksekliği 946/947/950 salınıyordu; **runner'da üç koşunun üçünde de geçti** → CI flake'i
+DEĞİL, §6.7'ye kalem açılmadı, yalnız kanıta yazıldı.
+
+Doğrulama: e2e tsc temiz · `visual-baseline-platform-gate.sh` → **23 baseline, hepsi
+`linux`** · `generate_repository_facts.py --check` **OK** (`Playwright snapshot PNGs 8 → 23`)
+· E2E + A11Y + frontend + backend CI **passed**. Ham kanıt:
+`docs/releases/evidence/2026-08-11/P11_2_visual_coverage.md`. Tam kayıt:
+`PROJECT_HISTORY.md` §ADIM 39; devir: `docs/ADIM39_LANDED_KICKOFF.md`.
+**A-08 DEĞİL** — piksel karşılaştırması ekran-okuyucu kanıtı değildir.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38 bunu DEĞİŞTİRMEDİ** — test/kapı slice'ıydı, motor eksenine dokunmadı.
-> Test ekseninde sıradaki iş **ADIM 39 = P11-2** (paste-ready resume prompt:
-> `docs/ADIM38_LANDED_KICKOFF.md` en altta).
+> **ADIM 38 ve ADIM 39 bunu DEĞİŞTİRMEDİ** — ikisi de test/kapı slice'ıydı, motor
+> eksenine dokunmadı. Test ekseninde kalan RC §6.7 kalemleri: **P11-1** (branch
+> protection — repo ayarı, **insan kararı**, agent işi değil), **P11-6b**, **P11-8**
+> (Lighthouse). Paste-ready resume prompt: `docs/ADIM39_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

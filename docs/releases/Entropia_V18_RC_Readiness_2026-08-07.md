@@ -855,11 +855,11 @@ açılmadı/kapatılmadı.
 | ~~**P9-F2**~~ | ~~**SPA origin'inde CSP yok** — `frontend/nginx-security-headers.conf` CSP vermiyor; yürütülebilir bundle'ı sunan origin budur. API'de CSP var ve testli; statik origin için **hiçbir test/kapı/belge yok**~~ → **2026-08-10 (ADIM 32) KAPANDI** — politika sevk edildi, canlı yanıtta ölçüldü, CI kapısına bağlandı. Ayrıntı ve ham kanıt: **§6.7.1** | P9 |
 | ~~**P9-F1**~~ | ~~`frontend/Dockerfile` **`npm install`** kullanıyor (`npm ci` değil) + `COPY package-lock.json*` glob'u lockfile yokluğunu tolere ediyor → reproducibility riski~~ → **2026-08-10 (ADIM 33) KAPANDI** — `npm ci` + glob'suz `COPY`; fail-closed olduğu **iki negatif durumda, her biri kontrolüyle** ölçüldü, ayrıca `frontend/.dockerignore` eklendi. Ayrıntı ve ham kanıt: **§6.7.2** | P9 |
 | **P11-1** | **`main` üzerinde branch protection YOK ve ruleset YOK** (`gh api …/protection` → 404, `…/rulesets` → `[]`) → visual/axe kapıları **job kapısıdır, required status check DEĞİLDİR**; kırmızı E2E ile merge'i mekanik engelleyen bir şey yok | P11 |
-| **P11-2** | Visual gate 23 sayfanın **8'ini** kapsıyor; kalan 15'te piksel regresyonu koruması **yok** | P11 |
+| ~~**P11-2**~~ | ~~Visual gate 23 sayfanın **8'ini** kapsıyor; kalan 15'te piksel regresyonu koruması **yok**~~ → **2026-08-11 KAPANDI.** İddia doğruydu. Kapsam **8 → 23**; rota listesi artık elle yazılmıyor, `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor (axe scan, keyboard sondaları ve insan incelemesiyle **aynı** tekil kaynak). Runner'da **23/23 passed**, **iki kez, aynı commit'te**. Onbeş yeni `-linux` baseline; sekiz mevcut baseline **yeniden üretilmedi**, yalnız slug'a göre **rename** edildi (byte-identical) → eski sekiz sözleşme aynen duruyor. Kapı **bloklayıcı** kaldı, tolerans **genişletilmedi**, hiçbir rota atlanmadı. Süre: `e2e` job'ında **1.4 dk → 4.0 dk (+2.6)**. İki YAN BULGU ölçüldü — (a) baseline'lar salt-seed stack'i değil **journey-suite sonrası** durumu tarif ediyor (yazılı değildi; **P11-3b'yi cevaplar**), (b) CI-dışı bir Linux imajı runner'ı 23'te 22 üretiyor, `analysis-lab` 6 px sapıyor → baseline'ı **CI artefaktından** alındı. Ayrıntı: **§6.7.7** | P11 |
 | ~~**P11-3**~~ | ~~8 `-chromium-darwin.png` baseline commit'li ama **hiçbir job onları assert etmiyor** → sessizce bayatlayabilir~~ → **2026-08-11 KAPANDI.** İddia doğruydu ama *"bayatlayabilir"* fazla nazikti: **zaten bayatlamıştı** — macOS'ta, `e2e.yml`'in seed'inin aynısıyla koşulduğunda **8'in 6'sı düştü** (yükseklik sapmaları **44–539 px**, `maxDiffPixelRatio 0.02`'nin çok dışında). Tüketici ölçüldü: 18 `runs-on:`'un 18'i `ubuntu-latest`, macOS runner **YOK** → **(b) SİL** seçildi; (a)'nın maliyeti (macOS dakikası 10×, üstelik ürün bir Linux konteyneri olarak sevk ediliyor) açıkça değerlendirilip **reddedildi**. Sekizi silindi; geri dönüşü **YENİ** `scripts/visual-baseline-platform-gate.sh` (→ `ci.yml` `frontend` job'ı) kırıyor ve **negatifi kanıtlı**. Ayrıntı ve ham kanıt: **§6.7.6** | P11 |
 | ~~**P11-6**~~ | ~~Tab sırası 23 route'un **yalnız 3'ünde** doğrulandı~~ → **2026-08-11 KAPANDI (kapsam ekseninde).** **23/23** yürütüldü, **0 N/A**; rota listesi artık elle yazılmıyor, `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor. Daraltmanın yazılı gerekçesi (*"walking every tabbable element on all 23 routes would double this job's wall clock"*) **ölçülerek çürütüldü**: 23 rota **13.2 s**, `@a11y` job'ının tamamı **1.2 dk** (ADIM 29: 1.0 dk). 0 sapma, 0 blocking, advisory **90** — ADIM 29 ile birebir aynı. **YENİ KALEM → P11-6b:** aynı sonda **Tab'a hiç basmıyor** ve **hiçbir rota onu kıramaz**; ölçüldü, **düzeltilmedi**, sınır artefakta yazıldı. Ayrıntı: **§6.7.6** | P11 |
 | **P11-6b** | **YENİ (2026-08-11 ölçümü, rapor bunu bildirmemişti).** `specs/20-a11y-prechecks.spec.ts`'in tab-sırası sondası adının vaat ettiğinden azını ölçüyor: **Tab tuşuna hiç basmıyor** (DOM sırasını `tabindex`'ten türetilen sırayla karşılaştırıyor) ve bulguları yalnız `advisories`'e yazdığı için **hiçbir rota onu kıramaz**. Görebildiği tek şey pozitif-`tabindex` yeniden sıralamasıdır; odak tuzağı / erişilemez kontrol / roving-tabindex **görünmez**. Sınır 3 rotada da vardı — bu dalga onu **getirmedi, ölçtü**; gerçek Tab yürüyüşü yeni bir modelleme kararıdır (radio grupları, `<select>`, roving tabindex) → **ayrı PR**. Şimdilik `precheck-results.json::tab_order_probe` + konsol satırı ile **beyan ediliyor**, ki 3→23 genişlemesi daha güçlü bir iddia gibi okunmasın. Fiziksel Tab yürüyüşü yalnız `specs/14-keyboard-flow.spec.ts`'te, **2 rotada** | P11 |
-| **P11-3b** | **YENİ (2026-08-11 ölçümü).** `strategy-standalone` bugün **1135 px** ölçüldü — `-darwin` (1425) ve **`-linux` (900)** baseline'larının **ikisiyle de** uyuşmuyor; sayfa yüksekliği seed'e bağlı liste uzunluğuyla oynuyor. P11-3'ün sonucunu değiştirmez ama **hayatta kalan `-linux` setinin seed hassasiyeti** hakkında açık bir soru bırakır. **Ölçüldü, düzeltilmedi** — bu dalga `-linux` setine dokunmadı | P11 |
+| **P11-3b** | **YENİ (2026-08-11 ölçümü).** `strategy-standalone` bugün **1135 px** ölçüldü — `-darwin` (1425) ve **`-linux` (900)** baseline'larının **ikisiyle de** uyuşmuyor; sayfa yüksekliği seed'e bağlı liste uzunluğuyla oynuyor. P11-3'ün sonucunu değiştirmez ama **hayatta kalan `-linux` setinin seed hassasiyeti** hakkında açık bir soru bırakır. **Ölçüldü, düzeltilmedi** — bu dalga `-linux` setine dokunmadı. → **2026-08-11 açık sorusu CEVAPLANDI (P11-2 ölçümü, §6.7.7):** yükseklik **seed'e** değil **journey-suite sonrası duruma** duyarlı; `e2e.yml` görsel kapıyı `npm test`'ten SONRA koşuyor, yani CI o durumu her koşuda üretiyor. Aynı 1135 px **Linux'ta da** ölçüldü → platform artefaktı **değil**. `-linux` seti runner'da iki kez 23/23 geçti | P11 |
 | **P11-8** | Lighthouse hâlâ bağlı değil | P11 |
 | **P10-7** | Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor) | P10 |
 | **P1-B1/B2** | `BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat | P1 |
@@ -1233,6 +1233,91 @@ da açılmadı.
 `docs/audit/a11y_screen_reader_audit_results.md` §1/§2'ye yazılamaz; defter BOŞ, dört
 kriter de ☐. Koşu `REMINDER: A-08 is HUMAN-BLOCKED. Nothing above counts as a
 screen-reader PASS.` satırını basmaya devam ediyor — **kaldırılmadı**.
+
+**Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
+
+---
+
+#### 6.7.7 P11-2 KAPANDI — görsel kapı 8 → 23 (2026-08-11)
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** P11-2 blocker değildi; §8 hâlâ **BLOCKED**, açık
+blocker sayısı hâlâ **üç** (1, 2, 4). **P11 KAPANMADI** — **P11-1** (branch protection,
+repo ayarı → **insan kararı**), **P11-6b** ve **P11-8** (Lighthouse) **ele alınmadı**.
+Tam kayıt ve ham çıktılar: `docs/releases/evidence/2026-08-11/P11_2_visual_coverage.md`
+(+ `p11_2_ci_visual_run1.txt`, `p11_2_ci_visual_run2.txt`,
+`p11_2_ci_visual_run3_same_commit.txt`, `p11_2_seed_only_calibration.txt`,
+`p11_2_visual_cycle1.txt`, `p11_2_visual_cycle2.txt`, `p11_2_baseline_dimensions.txt`).
+PR **#665**.
+
+**Kapsam 8 → 23, ve liste artık YAZILMIYOR.** Kapı sekiz elle yazılmış sayfayı assert
+ederken axe scan, keyboard sondaları ve insan sapma incelemesi yirmi üç rotayı geziyordu;
+kalan onbeşte piksel koruması yoktu ve bunu **söyleyen bir satır da yoktu** — okuyucu yeşil
+bir "visual gate" görüp ürünü kapsadığını sanıyordu. Liste artık
+`utils/screenshotMatrix.ts::TARGET_PAGES`'ten türüyor (P11-6'nın keyboard sondası için
+kullandığı **aynı** tekil kaynak), böylece oraya eklenen bir rota bir sonraki koşuda
+sessizce kapsamsız kalmak yerine assert ediliyor.
+
+**Sekiz mevcut baseline YENİDEN ÜRETİLMEDİ.** Snapshot adları slug'a çevrildi
+(`strategy-standalone → strategy-details`, `trading-signal-standalone → trading-signal`,
+`trade-log-standalone → trade-log`, `run-result → run-results`); git bunları **saf rename**
+olarak kaydetti (`Bin`, byte farkı yok) → eski sekiz sözleşme **aynen** duruyor. A-01'in
+dürüstlük notu korundu: bunlar hâlâ standalone rotalar, Mainboard inline editörü değil.
+
+**Kararlılık iddia edilmedi, ÖLÇÜLDÜ — runner'da iki kez, AYNI commit'te.**
+
+| Koşu | Nerede | Sonuç |
+|---|---|---|
+| `a75f5e7` | GitHub runner | 22 passed · **1 failed (`analysis-lab`)** · 4.2 dk |
+| `fa0c6a2` | GitHub runner | **23 passed** · 4.0 dk |
+| `fa0c6a2` (rerun, taze stack + taze seed) | GitHub runner | **23 passed** · 4.0 dk |
+
+Öncesinde yerel Linux konteynerinde iki tam döngü (her biri `down -v` → rebuild → reseed →
+`npm test` → `npm run visual`), yani ikinci döngü **taze ULID / timestamp / rastgele
+kullanıcı adı** gördü.
+
+**Süre etkisi ölçüldü: `e2e` job'ında 1.4 dk → 4.0 dk (+2.6).** Test başına 10.5 s → 10.4 s
+— maliyet neredeyse tamamen rota **sayısından**, rota başına maliyetten değil. Kapsam
+**kısılmadı**, paralelleştirme gerekmedi.
+
+**YAN BULGU (a) — yazılı olmayan önkoşul; P11-3b'yi CEVAPLAR.** İlk kalibrasyon 4/8 düştü.
+Sebep repoda hiçbir yerde yazmıyordu: **baseline'lar salt-seed stack'i değil, `npm test`
+SONRASI durumu tarif ediyor** — `e2e.yml` ikisini aynı job'da sırayla koşuyor, yani kapının
+fotoğrafladığı sayfalar journey suite'inin az önce yarattığı varlıkları içeriyor. Aynı
+commit, aynı imaj, tek fark DB durumu: mainboard **929↔900**, ready-check **947↔900**,
+create-package **1411↔1396**, strategy-details **900↔1135**. Bu, P11-3b'nin açık sorusunu
+kapatır: yükseklik **seed'e** değil **journey sonrası duruma** duyarlı ve CI o durumu her
+koşuda üretiyor; ayrıca aynı **1135 px Linux'ta da** ölçüldüğü için P11-3b'nin gözlemi bir
+platform artefaktı **değil**. Yeniden üretim sırası artık `frontend/e2e/README.md`'de.
+
+**YAN BULGU (b) — "Linux" ile "runner" aynı şey değil.** Baseline'lar
+`mcr.microsoft.com/playwright:v1.55.1-noble` içinde üretildi ve bu imaj 23 sayfanın
+**22'sini** runner ile birebir verdi; `analysis-lab` vermedi: konteynerde `1440x1496`,
+`ubuntu-latest`'te `1440x1490`. **Jitter değil** — runner iki ardışık denemede
+**byte-identical** çıktı üretti (`md5 12388809…`); kararlı ~6 px reflow, sebebi o sayfanın
+boş-durum sembol glifleri (◇, ⧗) iki imajda farklı fontlara düşüyor. O baseline **CI
+artefaktından** alındı; tolerans **genişletilmedi**, diğer 22 dosyaya dokunulmadı.
+
+**Yerelde görülüp CI'da ÜRETİLEMEYEN bir gözlem — kalem AÇILMADI.** Bu makinede
+`/backtest/ready-check` yüksekliği **946/947/950** arasında salınıyordu (tek testin kendi
+retry'ları arasında bile) ve iki yerel döngüde de tekrarladı; **runner'da üç koşunun
+üçünde de GEÇTİ**. Dolayısıyla CI'da bir flake **değildir** ve öyle raporlanmadı; §6.7'ye
+kalem eklenmedi, yalnız kanıt belgesine yazıldı ki CI-dışı bir Linux host'unda yeniden
+üretmeye çalışan bir sonraki kişi yanılmasın.
+
+**v18 uyum incelemesi — 15 baseline, TEK TEK, toplu onay YOK.** Referans: kanonik v18
+mockup + `frontend/e2e/screenshots/prototype/**` + adjudicated defter
+`docs/implementation/v18_visual_deviations.md` (A-06 derin kıyas, D-1 imzalı). **Hiçbir
+YENİ, imzasız sapma dondurulmadı.** Zaten adjudicated olup **artık kapı tarafından
+dondurulan** açık kusurlar açıkça bildirildi: **F-2** (`package-library` makine-değeri
+etiketleri), **F-4** (`portfolio` "+ Add item" ham `mbi_…`), ve **F-07 sınıfı** ham
+`btres_…` kimlikleri (`panel-logs`, `results-history`). **F-7** `embedded-packages`'ta
+**FIXED** doğrulandı (insan-okur "active revision pinned"). D-10 (45 accent-blue düğüm,
+imzalı kalıcı sapma) baseline'larda **beklendiği gibi** görünür — yeniden dosyalanmadı.
+Per-sayfa notlar kanıt belgesinin §7'sinde.
+
+**A-08 ile KARIŞTIRILAMAZ.** Piksel karşılaştırması ekran-okuyucu kanıtı **değildir**; bu
+bölümün hiçbir çıktısı `docs/audit/a11y_screen_reader_audit_results.md` §1/§2'ye
+yazılamaz. Defter BOŞ, dört kriter de ☐, #514'ün durumu değişmedi.
 
 **Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
 

@@ -1,0 +1,184 @@
+proxy 127.0.0.1:8080 -> web:8080
+proxy 127.0.0.1:8000 -> api:8000
+
+Running 23 tests using 1 worker
+
+  ✘   1 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: mainboard (24.7s)
+  ✘   2 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: strategy-details (12.7s)
+  ✘   3 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: outsource-signal (16.9s)
+  ✓   4 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: trading-signal (11.4s)
+  ✓   5 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: trade-log (16.2s)
+  ✘   6 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: create-package (14.9s)
+  ✘   7 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: pre-check (11.7s)
+  ✘   8 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: package-library (15.1s)
+  ✘   9 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: embedded-packages (20.8s)
+  ✘  10 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: rationale-families (12.6s)
+  ✓  11 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: market-data (10.4s)
+  ✘  12 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: research-data (11.8s)
+  ✘  13 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: portfolio (11.8s)
+  ✘  14 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: ready-check (13.5s)
+  ✓  15 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: run-results (14.6s)
+  ✘  16 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: results-history (10.4s)
+  ✘  17 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: arrange-metrics (11.7s)
+  ✘  18 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: analysis-lab (11.6s)
+  ✘  19 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: panel-management (13.7s)
+  ✘  20 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: panel-logs (10.3s)
+  ✘  21 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: trash (10.2s)
+  ✘  22 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: user-manual (10.6s)
+  ✘  23 [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: future-dev (13.0s)
+
+
+  1) [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: mainboard 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      Expected an image 1440px by 929px, received 1440px by 900px. 35645 pixels (ratio 0.03 of all image pixels) are different.
+
+      Snapshot: mainboard.png
+
+    Call log:
+      - Expect "toHaveScreenshot(mainboard.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - Expected an image 1440px by 929px, received 1440px by 900px. 35645 pixels (ratio 0.03 of all image pixels) are different.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - Expected an image 1440px by 929px, received 1440px by 900px. 35645 pixels (ratio 0.03 of all image pixels) are different.
+
+
+       98 |       await page.goto(target.path);
+       99 |       await settle(page);
+    > 100 |       await expect(page).toHaveScreenshot(`${target.slug}.png`, {
+          |                          ^
+      101 |         fullPage: true,
+      102 |         animations: "disabled",
+      103 |         maxDiffPixelRatio: 0.02,
+        at /work/frontend/e2e/specs/11-visual-regression.spec.ts:100:26
+
+    attachment #1: mainboard (image/png) ───────────────────────────────────────────────────────────
+    Expected: specs/11-visual-regression.spec.ts-snapshots/mainboard-chromium-linux.png
+    Received: test-results/11-visual-regression--visu-95aae-ited-route-visual-mainboard-chromium/mainboard-actual.png
+    Diff:     test-results/11-visual-regression--visu-95aae-ited-route-visual-mainboard-chromium/mainboard-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-95aae-ited-route-visual-mainboard-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-95aae-ited-route-visual-mainboard-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/11-visual-regression--visu-95aae-ited-route-visual-mainboard-chromium/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-95aae-ited-route-visual-mainboard-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/11-visual-regression--visu-95aae-ited-route-visual-mainboard-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: strategy-details 
+
+    Error: expect(page).toHaveScreenshot(expected) failed
+
+      Expected an image 1440px by 900px, received 1440px by 1135px. 
+
+      Snapshot: strategy-details.png
+
+    Call log:
+      - Expect "toHaveScreenshot(strategy-details.png)" with timeout 15000ms
+        - verifying given screenshot expectation
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - Expected an image 1440px by 900px, received 1440px by 1135px.
+      - waiting 100ms before taking screenshot
+      - taking page screenshot
+        - disabled all CSS animations
+      - waiting for fonts to load...
+      - fonts loaded
+      - captured a stable screenshot
+      - Expected an image 1440px by 900px, received 1440px by 1135px.
+
+
+       98 |       await page.goto(target.path);
+       99 |       await settle(page);
+    > 100 |       await expect(page).toHaveScreenshot(`${target.slug}.png`, {
+          |                          ^
+      101 |         fullPage: true,
+      102 |         animations: "disabled",
+      103 |         maxDiffPixelRatio: 0.02,
+        at /work/frontend/e2e/specs/11-visual-regression.spec.ts:100:26
+
+    attachment #1: strategy-details (image/png) ────────────────────────────────────────────────────
+    Expected: specs/11-visual-regression.spec.ts-snapshots/strategy-details-chromium-linux.png
+    Received: test-results/11-visual-regression--visu-fbbb4-ute-visual-strategy-details-chromium/strategy-details-actual.png
+    Diff:     test-results/11-visual-regression--visu-fbbb4-ute-visual-strategy-details-chromium/strategy-details-diff.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-fbbb4-ute-visual-strategy-details-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-fbbb4-ute-visual-strategy-details-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/11-visual-regression--visu-fbbb4-ute-visual-strategy-details-chromium/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-fbbb4-ute-visual-strategy-details-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/11-visual-regression--visu-fbbb4-ute-visual-strategy-details-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: outsource-signal 
+
+    Error: A snapshot doesn't exist at /work/frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/outsource-signal-chromium-linux.png, writing actual.
+
+       98 |       await page.goto(target.path);
+       99 |       await settle(page);
+    > 100 |       await expect(page).toHaveScreenshot(`${target.slug}.png`, {
+          |       ^
+      101 |         fullPage: true,
+      102 |         animations: "disabled",
+      103 |         maxDiffPixelRatio: 0.02,
+        at /work/frontend/e2e/specs/11-visual-regression.spec.ts:100:7
+
+    attachment #1: outsource-signal (image/png) ────────────────────────────────────────────────────
+    Expected: specs/11-visual-regression.spec.ts-snapshots/outsource-signal-chromium-linux.png
+    Received: test-results/11-visual-regression--visu-abb2d-ute-visual-outsource-signal-chromium/outsource-signal-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-abb2d-ute-visual-outsource-signal-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-abb2d-ute-visual-outsource-signal-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/11-visual-regression--visu-abb2d-ute-visual-outsource-signal-chromium/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/11-visual-regression--visu-abb2d-ute-visual-outsource-signal-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/11-visual-regression--visu-abb2d-ute-visual-outsource-signal-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › specs/11-visual-regression.spec.ts:91:5 › @visual R2-13 screenshot regression — every audited route › visual: create-package 
+

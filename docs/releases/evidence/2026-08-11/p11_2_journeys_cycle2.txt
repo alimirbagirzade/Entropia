@@ -1,0 +1,6 @@
+  ✓  38 [chromium] › specs/19-future-dev-boundary.spec.ts:35:3 › Future Dev boundary: placeholders stay honest (doc 22) › every Future-Dev capability is registered but NOT operational (1.6s)
+  ✓  39 [chromium] › specs/19-future-dev-boundary.spec.ts:60:3 › Future Dev boundary: placeholders stay honest (doc 22) › the Future Dev page renders the registry rather than an empty shell (2.8s)
+  ✓  40 [chromium] › specs/20-library-request-validation.spec.ts:57:3 › Package Library — Request Validation › certifies a draft package from the Library and unlocks Request Approval (11.8s)
+
+  1 skipped
+  39 passed (3.5m)

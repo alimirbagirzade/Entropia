@@ -1,4 +1,12 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — canlı devir belgesi `docs/ADIM39_LANDED_KICKOFF.md`'dir.**
+> Bu belge **ADIM 38 kapanışında** yazıldı ve o anın kaydıdır. Aşağıdaki *paste-ready
+> resume prompt* artık **kullanılmamalıdır**: tohumladığı iş (**P11-2**, görsel kapsam
+> 8 → 23) **ADIM 39 / PR #665** ile sevk edildi. ADIM 38'in açık bıraktığı **P11-3b**
+> (`-linux` setinin seed hassasiyeti) ADIM 39'un ölçümüyle **cevaplandı** — hassasiyet
+> seed'e değil **journey-suite sonrası duruma**; ayrıntı raporun **§6.7.7**'sinde.
+> **P11-6b**, **P11-1** ve **P11-8** hâlâ açıktır; kayıtları burada ve §6.7'de durur.
+
 # ADIM 38 landed — devir notu (RC §6.7 / P11-3 + P11-6)
 
 > **Numaralandırma.** Görev metni bu slice'a "ADIM 37" diyordu; `ADIM 37` merge edilmiş

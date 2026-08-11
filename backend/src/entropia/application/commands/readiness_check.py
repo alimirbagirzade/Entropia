@@ -27,6 +27,7 @@ from typing import Any
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands.allocation_plan import _plan_to_config
 from entropia.application.durable_audit import AuditSessionFactory, record_durable_audit
 from entropia.application.idempotency import run_idempotent
 from entropia.application.queries.allocation_currency import resolve_settlement_currencies
@@ -61,7 +62,6 @@ from entropia.domain.trading_signal.enums import PriceSourceMode as SignalPriceS
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     MainboardWorkingItem,
-    PortfolioAllocationEntry,
     PortfolioAllocationPlanRevision,
 )
 from entropia.infrastructure.postgres.repositories import allocation as alloc_repo
@@ -114,7 +114,7 @@ async def run_readiness_check(
     (O-04) — see :func:`record_readiness_access_denied`.
     """
     require_authenticated(actor)
-    await _load_workspace_for_check(
+    await _load_workspace(
         session,
         actor,
         composition_id,
@@ -271,7 +271,7 @@ async def record_readiness_access_denied(
     )
 
 
-async def _load_workspace_for_check(
+async def _load_workspace(
     session: AsyncSession,
     actor: Actor,
     composition_id: str,
@@ -279,6 +279,12 @@ async def _load_workspace_for_check(
     operation: str = "run_readiness_check",
     audit_session_factory: AuditSessionFactory | None = None,
 ) -> EntityRegistry:
+    """Open a composition for a read-only gate, or raise.
+
+    Shared by Ready Check and the Run surface (``commands/backtest_run.py``): both
+    are doors onto the SAME composition and both must write the doc 14 §12.2
+    ``readiness_access_denied`` event on refusal. ``operation`` is what tells the
+    two apart in the audit trail, so every caller passes its own."""
     workspace = await mb_repo.get_workspace(session, composition_id)
     if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
         raise CompositionNotFoundError()
@@ -892,47 +898,6 @@ def _pinned_config_hash(
     if revision is not None:
         return str(revision.config_hash)
     return compute_config_hash(config) if config.enabled else None
-
-
-def _plan_to_config(
-    plan: Any, entries: list[PortfolioAllocationEntry]
-) -> PortfolioAllocationConfigV1:
-    initial_capital = None
-    if plan.initial_capital_amount is not None and plan.initial_capital_currency is not None:
-        initial_capital = {
-            "amount": str(plan.initial_capital_amount),
-            "currency": str(plan.initial_capital_currency),
-        }
-    raw = {
-        "enabled": plan.enabled,
-        "initial_capital": initial_capital,
-        "compounding_mode": (
-            str(plan.compounding_mode) if plan.compounding_mode is not None else None
-        ),
-        "reserve_cash_percent": (
-            str(plan.reserve_cash_percent) if plan.reserve_cash_percent is not None else None
-        ),
-        "max_total_exposure_percent": (
-            str(plan.max_total_exposure_percent)
-            if plan.max_total_exposure_percent is not None
-            else None
-        ),
-        "conflict_policy": (
-            str(plan.conflict_policy) if plan.conflict_policy is not None else None
-        ),
-        "entries": [
-            {
-                "composition_item_id": e.composition_item_id,
-                "item_type": str(e.item_type),
-                "active": e.active,
-                "equity_share_percent": (
-                    str(e.equity_share_percent) if e.equity_share_percent is not None else None
-                ),
-            }
-            for e in entries
-        ],
-    }
-    return PortfolioAllocationConfigV1.model_validate(raw)
 
 
 def _members(items: list[MainboardWorkingItem]) -> list[CompositionMember]:

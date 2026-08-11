@@ -28,6 +28,7 @@ from entropia.domain.importing.column_mapping import (
     rename_columns,
     resolve_column_mapping,
 )
+from entropia.domain.importing.timezone import parse_source_timestamp
 from entropia.domain.trading_signal.enums import (
     NormalizedRevisionStatus,
     SignalDirection,
@@ -319,7 +320,7 @@ def _normalize_one(
     if not source_record_id:
         return SkippedRow(index, REASON_SOURCE_RECORD_ID_MISSING, "Missing source_record_id.")
 
-    event_time = _parse_time(row.get("event_time", ""), tz)
+    event_time = parse_source_timestamp(row.get("event_time", ""), tz)
     if event_time is None:
         return SkippedRow(
             index,
@@ -337,7 +338,7 @@ def _normalize_one(
         return SkippedRow(
             index, REASON_AVAILABLE_TIME_REQUIRED, "available_time is required.", source_record_id
         )
-    available_time = _parse_time(raw_available, tz)
+    available_time = parse_source_timestamp(raw_available, tz)
     if available_time is None:
         return SkippedRow(
             index, REASON_AVAILABLE_TIME_INVALID, "available_time is unparseable.", source_record_id
@@ -410,20 +411,6 @@ def _resolve_timezone(source_timezone: str) -> ZoneInfo:
         return ZoneInfo(source_timezone)
     except (ZoneInfoNotFoundError, ValueError, KeyError):
         return ZoneInfo("UTC")
-
-
-def _parse_time(value: str, tz: ZoneInfo) -> datetime | None:
-    text = (value or "").strip()
-    if not text:
-        return None
-    normalized = text.replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=tz)
-    return parsed.astimezone(UTC)
 
 
 def _optional_price(value: str | None) -> str | None:

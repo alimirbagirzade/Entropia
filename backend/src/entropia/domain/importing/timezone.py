@@ -22,6 +22,7 @@ shown to agree, so it counts as a disagreement rather than an assumed match.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Identifiers that all resolve to UTC. Two of these names describe ONE zone, so they
@@ -74,9 +75,36 @@ def _is_utc(value: str) -> bool:
     return any(value.casefold() == alias.casefold() for alias in UTC_EQUIVALENT_IANA)
 
 
+def parse_source_timestamp(value: str, tz: ZoneInfo) -> datetime | None:
+    """Read one source timestamp cell and normalize it to UTC, or ``None``.
+
+    A naive timestamp is stamped with the declared source zone ``tz`` — that is the
+    whole point of the O-28 cross-check above: the zone a row is read under must be
+    the zone the config declares. An offset already carried by the cell wins over
+    ``tz`` (the source stated it explicitly). Unparseable or blank reads as absent
+    rather than raising, so one bad cell surfaces as a row-level issue instead of
+    failing the batch.
+
+    Lives here, not in the twins, because Trade Log records and Trading Signal
+    events parsed timestamps with byte-identical copies of this function.
+    """
+    text = (value or "").strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=tz)
+    return parsed.astimezone(UTC)
+
+
 __all__ = [
     "UTC_EQUIVALENT_IANA",
     "is_valid_iana_timezone",
     "normalize_iana_timezone",
+    "parse_source_timestamp",
     "timezones_agree",
 ]

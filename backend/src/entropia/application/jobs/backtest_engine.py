@@ -64,6 +64,7 @@ from typing import Any
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from entropia.application.commands.readiness_check import _resolve_strategy_payload
 from entropia.application.queries.funding import FundingRowLoader, resolve_funding_schedule
 from entropia.application.queries.indicator_plan import resolve_indicator_plan
 from entropia.application.queries.market_bars import (
@@ -880,25 +881,6 @@ def _replay_strategy(
         output=output,
         item_label=item_label,
     )
-
-
-async def _resolve_strategy_payload(
-    session: AsyncSession, payload: dict[str, Any]
-) -> dict[str, Any]:
-    """Dereference a Strategy-editor MIRROR pin to its typed canonical config.
-
-    Twin of ``readiness_check._resolve_strategy_payload`` (doc 02 §7.1): a strategy
-    Mainboard item pins either a direct StrategyConfig or the mirror work-object
-    revision (``{"strategy_revision_id", ...}``). The engine must replay the REAL
-    immutable configuration, so the mirror is dereferenced here; an unresolvable
-    mirror falls through unchanged and fails config parse visibly."""
-    mirror_ref = payload.get("strategy_revision_id")
-    if not mirror_ref:
-        return payload
-    revision = await strat_repo.get_strategy_revision(session, str(mirror_ref))
-    if revision is None:
-        return payload
-    return dict(revision.payload)
 
 
 async def _record_stage(

@@ -1,5 +1,5 @@
 <!-- doc-status: current -->
-# P6-ek + P6-6 — harness fail-fast dayanıklılığı (ADIM 35, 2026-08-10)
+# P6-ek + P6-6 — harness fail-fast dayanıklılığı (ADIM 36, 2026-08-10)
 
 Kanonik kayıt: `docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` **§6.7.4**.
 Bu dosya o bölümün ham kanıtını toplar.

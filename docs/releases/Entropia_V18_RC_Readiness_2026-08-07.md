@@ -631,16 +631,16 @@ döndü. Raporun *kaynak baskısı* teşhisi doğrudur (host 8 GB, VM **3.89 GiB
 bugün geçerli değildir: izole yığın bu baskının altında sorunsuz ayağa kalktı ve P5'in
 2/3/4 kalemleri ile bu bölümün beş akışı **koşuldu**. Ham: `p6b_docker_remeasure.txt`.
 
-> **NOT — 2026-08-10 / ADIM 35.** "Docker takılması" teşhisi bundan sonra **kendi kendini
+> **NOT — 2026-08-10 / ADIM 36.** "Docker takılması" teşhisi bundan sonra **kendi kendini
 > ayırt eder**: `e2e-acceptance.sh` preflight'ı artık sınırlıdır ve üç durumu üç ayrı
 > mesajla verir — daemon **yok** (anında `exit 2`, "not reachable"), daemon **takılı**
 > (sınırlı sürede `exit 2`, "HUNG, not absent"), harness koştu ama bir adım **düştü**
 > (`exit 1`). Yani bir sonraki başarısız koşu, teşhisi doğru yere koyacak kanıtı kendisi
 > üretir; bugün bir insanın "takıldı mı, yok mu?" diye tahmin etmesi gerekmiyor.
-> **Bu, "Docker düzeldi" demek DEĞİLDİR** — ADIM 35 daemon'a hiç dokunmadı ve o gün daemon
+> **Bu, "Docker düzeldi" demek DEĞİLDİR** — ADIM 36 daemon'a hiç dokunmadı ve o gün daemon
 > zaten normal cevap veriyordu. **P5/P6 blocker'ı da KAPANMADI:** bu bölümün açık kalan
 > ekseni kapsam boşluğu ve `flows`'un CI kapısı olmaması (aşağıdaki "Blocker neden hâlâ
-> AÇIK" bloğu), ADIM 35 ise yalnız §6.7'nin P6-ek/P6-6 kalemlerini kapatır (§6.7.4).
+> AÇIK" bloğu), ADIM 36 ise yalnız §6.7'nin P6-ek/P6-6 kalemlerini kapatır (§6.7.4).
 
 **2. iddia — "beş akışın hiçbiri hiçbir katmanda doğrulanmadı": (a) ve (b) için YANLIŞTI.**
 Terim taraması **yalnız iki shell dosyasını** kapsıyordu ve o kapsamda doğrudur; hatalı olan
@@ -861,8 +861,8 @@ açılmadı/kapatılmadı.
 | **P10-7** | Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor) | P10 |
 | **P1-B1/B2** | `BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat | P1 |
 | **P8-B1/B2/B3** | `pending_data_job_dispatch` docstring gerekçesi bayat · Create-Package durable admission uçları **200** dönüyor, diğer dokuzu **202** (adjudicate edilmedi) · `JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış | P8 |
-| ~~**P6-6**~~ | ~~`dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir~~ → **2026-08-10 (ADIM 35) KAPANDI** — yanlış-negatif **yeniden üretildi** (sağlam yedek, `exit 1`), harici çağrılar sınırlandı, **yeni `exit 3` = "doğrulanamadı"** eklendi; "yedek bozuk" (1) ile karışmıyor, "sağlam" (0) ile **asla**. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
-| ~~**P6-ek**~~ | ~~`e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma~~ → **2026-08-10 (ADIM 35) KAPANDI** — asılı kalma **yeniden üretildi** (25s'de hâlâ koşuyordu), preflight sınırlandı; takılı daemon'a karşı **sınırlı sürede `exit 2`** ölçüldü, "daemon yok" teşhisi ayrı mesajda korundu. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
+| ~~**P6-6**~~ | ~~`dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir~~ → **2026-08-10 (ADIM 36) KAPANDI** — yanlış-negatif **yeniden üretildi** (sağlam yedek, `exit 1`), harici çağrılar sınırlandı, **yeni `exit 3` = "doğrulanamadı"** eklendi; "yedek bozuk" (1) ile karışmıyor, "sağlam" (0) ile **asla**. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
+| ~~**P6-ek**~~ | ~~`e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma~~ → **2026-08-10 (ADIM 36) KAPANDI** — asılı kalma **yeniden üretildi** (25s'de hâlâ koşuyordu), preflight sınırlandı; takılı daemon'a karşı **sınırlı sürede `exit 2`** ölçüldü, "daemon yok" teşhisi ayrı mesajda korundu. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
 | **P1-Gate3** | **8 uncovered kriter** + **131 partial kriter** (kapı yeşil sayıyor, ama RC kabul kararında okunmalıdır) — aralarında `AT-04`, `AOS-17`/`TS-17` (spec adı `ACTIVE_RUN_DEPENDENCY` ↔ sevk edilen `OBJECT_IN_ACTIVE_RUN`, **hiçbiri pinli değil**), `TL-20`/`AOS-18` (K-06 tehlikesi) | P1 |
 | **P10-B3** | **Bildirim yolunun DELIVERY kanıtı bir CI kapısı DEĞİL** (ADIM 31). Config yarısı kapılı (`scripts/alert-notification-gate.sh` + 21 contract testi); teslimat yarısı yalnız `scripts/alert-notification-proof.sh` ile ölçülür ve o üç konteyner + dakikalarca wall-clock ister. Kapıya bağlamak **insan kararıdır** (maliyet). Regresyon sessizce dönebilir | ADIM 31 |
 | **P10-B4** | **Monitörü izleyen yok.** Alertmanager erişilemezse Prometheus yeniden dener ve `prometheus_notifications_errors_total` sayacını artırır — **kendi** `/metrics`'inde, ki onu hiçbir şey scrape etmiyor. Sessizce teslim etmeyi bırakmış bir bildirim yolu, sessiz bir sistemden ayırt edilemez. Döngüsel olmayan bir çözüm ikinci bir Prometheus ister; denenmedi | ADIM 31 |
@@ -980,7 +980,7 @@ Ham kanıt: `docs/releases/evidence/2026-08-10/P9F1_frontend_build_reproducibili
 `p9f1_install_vs_ci.txt` · `p9f1_npm_drift.txt` · `p9f1_negative_cases.txt` ·
 `p9f1_dockerignore.txt` · `p9f1_image_and_csp.txt`.
 
-#### 6.7.4 P6-ek ve P6-6 KAPANDI — harness fail-fast (ADIM 35, 2026-08-10)
+#### 6.7.4 P6-ek ve P6-6 KAPANDI — harness fail-fast (ADIM 36, 2026-08-10)
 
 > **Numara notu:** bu bölüm önce §6.7.3 yazılmıştı; #657 aynı numarayı alarak merge oldu
 > (aşağıda, ADIM 34). Merge edilmiş bir numara değiştirilmez, bu yüzden **taşınan bu bölüm

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Entropia — bounded external calls (ADIM 35, RC §6.7 P6-ek / P6-6).
+# Entropia — bounded external calls (ADIM 36, RC §6.7 P6-ek / P6-6).
 #
 # WHY THIS FILE EXISTS. A guard that can hang is not a guard. Two harness
 # scripts asked an external tool a yes/no question with no bound on the answer:

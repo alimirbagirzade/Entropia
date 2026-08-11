@@ -97,7 +97,7 @@ make dr-accept       # full: did the CONTENT survive?
 count matches the manifest, then drops the scratch DB. **An untested backup is
 not a backup** — run it after every backup.
 
-**Read its exit code, not just its colour.** Since ADIM 35 it reports three
+**Read its exit code, not just its colour.** Since ADIM 36 it reports three
 distinct states. The third exists because the script used to blame the backup
 for its own plumbing failing: a `dropdb` that failed was swallowed, the leftover
 database made `createdb` fail, and a perfectly sound backup came back as `1`.

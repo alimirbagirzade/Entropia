@@ -9,7 +9,7 @@
 #   ./scripts/backup-verify.sh ./backups/<stamp>  # verify a specific backup
 #   VERIFY_DB=entropia_restore_check ./scripts/backup-verify.sh
 #
-# Exit codes — THREE distinct states, never collapsed (ADIM 35, RC §6.7 P6-6):
+# Exit codes — THREE distinct states, never collapsed (ADIM 36, RC §6.7 P6-6):
 #   0  the backup restores into a coherent database
 #   1  the backup does NOT restore — a verdict ON THE BACKUP
 #   3  the backup could NOT BE VERIFIED — a verdict on the ENVIRONMENT (a

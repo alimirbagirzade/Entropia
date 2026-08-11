@@ -38,7 +38,7 @@
 # Exit code: 0 = every asserted step passed for every requested flow, 1 = a
 # step failed (details on the FAIL lines) or the stack never became healthy,
 # 2 = the harness could not run at all — Compose missing, the daemon
-# unreachable, or (ADIM 35) the daemon HUNG. Those states are distinct on
+# unreachable, or (ADIM 36) the daemon HUNG. Those states are distinct on
 # purpose: a hang is never reported as a step failure and never as a pass.
 # =============================================================================
 set -uo pipefail
@@ -46,7 +46,7 @@ cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
 # ---- bounded external calls --------------------------------------------------
-# ADIM 35 / RC §6.7 P6-ek. The preflight below is a GUARD, and a guard that can
+# ADIM 36 / RC §6.7 P6-ek. The preflight below is a GUARD, and a guard that can
 # hang is not a guard: against a wedged daemon the probe itself blocked, so the
 # FATAL branch written directly underneath it could never be taken. MEASURED
 # before the fix — with a non-answering `docker` on PATH this script was still
@@ -135,7 +135,7 @@ trap teardown EXIT INT TERM
 # dc — run compose for the CURRENT flow with all interpolation vars exported.
 # Deliberately UNBOUNDED: its callers are `up --build`, `exec` and `logs`, whose
 # honest duration is minutes. Bounding those would invent false failures, which
-# is the opposite of what ADIM 35 is for.
+# is the opposite of what ADIM 36 is for.
 dc() { "${COMPOSE_BIN[@]}" -p "$PROJECT" "${COMPOSE_FILES[@]}" "$@"; }
 
 # dc_probe / inspect_field — the SHORT queries, bounded. Returns the command's

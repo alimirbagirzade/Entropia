@@ -162,13 +162,38 @@ class MandatoryExit:
 
 
 @dataclass(frozen=True, slots=True)
+class BookedClose:
+    """What P3 actually BOOKED for one item at this tick — recorded, never re-derived.
+
+    Kept because the loop otherwise consumes this and forgets it. The intent in
+    :attr:`PortfolioTick.mandatory` records THAT a close happened and at what price, but the
+    money it realized lands only in ``E(t)`` and in the item's running attribution total,
+    where a per-trade figure can no longer be recovered — the same reason ``ItemAttribution``
+    exists at all (*"recorded as the booking happens or it is gone"*).
+
+    ``gross_pnl`` and ``commission`` are the amounts the participant STATED. ``net_pnl`` is
+    the figure :meth:`PortfolioLedger.book_trade` actually applied to ``E(t)``: it quantizes
+    the sum once, so a reader recomputing ``gross - commission`` would be a second
+    implementation of that rounding, free to land a cent away from the ledger.
+
+    Additive and reporting-only: nothing in this loop reads it back, no phase branches on it,
+    and no arithmetic changed when it was added."""
+
+    item_id: str
+    gross_pnl: Decimal
+    commission: Decimal
+    net_pnl: Decimal
+
+
+@dataclass(frozen=True, slots=True)
 class PortfolioTick:
     """Everything one tick published, kept so a caller can inspect the phase boundary.
 
     ``mandatory`` and ``intents`` are the two sides of ``PV``: the first was formed before the
     snapshot existed and carries ``phase="P3"`` with no snapshot identity, the second was formed
     against it and carries ``phase="P4"``. ``equity_point`` is ``None`` when ``E(t)`` did not
-    move — the ledger appends a point only when it does."""
+    move — the ledger appends a point only when it does. ``closes`` pairs one-to-one with
+    ``mandatory`` by ``item_id``: what each of those exits realized."""
 
     t_ms: int
     timestamp: str
@@ -178,6 +203,7 @@ class PortfolioTick:
     intents: tuple[ItemIntent, ...]
     report: ArbitrationReport
     equity_point: PortfolioEquityPoint | None
+    closes: tuple[BookedClose, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,12 +387,17 @@ def _phase_1_carry(tick: ClockTick, ctx: _RunContext) -> str:
     return stamp
 
 
-def _phase_3_mandatory(tick: ClockTick, ctx: _RunContext) -> tuple[ItemIntent, ...]:
+def _phase_3_mandatory(
+    tick: ClockTick, ctx: _RunContext
+) -> tuple[tuple[ItemIntent, ...], tuple[BookedClose, ...]]:
     """P3 — mandatory exits, formed by the shipped former BEFORE ``E(t)`` exists.
 
     The intent is formed from the position as it is still HELD, then the capital is released and
-    the result booked: releasing and realizing are two ledger facts and the engine emits two."""
+    the result booked: releasing and realizing are two ledger facts and the engine emits two.
+    Returns both halves of that: what was DECIDED (the intents) and what it REALIZED (the booked
+    amounts), because the second is otherwise unrecoverable once it folds into ``E(t)``."""
     formed: list[ItemIntent] = []
+    booked: list[BookedClose] = []
     for view in tick.views:
         if not view.is_decision:
             continue
@@ -385,12 +416,19 @@ def _phase_3_mandatory(tick: ClockTick, ctx: _RunContext) -> tuple[ItemIntent, .
             )
         )
         ctx.ledger.close_position(view.item_id)
-        ctx.ledger.book_trade(
-            view.item_id,
-            gross_pnl=exit_event.gross_pnl,
-            commission=exit_event.commission,
+        booked.append(
+            BookedClose(
+                item_id=view.item_id,
+                gross_pnl=exit_event.gross_pnl,
+                commission=exit_event.commission,
+                net_pnl=ctx.ledger.book_trade(
+                    view.item_id,
+                    gross_pnl=exit_event.gross_pnl,
+                    commission=exit_event.commission,
+                ),
+            )
         )
-    return tuple(formed)
+    return tuple(formed), tuple(booked)
 
 
 def _phase_4_intents(
@@ -444,7 +482,7 @@ def _run_tick(tick: ClockTick, ctx: _RunContext) -> PortfolioTick:
     ``arbitrate`` REFUSES an unfrozen ledger, so the permission envelope cannot be computed
     against an ``E(t)`` a sibling has already moved."""
     stamp = _phase_1_carry(tick, ctx)
-    mandatory = _phase_3_mandatory(tick, ctx)
+    mandatory, closes = _phase_3_mandatory(tick, ctx)
 
     snapshot = ctx.ledger.publish_snapshot(tick.t_ms)
 
@@ -473,6 +511,7 @@ def _run_tick(tick: ClockTick, ctx: _RunContext) -> PortfolioTick:
         intents=intents,
         report=report,
         equity_point=point,
+        closes=closes,
     )
 
 
@@ -556,6 +595,7 @@ def run_portfolio(
 __all__ = [
     "PHASE_ORDER",
     "PORTFOLIO_LOOP_VERSION",
+    "BookedClose",
     "CarryCharges",
     "InvalidParticipantError",
     "ItemParticipant",

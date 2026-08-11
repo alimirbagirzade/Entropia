@@ -5032,65 +5032,86 @@ başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi*
 
 ---
 
-## ADIM 35 — RC §6.7 / P6-ek + P6-6: harness fail-fast landed (PR pending)
+## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu landed (PR pending)
 
-**Tip:** harness/script. **`backend/src` ve `frontend/src` DEĞİŞMEDİ**, migration yok,
-`ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`. Route path, react-query
-key, OCC token, Idempotency-Key, hook, SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**.
-Kapsam yalnız §6.7'nin **P6-ek** ve **P6-6** kalemleri; **P11-1 hâlâ açık ve ELE ALINMADI**
-(repo ayarı, insan kararı).
+**Tip:** motor yolu, **containment'ın dışında**. Migration **yok** (alembic head
+`0043_i08_registry_strategy_fks` sabit), `ENGINE_VERSION` **sabit**,
+`SHARED_ALLOCATION_STATUS` = `future_dev`, frontend / route / OCC / Idempotency / SSE
+yüzeylerine **hiç dokunulmadı**.
 
-**Önce yeniden üretildi.** P6-ek: cevap vermeyen bir `docker` ile script **25s sonra hâlâ
-koşuyordu** — `FATAL … exit 2` dalı probe'un hemen altında ama probe hiç dönmüyor.
-P6-6: (a) takılmış `dropdb` → süresiz asılı; (b) `dropdb` başarısız → `|| true` yuttu →
-`createdb` patladı → **`exit 1`**, yani **hiç okunmamış sağlam bir yedek bozuk raporlandı**.
+**Neden bu slice.** `docs/ADIM16_STEPPER_LANDED_KICKOFF.md` §4.1 PR B'nin literal kapsamıyla
+ulaşılabilir olmadığını ölçmüş, üç engel bırakmıştı; **(a)** ve **(b)** `run_engine`'in bar
+gövdesini fazlara bölmeyi, yani ADR §16 insan kapısını + bir ADR amendment'ını gerektiriyor.
+**(c)** — projeksiyonun kod olarak olmaması — gerektirmiyor, hangi yol seçilirse seçilsin
+gerekiyor ve tek başına test edilebilir. Kickoff'un **seçenek 3**'ü seçildi.
+**(a) ve (b) KAPANMADI.**
 
-**Ne indi.** `scripts/lib/bounded.sh` (**YENİ**): `bounded_run SECONDS CMD…` → komutun kendi
-statüsü ya da **124**; öldürdüğü bir komut için **asla 0** dönemez.
-`scripts/e2e-acceptance.sh`: iki preflight probe'u + `dc_probe` + `inspect_field` +
-`teardown` sınırlı.
-`scripts/backup-verify.sh`: dört pg çağrısı sınırlı, **yeni `exit 3` = doğrulanamadı**,
-ön-koşu `dropdb` artık **katı**.
-`backend/tests/contract/test_harness_failfast_contract.py` (**YENİ**, 12 test, **CI kapısı**).
+**KARAR (canon'dan, koddan değil): tek portföy-seviyesi çıktı, N adet öğe-seviyesi DEĞİL.**
+(1) N öğe çıktısını `combine_item_runs`'a beslemek bileşik eğriyi **sıralı birleştirmeyle**
+yeniden kurardı — ADR §14 **A5**'in ("*time-ordered by construction*") kaldırmak için var olduğu
+kusur, ki fold onu `portfolio_curve_sequential_not_unified_clock` diye zaten ifşa ediyor.
+(2) ADR §7: *"a sleeve is a cap, not a wallet"* — sermaye bölünmez, yani bölünecek **öğe-seviyesi
+equity yoktur**; `E(t)`'yi N eğriye ayırmak canon'un tanımlamadığı bir tahsis-atıf modeli olurdu.
+Defterin öğe başına tuttuğu şey `ItemAttribution`'dır (net katkı; eğri değil, drawdown tabanı
+değil). Projeksiyon bu yüzden `combine_item_runs`'ı **beslemez, yerine geçer** — ve sıralı fold'a
+tek satır dokunulmadı.
 
-**Reuse anchor'ları (tam adlarıyla):** yeni bir harness'ta kısa bir harici sorgu
-koşacaksan `scripts/lib/bounded.sh::bounded_run` **üzerinden** geçir, kendi timeout'unu
-yazma — GNU `timeout` bu repoda **kullanılamaz** (macOS'ta yok). Sınır sabitini
-`E2E_DOCKER_PROBE_TIMEOUT_SECONDS` / `E2E_TEARDOWN_TIMEOUT_SECONDS` /
-`BACKUP_VERIFY_PG_TIMEOUT_SECONDS` / `BACKUP_VERIFY_RESTORE_TIMEOUT_SECONDS` kalıbıyla
-**adlandır ve ölçüme dayandır**. `e2e-acceptance.sh::dc` **bilerek sınırsızdır** —
-`up --build`/`exec`/`logs` oradan geçer; kısa sorgular için `dc_probe`'u kullan.
-`backup-verify.sh` içinde yeni bir ortam hatası eklerken `EXIT_UNVERIFIED` (3) kullan;
-`EXIT_NOT_RESTORABLE` (1) **yalnız yedek hakkında** karar içindir.
+**Ne indi.** **YENİ** `domain/backtest/execution/portfolio_projection.py`:
+`project_portfolio_run(run, *, items, execution_key, item_count) -> EngineOutput` (`:511`),
+`PinnedItem` (`:162`), `ABSENT_BY_CONSTRUCTION` (`:117`), üç fail-closed hata,
+`ENGINE_KIND = "v1_unified_clock_portfolio"`. `portfolio_engine.py`'ye **additive, reporting-only**
+iki ekleme: `BookedClose` (`:165`) ve `PortfolioTick.closes` (`:206`, varsayılan `()`) — döngü P3'te
+`MandatoryExit`'i tüketip unutuyordu ve realize edilen para yalnız `E(t)`'ye düşüyordu, orada
+işlem-başı rakam geri alınamaz. `net_pnl` = `book_trade`'in **dönüş değeri**, çünkü
+`gross - commission`'ı yeniden hesaplamak yuvarlamanın ikinci uygulaması olurdu.
 
-**Ölçüldü.** docker CLI takılı → **2**/3.0s · yalnız `docker version` takılı → **2**/3.0s ·
-daemon anında reddediyor (kontrol) → **2**/0.0s, mesaj "not reachable" · `dropdb` takılı →
-**3**/6.1s · artık scratch DB → **3**/0.0s · `pg_restore` takılı → **3**/3.1s · tutarsız
-dump (kontrol) → **1** · **sağlam yedek (kontrol) → 0**. Testlerin ısırdığı kanıtlandı:
-düzeltme geri alınınca **5 failed / 7 passed**, düzeltmeyle **12 passed / 23.3s**.
+**Bu ne açtı.** ADR §14'ün **A4** ("item sırası sonucu değiştirmez — *identical `EngineOutput`
+digest*") ve **A18** (cross-item batch invariance, aynı ifade) kriterleri **ilk kez
+değerlendirilebilir**: o yolda digest alınacak bir artefakt yoktu. İkisi de tam çıktı digest'i
+üzerinden test edildi. Amiral gemisi test containment fixture'ının **kendi** trade set'idir:
+sıralı fold'un `5000.00` dediği dört kapanış, projeksiyonda `summary["max_drawdown"] == 3000.00`.
 
-**Dürüst sınır.** **Blocker sayısı DEĞİŞMEDİ (üç); verdict BLOCKED kalır.**
-**"Docker düzeldi" denmiyor** — daemon'a dokunulmadı, o gün zaten normal cevap veriyordu;
-değişen tek şey bir sonraki takılmanın **kendini bildirecek** olması. **P5/P6 blocker'ı
-kapanmadı** — §6.2'nin ekseni kapsam boşluğu ve `flows`'un CI kapısı olmamasıdır (ADIM 30).
-Aynı kusur sınıfı **yalnız bu iki script içinde** tarandı. Frontend suite'i koşulmadı
-(tek satır TS değişmedi; gerekçedir, ölçüm değil — otorite CI'dır).
+**Reuse anchor'ları (tam adlarıyla):** yeni bir alan eklerken önce `portfolio_projection.py`
+§"deliberately ABSENT" bölümünü oku — beş kalem gerekçeli olarak **yok** ve
+`ABSENT_BY_CONSTRUCTION` ile ilan ediliyor · pinlenmiş metadata için `PinnedItem` (worker
+`ItemRun`'ın taşıdığı alanların aynısını verir) · faz döngüsünde bir kapanışın parasını okumak için
+`PortfolioTick.closes` / `BookedClose.net_pnl` · `combine_item_runs`
+(`execution/portfolio.py:312`) **dokunulmadı**, worker call site `jobs/backtest_engine.py:363`.
 
-Ayrıntı: `PROJECT_HISTORY.md` §ADIM 35 · rapor kaydı: RC readiness **§6.7.4** (+ §6.2 notu) ·
-ham kanıt: `docs/releases/evidence/2026-08-10/P6FF_harness_failfast.md`.
+**Containment ölçüldü, gevşetilmedi.** `execution/*` modüllerinin her biri tam importer listesiyle
+pinli. Projeksiyon yalnız `execution.intents`'i (tip için) import ediyor →
+`test_backtest_item_intents.py` listesi **bilerek** genişletildi. `clock`/`portfolio_ledger`/
+`arbitration` policy-version sabitleri **bilerek yayımlanmadı** (hiçbir tüketicinin okumadığı bir
+alan için üç liste daha genişletmek pahalıydı). `execution/` içindeki modüller per-module importer
+kontrolünden muaf olduğu için projeksiyonun kendi containment iddiası ayrıca yazıldı:
+`test_oracle_portfolio_containment_gate.py::test_the_result_projection_exists_but_no_production_path_reaches_it_either`.
+
+**Dürüst sınır.** **Üretim yolu YOK ve bilerek yazılmadı** — worker hâlâ item döngüsü +
+`combine_item_runs`, `run_portfolio` ve `project_portfolio_run` ikisi de çağrısız; bu slice
+**hiçbir sevk edilmiş Result'ı değiştirmez** ve A4/A18'i tek başına "geçirmez", yalnız
+*ölçülebilir* kılar · §4.1'in (a)/(b) engelleri **kapanmadı** · `domain/backtest/` paketi
+`docs/CODEMAPS/BACKEND_LAYERS.md`'de **hiç haritalı değil** (bu slice öncesinde de öyleydi; bu
+dalga endpoint/tablo/sayfa/job eklemediği için tazeleme tetiklenmedi — eksik kaydedildi,
+kapatılmadı) · frontend suite koşulmadı (tek satır TS değişmedi; gerekçedir, ölçüm değil).
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 35. Devir: `docs/ADIM35_LANDED_KICKOFF.md`.
 
 ---
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-**Değişmedi** — ADIM 25/26/27 ops/CI/docs, ADIM 28 a11y-hazırlık, ADIM 29 RC-kanıt,
-ADIM 30 kabul-harness'ı, ADIM 31 ops/bildirim, ADIM 32 güvenlik-başlık, ADIM 33 build
-tesisatı, ADIM 35 ise harness fail-fast slice'ıydı; hiçbiri motor yoluna dokunmadı. `run_portfolio` hâlâ üretimde **çağrısız**:
+**Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
+var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —
+stepper'ın barı bütün olarak ilerletmesine karşılık faz döngüsünün fazlara bölünmüş bar istemesi,
+ve `entry`'nin book-etmeyen bir değerlendirme girişine ihtiyaç duyması — `run_engine`'in bar
+gövdesine dokunur ve **ADR §16 insan kapısı + bir ADR amendment'ı** gerektirir. Bu kapıdan
+geçmeden (a)/(b)'ye başlanmaz.
+
+`run_portfolio` **ve** `project_portfolio_run` üretimde **çağrısız**:
 `jobs/backtest_engine.py:298` item döngüsü, `:363` `combine_item_runs`,
-`SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20 matrisindeki A1/A3/A5
-dışında hiçbir satır bu boşluk kapanmadan kapanamaz. Stepper indi (#602); kalan borç
-**adaptör + call site**. Ayrıntı ve tasarım işaretleri:
-`docs/ADIM16_STEPPER_LANDED_KICKOFF.md` ve `docs/ADIM26_KICKOFF.md`.
+`SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20 matrisindeki satırların
+kalanı bu boşluk kapanmadan kapanamaz; **A4 ve A18 artık ölçülebilir ama ADIM 20'yi tek başına
+açmaz**. Ayrıntı ve tasarım işaretleri: `docs/ADIM35_LANDED_KICKOFF.md` (paste-ready resume prompt
+en altta), `docs/ADIM16_STEPPER_LANDED_KICKOFF.md` §4.1 ve `docs/ADIM26_KICKOFF.md`.
 
 **A-08 ayrı bir eksendedir ve PR B'yi bloklamaz.** İnsan denetimi hâlâ yapılmadı; iskele
 hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş, #514 kanıtsız kapatıldı.

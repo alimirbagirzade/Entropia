@@ -184,6 +184,44 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
     assert "for prepared in prepared_items:" in worker
 
 
+def test_the_result_projection_exists_but_no_production_path_reaches_it_either() -> None:
+    """The second half of the path, and the same answer: it exists, nothing calls it.
+
+    ``execution/portfolio_projection.py`` turns a finished ``PortfolioRun`` into the composite
+    ``EngineOutput`` ADR §14's A4 and A18 are worded over — until it existed there was no
+    artifact on that path to digest, so neither criterion could be evaluated at all. It moves
+    no shipped number because the half in front of it is still uncalled.
+
+    Asserted rather than assumed, for two reasons the phase loop's own test does not cover.
+    The projection sits INSIDE ``execution/``, which the per-module importer check above
+    exempts, so nothing there can see it widen the unified-clock surface. And unlike the loop
+    it produces the exact type the worker persists — a single import in
+    ``jobs/backtest_engine.py`` would be enough to change every multi-item Result, with no
+    participant, no adapter and no ``ENGINE_VERSION`` bump in between. When the call site
+    lands, this test is the one that must be updated deliberately."""
+    sources = {p: p.read_text() for p in _SRC.rglob("*.py")}
+    projection = _SRC / "domain" / "backtest" / "execution" / "portfolio_projection.py"
+
+    assert "def project_portfolio_run" in sources[projection]
+    # One module answers "what does a portfolio run look like as a Result"; two would be two
+    # answers, which is the same reason exactly one module defines the phase order.
+    assert [p.name for p, text in sources.items() if "def project_portfolio_run" in text] == [
+        "portfolio_projection.py"
+    ]
+
+    callers = sorted(
+        str(path.relative_to(_SRC))
+        for path, text in sources.items()
+        if path != projection
+        and ("project_portfolio_run(" in text or "import project_portfolio_run" in text)
+    )
+    assert callers == [], f"the Result projection gained a production caller: {callers}"
+
+    # The worker's Result still comes from per-item runs folded sequentially, untouched.
+    worker = sources[_SRC / "application" / "jobs" / "backtest_engine.py"]
+    assert "portfolio_projection" not in worker
+
+
 def test_the_containment_flag_and_engine_version_are_both_untouched() -> None:
     """§6 condition 6 / ADR §14 A15: the lift REQUIRES an ``ENGINE_VERSION`` bump, so no
     sequential-era Result can be idempotently reused for a unified-clock re-run. Neither the

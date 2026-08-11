@@ -6133,3 +6133,156 @@ Containment kapısına 1 test eklendi. `repository_facts` collected: **3432 → 
 - Projeksiyon `summary["period_start"]`/`period_end`'i (merged axis'in ilk/son tick'i) **doldurur**;
   `combine_item_runs` bunları hiç yazmıyordu. Bilgi kazancıdır ama **sevk edilen hiçbir Result'ı
   değiştirmez**, çünkü bu yol çağrısızdır.
+
+---
+
+## ADIM 37 — RC §6.7 / P10-B2: sayfalama sınırının şemada yayımlanması (PR pending)
+
+**Numara notu (önce bunu oku).** Bu slice'ın kickoff prompt'u kendisini **"ADIM 36"** diye
+adlandırıyordu. **ADIM 36 doludur** — RC §6.7 / P6-ek + P6-6 harness fail-fast slice'ı
+(PR #658, merge commit `881d273`, `docs/ADIM36_LANDED_KICKOFF.md`, rapor §6.7.4). CLAUDE.md
+merge edilmiş bir numarayı yeniden atamayı yasakladığı için bu slice **ADIM 37** olarak
+kaydedildi; prompt'un numarası **düzeltildi, korunmadı**. Aynı sebeple yeni bulgu
+**P10-B6**'dır: `P10-B1`..`P10-B5` doludur (`P10-B3` = Alertmanager delivery proof,
+`P10-B5` = on-call rotasyonu).
+
+**Dalganın tipi:** HTTP sözleşmesi (yalnız **yayımlama**). Migration yok, `ENGINE_VERSION`
+sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`. `frontend/src` **hiç dokunulmadı**.
+Route path, react-query key, OCC token (`If-Match` / `expected_*_version` / `X-*-Version`),
+`Idempotency-Key`, hook, SSE taksonomisi, `lib/*.ts` **değişmedi**. Issue açma/kapama, tag,
+release **yok**. Base `881d273` (#658).
+
+Kapsam **yalnız §6.7'nin P10-B2 kalemi**. Dört blocker ve §6.7'nin diğer kalemleri
+(P11-1/2/3/6/8, P10-7, P1-B1/B2, P8-B*, P1-Gate3) **girmedi**. **P11-1 ELE ALINMADI** —
+repo ayarı, insan kararı. Cursor tabanlı sayfalamaya geçiş **girmedi** (ayrı, çok daha
+büyük karar). Varsayılan limit değerleri **değiştirilmedi** — konu yalnız ÜST SINIR
+sözleşmesiydi.
+
+### İki soru ayrı tutuldu — ve biri bilerek CEVAPSIZ bırakıldı
+
+- **(1) YAYIMLAMA** = sevk edilen davranışın görünür kılınması. Karar değil → **yapıldı**.
+- **(2) AŞIM DAVRANIŞI** = sessiz clamp mi 422 red mi. **Ürün kararı** → **VERİLMEDİ**,
+  adjudication olarak kaydedildi (rapor §6.7.5). Sessiz clamp *"böyle kalsın"* diye
+  **sessizce onaylanmadı** da.
+
+### İddia yeniden üretildi: sayı doğru, niteleme yanlıştı
+
+Rapor *"9 uçta sayfalama sınırı şemada yayımlanmıyor → `limit=100000` reddedilmiyor,
+sessizce 100'e iniyor"* diyordu. **9 sayısı doğru** ve dokuzu da adıyla çıkarıldı. Ama:
+
+- **"Hepsi aynı deseni kullanıyor" DEĞİL.** Üç ayrı kelepçe fonksiyonu ve **üç ayrı
+  default** var: `clamp_limit` → 20 · `panel_backtest_log::_clamp_limit` → **25** ·
+  `log_projection::_clamp_limit` → **50**. Tavan üçünde de 100. Yayımlama bu yüzden tek
+  bir sabiti değil, **her ucun kendi ikilisini** taşımak zorundaydı.
+- **"Sessizce" nitelemesi 9 uç için yanlıştı.** Ölçüldü: **5 uç** `meta: {cursor, has_more,
+  limit}` döndürüyor ve `limit` **etkin (kelepçelenmiş)** değeri yankılıyor → istemci
+  `limit=100000` gönderip `meta.limit=100` okuyor, kesildiğini **doğrudan** anlıyor.
+  **3 uç** (`/agent-tasks`, `/lab/messages`, `/hypotheses`) yalnız `next_cursor` döndürüyor
+  → "daha var" der, limitinin indirildiğini söylemez. **1 uç**
+  (`/agent-tasks/{task_id}/tool-calls`) **hiçbir sayfalama metadata'sı döndürmüyor** →
+  gerçekten sessiz. Raporun cümlesi yalnız o **tek** uç için tam doğrudur.
+
+Asıl kusur bu yüzden "istemci kesildiğini anlayamıyor" değil, **"istemci sınırı ÖNCEDEN
+öğrenemiyor"** idi: sözleşmeden istek kuran bir istemci (kod üreteci dahil) 9 ucun
+hiçbirinde ne default'u ne tavanı bulabiliyordu. Bu slice tam olarak onu kapatır.
+
+### Ölçüm tuzağı — yakalandı
+
+İlk taramada `manual/search`, `manual/stream` ve `trash-entries` de "yayımlamıyor" göründü.
+**Yanlıştı:** bu üçü `int | None` + `le=100` taşıyor ve FastAPI bir OPSİYONEL parametrenin
+sınırını **`anyOf` dalının içine** koyuyor. Yalnız üst seviyeye bakan bir kontrol onları
+sahte kırmızıya çevirir — test bunu `_json_schema_maximum` içinde açıkça ele alıyor ve
+gerekçesini docstring'inde taşıyor.
+
+### Ne sevk edildi
+
+**YENİ** `backend/src/entropia/apps/api/pagination.py::clamped_limit_query` — dokuz ucun
+dokuzu da bundan geçiyor. Yayımladığı: `description` (insan metni: default, tavan, ve
+**aşımın RED DEĞİL KELEPÇE olduğu**) + `x-clamp-default` / `x-clamp-maximum` (makine).
+
+**JSON Schema `maximum` bilerek YAYIMLANMADI.** O keyword *"bundan büyük değerler
+geçersiz"* demektir ve bu sunucu onları **kabul ediyor**; emitlemek eksik bir sözleşmeyi
+**yanlış** bir sözleşmeyle değiştirirdi — üretilmiş bir istemci, sunucunun 200 döndüğü
+isteği reddederdi. Bu, repodaki **ilk `x-` uzantısıdır** (snapshot'ta önceden 0 tane vardı).
+
+Ölçülen sonuç (`docs/openapi.json` yeniden üretildi, 45 eklenen / 9 silinen satır):
+
+```
+limit params total: 28
+  ENFORCED  (JSON Schema maximum -> 422): 19
+  CLAMPED   (x-clamp-maximum     -> 200):  9
+  UNPUBLISHED:                             0
+  clamped params ALSO emitting `maximum`:  0
+```
+
+**Davranış bit-özdeş:** `le=`/`ge=` eklenmedi, `default=None` korundu. `capability.py`'nin
+iki parametresi çıplak `= None`'dan `Query`'ye geçti — bu FastAPI'de **aynı** query
+parametresidir, davranış değişmez.
+
+**Frontend etkisi ÖLÇÜLDÜ = sıfır.** `frontend/src/lib/*.ts` bu 9 uca **hiç `limit`
+göndermiyor**; yalnız `lib/adminPanel.ts` `meta.limit`'i **okuyor**. >100 gönderen tek bir
+çağrı yok → (2) için ileride red seçilse bile **repo içi hiçbir çağıran kırılmaz**. Repo
+dışı çağıranlar bilinmiyor; bu bir sınırdır, kanıt değil.
+
+### Kapı ve negatif kanıtı
+
+`backend/tests/contract/test_pagination_limit_contract.py` — 5 test: sınırsız yayımlanan
+`limit` yasak (asıl kapı) · iki aile kesişmez ve 28'i tam böler · kelepçeli parametre
+**asla** `maximum` reklamı yapamaz · yayımlanan sayı uygulanan sabite **eşit** (drift) ·
+**aşım davranışı pin'i** (`clamp_limit(100_000) == 100`). Beşincisi kritik: ileride biri
+clamp'i red'e çevirirse pin kırılır ve **ürün kararı bir refactor yan etkisi olarak
+sessizce yutulamaz**.
+
+**Negatif kanıt:** `capability.py`'nin TEK bir ucu yayımlamayı bırakacak şekilde geri
+alındı → `exit 1`, üç test kırmızı, hata mesajı ucu **adıyla** raporladı
+(`['/api/v1/view-datasets']`). Uç geri yüklendi, `git diff` ile doğrulandı.
+
+### Adjudication (2) — AÇIK, PO kararı bekliyor
+
+**Canonical SESSİZ.** `docs/spec/01`..`22` + Master Technical Reference tarandı:
+MTR §2.1 (satır 11800) ve §8 (12032–12044) cursor pagination'ı ve `meta.pagination`
+alanlarını (`limit, next_cursor, previous_cursor|null, total_estimate|null`) zorunlu kılar;
+doc 19 (satır 513, 923, 1197, 10688) admin listeleri için `limit=50` + opaque cursor **ister**
+ve offset'i yasaklar. **Hiçbiri ne MAX_LIMIT değerini ne de aşım kuralını bildirir.**
+doc 18 ve doc 22 sessiz. Repo kuralı gereği ("canonical boşlukta ürün kararı UYDURULMAZ")
+karar verilmedi.
+
+İki okuma: **(A) sessiz clamp** (sevk edilen; affedici, kaynak fail-safe, ama aynı yüzeyde
+19 uç 422 verirken bu 9'u 200 veriyor) · **(B) 422 red** (tek tutarlı yüzey; davranış
+değişikliği, repo içi kırılan çağıran ölçülen **0**).
+
+**Bağlayıcı OLMAYAN komşu sinyal, kayda geçirildi:** MTR satır 7560/7605 **position
+sizing** alanında ürün *"clamp değil blocker"* ve *"kırpılıp açılmaz … reddedilir"* diyor.
+**Sayfalama için canonical DEĞİLDİR** — farklı domain, farklı risk (orada kırpma sahte PnL
+üretir, burada yalnız daha küçük bir sayfa döner). Ürünün "sessiz kırpma" karşısındaki
+eğilimini gösterdiği için kaydedildi; **kararın yerine geçmez** — taşımak, yasaklanan
+uydurmanın ta kendisi olurdu.
+
+**(B) seçilirse tuzak:** FastAPI'nin varsayılan `{"detail": [...]}` şekli adjudicated zarf
+DEĞİLDİR (O-02). `le=` taşıyan 19 uç zaten `apps/api/errors.py` handler'ından geçiyor →
+yeni 422'ler muhtemelen doğru zarfa düşer, **ama varsayma, ölç.**
+
+### YENİ BULGU — P10-B6 (ölçüldü, DÜZELTİLMEDİ)
+
+Dört uç uyguladığı **etkin** sayfa boyutunu yanıtta yankılamıyor (yukarıdaki katman B ve C).
+MTR §8'in `Response meta.pagination` sözleşmesiyle ayrışır — **ama dikkat:** sevk edilen
+`meta: {cursor, has_more, limit}` şekli MTR §8'in `{limit, next_cursor, previous_cursor,
+total_estimate}` şeklinden **zaten** ad ekseninde ayrı; bu, bu dört uçtan büyük ve daha
+eski bir sözleşme sapmasıdır.
+
+**Neden bu PR'da düzeltilmedi:** yanıt gövdesine alan eklemek **wire contract
+değişikliğidir**; `lib/*.ts` bu projeksiyonları okuyor ve `AgentToolCallListResponse` typed
+bir `response_model`'dır. Hangi şeklin kanonik olacağı kendi kararını ister. ADIM 34'ün
+P4-3'te yaptığı gibi: **ölçüldü, adlandırıldı, kaydedildi.**
+
+### Dürüst sınırlar
+
+- **Blocker sayısı DEĞİŞMEDİ (üç/dört — §8'e göre). Verdict BLOCKED KALIR.** P10-B2
+  blocker değildi ve **kalemin kendisi de KAPANMADI** — yalnız yayımlama yarısı kapandı.
+- **Frontend suite koşulmadı** — tek satır TS değişmedi ve backend davranışı bit-özdeş.
+  Gerekçedir, ölçüm değil; otorite CI'dır.
+- `x-clamp-*` uzantısı bu repoda **yeni bir konvansiyondur**. Tek bir yerde tanımlıdır
+  (`apps/api/pagination.py`) ve kapı onu pinler, ama bir OpenAPI standardı değildir —
+  tüketen araçların bunu okuması için özel destek gerekir. Bu bilinçli bir takastır:
+  yanlış bir standart alan yerine doğru bir standart-dışı alan.
+- Migration yok → alembic up/down/up ve FK insert-order kanıtı **gerekmedi**.

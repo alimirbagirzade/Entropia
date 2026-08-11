@@ -6530,3 +6530,94 @@ dosyalanmadı. Per-sayfa notlar: kanıt belgesi §7.
 
 Ham kanıt: `docs/releases/evidence/2026-08-11/P11_2_visual_coverage.md` (+ yedi ham çıktı).
 Rapor: §6.7 tablosu (`P11-2` üstü çizili, `P11-3b` cevaplandı) + **§6.7.7**.
+
+---
+
+## ADIM 40 — RC §6.7 / P1-B1+B2 + P8-B1+B3: sayının sahibi değişti (PR pending)
+
+**Numaralandırma notu.** Bu slice'a giden istem "ADIM 38" diyordu ve base olarak ADIM 37b'yi
+varsayıyordu; `origin/main` doğrulandığında **ADIM 38 (#664) ve ADIM 39 (#665) zaten sevk
+edilmişti**. Merge edilmiş PR başlıkları değiştirilemeyeceği için numara **yeniden
+kullanılmadı** — bu kayıt **ADIM 40**'tır. Base: `66bdeb4`.
+
+**Kapsam: yalnız dört belge kalemi.** Dördü de blocker değildi. Blocker sayısı **üç**,
+§8 verdict **BLOCKED**. **P8 KAPANMADI** (P8-B2 bilerek dışarıda).
+
+### Çekirdek karar — sayıyı güncellemek dördüncü tekrarı garanti ederdi
+
+Elle yazılmış bir sayının bayatladığı **üçüncü** kayıttı ve ADIM 27'nin doküman-gerçek kapısı
+hiçbirini yakalamamıştı: o kapı **üretilmiş** olguları koruyor, bu sayılar elle yazılmış
+düzyazıydı. Her kalemde merdiven sırayla soruldu (1 = üretilene işaret et · 2 = üretime ekle ·
+3 = bayatlamayacak biçimde elle yaz) ve **ilk uyan** seçildi:
+
+| Kalem | Seçilen | Neden |
+|---|---|---|
+| **P1-B1** `BACKEND_LAYERS.md` 37/38 · 14/16 | **2 → sonra 1** | Sayı ucuzca üretilebilir → üreticiye eklendi, sonra codemap'ten silinip üretilmiş satıra işaret edildi. Yalnız 1 olmazdı: üretilmemiş sayıya işaret edilemez |
+| **P1-B2** `CLAUDE.md` dual-token 16 ↔ 17 | **1** | Op-seviyesinde **semantik** sayı; statik yürüyüşle türetilemez (`reconcile_occ_tokens` çağrı yeri **12**, op **17** — yardımcılar birden çok op'a hizmet ediyor). Kanonik liste zaten `BACKEND_ROUTES.md` §DUAL-TOKEN'daydı → `CLAUDE.md` kopyası **kaldırıldı** |
+| **P8-B1** docstring gerekçesi | **3** | Gerekçe üretilemez. Yeni metinde mutlak sayı ve `dosya:satır` **yok**; guard kapsamını tekrarlamak yerine `jobs/delivery.py` docstring'ini tek otorite gösteriyor |
+| **P8-B3** aktör tablosu `:NN` | **sembol adı** | Aktör adı **zaten** sembol (`apps/worker/actors.py::<aktör>`) → kolon **fazlalıktı, silindi**. Numarayı elle kaydırmak bir sonraki PR'da yine kaydırırdı |
+
+### Yeniden ölçüldü (rapordaki sayı kopyalanmadı)
+
+`commands` **32** · `queries` **38** (rapor: 38 ✓) · `jobs` **16** (✓) · `domain/` **26 paket**.
+Dual-token codemap listesi tek tek sayıldı → **17** (✓). `@dramatiq.actor` tanımı **12**;
+tablodaki satır numaralarının **11'i yanlış** (`run_market_data_analysis` `:45` yazıyor /
+gerçek `:70`), yalnız `system_heartbeat :39` tutuyordu → B3 doğrulandı.
+
+**Ölçüm raporun kendi ifadesini çürüttü.** §6.7'nin *"`BACKEND_LAYERS.md` içerik olarak tam"*
+cümlesi **yanlıştı**: `jobs` tablosu 16 modülün **14'ünü** adlandırıyordu — `delivery.py`
+(ADIM 21 at-least-once teslim kapısı) ve `heartbeat.py` (ADIM 25 worker canlılığı) hiç satır
+almamıştı. Bayat sayının **nedeni** buydu, ve bir sayı bunu zaten göremez. İkisi de eklendi.
+
+### Ne sevk edildi
+
+- `scripts/generate_repository_facts.py`
+  - **YENİ** `collect_backend_layers` → `backend_layers.{application_module_counts,
+    application_module_names,domain_package_count,domain_packages}`; özet tabloya tek satır
+    (*Application modules*). Mevcut collector'lar, `INVARIANT_RULES` **kimlikleri** ve
+    regex'leri **değişmedi**.
+  - **YENİ** `check_codemap_coverage` → `--check` yolunda: her `application/{commands,queries,
+    jobs}` modülünün BACKEND_LAYERS.md'de satırı var mı (**katman bölümüne kapsamlı** arama —
+    `market_data.py` üç katmanda birden var, bütün-dosya eşleşmesi eksik satırı örterdi); her
+    `@dramatiq.actor` JOBS_AND_EVENTS.md tablosunda var mı **ve doğru kuyrukta mı**.
+- `docs/CODEMAPS/BACKEND_LAYERS.md` — üç sayı silindi, üretilmiş satıra işaret; `delivery.py`
+  ve `heartbeat.py` satırları eklendi.
+- `docs/CODEMAPS/JOBS_AND_EVENTS.md` — aktör tablosunun **"Satır" kolonu silindi**; başlık
+  `Aktör (apps/worker/actors.py::)`. Gövdedeki ~30 `:NN` referansı için **P8-B3b** sınırı yazıldı.
+- `CLAUDE.md` — O-12 maddesinden dual-token sayısı kaldırıldı.
+- `backend/src/entropia/application/jobs/agent_tools.py` — **yalnız docstring**:
+  `pending_data_job_dispatch` replay'de `None` dönüşünü artık **admission** ile gerekçelendiriyor
+  (replay yeni iş admit etmedi → dispatch edilecek şey yok). Eski gerekçe (*"gövdede
+  terminal-state guard yok"*) ADIM 21'de öncülünü kaybetmişti: `trade_log.py` ve
+  `trading_signal.py` gövdeleri `claim_job_for_delivery` çağırıyor (bu koşuda doğrulandı).
+  **İmza, gövde, `__all__` değişmedi.**
+
+### Negatifi kanıtlı
+
+`backend/tests/contract/test_repository_facts_guard.py` **+6 test**: tam harita sessiz ·
+eksik modül satırı → 1 bulgu · başka katmandaki **aynı adlı** modül eksik satırı **örtmüyor** ·
+satırsız aktör → 1 bulgu · yanlış kuyruk → 1 bulgu · üretilmiş sayıların transkripsiyon değil
+**türetme** olduğu.
+
+### Honest boundary — kapatılmayanlar
+
+- **P8-B2 AÇIK** (Create-Package durable admission **200** ↔ diğer dokuz **202**): belge
+  sapması değil, çözülmemiş **API sözleşmesi**; wire contract'ı ve muhtemelen frontend'i
+  etkiler, doc 06 §-taksonomisi otoritedir ve **bu koşuda da okunmadı** → ayrı PR + ürün kararı.
+- **P8-B3b YENİ:** `JOBS_AND_EVENTS.md` gövdesinde ~30 `:NN` referansı daha var; ölçüldü,
+  **düzeltilmedi**, sınır dosyanın kendisine yazıldı.
+- Yeni kapı **satır numarası doğrulamıyor** — yalnız üyelik ve kuyruk. Diğer codemap'lerdeki
+  `dosya.py:NN` referansları bu koşuda **ölçülmedi**.
+- Alembic head, `ENGINE_VERSION`, `SHARED_ALLOCATION_STATUS`, migration: **değişmedi**.
+
+Rapor: §6.7 tablosu (`P1-B1/B2` ve `P8-B1`/`P8-B3` üstü çizili, `P8-B2` açık, `P8-B3b` yeni)
++ **§6.7.8**.
+
+### Doğrulama
+
+ruff check + `ruff format --check` temiz · mypy **398 source files** temiz ·
+`generate_repository_facts.py --check` **OK**; yeni kapının negatifi hem sentetik ağaçta (6 test)
+hem **gerçek ağaçta** kanıtlandı (`heartbeat.py` satırı silindi + `run_trash_purge` kuyruğu
+bozuldu → kapı tam iki doğru bulgu verdi, sonra geri alındı) · tam backend suite
+**4034 passed / 1 xfailed / 0 failed**, coverage **%93,58** (kapı ≥90), exit **0**, 23 dk 13 sn
+(izole DB `entropia_adim40_counts`) · `git diff origin/main -- docs/ | grep '^-## '` **boş**.

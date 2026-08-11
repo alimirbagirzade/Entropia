@@ -2,10 +2,15 @@
 
 Katmanlar: `domain/` (saf, I/O yok) → `application/{commands,queries,jobs}` → `infrastructure/` → `apps/{api,worker,scheduler}`.
 
-> **Dosya sayıları (2026-07-29, ampirik):** `application/commands` **32** · `application/queries`
-> **37** · `application/jobs` **14** · `domain/` **26 paket**. Aşağıdaki tablolar bu dosyaların
-> **tamamını** adlandırır (`__init__.py` hariç). Bir modül eklendiğinde satırı da ekle — bu dosya
-> türetilmiş bir haritadır, otomatik tazelenmez.
+> **Dosya sayıları buraya YAZILMAZ.** Üretilmiş satır:
+> [`docs/generated/repository_facts.md`](../generated/repository_facts.md) §Summary ▸
+> *Application modules*. Elle yazıldıkları sürece bayatladılar (`queries` **37** diyordu, gerçek
+> **38**; `jobs` **14** diyordu, gerçek **16**) — ve sayı bayatken **tablonun kendisi de eksikti**,
+> ki bunu bir sayı zaten yakalayamaz.
+>
+> Aşağıdaki tablolar her katmandaki modüllerin **tamamını** adlandırır (`__init__.py` hariç), ve bu
+> artık dilek değil **kapıdır**: `scripts/generate_repository_facts.py::check_codemap_coverage`
+> satırı olmayan modülü CI'da kırmızıya çevirir. Modül eklerken **satırı** ekle, sayıyı değil.
 
 **Command konvansiyonu (her modülün docstring'inde tekrarlanan):** modül seviyesinde `async def`,
 request bağımlılığından gelen **TEK transaction**, burada **asla commit yok**, şekil =
@@ -102,6 +107,8 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `backtest_engine.py` | `backtest` | Engine worker gövdesi; `jobs` + `backtest_run` tek gerçek kaynağı |
 | `create_package.py` | `default` | CP kind-dispatch worker: `precheck` · `candidate_generation` · `validation` · `baseline_parse` (F-01a/F-01b/F-01c); durable kanıt + state ilerlemesi + audit/outbox |
 | `data_queue.py` | (yardımcı) | `data` kuyruğu job-kind taksonomisi + operator redelivery listesi |
+| `delivery.py` | (ortak kapı) | **At-least-once teslim kapısı (ADIM 21, INF-03/INF-09):** `claim_job_for_delivery` durable `jobs` satırını `FOR UPDATE` ile kilitler → terminal ise `(job, replay)` döner ve gövde **hiçbir şey yazmaz**, değilse ikinci teslimat birincinin arkasında **bekler**. Domain satırının kendi kilidi + terminal durumu olan gövdeler (`backtest_engine`, `agent_executor`, `create_package`) bu yardımcıyı çağırmaz. `run_idempotent`'tan **ayrı eksen**: o admission'ı, bu gövdenin ikinci koşusunu durdurur |
+| `heartbeat.py` | `maintenance` | `record_worker_heartbeat` — scheduler → Redis → worker round-trip'ini `app_metadata` anahtarına yazarak **kalıcı** kılar (ADIM 25, migration yok). **Dürüst sınır:** yalnız `maintenance` tüketen bir worker'ın canlılığını kanıtlar, kuyruk-başına sinyal DEĞİLDİR; satır yoksa `None` döner, asla "0 saniye önce" değil |
 | `maintenance.py` | (scheduler) | `recover_stale_jobs` (INF-09) + `redeliverable_queued_jobs` (INF-03) sweep'leri |
 | `market_data.py` | `data` | Raw asset → Polars parse → şema map → normalize → validate → processed asset |
 | `outbox_relay.py` | (scheduler + SSE) | Transactional outbox tüketici tarafı: `relay_unpublished` + `fetch_events_after` |

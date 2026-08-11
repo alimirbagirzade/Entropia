@@ -289,3 +289,131 @@ def test_a_split_revision_graph_is_reported_as_multiple_heads(tmp_path: Path) ->
     assert alembic["head"] is None
     assert alembic["heads"] == ["0002_b", "0002_c"]
     assert alembic["revision_count"] == 3
+
+
+# --------------------------------------------------------------------------
+# Codemap coverage — a map that stops naming its subject must go red
+#
+# The counts this replaces were hand-written and went stale twice (`queries`
+# said 37 against 38, `jobs` said 14 against 16). The deeper defect is that a
+# count cannot see the drift that produced it: two `jobs` modules had no row at
+# all while the header still advertised a number. What is gated is therefore
+# membership, not arithmetic.
+
+
+COMPLETE_LAYERS = (
+    "# BACKEND_LAYERS\n\n"
+    "## `application/commands/` — yazma yolu\n\n"
+    "| `market_data.py` | writes |\n\n"
+    "## `application/queries/` — okuma yolu\n\n"
+    "| `market_data.py` | reads |\n\n"
+    "## `application/jobs/` — durable worker gövdeleri\n\n"
+    "| `delivery.py` | shared guard |\n"
+)
+
+COMPLETE_ACTORS = (
+    '@dramatiq.actor(queue_name="data", max_retries=3)\n'
+    "def run_market_data_analysis(job_id: str) -> None:\n"
+    "    pass\n"
+)
+
+COMPLETE_JOBS_MAP = (
+    "# JOBS_AND_EVENTS\n\n| `run_market_data_analysis` | `data` | `market_data.py` |\n"
+)
+
+# Only the branch `check_codemap_coverage` reads; the collectors that fill this
+# key for real are exercised by the live tree, not re-implemented here.
+LAYER_FACTS = {
+    "backend_layers": {
+        "application_module_names": {
+            "commands": ["market_data.py"],
+            "queries": ["market_data.py"],
+            "jobs": ["delivery.py"],
+        }
+    }
+}
+
+
+def _codemap_tree(tmp_path: Path, *, layers: str, actors: str, jobs_map: str) -> Path:
+    _write(tmp_path, gate.BACKEND_LAYERS_REL, layers)
+    _write(tmp_path, gate.JOBS_AND_EVENTS_REL, jobs_map)
+    _write(tmp_path, gate.ACTORS_REL, actors)
+    return tmp_path
+
+
+def test_a_complete_pair_of_codemaps_is_quiet(tmp_path: Path) -> None:
+    """A map that names everything stays silent — so a finding below is real."""
+    root = _codemap_tree(
+        tmp_path,
+        layers=COMPLETE_LAYERS,
+        actors=COMPLETE_ACTORS,
+        jobs_map=COMPLETE_JOBS_MAP,
+    )
+    assert gate.check_codemap_coverage(root, LAYER_FACTS) == []
+
+
+def test_a_module_with_no_codemap_row_is_reported(tmp_path: Path) -> None:
+    """The real regression: `delivery.py` and `heartbeat.py` were never named."""
+    root = _codemap_tree(
+        tmp_path,
+        layers=COMPLETE_LAYERS.replace("| `delivery.py` | shared guard |\n", ""),
+        actors=COMPLETE_ACTORS,
+        jobs_map=COMPLETE_JOBS_MAP,
+    )
+    failures = gate.check_codemap_coverage(root, LAYER_FACTS)
+    assert len(failures) == 1, failures
+    assert "application/jobs/delivery.py" in failures[0]
+
+
+def test_a_namesake_in_another_layer_does_not_cover_a_missing_row(tmp_path: Path) -> None:
+    """`market_data.py` exists in three layers; a whole-file match would lie."""
+    root = _codemap_tree(
+        tmp_path,
+        layers=COMPLETE_LAYERS.replace("| `market_data.py` | reads |\n", ""),
+        actors=COMPLETE_ACTORS,
+        jobs_map=COMPLETE_JOBS_MAP,
+    )
+    failures = gate.check_codemap_coverage(root, LAYER_FACTS)
+    assert len(failures) == 1, failures
+    assert "application/queries/market_data.py" in failures[0]
+
+
+def test_an_actor_with_no_row_is_reported(tmp_path: Path) -> None:
+    root = _codemap_tree(
+        tmp_path,
+        layers=COMPLETE_LAYERS,
+        actors=COMPLETE_ACTORS,
+        jobs_map="# JOBS_AND_EVENTS\n\nno actor table here\n",
+    )
+    failures = gate.check_codemap_coverage(root, LAYER_FACTS)
+    assert len(failures) == 1, failures
+    assert "run_market_data_analysis" in failures[0]
+
+
+def test_an_actor_filed_under_the_wrong_queue_is_reported(tmp_path: Path) -> None:
+    """The queue is the operationally load-bearing half of that row.
+
+    `data` is deliberately excluded from the scheduler's redelivery sweep, so a
+    row filing an actor under another queue misdescribes whether a lost message
+    ever comes back.
+    """
+    root = _codemap_tree(
+        tmp_path,
+        layers=COMPLETE_LAYERS,
+        actors=COMPLETE_ACTORS,
+        jobs_map=COMPLETE_JOBS_MAP.replace("| `data` |", "| `maintenance` |"),
+    )
+    failures = gate.check_codemap_coverage(root, LAYER_FACTS)
+    assert len(failures) == 1, failures
+    assert "real queue `data`" in failures[0]
+
+
+def test_the_layer_counts_are_derived_never_transcribed() -> None:
+    """The generated artefact owns the numbers the codemap header used to state."""
+    layers = json.loads((REPO_ROOT / gate.JSON_REL).read_text(encoding="utf-8"))["backend_layers"]
+    assert layers["application_module_names"], "the layer walk found nothing"
+    for layer, names in layers["application_module_names"].items():
+        assert layers["application_module_counts"][layer] == len(names)
+        assert "__init__.py" not in names
+    assert layers["domain_package_count"] == len(layers["domain_packages"])
+    assert not [p for p in layers["domain_packages"] if p.startswith("_")]

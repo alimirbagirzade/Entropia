@@ -98,8 +98,10 @@ Before stopping a working session, produce **ALL** of the following:
   (`commands/backtest_run.py::_readiness_blocked`), `details` yine tüm issue'ları taşır. Yeni
   hata sınıfı eklerken kategorisini bildir; zarf `docs/openapi.json` →
   `components.schemas.ErrorResponse` altında yayımlanır (drift guard onu korur).
-- **OCC dual-token = TEK kural, çelişki 409 (O-12).** 16 mutating op token'ı hem gövdeden
-  (`expected_*`) hem `If-Match`'ten kabul eder. Bunlar **tek değerin iki yazımıdır**, iki
+- **OCC dual-token = TEK kural, çelişki 409 (O-12).** Bir dizi mutating op token'ı hem gövdeden
+  (`expected_*`) hem `If-Match`'ten kabul eder — **kaç tane olduğunu buraya YAZMA**: tek tek
+  sayılmış kanonik liste `docs/CODEMAPS/BACKEND_ROUTES.md` §DUAL-TOKEN'da yaşar (buradaki elle
+  yazılmış sayı `trash.soft_delete` O-18'de dual olduğunda bayatlamış ve öyle kalmıştı). Bunlar **tek değerin iki yazımıdır**, iki
   bağımsız önkoşul değil (doc 15 §11, doc 20 §14 "Do not treat them as interchangeable
   fields", doc 21 §7). Kural tek yerde: `shared/concurrency.py::reconcile_occ_tokens` —
   **ikisi de verilmiş ve ÇELİŞİYORSA → 409 `OCC_TOKEN_CONFLICT`**
@@ -179,18 +181,22 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `ed83688`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `66bdeb4`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 39 (RC §6.7 / P11-2, #665):** görsel kapı **8 → 23 rota**; liste artık
-> `screenshotMatrix.ts::TARGET_PAGES` türevi (**elle liste yazma**), runner'da **23/23 iki kez**,
-> `e2e` +2.6 dk. **Baseline üretirken sıra ZORUNLU:** `down -v` → seed → **`npm test`** →
-> `screenshots:update` — kapı journey-suite SONRASI durumu dondurur, salt-seed stack'te 4/8 düşer
-> (bu **P11-3b'yi cevaplar**). CI-dışı Linux runner'a EŞİT DEĞİL (`analysis-lab` 6 px saptı →
-> baseline CI artefaktından alındı); **toleransı büyütme, maske icat etme, rotayı çıkarma**.
-> Öncesinde ADIM 38 (P11-3 + P11-6): `-darwin` seti silindi, `scripts/visual-baseline-platform-gate.sh`
-> geri dönüşü kırıyor (**`-linux` dışı platform eki commit EDİLEMEZ**), tab sırası 3/23 → 23/23.
+> **Son dalga — ADIM 40 (RC §6.7 / P1-B1+B2 + P8-B1+B3):** elle yazılmış sayılar **silindi,
+> sahipleri değişti** — katman sayıları üretiliyor (`repository_facts.md` §*Application modules*),
+> dual-token sayısının tek sahibi `BACKEND_ROUTES.md` §DUAL-TOKEN. **Sayı yazma:** yeni
+> application modülü / dramatiq aktörü eklersen **codemap satırı ZORUNLU** —
+> `generate_repository_facts.py::check_codemap_coverage` CI'da kırmızıya çevirir (aktör satırında
+> **kuyruk** da doğrulanır). **Satır numarası yazma, sembol adı kullan.** P8-B2 (200↔202) ve
+> **yeni P8-B3b** açık; **P8 KAPANMADI**. `PROJECT_HISTORY.md` §ADIM 40 · `docs/ADIM40_LANDED_KICKOFF.md`.
+> Öncesinde ADIM 39 (P11-2, #665): görsel kapı **8 → 23 rota**, liste `screenshotMatrix.ts::TARGET_PAGES`
+> türevi (**elle liste yazma**). **Baseline üretirken sıra ZORUNLU:** `down -v` → seed → **`npm test`**
+> → `screenshots:update`; CI-dışı Linux runner'a EŞİT DEĞİL — **toleransı büyütme, maske icat etme,
+> rotayı çıkarma**. Öncesinde ADIM 38 (P11-3 + P11-6): `-darwin` seti silindi,
+> `scripts/visual-baseline-platform-gate.sh` geri dönüşü kırıyor (**`-linux` dışı platform eki
+> commit EDİLEMEZ**), tab sırası 3/23 → 23/23.
 > **P11 KAPANMADI:** P11-1 (branch protection — **insan kararı**), P11-6b, P11-8 açık.
-> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 39; devir: `docs/ADIM39_LANDED_KICKOFF.md`.
 > Öncesinde ADIM 37 (RC §6.7 / P10-B2, sayfalama sınırı, #663): 9 kelepçeli `limit` sınırını
 > **yayımlıyor** (`apps/api/pagination.py::clamped_limit_query` → `x-clamp-*`; UNPUBLISHED 0);
 > **kalem KAPANMADI** — aşımın clamp mi 422 mi olacağı **ürün kararı**, **PO bekliyor**

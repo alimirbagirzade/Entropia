@@ -24,19 +24,50 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
 # uv: fast, reproducible Python dependency management. Build-time only now.
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+#
+# Digest-pinned for the same reason as trivy and gitleaks in security.yml. Bump
+# deliberately. `:latest` still resolved a different uv on every build even after
+# the binary stopped being shipped: it no longer moves the image's scan surface,
+# but it does move the resolver, and a resolver that changes underneath a build
+# is the one input a lockfile cannot pin. The tag is documentation — the digest
+# is what Docker verifies — and it names the multi-arch index, not one platform's
+# manifest, so amd64 and arm64 still resolve normally.
+COPY --from=ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657da05ffaa45d82797b53fa3abc /uv /uvx /bin/
 
 WORKDIR /app
 
-# Install dependencies first (cached layer) using only the lock inputs.
-COPY pyproject.toml README.md ./
-RUN uv venv /app/.venv && uv pip install -e .
+# Install dependencies from the COMMITTED LOCKFILE, not from the `>=x,<y` ranges
+# in pyproject.toml. This is the backend twin of the frontend gap ADIM 33 closed
+# (`npm install` -> `npm ci`, PR #656): `uv pip install -e .` re-resolved those
+# ranges at build time, so two builds a week apart could ship different dependency
+# trees from identical source, and uv.lock — which is committed and which the test
+# suite runs against — described a tree the image never actually installed.
+#
+# `--locked`, not `--frozen`. Both install the lock as written; they differ in what
+# happens when pyproject.toml and uv.lock disagree. `--frozen` syncs without
+# consulting pyproject at all, so a dependency edit that was never re-locked builds
+# green and ships a tree that silently predates it. `--locked` asserts the lock
+# will remain unchanged and FAILS the build instead — which is the property worth
+# having, since a stale lock is exactly the drift this change exists to catch.
+#
+# Split in two so the dependency layer still caches against the lock inputs alone:
+# `--no-install-project` syncs the locked dependencies without needing src/, so
+# editing application code does not re-download them. The second sync installs the
+# project itself. It stays EDITABLE (uv's default), which is what keeps the runtime
+# stage's /app/src anchor valid — a non-editable install would import from
+# site-packages and make the COPY of /app/src dead weight.
+#
+# Extras are not synced, matching `uv pip install -e .`: `dev` is an extra rather
+# than a dependency-group, and uv sync installs no extras unless asked. The runtime
+# image gets pytest/ruff/mypy exactly as before — that is, not at all.
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --locked --no-install-project
 
 # Now copy the source and config.
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY src ./src
-RUN uv pip install -e .
+RUN uv sync --locked
 
 # The runtime stage starts from the SAME base as the builder, which is what makes
 # copying a prebuilt venv across stages safe: the interpreter that the venv's

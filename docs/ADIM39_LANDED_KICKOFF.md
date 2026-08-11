@@ -1,4 +1,11 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — canlı devir belgesi `docs/ADIM40_LANDED_KICKOFF.md`'dir.**
+> Bu belge **ADIM 39 kapanışında** yazıldı ve o anın kaydıdır; aşağıdaki *paste-ready resume
+> prompt* artık **kullanılmamalıdır**. ADIM 40 görsel/E2E eksenine **dokunmadı** — RC §6.7'nin
+> belge kalemlerini (**P1-B1/B2, P8-B1/B3**) kapattı; bu belgenin açık bıraktığı
+> **P11-1 / P11-6b / P11-8** hâlâ **açıktır**. §3'ün iki görsel-baseline önkoşulu
+> **geçerliliğini korur** — yeni baseline üretecek herkes onları okumalıdır.
+
 # ADIM 39 landed — devir belgesi (RC §6.7 / P11-2)
 
 **PR #665** · branch `test/rc-p11b2-visual-coverage` · base `ed83688` (ADIM 38).

@@ -124,7 +124,13 @@ frontend_component 127 · backend_contract 70 · e2e 16.
 ama iki başlık sayısı bayat (`queries` 37 yazıyor / gerçek **38**; `jobs` 14 yazıyor /
 gerçek **16**) — bulgu **P1-B1**. Ayrıca dual-token op sayısında `CLAUDE.md` (**16**) ↔
 codemap (**17**) ayrışması; ampirik `reconcile_occ_tokens` çağrı yeri **12** (10 dosya) —
-bulgu **P1-B2**. İkisi de **düzeltilmedi**.
+bulgu **P1-B2**.
+
+> **2026-08-11 (ADIM 40) düzeltmesi — ve bu koşunun bir DÜZELTMESİ.** İkisi de kapatıldı
+> (§6.7.8). Bu paragrafın *"`BACKEND_LAYERS.md` **içerik olarak tam**"* ifadesi **yanlıştı**:
+> `jobs` tablosu 16 modülün yalnız **14'ünü** adlandırıyordu — `delivery.py` ve `heartbeat.py`
+> hiç satır almamıştı. Bayat olan yalnız başlık sayısı değil, içeriğin kendisiydi; sayı zaten
+> bunu göremez, çünkü sayı yalnız birinin bir kez saydığını kaydeder.
 
 ### P2 — Backend lint / type / test / coverage (verdict: **PASS**, 4/4)
 
@@ -862,8 +868,9 @@ açılmadı/kapatılmadı.
 | **P11-3b** | **YENİ (2026-08-11 ölçümü).** `strategy-standalone` bugün **1135 px** ölçüldü — `-darwin` (1425) ve **`-linux` (900)** baseline'larının **ikisiyle de** uyuşmuyor; sayfa yüksekliği seed'e bağlı liste uzunluğuyla oynuyor. P11-3'ün sonucunu değiştirmez ama **hayatta kalan `-linux` setinin seed hassasiyeti** hakkında açık bir soru bırakır. **Ölçüldü, düzeltilmedi** — bu dalga `-linux` setine dokunmadı. → **2026-08-11 açık sorusu CEVAPLANDI (P11-2 ölçümü, §6.7.7):** yükseklik **seed'e** değil **journey-suite sonrası duruma** duyarlı; `e2e.yml` görsel kapıyı `npm test`'ten SONRA koşuyor, yani CI o durumu her koşuda üretiyor. Aynı 1135 px **Linux'ta da** ölçüldü → platform artefaktı **değil**. `-linux` seti runner'da iki kez 23/23 geçti | P11 |
 | **P11-8** | Lighthouse hâlâ bağlı değil | P11 |
 | **P10-7** | Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor) | P10 |
-| **P1-B1/B2** | `BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat | P1 |
-| **P8-B1/B2/B3** | `pending_data_job_dispatch` docstring gerekçesi bayat · Create-Package durable admission uçları **200** dönüyor, diğer dokuzu **202** (adjudicate edilmedi) · `JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış | P8 |
+| ~~**P1-B1/B2**~~ | ~~`BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat~~ → **2026-08-11 (ADIM 40) KAPANDI — sayı güncellenerek DEĞİL, sahipliği değiştirilerek.** İkisi de yeniden ölçüldü, ikisi de doğru çıktı. B1: üç sayı codemap'ten **silindi**, üretilmiş satıra taşındı (`repository_facts.md` §Summary ▸ *Application modules*); ölçüm ayrıca sayının **göremediği** kusuru buldu — `jobs` tablosunda `delivery.py` ve `heartbeat.py`'nin **hiç satırı yoktu** (14 satır / 16 modül), ikisi eklendi. B2: `CLAUDE.md`'den sayı **kaldırıldı**, otorite `BACKEND_ROUTES.md` §DUAL-TOKEN'ın tek tek sayan listesi (**17**). Tekrarı **yeni kapı** engelliyor: `check_codemap_coverage`, negatifi 5 testle kanıtlı. Ayrıntı: **§6.7.8** | P1 |
+| ~~**P8-B1**~~ · ~~**P8-B3**~~ · **P8-B2 AÇIK KALDI** | ~~`pending_data_job_dispatch` docstring gerekçesi bayat~~ → **KAPANDI (ADIM 40):** gerekçe yeniden yazıldı — `None` **admission** yüzünden dönüyor (replay yeni iş admit etmedi, dispatch edilecek şey yok); *"gövdede terminal-state guard yok"* öncülü ADIM 21'de sona ermişti (`trade_log.py`/`trading_signal.py` gövdeleri `claim_job_for_delivery` çağırıyor — bu koşuda doğrulandı). **Davranış ve imza DEĞİŞMEDİ.** ~~`JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış~~ → **KAPANDI (ADIM 40):** aktör tablosunun **"Satır" kolonu silindi** (aktör adı zaten sembolün kendisi; 12 değerin 11'i bayattı, yalnız `system_heartbeat :39` tutuyordu) ve tablonun tamlığı + kuyruk eşlemesi kapıya bağlandı. **P8-B2 (Create-Package 200 ↔ diğer dokuz 202) BU SLICE'A GİRMEDİ ve AÇIK** — belge sapması değil, **çözülmemiş API sözleşmesi**; wire contract'ı etkiler, ürün adjudication'ı ister. **P8 KAPANMADI.** Ayrıca **YENİ: P8-B3b** (aşağıda). Ayrıntı: **§6.7.8** | P8 |
+| **P8-B3b** | **YENİ (ADIM 40 ölçümü, rapor bunu bildirmemişti).** `JOBS_AND_EVENTS.md`'in **gövdesinde** ~30 adet `dosya.py:NN` / `:NN` referansı daha var (`sse.py:270`, `_wait_for_tick:166`, `actors.py:334`, …) — aktör tablosuyla **aynı** yapısal kusur: her düzenleme onları kaydırır. B3 ölçümü yalnız aktör tablosunu kapsıyordu, bu yüzden yalnız o kapatıldı; gerisini sembol adına çevirmek her referansın **tek tek doğrulanmasını** ister → **ayrı PR**. Sınır dosyanın kendisine yazıldı. **Ölçüldü, düzeltilmedi** | ADIM 40 |
 | ~~**P6-6**~~ | ~~`dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir~~ → **2026-08-10 (ADIM 36) KAPANDI** — yanlış-negatif **yeniden üretildi** (sağlam yedek, `exit 1`), harici çağrılar sınırlandı, **yeni `exit 3` = "doğrulanamadı"** eklendi; "yedek bozuk" (1) ile karışmıyor, "sağlam" (0) ile **asla**. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
 | ~~**P6-ek**~~ | ~~`e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma~~ → **2026-08-10 (ADIM 36) KAPANDI** — asılı kalma **yeniden üretildi** (25s'de hâlâ koşuyordu), preflight sınırlandı; takılı daemon'a karşı **sınırlı sürede `exit 2`** ölçüldü, "daemon yok" teşhisi ayrı mesajda korundu. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
 | **P1-Gate3** | **8 uncovered kriter** + **131 partial kriter** (kapı yeşil sayıyor, ama RC kabul kararında okunmalıdır) — aralarında `AT-04`, `AOS-17`/`TS-17` (spec adı `ACTIVE_RUN_DEPENDENCY` ↔ sevk edilen `OBJECT_IN_ACTIVE_RUN`, **hiçbiri pinli değil**), `TL-20`/`AOS-18` (K-06 tehlikesi) | P1 |
@@ -1318,6 +1325,74 @@ Per-sayfa notlar kanıt belgesinin §7'sinde.
 **A-08 ile KARIŞTIRILAMAZ.** Piksel karşılaştırması ekran-okuyucu kanıtı **değildir**; bu
 bölümün hiçbir çıktısı `docs/audit/a11y_screen_reader_audit_results.md` §1/§2'ye
 yazılamaz. Defter BOŞ, dört kriter de ☐, #514'ün durumu değişmedi.
+
+**Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
+
+---
+
+#### 6.7.8 P1-B1/B2 + P8-B1/B3 KAPANDI — sayının sahibi değişti (ADIM 40, 2026-08-11)
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** Dördü de blocker değildi; §8 hâlâ **BLOCKED**,
+açık blocker sayısı hâlâ **üç** (1, 2, 4). **P8 KAPANMADI** — P8-B2 açık (aşağıda).
+
+**Çekirdek karar: sayıyı güncellemek dördüncü tekrarı garanti ederdi.** Bu, elle yazılmış bir
+sayının bayatladığı **üçüncü** kayıttı ve ADIM 27'nin doküman-gerçek kapısı hiçbirini
+yakalamamıştı — çünkü o kapı **üretilmiş** olguları koruyor, bu sayılar ise elle yazılmış
+düzyazıydı. Her kalemde "1 = üretilene işaret et / 2 = üretime ekle / 3 = bayatlamayacak
+biçimde elle yaz" merdiveni sırayla soruldu ve **ilk uyan** seçildi:
+
+| Kalem | Seçilen | Neden |
+|---|---|---|
+| **P1-B1** (`BACKEND_LAYERS.md` 37/38 · 14/16) | **2 → sonra 1** | Sayı ucuzca üretilebilir (dosya sistemi yürüyüşü), bu yüzden üreticiye eklendi; ardından codemap'ten **silinip** üretilmiş satıra işaret edildi. Yalnız 1'i seçmek olmazdı: üretilmiş bir dosyada olmayan sayıya işaret edilemez |
+| **P1-B2** (`CLAUDE.md` dual-token 16 ↔ 17) | **1** | Op-seviyesinde **semantik** bir sayı; ucuz bir statik yürüyüşle türetilemez (ampirik `reconcile_occ_tokens` çağrı yeri **12**'dir, op sayısı **17** — yardımcı fonksiyonlar birden çok op'a hizmet ediyor). Kanonik, tek tek sayan liste zaten `BACKEND_ROUTES.md` §DUAL-TOKEN'da vardı → `CLAUDE.md`'deki kopya **kaldırıldı**, sayı ikinci kez yazılmıyor |
+| **P8-B1** (docstring gerekçesi) | **3** | Bir gerekçe üretilemez. Yeni metin **mutlak sayı ve dosya:satır içermiyor**; guard'ın kapsamını tekrar etmek yerine `jobs/delivery.py` docstring'ini tek otorite olarak gösteriyor — yani aynı biçimde ikinci kez bayatlayamaz |
+| **P8-B3** (aktör tablosu satır no) | **sembol adı** | Satır numarası yapısal olarak bayattır. Aktör adı **zaten** sembolün kendisidir (`apps/worker/actors.py::<aktör>`), yani kolon fazlalıktı → **kolon silindi**. Numarayı elle kaydırmak bir sonraki PR'da yine kayardı |
+
+**Yeniden ölçüldü, rapordaki sayı kopyalanmadı.** `queries` **38** (rapor: 38 ✓), `jobs`
+**16** (✓), `commands` **32**, `domain/` **26 paket**; dual-token codemap listesi tek tek
+sayıldığında **17** (✓). Aktör tablosu: `@dramatiq.actor` tanımları **12**, tablodaki satır
+numaralarının **11'i yanlış** (`run_market_data_analysis` `:45` yazıyor / gerçek `:70`), yalnız
+`system_heartbeat :39` tutuyor — B3'ün "~24 satır kaymış" ifadesi doğrulandı.
+
+**Ölçüm, raporun kendi ifadesini de çürüttü.** §6.7'nin *"`BACKEND_LAYERS.md` **içerik olarak
+tam**"* cümlesi yanlıştı: `jobs` tablosu 16 modülün **14'ünü** adlandırıyordu — `delivery.py`
+(ADIM 21 at-least-once teslim kapısı) ve `heartbeat.py` (ADIM 25 worker canlılığı) hiç satır
+almamıştı. **Bu tam olarak bir sayının göremeyeceği kusurdur**, ve bayat sayının nedeniydi.
+İki satır da eklendi.
+
+**Tekrarı ne engelliyor (yeni kapı).** `scripts/generate_repository_facts.py::check_codemap_coverage`
+— `--check` yolunda, `ci.yml`'a **zaten bağlı** olan aynı adımda koşar:
+
+* her `application/{commands,queries,jobs}` modülünün BACKEND_LAYERS.md'de **satırı** var mı
+  (katman bölümüne **kapsamlı** arama — `market_data.py` üç katmanda birden var, bütün-dosya
+  eşleşmesi eksik satırı yanlışlıkla örterdi);
+* her `@dramatiq.actor` JOBS_AND_EVENTS.md aktör tablosunda **var mı** ve **doğru kuyrukta mı**
+  (kuyruk o satırın operasyonel yarısıdır: `data` scheduler sweep'inin **dışındadır**, yanlış
+  kuyruk kayıp mesajın geri gelip gelmediğini yanlış anlatır).
+
+Gerekçe: **sayı değil, üyelik kapıya bağlandı.** Bir sayı yalnız birinin bir kez saydığını
+kaydeder; eksik satırı göremez.
+
+**Negatifi kanıtlı** (`backend/tests/contract/test_repository_facts_guard.py`, 5 yeni test):
+tam harita **sessiz** · eksik modül satırı → **1 bulgu** · başka katmandaki **aynı adlı** modül
+eksik satırı **örtmüyor** · satırsız aktör → **1 bulgu** · yanlış kuyruk → **1 bulgu**. Artı
+üretilmiş sayıların **transkripsiyon değil türetme** olduğunu pinleyen bir test.
+
+**Ürün kodu değişmedi.** Tek dokunuş `pending_data_job_dispatch`'in **docstring**'i; imza,
+gövde ve `__all__` aynı, fonksiyonun beş assert'i (`test_gateway_parity_s4.py`,
+`test_gateway_parity_trading_signal.py`) değişmeden geçiyor.
+
+**AÇIK KALAN — bu slice'ın kapatmadıkları (dürüst sınır):**
+
+1. **P8-B2** — Create-Package durable admission uçları **200**, diğer dokuzu **202**. Bu bir
+   belge sapması **değil**, çözülmemiş bir **API sözleşmesi** tutarsızlığıdır: wire contract'ı
+   ve muhtemelen frontend'i etkiler, doc 06'nın kendi §-taksonomisi otoritedir ve **bu koşuda
+   da okunmadı**. Ucuz belge PR'ına karıştırılmadı → **ayrı PR + ürün kararı**.
+2. **P8-B3b (YENİ)** — `JOBS_AND_EVENTS.md` gövdesindeki ~30 `:NN` referansı. Aynı kusur,
+   ölçüldü, **düzeltilmedi**; her biri ayrı doğrulama ister → ayrı PR. Sınır dosyanın kendisine
+   yazıldı, böylece bir sonraki okuyucu onlara güvenmeden önce grep'liyor.
+3. **Diğer codemap'lerdeki satır numaraları** (`BACKEND_LAYERS.md` `config.py:118-119` gibi)
+   bu koşuda **ölçülmedi**. Yeni kapı **satır numarası doğrulamıyor**, yalnız üyelik ve kuyruk.
 
 **Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
 

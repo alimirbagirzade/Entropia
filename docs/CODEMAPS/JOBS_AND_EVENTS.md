@@ -11,22 +11,35 @@ transport'tur. Mesaj kaybolursa scheduler sweep'i (INF-03/INF-09) işi geri geti
 
 ## dramatiq aktörleri (`apps/worker/actors.py`)
 
-| Aktör | Kuyruk | Satır | Gövde (`application/jobs/`) |
-|---|---|---|---|
-| `system_heartbeat` | `maintenance` | `:39` | `heartbeat.py::record_worker_heartbeat` — scheduler tick ping'i **ve** round-trip kanıtının kalıcı kaydı (ADIM 25) |
-| `run_market_data_analysis` | `data` | `:45` | `market_data.py` |
-| `run_research_data_analysis` | `data` | `:72` | `research_data.py` |
-| `run_trading_signal_import` | `data` | `:99` | `trading_signal.py` |
-| `run_trade_log_import` | `data` | `:126` | `trade_log.py` |
-| `run_backtest_engine` | `backtest` | `:153` | `backtest_engine.py` |
-| `run_agent_tool` | `agent` | `:181` | `agent_tools.py` |
-| `run_agent_tool_high` | `agent-high` | `:193` | `agent_tools.py` |
-| `run_agent_executor` | `agent-executor` | `:216` | `agent_executor.py` |
-| `run_create_package_job` | `default` | `:245` | `create_package.py` (kind-dispatch) |
-| `run_trash_purge` | `maintenance` | `:274` | `purge.py` |
-| `run_package_import` | `data` | `:301` | `package_import.py` |
+> **Satır numarası kolonu KALDIRILDI (ADIM 40).** Aktör adı zaten sembolün kendisidir
+> (`apps/worker/actors.py::<aktör>`); numara fazlalıktı ve **12'nin 11'i bayatlamıştı** (~24 satır
+> kaymış — RC §6.7 P8-B3). Bu tablonun tamlığı ve kuyruk eşlemesi artık **kapıdır**:
+> `scripts/generate_repository_facts.py::check_codemap_coverage` her `@dramatiq.actor`'ı burada
+> arar ve kuyruğunu karşılaştırır. Yeni aktör eklerken **satır** ekle — numara yazma.
+
+| Aktör (`apps/worker/actors.py::`) | Kuyruk | Gövde (`application/jobs/`) |
+|---|---|---|
+| `system_heartbeat` | `maintenance` | `heartbeat.py::record_worker_heartbeat` — scheduler tick ping'i **ve** round-trip kanıtının kalıcı kaydı (ADIM 25) |
+| `run_market_data_analysis` | `data` | `market_data.py` |
+| `run_research_data_analysis` | `data` | `research_data.py` |
+| `run_trading_signal_import` | `data` | `trading_signal.py` |
+| `run_trade_log_import` | `data` | `trade_log.py` |
+| `run_backtest_engine` | `backtest` | `backtest_engine.py` |
+| `run_agent_tool` | `agent` | `agent_tools.py` |
+| `run_agent_tool_high` | `agent-high` | `agent_tools.py` |
+| `run_agent_executor` | `agent-executor` | `agent_executor.py` |
+| `run_create_package_job` | `default` | `create_package.py` (kind-dispatch) |
+| `run_trash_purge` | `maintenance` | `purge.py` |
+| `run_package_import` | `data` | `package_import.py` |
 
 Tüm aktörler `max_retries=3`.
+
+> **AÇIK — P8-B3b (bu koşuda ölçüldü, düzeltilmedi):** bu dosyanın **gövdesinde** hâlâ ~30 adet
+> `dosya.py:NN` / `:NN` referansı var (`sse.py:270`, `_wait_for_tick:166`, `actors.py:334`, …).
+> Aynı yapısal kusur: her düzenleme onları kaydırır. B3 ölçümü **yalnız aktör tablosunu**
+> kapsıyordu, bu yüzden yalnız o kapatıldı; gerisini sembol adına çevirmek her referansın ayrı
+> ayrı doğrulanmasını gerektirir ve **kendi PR'ını hak eder**. O numaralara güvenmeden önce
+> sembolü grep'le.
 
 ### Yürütme modeli — sync gövde → async gövde (ZORUNLU: `run_sync`)
 

@@ -5220,12 +5220,58 @@ Doğrulama: e2e tsc temiz · `visual-baseline-platform-gate.sh` → **23 baselin
 
 ---
 
+## ADIM 40 — RC §6.7 / P1-B1+B2 + P8-B1+B3: sayının sahibi değişti landed (PR pending)
+
+**Numaralandırma:** istem "ADIM 38" diyordu ve base olarak ADIM 37b'yi varsayıyordu; doğrulama
+`origin/main`'de **ADIM 38 (#664) + ADIM 39 (#665) zaten merge** gösterdi → numara yeniden
+kullanılmadı, bu **ADIM 40**. Base `66bdeb4`.
+
+**Dört belge kalemi kapandı — sayı güncellenerek DEĞİL, sahipliği değiştirilerek.** Bu, elle
+yazılmış bir sayının bayatladığı **üçüncü** kayıttı; sayıyı elle tazelemek dördüncüyü garanti
+ederdi. Her kalemde merdiven (1 = üretilene işaret et · 2 = üretime ekle · 3 = bayatlamayacak
+biçimde yaz) sırayla soruldu ve ilk uyan seçildi:
+
+- **P1-B1** (`queries` 37/38, `jobs` 14/16) → **2 sonra 1**: sayılar artık
+  `collect_backend_layers` ile üretiliyor (`repository_facts.md` §Summary ▸ *Application
+  modules*), codemap'ten **silindi**. Ölçüm sayının **göremediği** kusuru buldu: `jobs` tablosu
+  16 modülün 14'ünü adlandırıyordu — `delivery.py` ve `heartbeat.py` **hiç satır almamıştı**,
+  ikisi de eklendi. Raporun *"içerik olarak tam"* ifadesi bu yüzden **yanlıştı**.
+- **P1-B2** (`CLAUDE.md` 16 ↔ codemap 17) → **1**: op-seviyesinde semantik sayı, ucuzca
+  türetilemez (`reconcile_occ_tokens` çağrı yeri 12, op 17). Kanonik liste zaten
+  `BACKEND_ROUTES.md` §DUAL-TOKEN'daydı → `CLAUDE.md`'deki kopya **kaldırıldı**.
+- **P8-B1** (docstring gerekçesi) → **3**: `pending_data_job_dispatch`'in replay'de `None`
+  dönüşü artık **admission** ile gerekçeleniyor; *"gövdede terminal-state guard yok"* öncülü
+  ADIM 21'de sona ermişti (`trade_log.py`/`trading_signal.py` → `claim_job_for_delivery`).
+  **Davranış, imza, `__all__` değişmedi.**
+- **P8-B3** (aktör tablosu ~24 satır kaymış) → **sembol adı**: aktör adı zaten sembol
+  (`apps/worker/actors.py::<aktör>`) → **"Satır" kolonu silindi**. 12 değerin 11'i bayattı.
+
+**Tekrarı yeni kapı engelliyor:** `generate_repository_facts.py::check_codemap_coverage` —
+her application modülünün codemap satırı (**katman bölümüne kapsamlı** arama; `market_data.py`
+üç katmanda birden var) + her `@dramatiq.actor`'ın satırı **ve kuyruğu**. **Negatifi 5 testle
+kanıtlı** (+1 türetme testi). Kapı **sayı değil üyelik** doğrular; bir sayı yalnız birinin bir
+kez saydığını kaydeder.
+
+**AÇIK — bilerek girmedi:** **P8-B2** (Create-Package **200** ↔ diğer dokuz **202**) bir belge
+sapması değil, çözülmemiş **API sözleşmesi** → ayrı PR + ürün kararı; **P8 KAPANMADI**.
+**YENİ P8-B3b:** `JOBS_AND_EVENTS.md` gövdesinde ~30 `:NN` referansı daha — ölçüldü,
+düzeltilmedi, sınır dosyanın kendisine yazıldı.
+
+**Doğrulama:** ruff check + format temiz · mypy `398 source files` temiz · `generate_repository_facts.py --check` **OK** (negatifi hem sentetik hem **gerçek ağaçta** kanıtlandı) · tam suite **4034 passed / 1 xfailed / 0 failed**, coverage **%93.58** (kapı ≥90), exit **0** · `git diff origin/main -- docs/ | grep '^-## '` **boş**.
+
+Migration YOK · alembic head, `ENGINE_VERSION`, `SHARED_ALLOCATION_STATUS` değişmedi ·
+blocker sayısı **üç**, §8 verdict **BLOCKED**. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 40;
+rapor **§6.7.8**; devir: `docs/ADIM40_LANDED_KICKOFF.md`.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38 ve ADIM 39 bunu DEĞİŞTİRMEDİ** — ikisi de test/kapı slice'ıydı, motor
+> **ADIM 38, 39 ve 40 bunu DEĞİŞTİRMEDİ** — üçü de test/kapı/belge slice'ıydı, motor
 > eksenine dokunmadı. Test ekseninde kalan RC §6.7 kalemleri: **P11-1** (branch
 > protection — repo ayarı, **insan kararı**, agent işi değil), **P11-6b**, **P11-8**
-> (Lighthouse). Paste-ready resume prompt: `docs/ADIM39_LANDED_KICKOFF.md` en altta.
+> (Lighthouse). Belge ekseninde kalan: **P8-B2** (ürün kararı), **P8-B3b**.
+> Paste-ready resume prompt: `docs/ADIM40_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

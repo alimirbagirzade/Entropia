@@ -1377,9 +1377,17 @@ def pending_data_job_dispatch(response: dict[str, Any]) -> tuple[str, str] | Non
     it. A tool call reporting ``succeeded`` while its durable work could never start
     is exactly the silent-fallback shape this system forbids.
 
-    Returns ``None`` for a REPLAY: a redelivered tool call admitted no new work, and
-    the import job body has no terminal-state guard, so re-sending it would run the
-    parse a second time and write a second normalized revision.
+    Returns ``None`` for a REPLAY, and the reason is admission, not protection: a
+    redelivered tool call admitted no new work, so there is no newly-queued job for
+    this step to hand over. The envelope being replayed describes a job the original
+    delivery already dispatched.
+
+    This docstring used to justify the same ``None`` by asserting that the import
+    bodies had no terminal-state guard. That premise expired when the shared guard
+    landed — the agent-admitted import bodies now open with
+    ``jobs/delivery.py::claim_job_for_delivery``, like every other durable body that
+    does not hold a domain-row lock of its own. Do not restate that module's
+    coverage here; its own docstring is the authority for which bodies claim.
     """
     if response.get("replayed"):
         return None

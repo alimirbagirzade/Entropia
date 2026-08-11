@@ -20,8 +20,8 @@ This module closes that hole from two directions:
 
 2. **Checking (`--check`).** It regenerates in memory and fails when the
    committed artefacts are stale, when a document is not classified as current
-   or historical, or when a *current* document asserts something the tree
-   contradicts.
+   or historical, when a codemap stops naming a module or an actor it promises
+   to name, or when a *current* document asserts something the tree contradicts.
 
 WHAT IS DELIBERATELY NOT A FACT HERE
 ------------------------------------
@@ -174,6 +174,34 @@ def collect_frontend_routes(root: Path) -> dict[str, Any]:
         "nav_admin_only_count": sum(1 for _, admin in nav_items if admin),
         "nav_paths": sorted(path for path, _ in nav_items),
         "future_dev_subpage_count": len(subpages),
+    }
+
+
+APPLICATION_LAYERS = ("commands", "queries", "jobs")
+
+
+def collect_backend_layers(root: Path) -> dict[str, Any]:
+    """Application-layer module names and `domain/` packages, read off the tree.
+
+    `docs/CODEMAPS/BACKEND_LAYERS.md` used to hand-write these counts in its own
+    header, and two of the three went stale (`queries` said 37 against 38 real,
+    `jobs` said 14 against 16). The counts are derived here so the codemap can
+    point at them instead of restating them; the module NAMES are kept because
+    `check_codemap_coverage` gates the rows, which is the drift a count cannot
+    see — both uncounted `jobs` modules had no row at all.
+    """
+    application = root / "backend" / "src" / "entropia" / "application"
+    modules = {
+        layer: sorted(p.name for p in (application / layer).glob("*.py") if p.name != "__init__.py")
+        for layer in APPLICATION_LAYERS
+    }
+    domain = root / "backend" / "src" / "entropia" / "domain"
+    packages = sorted(p.name for p in domain.iterdir() if p.is_dir() and not p.name.startswith("_"))
+    return {
+        "application_module_counts": {layer: len(names) for layer, names in modules.items()},
+        "application_module_names": modules,
+        "domain_package_count": len(packages),
+        "domain_packages": packages,
     }
 
 
@@ -342,6 +370,7 @@ def collect_facts(root: Path) -> dict[str, Any]:
         "database": collect_database(),
         "http_api": collect_http_api(root),
         "frontend": collect_frontend_routes(root),
+        "backend_layers": collect_backend_layers(root),
     }
     facts.update(collect_engine_and_capabilities())
     facts["tests"] = collect_tests(root)
@@ -378,6 +407,14 @@ def render_summary_rows(facts: dict[str, Any]) -> list[str]:
         _row("HTTP operations", facts["http_api"]["operation_count"]),
         _row("Frontend router paths", facts["frontend"]["router_path_count"]),
         _row("Frontend nav items", facts["frontend"]["nav_item_count"]),
+        _row(
+            "Application modules (`domain/` packages)",
+            " · ".join(
+                f"{count} `{layer}`"
+                for layer, count in facts["backend_layers"]["application_module_counts"].items()
+            )
+            + f" ({facts['backend_layers']['domain_package_count']} packages)",
+        ),
         _row("`ENGINE_VERSION`", f"`{facts['engine']['engine_version']}`"),
         _row(
             "`SHARED_ALLOCATION_STATUS`",
@@ -726,6 +763,73 @@ INVARIANT_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
 )
 
 
+# ==========================================================================
+# Codemap coverage — the maps claim to name their subjects exhaustively
+# ==========================================================================
+
+BACKEND_LAYERS_REL = "docs/CODEMAPS/BACKEND_LAYERS.md"
+JOBS_AND_EVENTS_REL = "docs/CODEMAPS/JOBS_AND_EVENTS.md"
+ACTORS_REL = "backend/src/entropia/apps/worker/actors.py"
+
+ACTOR_RE = re.compile(r'@dramatiq\.actor\(\s*queue_name="([^"]+)"[^)]*\)\s*\ndef\s+(\w+)')
+
+
+def _layer_section(text: str, layer: str) -> str:
+    """The BACKEND_LAYERS.md section for one application layer.
+
+    Scoped rather than searched whole-file on purpose: three layers share module
+    names (`market_data.py` exists in `commands`, `queries` and `jobs`), so a
+    whole-file membership test would call a missing query row covered by its
+    command namesake.
+    """
+    heading = f"## `application/{layer}/`"
+    start = text.find(heading)
+    if start == -1:
+        return ""
+    end = text.find("\n## ", start + len(heading))
+    return text[start:] if end == -1 else text[start:end]
+
+
+def check_codemap_coverage(root: Path, facts: dict[str, Any]) -> list[str]:
+    """Every application module and every dramatiq actor must be NAMED in its map.
+
+    The codemaps promise an exhaustive naming, and a later agent trusts that
+    promise instead of walking the tree. Two `application/jobs` modules
+    (`delivery.py`, `heartbeat.py`) sat outside the map for a whole wave while
+    its header still advertised a count. A count in prose cannot catch a missing
+    row — it only records that someone once counted — so what is gated here is
+    membership, and the counts live in the generated artefact instead.
+    """
+    failures: list[str] = []
+
+    layers_text = (root / BACKEND_LAYERS_REL).read_text(encoding="utf-8")
+    for layer, names in facts["backend_layers"]["application_module_names"].items():
+        section = _layer_section(layers_text, layer)
+        if not section:
+            failures.append(f"{BACKEND_LAYERS_REL}: no `## `application/{layer}/`` section.")
+            continue
+        for name in names:
+            if f"`{name}`" not in section:
+                failures.append(
+                    f"{BACKEND_LAYERS_REL}: `application/{layer}/{name}` has no row. The map "
+                    "names every module in the layer; add the row rather than a count."
+                )
+
+    actors_text = (root / ACTORS_REL).read_text(encoding="utf-8")
+    jobs_lines = (root / JOBS_AND_EVENTS_REL).read_text(encoding="utf-8").splitlines()
+    for queue, actor in ACTOR_RE.findall(actors_text):
+        row = next((line for line in jobs_lines if line.startswith(f"| `{actor}` |")), None)
+        if row is None:
+            failures.append(
+                f"{JOBS_AND_EVENTS_REL}: dramatiq actor `{actor}` has no row in the actor table."
+            )
+        elif f"| `{queue}` |" not in row:
+            failures.append(
+                f"{JOBS_AND_EVENTS_REL}: `{actor}` is not mapped to its real queue `{queue}`."
+            )
+    return failures
+
+
 def _scan(root: Path, globs: tuple[str, ...]):
     """Yield (rel path, 1-based line number, line) for every present-tense line.
 
@@ -851,6 +955,7 @@ def main(argv: list[str] | None = None) -> int:
 
     failures = check_artifacts(root, facts)
     failures += check_classification(root)
+    failures += check_codemap_coverage(root, facts)
     failures += check_assertions(root, facts)
 
     if failures:

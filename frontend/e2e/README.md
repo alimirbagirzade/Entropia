@@ -130,7 +130,7 @@ Three opt-in Playwright layers (all excluded from plain `npm test`):
 |---|---|---|---|
 | Baseline matrix (22 pages × state × width) | `specs/10-screenshot-matrix.spec.ts` | `npm run screenshots` | `screenshots/baseline/<page>/<state>--<width>.png` |
 | V18 prototype references | `specs/12-prototype-capture.spec.ts` | `npm run screenshots:prototype` | `screenshots/prototype/<page>--1440.png` |
-| Regression (critical pages, asserted) | `specs/11-visual-regression.spec.ts` | `npm run visual` (refresh: `npm run screenshots:update`) | `specs/11-visual-regression.spec.ts-snapshots/` |
+| Regression (**all 23 audited routes**, asserted) | `specs/11-visual-regression.spec.ts` | `npm run visual` (refresh: `npm run screenshots:update`) | `specs/11-visual-regression.spec.ts-snapshots/` |
 
 Prerequisites: the live seeded stack (same as the rest of the suite) **plus**
 the dev-only mockup copy for the prototype layer:
@@ -150,6 +150,35 @@ animations disabled + caret hidden via injected CSS, volatile regions masked
 (`time`, `[data-e2e-volatile]`), `maxDiffPixelRatio: 0.02`, fixed 1440×900
 viewport, fullPage. The E2E workflow runs `npm run visual` as a blocking
 PR/main gate; CI never updates baselines automatically.
+
+**Coverage is the whole audited surface, and the list is derived, not written.**
+Until 2026-08-11 this suite asserted eight hand-listed pages while the axe scan,
+the keyboard probes and the human deviation review all walked twenty-three; the
+other fifteen had no pixel protection and nothing said so (RC §6.7 / P11-2). The
+page list now comes from `utils/screenshotMatrix.ts::TARGET_PAGES` — the same
+single source those other layers read — so a new route is asserted here on the
+next run instead of being quietly uncovered. Snapshot names are the TARGET_PAGES
+slugs, which is why four of the original eight files were renamed
+(`strategy-standalone` -> `strategy-details` and so on); the **image bytes were
+not regenerated**, only the filenames changed.
+
+> **The baselines describe the stack AFTER the journey suite has run — not a
+> freshly seeded one.** `e2e.yml` runs `npm test` and *then* `npm run visual` in
+> one job, so the pages the gate photographs contain the strategies, package
+> requests, users and backtest results the journeys just created. This was never
+> written down and it is not guessable from the spec. Measured on 2026-08-11:
+> against a seed-only stack, four of the eight then-committed baselines failed on
+> height alone (mainboard 929 vs 900, ready-check 947 vs 900, create-package 1411
+> vs 1396, strategy-details 900 vs 1135); after running `npm test` first against
+> the same image, on the same commit, they passed. If you regenerate baselines,
+> reproduce that order or you will freeze a state CI never renders:
+>
+> ```sh
+> docker compose down -v && docker compose up -d --build     # fresh volumes
+> docker compose exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 \
+>   api python -m entropia.apps.seed
+> cd frontend/e2e && npm test && npm run screenshots:update
+> ```
 
 **Only `-linux` baselines are committed, and that is enforced.** Playwright
 suffixes baselines with the platform that produced them and compares only

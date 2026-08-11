@@ -1,0 +1,495 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 12 items
+
+tests/contract/test_harness_failfast_contract.py ...FF.FFF...            [100%]
+
+=================================== FAILURES ===================================
+___________ test_e2e_preflight_exits_2_when_the_docker_cli_is_wedged ___________
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/e2e-acceptance.sh')
+args = ['session']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_e2e_preflight_exits_2_whe0/bin')
+env_extra = {'E2E_DOCKER_PROBE_TIMEOUT_SECONDS': '3'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+>           proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+
+tests/contract/test_harness_failfast_contract.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['bash', '/Users/mirbagirzade/Development/Entro...>
+endtime = 830034.072008875, orig_timeout = 90, stdout_seq = [], stderr_seq = []
+skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['bash', '/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/e2e-acceptance.sh', 'session']' timed out after 90 seconds
+
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1253: TimeoutExpired
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_e2e_preflight_exits_2_whe0')
+
+    def test_e2e_preflight_exits_2_when_the_docker_cli_is_wedged(tmp_path: Path) -> None:
+        """The reproduced fault: a docker that never answers anything."""
+        fake_bin = tmp_path / "bin"
+        _fake_tool(fake_bin, "docker", WEDGED)
+    
+>       proc, elapsed = _run(
+            E2E_SCRIPT,
+            ["session"],
+            fake_bin,
+            {"E2E_DOCKER_PROBE_TIMEOUT_SECONDS": str(PROBE_TIMEOUT_SECONDS)},
+        )
+
+tests/contract/test_harness_failfast_contract.py:222: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/e2e-acceptance.sh')
+args = ['session']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_e2e_preflight_exits_2_whe0/bin')
+env_extra = {'E2E_DOCKER_PROBE_TIMEOUT_SECONDS': '3'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+        except subprocess.TimeoutExpired:
+>           pytest.fail(
+                f"{script.name} was STILL RUNNING after {SUBPROCESS_TIMEOUT_SECONDS}s — "
+                "the harness hung instead of failing fast. This is the ADIM 34 regression."
+            )
+E           Failed: e2e-acceptance.sh was STILL RUNNING after 90s — the harness hung instead of failing fast. This is the ADIM 34 regression.
+
+tests/contract/test_harness_failfast_contract.py:108: Failed
+_______ test_e2e_preflight_exits_2_when_only_the_daemon_query_is_wedged ________
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/e2e-acceptance.sh')
+args = ['session']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_e2e_preflight_exits_2_whe1/bin')
+env_extra = {'E2E_DOCKER_PROBE_TIMEOUT_SECONDS': '3'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+>           proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+
+tests/contract/test_harness_failfast_contract.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['bash', '/Users/mirbagirzade/Development/Entro...>
+endtime = 830124.207587541, orig_timeout = 90, stdout_seq = [], stderr_seq = []
+skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['bash', '/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/e2e-acceptance.sh', 'session']' timed out after 90 seconds
+
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1253: TimeoutExpired
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_e2e_preflight_exits_2_whe1')
+
+    def test_e2e_preflight_exits_2_when_only_the_daemon_query_is_wedged(tmp_path: Path) -> None:
+        """The second probe must be bounded too, not just the first one.
+    
+        A wedged daemon with a healthy CLI answers ``docker compose version`` (client
+        side, no daemon round trip) and then hangs on ``docker version``.
+        """
+        fake_bin = tmp_path / "bin"
+        _fake_tool(
+            fake_bin,
+            "docker",
+            '[ "$1" = "compose" ] && { echo "Docker Compose version v5.1.2"; exit 0; }\n' + WEDGED,
+        )
+    
+>       proc, elapsed = _run(
+            E2E_SCRIPT,
+            ["session"],
+            fake_bin,
+            {"E2E_DOCKER_PROBE_TIMEOUT_SECONDS": str(PROBE_TIMEOUT_SECONDS)},
+        )
+
+tests/contract/test_harness_failfast_contract.py:247: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/e2e-acceptance.sh')
+args = ['session']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_e2e_preflight_exits_2_whe1/bin')
+env_extra = {'E2E_DOCKER_PROBE_TIMEOUT_SECONDS': '3'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+        except subprocess.TimeoutExpired:
+>           pytest.fail(
+                f"{script.name} was STILL RUNNING after {SUBPROCESS_TIMEOUT_SECONDS}s — "
+                "the harness hung instead of failing fast. This is the ADIM 34 regression."
+            )
+E           Failed: e2e-acceptance.sh was STILL RUNNING after 90s — the harness hung instead of failing fast. This is the ADIM 34 regression.
+
+tests/contract/test_harness_failfast_contract.py:108: Failed
+_________ test_backup_verify_reports_unverified_when_dropdb_is_wedged __________
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/backup-verify.sh')
+args = ['/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv0/20260810T000000Z']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv0/bin')
+env_extra = {'BACKUP_VERIFY_PG_TIMEOUT_SECONDS': '3', 'BACKUP_VERIFY_RESTORE_TIMEOUT_SECONDS': '3', 'VERIFY_DB': 'entropia_failfast_probe'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+>           proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+
+tests/contract/test_harness_failfast_contract.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['bash', '/Users/mirbagirzade/Development/Entro...>
+endtime = 830214.7616285, orig_timeout = 90
+stdout_seq = [b"== Verifying backup 20260810T000000Z into scratch DB 'entropia_failfast_probe' ==\n"]
+stderr_seq = [], skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['bash', '/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/backup-verify.sh', '/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv0/20260810T000000Z']' timed out after 90 seconds
+
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1253: TimeoutExpired
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv0')
+backup_dir = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv0/20260810T000000Z')
+
+    def test_backup_verify_reports_unverified_when_dropdb_is_wedged(
+        tmp_path: Path, backup_dir: Path
+    ) -> None:
+        """The named fault: ``dropdb`` hangs, so nothing was learned about the dump."""
+        fake_bin = _pg_toolchain(tmp_path / "bin", dropdb=WEDGED)
+    
+>       proc, elapsed = _run(BACKUP_VERIFY_SCRIPT, [str(backup_dir)], fake_bin, _backup_env())
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/contract/test_harness_failfast_contract.py:293: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/backup-verify.sh')
+args = ['/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv0/20260810T000000Z']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv0/bin')
+env_extra = {'BACKUP_VERIFY_PG_TIMEOUT_SECONDS': '3', 'BACKUP_VERIFY_RESTORE_TIMEOUT_SECONDS': '3', 'VERIFY_DB': 'entropia_failfast_probe'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+        except subprocess.TimeoutExpired:
+>           pytest.fail(
+                f"{script.name} was STILL RUNNING after {SUBPROCESS_TIMEOUT_SECONDS}s — "
+                "the harness hung instead of failing fast. This is the ADIM 34 regression."
+            )
+E           Failed: backup-verify.sh was STILL RUNNING after 90s — the harness hung instead of failing fast. This is the ADIM 34 regression.
+
+tests/contract/test_harness_failfast_contract.py:108: Failed
+____ test_backup_verify_does_not_blame_the_backup_for_a_leftover_scratch_db ____
+
+tmp_path = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_does_not_bl0')
+backup_dir = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_does_not_bl0/20260810T000000Z')
+
+    def test_backup_verify_does_not_blame_the_backup_for_a_leftover_scratch_db(
+        tmp_path: Path, backup_dir: Path
+    ) -> None:
+        """The reproduced FALSE NEGATIVE, verbatim.
+    
+        ``dropdb`` fails, the leftover database makes ``createdb`` fail, and the old
+        script exited 1 — "the backup does not restore" — about a backup it had not
+        read a single byte of.
+        """
+        fake_bin = _pg_toolchain(
+            tmp_path / "bin",
+            dropdb="exit 1\n",
+            createdb='echo "database already exists" >&2\nexit 1\n',
+        )
+    
+        proc, elapsed = _run(BACKUP_VERIFY_SCRIPT, [str(backup_dir)], fake_bin, _backup_env())
+    
+>       assert proc.returncode == EXIT_UNVERIFIED, proc.stdout + proc.stderr
+E       AssertionError: == Verifying backup 20260810T000000Z into scratch DB 'entropia_failfast_probe' ==
+E         database already exists
+E           FAIL  could not create scratch DB 'entropia_failfast_probe'
+E         
+E       assert 1 == 3
+E        +  where 1 = CompletedProcess(args=['bash', '/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-74...ilfast_probe' ==\n", stderr="database already exists\n  FAIL  could not create scratch DB 'entropia_failfast_probe'\n").returncode
+
+tests/contract/test_harness_failfast_contract.py:318: AssertionError
+_______ test_backup_verify_reports_unverified_when_pg_restore_is_wedged ________
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/backup-verify.sh')
+args = ['/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv1/20260810T000000Z']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv1/bin')
+env_extra = {'BACKUP_VERIFY_PG_TIMEOUT_SECONDS': '3', 'BACKUP_VERIFY_RESTORE_TIMEOUT_SECONDS': '3', 'VERIFY_DB': 'entropia_failfast_probe'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+>           proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+
+tests/contract/test_harness_failfast_contract.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: -9 args: ['bash', '/Users/mirbagirzade/Development/Entro...>
+endtime = 830305.847620375, orig_timeout = 90
+stdout_seq = [b"== Verifying backup 20260810T000000Z into scratch DB 'entropia_failfast_probe' ==\n"]
+stderr_seq = [], skip_check_and_raise = False
+
+    def _check_timeout(self, endtime, orig_timeout, stdout_seq, stderr_seq,
+                       skip_check_and_raise=False):
+        """Convenience for checking if a timeout has expired."""
+        if endtime is None:
+            return
+        if skip_check_and_raise or _time() > endtime:
+>           raise TimeoutExpired(
+                    self.args, orig_timeout,
+                    output=b''.join(stdout_seq) if stdout_seq else None,
+                    stderr=b''.join(stderr_seq) if stderr_seq else None)
+E           subprocess.TimeoutExpired: Command '['bash', '/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/backup-verify.sh', '/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv1/20260810T000000Z']' timed out after 90 seconds
+
+../../../../../../.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/subprocess.py:1253: TimeoutExpired
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv1')
+backup_dir = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv1/20260810T000000Z')
+
+    def test_backup_verify_reports_unverified_when_pg_restore_is_wedged(
+        tmp_path: Path, backup_dir: Path
+    ) -> None:
+        """Same fault class, the other long call: a partial restore proves nothing."""
+        fake_bin = _pg_toolchain(tmp_path / "bin", pg_restore=WEDGED)
+    
+>       proc, elapsed = _run(BACKUP_VERIFY_SCRIPT, [str(backup_dir)], fake_bin, _backup_env())
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/contract/test_harness_failfast_contract.py:330: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = PosixPath('/Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/scripts/backup-verify.sh')
+args = ['/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv1/20260810T000000Z']
+fake_bin = PosixPath('/private/var/folders/b9/6dtr76_d79s1wgktmrj5f1cm0000gn/T/pytest-of-mirbagirzade/pytest-306/test_backup_verify_reports_unv1/bin')
+env_extra = {'BACKUP_VERIFY_PG_TIMEOUT_SECONDS': '3', 'BACKUP_VERIFY_RESTORE_TIMEOUT_SECONDS': '3', 'VERIFY_DB': 'entropia_failfast_probe'}
+
+    def _run(
+        script: Path,
+        args: list[str],
+        fake_bin: Path,
+        env_extra: dict[str, str],
+    ) -> tuple[subprocess.CompletedProcess[str], float]:
+        """Run ``script`` with ``fake_bin`` shadowing the real tools on PATH."""
+        env = dict(os.environ)
+        env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+        env.update(env_extra)
+        started = time.monotonic()
+        try:
+            proc = subprocess.run(
+                ["bash", str(script), *args],
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                env=env,
+                cwd=REPO_ROOT,
+            )
+        except subprocess.TimeoutExpired:
+>           pytest.fail(
+                f"{script.name} was STILL RUNNING after {SUBPROCESS_TIMEOUT_SECONDS}s — "
+                "the harness hung instead of failing fast. This is the ADIM 34 regression."
+            )
+E           Failed: backup-verify.sh was STILL RUNNING after 90s — the harness hung instead of failing fast. This is the ADIM 34 regression.
+
+tests/contract/test_harness_failfast_contract.py:108: Failed
+=========================== short test summary info ============================
+FAILED tests/contract/test_harness_failfast_contract.py::test_e2e_preflight_exits_2_when_the_docker_cli_is_wedged
+FAILED tests/contract/test_harness_failfast_contract.py::test_e2e_preflight_exits_2_when_only_the_daemon_query_is_wedged
+FAILED tests/contract/test_harness_failfast_contract.py::test_backup_verify_reports_unverified_when_dropdb_is_wedged
+FAILED tests/contract/test_harness_failfast_contract.py::test_backup_verify_does_not_blame_the_backup_for_a_leftover_scratch_db
+FAILED tests/contract/test_harness_failfast_contract.py::test_backup_verify_reports_unverified_when_pg_restore_is_wedged
+=================== 5 failed, 7 passed in 369.08s (0:06:09) ====================

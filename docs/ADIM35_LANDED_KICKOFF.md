@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 35 landed — `PortfolioRun` → composite `EngineOutput`; sıradaki iş hâlâ PR B
 
 > Bu belge **projeksiyon slice'ının devri**dir. Otorite sırası: (1) bu belge, (2)

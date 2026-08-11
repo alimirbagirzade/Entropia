@@ -97,6 +97,23 @@ make dr-accept       # full: did the CONTENT survive?
 count matches the manifest, then drops the scratch DB. **An untested backup is
 not a backup** — run it after every backup.
 
+**Read its exit code, not just its colour.** Since ADIM 36 it reports three
+distinct states. The third exists because the script used to blame the backup
+for its own plumbing failing: a `dropdb` that failed was swallowed, the leftover
+database made `createdb` fail, and a perfectly sound backup came back as `1`.
+
+| Code | Means | A verdict about |
+|---|---|---|
+| `0` | the dump restores into a coherent database | the BACKUP |
+| `1` | the dump does **not** restore | the BACKUP |
+| `3` | it could **not be verified** — a postgres client tool is missing, or one of them did not answer inside its timeout | the ENVIRONMENT |
+
+`3` is non-zero, so CI/cron still goes red: uncertainty fails. What it no longer
+does is claim a sound backup is broken. The bounds are
+`BACKUP_VERIFY_PG_TIMEOUT_SECONDS` (default 60 — `dropdb`/`createdb`/`psql`, all
+sub-5s on a healthy host) and `BACKUP_VERIFY_RESTORE_TIMEOUT_SECONDS` (default
+1800 — `pg_restore`, whose honest duration scales with the dump).
+
 It is deliberately shallow, though: a dump that lost every row, every immutable
 hash and every audit event still passes it. `make dr-accept`
 (`scripts/dr-acceptance.sh`) closes that gap. It backs up, restores into its own

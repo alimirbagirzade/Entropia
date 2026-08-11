@@ -5767,6 +5767,135 @@ değildi, §6.7'nin blocker-olmayan kalemlerinden biriydi. **"READY" yazılmadı
 
 ---
 
+## ADIM 36 — RC §6.7 / P6-ek + P6-6: harness fail-fast dayanıklılığı (PR pending)
+
+**Dalganın tipi:** harness/script. **Ürün kodu değişmedi** — `backend/src` ve `frontend/src`
+bu dalgada hiç düzenlenmedi; route path, react-query key, OCC token, Idempotency-Key, hook,
+SSE taksonomisi, `lib/*.ts` **hiç dokunulmadı**. Migration yok, `ENGINE_VERSION` sabit,
+`SHARED_ALLOCATION_STATUS` = `future_dev`. Issue açma/kapama, tag, release **yok**.
+Base `970ec81` (#656).
+
+Kapsam **yalnız §6.7'nin P6-ek ve P6-6 kalemleri**. Dört blocker ve §6.7'nin diğer kalemleri
+(P9-F1 kapandı, P10-B2, P11-*, P10-7, P1-B1/B2, P8-B*, P1-Gate3) **girmedi**.
+**P11-1 (branch protection) ELE ALINMADI** — repo ayarı, insan kararı, agent işi değil.
+
+### Neden — iddialar yeniden üretildi, kabul edilmedi
+
+Kusur sınıfı tek: **bir harici araca evet/hayır sorusu sınırsız soruluyordu.** İkisi de tam
+olarak bu yüzden elle fark edilmedi — asılı kalma "biraz uzun sürüyor" gibi görünür.
+
+- **P6-ek.** PATH'e cevap vermeyen bir `docker` konarak `e2e-acceptance.sh session`
+  koşuldu: **25s sonra hâlâ koşuyordu**. `FATAL … exit 2` dalı probe'un **hemen altındadır**
+  ama probe hiç dönmediği için asla alınamaz. Bir guard'ın kendisi asılı kalıyorsa guard
+  değildir.
+- **P6-6, iki ayrı biçimde.** (a) Takılmış `dropdb` → script süresiz asılı. (b) `dropdb`
+  **başarısız** → `|| true` yuttu → artık scratch DB yüzünden `createdb` patladı →
+  **`exit 1`**, yani dosyanın kendi başlığında "yedek geri yüklenmiyor" diye belgelenen kod.
+  **Hiç okunmamış, sağlam bir yedek bozuk diye raporlandı.** Rapor bunu "raporlayabilir"
+  diye yazmıştı; ölçüldü, **raporluyor**.
+
+### Ne indi
+
+| Dosya | Ne |
+|---|---|
+| `scripts/lib/bounded.sh` (**YENİ**) | `bounded_run SECONDS CMD…` → komutun kendi statüsü ya da **124**. Öldürdüğü bir komut için **asla 0** dönemez |
+| `scripts/e2e-acceptance.sh` | preflight'ın iki probe'u sınırlı; `dc_probe` / `inspect_field` (kısa sorgular) sınırlı; `teardown` sınırlı. `dc up --build`/`exec`/`logs` **bilerek sınırsız** |
+| `scripts/backup-verify.sh` | `dropdb`/`createdb`/`psql`/`pg_restore` sınırlı; **yeni `exit 3` = doğrulanamadı**; ön-koşu `dropdb` artık **katı** (eskiden `\|\| true` ile yutuluyordu) |
+| `backend/tests/contract/test_harness_failfast_contract.py` (**YENİ**) | 12 test; PATH'e sahte binary koyup exit code + sınırlı dönüş süresi assert eder |
+
+**Exit-code taksonomisi — üçü ayrı, bilerek.**
+`e2e-acceptance.sh`: `0` her adım geçti · `1` bir adım düştü · `2` harness **hiç koşamadı**
+(Compose yok · daemon erişilemez · daemon **HUNG**; üçü ayrı mesaj).
+`backup-verify.sh`: `0` geri yükleniyor · `1` geri yüklenmiyor — **YEDEK hakkında** karar ·
+`3` doğrulanamadı — **ORTAM hakkında** karar. `3` sıfır değildir: **belirsizlik BAŞARISIZ
+sayılır**, yalnız artık neyin başarısız olduğu hakkında yalan söylemiyor.
+
+**Ters yöne kayma yasak ve testli.** Bir yedek doğrulayıcısında asıl felaket, bozuk yedeği
+sağlam raporlamaktır. İki kontrol testi bunu kilitler: tutarsız dump hâlâ **1**, sağlam
+yedek hâlâ **0**.
+
+**Eşikler gerekçeli — sihirli sayı yok.** Sağlıklı host ölçümleri: `docker version` 1.44s ·
+`docker compose version` 0.16s · `dropdb` (mevcut DB) **4.83s** — raporun işaret ettiği
+çağrı — `createdb` 0.92s · `psql` 0.13s. Varsayılanlar: docker probe **20s** (~14×), pg
+kontrol düzlemi **60s** (~12×), `pg_restore` **1800s** (süresi dump'la ölçeklenir, ayrı
+eksen). Hepsi env ile geçersiz kılınabilir; test 3s ile aynı kod yolunu koşar.
+
+**`bounded_run`'ın iki inceliği ölçülerek bulundu.** (i) `kill -0` ile yoklama, kabuğun
+çocuğu reap etmesiyle **yarışır** → sonuç gerçek bir `wait`'ten alınır, yoklamadan değil.
+(ii) Yalnız doğrudan çocuğu öldürmek **yetmiyor**: `docker compose …`, compose eklentisini
+`docker`'ın **çocuğu** olarak koşar; hayatta kalan torun `x="$(bounded_run …)"` borusunu
+açık tutar ve 2s'lik sınıra karşı çağıran **60s** bloke ölçüldü. Bu yüzden **süreç grubu**
+öldürülür (`set -m` + `kill -TERM -$pid`). GNU `timeout` **kullanılmadı** (macOS'ta yok);
+`wait -n` yok, kesirli `sleep` yok → macOS'un **bash 3.2**'si ile CI'ın bash 5'i aynı yolu
+koşar.
+
+### Ölçüm
+
+| Senaryo | rc | süre |
+|---|---|---|
+| docker CLI tamamen takılı | **2** | 3.0s |
+| yalnız `docker version` takılı | **2** | 3.0s |
+| daemon anında reddediyor (**kontrol**) | **2** | 0.0s — "not reachable", "HUNG" **değil** |
+| `dropdb` takılı | **3** | 6.1s |
+| artık scratch DB (**eski yanlış-negatif**) | **3** | 0.0s |
+| `pg_restore` takılı | **3** | 3.1s |
+| dump gerçekten tutarsız (**kontrol**) | **1** | 0.1s |
+| **sağlam yedek** (**kontrol**) | **0** | 0.1s |
+
+**Testlerin ısırdığı kanıtlandı.** `git stash` ile yalnız iki script düzeltmeden önceki
+hâline döndürülüp aynı 12 test koşuldu: **5 failed / 7 passed** (369s) — dördü
+`pytest.fail("… STILL RUNNING after 90s")`, biri `assert 1 == 3`, yani P6-6'nın
+yanlış-negatifi. Düzeltmeyle **12 passed / 23.3s**. Geçen 7 kontrolün 3'ü `bounded_run`'ın
+kendi semantiğidir ve o dosya bu slice'ta doğdu → bu üçü için "önce kırmızıydı"
+**iddia edilmiyor**.
+
+**Regresyon testi bir CI kapısıdır** (backend job'ında koşar) — `flows` harness'ının aksine.
+
+**Üretilmiş belgeler tazelendi.** Yeni test dosyası collection sayısını değiştirdiği için
+`documentation-truth` kapısı kırmızı verdi; `scripts/generate_repository_facts.py` yeniden
+üretildi ve **tek satır** oynadı: *Backend tests collected* `3432 in 330 files` →
+`3444 in 331 files` (alembic head, `ENGINE_VERSION`, tablo/FK, HTTP operation sayıları
+**değişmedi**). Kapı ikinci bir düzyazı kusuru daha yakaladı: base `970ec81`'de
+`docs/ADIM32_LANDED_KICKOFF.md` hâlâ `doc-status: current`'tı ve bu slice'ın kickoff'u ikinci
+bir "canlı" belge yaratıyordu → `historical`'a **indirildi** (içeriği silinmedi). Sonradan
+#657 aynı düzeltmeyi main'de yaptı; canlı kickoff artık yalnız `docs/ADIM36_LANDED_KICKOFF.md`.
+
+**Numara çakışması ve bir belge onarımı (dürüst kayıt).** Bu slice önce **ADIM 34** olarak
+yazıldı. Çalışırken **#657 kendini ADIM 34 ilan ederek merge oldu** (o da çift-numaradan
+kaçınmak için ADIM 33 → ADIM 34'e taşınmıştı). Merge edilmiş bir başlık değiştirilmez, bu
+yüzden **taşınan bu slice oldu: ADIM 36**; rapor alt bölümü de §6.7.3 → **§6.7.4**. İkinci
+bir kusur daha vardı: dalın uzaktaki main-merge'ü (`d68fb45`)
+`docs/ADIM34_LANDED_KICKOFF.md` çakışmasını **iki belgeyi iç içe geçirerek** çözmüştü —
+#657'nin gövdesi bu slice'ın "Paste-ready resume prompt" başlığının altına yapışmış, bu
+slice'ın kendi resume prompt bloğu ise **silinmişti**. İkisi de git'teki temiz
+sürümlerinden **yeniden kuruldu**: `ADIM34_LANDED_KICKOFF.md` ← `origin/main` (#657, 133
+satır, `historical`'a indirildi), `ADIM36_LANDED_KICKOFF.md` ← `672ebe1` (bu slice, 107
+satır, `current`). Hiçbir kayıt kaybolmadı; ikisi de tekrar tek başlıklı ve tam.
+
+**Yerel kapılar:** `ruff check .` temiz · `ruff format --check .` 788 dosya formatlı ·
+`mypy src` 396 dosyada sorun yok · `pytest tests/contract/test_repository_facts_guard.py
+tests/contract/test_harness_failfast_contract.py --no-cov` **40 passed** ·
+`generate_repository_facts.py --check` **exit 0**. **Tam suite yerelde YENİDEN KOŞULMADI** —
+dürüst gerekçe: paralel bir worktree oturumu aynı log dosyasını ezdi, dolayısıyla kendi
+koşumun sonucunu iddia edemem. Ürün kodu değişmediği için otorite **CI'dır**.
+
+### Verdict ve dürüst sınırlar
+
+**RC verdict'i BLOCKED KALIR. Blocker sayısı DEĞİŞMEDİ (üç: 1, 2, 4).** P6-ek ve P6-6
+blocker değildi, §6.7'nin blocker-olmayan kalemleriydi. **"READY" yazılmadı.**
+
+- **"Docker düzeldi" DENMİYOR.** Daemon'a dokunulmadı; ölçüm günü zaten normal cevap
+  veriyordu (`docker version` rc=0). Değişen tek şey: bir sonraki takılma **kendini
+  bildirecek**, teşhis tahmine kalmayacak.
+- **P5/P6 blocker'ı KAPANMADI.** §6.2'nin açık ekseni kapsam boşluğu ve `flows`'un CI
+  kapısı olmaması — o ADIM 30'un eksenidir, bu slice ona dokunmaz.
+- Aynı kusur sınıfı **yalnız bu iki script içinde** tarandı; başka script'lere süpürülmedi.
+- `dc up --build` / `exec` / `logs` sınırsız bırakıldı: dürüst süreleri dakikalardır,
+  sınırlamak **sahte başarısızlık** üretirdi — bu slice'ın tam tersi.
+
+Ham kanıt: `docs/releases/evidence/2026-08-10/P6FF_harness_failfast.md` +
+`p6ff_measurements.txt` · `p6ff_tests_before_fix.txt` · `p6ff_tests_after_fix.txt`.
+Kanonik rapor kaydı: `Entropia_V18_RC_Readiness_2026-08-07.md` **§6.7.4** (+ §6.2 notu).
 ## ADIM 34 — RC §6.7 / P4-1 + P4-2: model↔migration şema paritesi (PR #657)
 
 > **Numara notu:** bu slice önce `ADIM 33` olarak yazılmıştı; çalışma sürerken **#656

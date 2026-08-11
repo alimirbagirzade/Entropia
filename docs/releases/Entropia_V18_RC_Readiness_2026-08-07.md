@@ -631,6 +631,17 @@ döndü. Raporun *kaynak baskısı* teşhisi doğrudur (host 8 GB, VM **3.89 GiB
 bugün geçerli değildir: izole yığın bu baskının altında sorunsuz ayağa kalktı ve P5'in
 2/3/4 kalemleri ile bu bölümün beş akışı **koşuldu**. Ham: `p6b_docker_remeasure.txt`.
 
+> **NOT — 2026-08-10 / ADIM 36.** "Docker takılması" teşhisi bundan sonra **kendi kendini
+> ayırt eder**: `e2e-acceptance.sh` preflight'ı artık sınırlıdır ve üç durumu üç ayrı
+> mesajla verir — daemon **yok** (anında `exit 2`, "not reachable"), daemon **takılı**
+> (sınırlı sürede `exit 2`, "HUNG, not absent"), harness koştu ama bir adım **düştü**
+> (`exit 1`). Yani bir sonraki başarısız koşu, teşhisi doğru yere koyacak kanıtı kendisi
+> üretir; bugün bir insanın "takıldı mı, yok mu?" diye tahmin etmesi gerekmiyor.
+> **Bu, "Docker düzeldi" demek DEĞİLDİR** — ADIM 36 daemon'a hiç dokunmadı ve o gün daemon
+> zaten normal cevap veriyordu. **P5/P6 blocker'ı da KAPANMADI:** bu bölümün açık kalan
+> ekseni kapsam boşluğu ve `flows`'un CI kapısı olmaması (aşağıdaki "Blocker neden hâlâ
+> AÇIK" bloğu), ADIM 36 ise yalnız §6.7'nin P6-ek/P6-6 kalemlerini kapatır (§6.7.4).
+
 **2. iddia — "beş akışın hiçbiri hiçbir katmanda doğrulanmadı": (a) ve (b) için YANLIŞTI.**
 Terim taraması **yalnız iki shell dosyasını** kapsıyordu ve o kapsamda doğrudur; hatalı olan
 oradan "hiçbir katmanda" genellemesine geçmektir. **Tarayıcı katmanı atlanmıştır.** Aday
@@ -850,8 +861,8 @@ açılmadı/kapatılmadı.
 | **P10-7** | Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor) | P10 |
 | **P1-B1/B2** | `BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat | P1 |
 | **P8-B1/B2/B3** | `pending_data_job_dispatch` docstring gerekçesi bayat · Create-Package durable admission uçları **200** dönüyor, diğer dokuzu **202** (adjudicate edilmedi) · `JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış | P8 |
-| **P6-6** | `dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir | P6 |
-| **P6-ek** | `e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma | P6 |
+| ~~**P6-6**~~ | ~~`dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir~~ → **2026-08-10 (ADIM 36) KAPANDI** — yanlış-negatif **yeniden üretildi** (sağlam yedek, `exit 1`), harici çağrılar sınırlandı, **yeni `exit 3` = "doğrulanamadı"** eklendi; "yedek bozuk" (1) ile karışmıyor, "sağlam" (0) ile **asla**. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
+| ~~**P6-ek**~~ | ~~`e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma~~ → **2026-08-10 (ADIM 36) KAPANDI** — asılı kalma **yeniden üretildi** (25s'de hâlâ koşuyordu), preflight sınırlandı; takılı daemon'a karşı **sınırlı sürede `exit 2`** ölçüldü, "daemon yok" teşhisi ayrı mesajda korundu. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
 | **P1-Gate3** | **8 uncovered kriter** + **131 partial kriter** (kapı yeşil sayıyor, ama RC kabul kararında okunmalıdır) — aralarında `AT-04`, `AOS-17`/`TS-17` (spec adı `ACTIVE_RUN_DEPENDENCY` ↔ sevk edilen `OBJECT_IN_ACTIVE_RUN`, **hiçbiri pinli değil**), `TL-20`/`AOS-18` (K-06 tehlikesi) | P1 |
 | **P10-B3** | **Bildirim yolunun DELIVERY kanıtı bir CI kapısı DEĞİL** (ADIM 31). Config yarısı kapılı (`scripts/alert-notification-gate.sh` + 21 contract testi); teslimat yarısı yalnız `scripts/alert-notification-proof.sh` ile ölçülür ve o üç konteyner + dakikalarca wall-clock ister. Kapıya bağlamak **insan kararıdır** (maliyet). Regresyon sessizce dönebilir | ADIM 31 |
 | **P10-B4** | **Monitörü izleyen yok.** Alertmanager erişilemezse Prometheus yeniden dener ve `prometheus_notifications_errors_total` sayacını artırır — **kendi** `/metrics`'inde, ki onu hiçbir şey scrape etmiyor. Sessizce teslim etmeyi bırakmış bir bildirim yolu, sessiz bir sistemden ayırt edilemez. Döngüsel olmayan bir çözüm ikinci bir Prometheus ister; denenmedi | ADIM 31 |
@@ -969,6 +980,62 @@ Ham kanıt: `docs/releases/evidence/2026-08-10/P9F1_frontend_build_reproducibili
 `p9f1_install_vs_ci.txt` · `p9f1_npm_drift.txt` · `p9f1_negative_cases.txt` ·
 `p9f1_dockerignore.txt` · `p9f1_image_and_csp.txt`.
 
+#### 6.7.4 P6-ek ve P6-6 KAPANDI — harness fail-fast (ADIM 36, 2026-08-10)
+
+> **Numara notu:** bu bölüm önce §6.7.3 yazılmıştı; #657 aynı numarayı alarak merge oldu
+> (aşağıda, ADIM 34). Merge edilmiş bir numara değiştirilmez, bu yüzden **taşınan bu bölüm
+> oldu**. Fiziksel sıra bu yüzden §6.7.4 → §6.7.3 şeklinde; numaralar otoritedir, sıra değil.
+
+**Kusur sınıfı tek:** bir harici araca evet/hayır sorusu **sınırsız** soruluyordu. İki
+kalem de bu yüzden elle fark edilmedi — asılı kalma "biraz uzun sürüyor" gibi görünür,
+Ctrl-C basılır, geçilir. **İkisi de düzeltmeden ÖNCE yeniden üretildi.**
+
+| Kalem | Düzeltmeden önce ÖLÇÜLEN | Sonra ÖLÇÜLEN |
+|---|---|---|
+| **P6-ek** | PATH'e cevap vermeyen bir `docker` konarak: script **25s sonra hâlâ koşuyordu**. `FATAL … exit 2` dalı probe'un **hemen altında** ama probe hiç dönmediği için asla alınamıyor | probe sınırı 3s → **`exit 2`, 3.0s** ("HUNG, not absent") |
+| **P6-6 (a)** | Takılmış `dropdb` → script **süresiz** asılı | **`exit 3`, 6.1s** ("UNVERIFIED … says nothing about the backup") |
+| **P6-6 (b)** | `dropdb` **başarısız** → `\|\| true` yuttu → artık DB yüzünden `createdb` patladı → **`exit 1`** = "yedek geri yüklenmiyor". **Sağlam bir yedek, bozuk diye raporlandı** | **`exit 3`, 0.0s** — yedek hakkında hiçbir iddia yok |
+
+**Yeni exit-code taksonomisi (üçü ayrı, bilerek).**
+`e2e-acceptance.sh`: `0` her adım geçti · `1` bir adım düştü · `2` harness **hiç koşamadı**
+(Compose yok · daemon erişilemez · daemon **HUNG**).
+`backup-verify.sh`: `0` geri yükleniyor · `1` geri yüklenmiyor — **YEDEK hakkında** karar ·
+`3` **doğrulanamadı** — **ORTAM** hakkında karar. `3` sıfır değildir, yani CI/cron yine
+kırmızı olur: **belirsizlik BAŞARISIZ sayılır**, yalnız neyin başarısız olduğu artık yalan
+söylemiyor. Ters yöne kayma testle kilitlendi: bozuk dump hâlâ **1**, sağlam yedek hâlâ **0**.
+
+**Eşikler gerekçeli, sihirli sayı yok** (hepsi bu host'ta ölçüldü):
+`docker version` 1.44s · `docker compose version` 0.16s → **20s** (~14×) ·
+`dropdb` (mevcut DB) **4.83s** — raporun işaret ettiği çağrı — `createdb` 0.92s,
+`psql` 0.13s → **60s** (~12×) · `pg_restore` süresi dump'la ölçeklendiği için ayrı ve
+gevşek bir sınır: **1800s**. Hepsi env ile geçersiz kılınabilir (test 3s ile koşar).
+`dc up --build` / `exec` / `logs` **bilerek sınırsız** bırakıldı: dürüst süreleri dakikalar,
+sınırlamak sahte başarısızlık üretirdi.
+
+**Ortak yardımcı `scripts/lib/bounded.sh` (YENİ).** `bounded_run SECONDS CMD…` → komutun
+kendi statüsü, ya da **124** (GNU `timeout` uzlaşımı). Öldürdüğü bir komut için **asla 0**
+dönemez. GNU `timeout` yok (macOS'ta bulunmuyor), `wait -n` yok, kesirli `sleep` yok —
+macOS'un **bash 3.2**'si ile CI'ın bash 5'i aynı yolu koşar. İki incelik ölçülerek bulundu:
+(i) `kill -0` ile yoklama çocuğun reap edilmesiyle yarışıyor → sonuç gerçek bir `wait`'ten
+alınır; (ii) yalnız doğrudan çocuğu öldürmek **yetmiyor** — `docker compose …`, compose
+eklentisini `docker`'ın **çocuğu** olarak koşar ve hayatta kalan torun
+`x="$(bounded_run …)"` borusunu açık tutar: 2s'lik sınıra karşı çağıran **60s** bloke
+ölçüldü. Bu yüzden **süreç grubu** öldürülür.
+
+**Regresyon testi bir CI kapısıdır** — `backend/tests/contract/test_harness_failfast_contract.py`
+(12 test, backend job'ında koşar). PATH'e sahte binary koyar (takılan / patlayan / anında
+cevaplayan) ve exit code + sınırlı dönüş süresi assert eder; asılı kalma `pytest.fail` olur,
+**CI asılmaz**. **Testlerin ısırdığı kanıtlandı:** düzeltme geri alınıp koşulduğunda
+**5 failed / 7 passed** (dördü 90s'de timeout, biri `assert 1 == 3` — yani P6-6'nın
+yanlış-negatifi), düzeltmeyle **12 passed / 23.3s**.
+
+**Bu slice'ın KAPATMADIĞI şeyler (dürüst sınır).** Blocker sayısı **değişmedi**; verdict
+**BLOCKED** kalır. `flows` hâlâ bir CI kapısı **değildir** (§6.2 — ADIM 30'un ekseni, bu
+slice ona dokunmaz). Ürün kodu değişmedi. Aynı kusur sınıfı **yalnız bu iki script içinde**
+tarandı; diğer script'lere süpürme yapılmadı.
+
+Ham kanıt: `docs/releases/evidence/2026-08-10/P6FF_harness_failfast.md` +
+`p6ff_measurements.txt` · `p6ff_tests_before_fix.txt` · `p6ff_tests_after_fix.txt`.
 #### 6.7.3 P4-1 + P4-2 KAPANDI — model↔migration şema paritesi (ADIM 34, 2026-08-10)
 
 Tam kayıt ve ham çıktılar: **`evidence/2026-08-10/P4_schema_parity.md`** +

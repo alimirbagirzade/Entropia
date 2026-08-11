@@ -39,6 +39,16 @@ All backend-observable numbered steps from the audit are asserted directly
 against the live API. Every flow prints `PASS`/`FAIL` per step and the script
 exits non-zero if any step fails.
 
+**Exit codes — three states, kept apart (ADIM 36):** `0` every asserted step
+passed · `1` a step failed, or the stack never became healthy · `2` the harness
+could **not run at all**. The preflight distinguishes the two ways that happens:
+a daemon that refuses instantly ("not reachable") and a daemon that is **hung**
+("HUNG, not absent"), the latter reported inside
+`E2E_DOCKER_PROBE_TIMEOUT_SECONDS` (default 20) rather than waited on forever.
+`E2E_TEARDOWN_TIMEOUT_SECONDS` (default 180) does the same for the EXIT trap.
+The long operations — `up --build`, `exec`, `logs` — are deliberately unbounded;
+their honest duration is minutes.
+
 - **§9.4 session-clean** — session `/meta`; strong service token present;
   mode-safe provisioning; bootstrap-Admin signup on a fresh DB; logout→login;
   exact `/me` principal + role; Mainboard/strategy not 401; session retained on

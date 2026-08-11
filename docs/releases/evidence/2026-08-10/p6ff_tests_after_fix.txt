@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/mirbagirzade/Development/Entropia/.claude/worktrees/entropia-v18-rc-failfast-748aaf/backend
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 12 items
+
+tests/contract/test_harness_failfast_contract.py ............            [100%]
+
+============================= 12 passed in 24.90s ==============================

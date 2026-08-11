@@ -19,10 +19,12 @@ from entropia.application.commands import lab_message as lab_message_cmd
 from entropia.application.queries import agent_tool_gateway as tool_gateway_query
 from entropia.application.queries import agent_workspace as agent_workspace_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.pagination import clamped_limit_query
 from entropia.apps.api.schemas.agent_tool_gateway import (
     AgentToolCallDetailResponse,
     AgentToolCallListResponse,
 )
+from entropia.domain.agent_lab.cursor import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from entropia.domain.agent_lab.enums import ALPHA_AGENT_ID
 from entropia.domain.identity.policy import require_role
 from entropia.domain.lifecycle.enums import Role
@@ -90,7 +92,7 @@ async def list_tasks(
     ctx: RequestContext = Depends(request_context),
     status: str | None = Query(default=None),
     cursor: str | None = Query(default=None),
-    limit: int | None = Query(default=None),
+    limit: int | None = clamped_limit_query(default=DEFAULT_PAGE_LIMIT, maximum=MAX_PAGE_LIMIT),
 ) -> dict[str, Any]:
     return await agent_workspace_query.list_tasks(
         ctx.session, ctx.actor, status=status, cursor=cursor, limit=limit
@@ -106,7 +108,7 @@ async def get_task(task_id: str, ctx: RequestContext = Depends(request_context))
 async def list_task_tool_calls(
     task_id: str,
     ctx: RequestContext = Depends(request_context),
-    limit: int | None = Query(default=None),
+    limit: int | None = clamped_limit_query(default=DEFAULT_PAGE_LIMIT, maximum=MAX_PAGE_LIMIT),
 ) -> dict[str, Any]:
     return await tool_gateway_query.list_task_tool_calls(
         ctx.session, ctx.actor, task_id=task_id, limit=limit
@@ -125,7 +127,7 @@ async def list_lab_messages(
     ctx: RequestContext = Depends(request_context),
     task: str | None = Query(default=None),
     cursor: str | None = Query(default=None),
-    limit: int | None = Query(default=None),
+    limit: int | None = clamped_limit_query(default=DEFAULT_PAGE_LIMIT, maximum=MAX_PAGE_LIMIT),
 ) -> dict[str, Any]:
     return await agent_workspace_query.list_lab_messages(
         ctx.session, ctx.actor, task_id=task, cursor=cursor, limit=limit
@@ -137,7 +139,7 @@ async def list_hypotheses(
     ctx: RequestContext = Depends(request_context),
     status: str | None = Query(default=None),
     cursor: str | None = Query(default=None),
-    limit: int | None = Query(default=None),
+    limit: int | None = clamped_limit_query(default=DEFAULT_PAGE_LIMIT, maximum=MAX_PAGE_LIMIT),
 ) -> dict[str, Any]:
     return await agent_workspace_query.list_hypotheses(
         ctx.session, ctx.actor, status=status, cursor=cursor, limit=limit

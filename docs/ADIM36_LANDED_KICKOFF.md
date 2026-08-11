@@ -1,4 +1,9 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **DEVREDİLDİ (2026-08-11, ADIM 37).** Canlı kickoff artık
+> `docs/ADIM37_LANDED_KICKOFF.md`'dir; buradaki resume prompt **bayattır** ve
+> yapıştırılmamalıdır. Bu belge ADIM 36'nın (RC §6.7 / P6-ek + P6-6, PR #658)
+> tarihsel kaydı olarak durur.
+>
 > Bu belge **ADIM 36 kapanışında** yazıldı. En altındaki *paste-ready resume prompt*
 > temiz bir oturuma yapıştırılacak devam tohumudur.
 > Sayısal otorite: `docs/generated/repository_facts.md` (üretilmiş, CI'da `--check`).

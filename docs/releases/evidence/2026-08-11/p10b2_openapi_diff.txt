@@ -1,0 +1,184 @@
+diff --git a/docs/openapi.json b/docs/openapi.json
+index a0f52c0..38d3f7a 100644
+--- a/docs/openapi.json
++++ b/docs/openapi.json
+@@ -5682,6 +5682,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 25. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -5694,7 +5695,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 25. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 25,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -5986,6 +5990,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 50. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -5998,7 +6003,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 50. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 50,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -6489,6 +6497,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -6501,7 +6510,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 20,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -6948,6 +6960,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -6960,7 +6973,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 20,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -7052,6 +7068,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -7064,7 +7081,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 20,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -7198,6 +7218,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -7210,7 +7231,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 20,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -10181,6 +10205,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -10193,7 +10218,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 20,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -10645,6 +10673,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -10657,7 +10686,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 20,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],
+@@ -17490,6 +17522,7 @@
+             }
+           },
+           {
++            "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
+             "in": "query",
+             "name": "limit",
+             "required": false,
+@@ -17502,7 +17535,10 @@
+                   "type": "null"
+                 }
+               ],
+-              "title": "Limit"
++              "description": "Page size. Omitted -> 20. A value above 100 is reduced to 100, and a value below 1 is raised to 1: an out-of-range limit is CLAMPED, not rejected, so the request still succeeds with a smaller page. The ceiling is published as `x-clamp-maximum` rather than as JSON Schema `maximum`, which would wrongly advertise that over-limit requests fail.",
++              "title": "Limit",
++              "x-clamp-default": 20,
++              "x-clamp-maximum": 100
+             }
+           }
+         ],

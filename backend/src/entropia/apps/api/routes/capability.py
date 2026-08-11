@@ -34,6 +34,8 @@ from entropia.application.queries.capability import (
     list_view_datasets,
 )
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.pagination import clamped_limit_query
+from entropia.domain.agent_lab.cursor import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from entropia.domain.identity.policy import require_capability_admin
 
 router = APIRouter(tags=["future-dev"])
@@ -168,7 +170,7 @@ async def analysis_artifact_create(
 @router.get(_VIEW_DATASETS_PATH)
 async def view_datasets_index(
     cursor: str | None = None,
-    limit: int | None = None,
+    limit: int | None = clamped_limit_query(default=DEFAULT_PAGE_LIMIT, maximum=MAX_PAGE_LIMIT),
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
     return await list_view_datasets(ctx.session, ctx.actor, cursor=cursor, limit=limit)
@@ -186,7 +188,7 @@ async def view_dataset_detail(
 async def analysis_artifacts_index(
     artifact_type: str | None = None,
     cursor: str | None = None,
-    limit: int | None = None,
+    limit: int | None = clamped_limit_query(default=DEFAULT_PAGE_LIMIT, maximum=MAX_PAGE_LIMIT),
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
     return await list_analysis_artifacts(

@@ -179,17 +179,20 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `dd3136f`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `881d273`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 35 (`PortfolioRun` → composite `EngineOutput` projeksiyonu):** YENİ
-> `execution/portfolio_projection.py::project_portfolio_run` + faz döngüsüne additive
-> `BookedClose` / `PortfolioTick.closes`. **TEK portföy-seviyesi çıktı** (N öğe-seviyesi DEĞİL —
-> A5 eğriyi ters çevirirdi, ADR §7'de bölünecek öğe equity'si yok); `combine_item_runs`
-> beslenmez, **yerine geçer** ve ona dokunulmadı. ADR §14 **A4/A18 artık ölçülebilir**
-> (digest üzerinden). Beş sınır fail-closed **adlandırıldı** (`ABSENT_BY_CONSTRUCTION`).
-> **Üretim yolu YOK ve bilerek yazılmadı** — §4.1'in (a)/(b) engelleri KAPANMADI, PR B hâlâ ADR
-> §16 insan kapısının arkasında. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 35; devir:
-> `docs/ADIM35_LANDED_KICKOFF.md`.
+> **Son dalga — ADIM 37 (RC §6.7 / P10-B2, sayfalama sınırı):** 9 kelepçeli `limit`
+> parametresi artık sınırını **yayımlıyor** (YENİ `apps/api/pagination.py::clamped_limit_query`
+> → `x-clamp-default` / `x-clamp-maximum`; ölçülen 19 ENFORCING + 9 CLAMPING, **UNPUBLISHED 0**).
+> **Kalem KAPANMADI:** aşımın sessiz clamp mi 422 red mi olacağı **ürün kararıdır**, canonical
+> sessizdir → **PO kararı bekliyor** (rapor §6.7.5). Yeni `limit` eklerken sınırsız bırakma —
+> kelepçeliyorsa bu declarator'dan geçir, reddediyorsa `le=` yaz; kapı kırar. Tam kayıt:
+> `PROJECT_HISTORY.md` §ADIM 37; devir: `docs/ADIM37_LANDED_KICKOFF.md`.
+> Öncesinde ADIM 36 (RC §6.7 / P6-ek + P6-6, harness fail-fast, #658) ve
+> **ADIM 35** (`PortfolioRun` → composite `EngineOutput` projeksiyonu, #659): YENİ
+> `execution/portfolio_projection.py::project_portfolio_run`; **üretim yolu YOK ve bilerek
+> yazılmadı** — §4.1'in (a)/(b) engelleri KAPANMADI, PR B hâlâ ADR §16 insan kapısının
+> arkasında (`PROJECT_HISTORY.md` §ADIM 35, `docs/ADIM35_LANDED_KICKOFF.md`).
 > Öncesinde ADIM 34 (RC §6.7 / P4-1 + P4-2, şema paritesi, #657): model↔migration index ekseni
 > **40 sapmadan 0'a**, `scripts/schema_parity_gate.py` `ci.yml`'a bağlı ve negatifi kanıtlı;
 > `alembic check` **yine de exit 255** (P4-3 — 60 `modify_default`, ölçüldü, düzeltilmedi).

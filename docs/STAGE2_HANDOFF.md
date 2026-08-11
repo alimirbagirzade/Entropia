@@ -5097,6 +5097,47 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 35. Devir: `docs/ADIM35_LANDED_KICK
 
 ---
 
+## ADIM 37 — RC §6.7 / P10-B2: sayfalama sınırı YAYIMLANDI, aşım davranışı AÇIK (PR pending)
+
+**Numara düzeltmesi:** kickoff prompt'u bu slice'a "ADIM 36" diyordu; **ADIM 36 doludur**
+(P6-ek + P6-6, PR #658, `881d273`). Merge edilmiş numara yeniden atanmaz → **ADIM 37**.
+Yeni bulgu **P10-B6** (B1..B5 dolu). *Gözlem, düzeltilmedi: ADIM 36'nın bu belgede bir
+`landed` girdisi **yok** — PROJECT_HISTORY §ADIM 36 var, handoff'ta yok. Başka bir slice'ın
+kaydına dokunmadım, eksiği burada kaydediyorum.*
+
+**Migration yok · `ENGINE_VERSION` sabit · `SHARED_ALLOCATION_STATUS` = `future_dev` ·
+`frontend/src` hiç dokunulmadı.** Base `881d273` (#658).
+
+**Ne kapandı:** 9 kelepçeli `limit` parametresinin **hiçbiri** sınırını yayımlamıyordu;
+artık dokuzu da default + tavan bildiriyor. YENİ ortak declarator
+`apps/api/pagination.py::clamped_limit_query` → `description` + `x-clamp-default` /
+`x-clamp-maximum`. Ölçülen: **28 parametre = 19 ENFORCING (`maximum` → 422) + 9 CLAMPING
+(`x-clamp-maximum` → 200), UNPUBLISHED 0**, ve kelepçeli hiçbir parametre `maximum` emitlemiyor.
+`docs/openapi.json` yeniden üretildi (45+/9−). Kapı:
+`tests/contract/test_pagination_limit_contract.py` (5 test), **negatifi kanıtlı**
+(tek uç geri alındı → `exit 1`, uç adıyla raporlandı).
+
+**Ne KAPANMADI (ve kapandı diye yazılmayacak):** aşımın **sessiz clamp mi 422 red mi**
+olacağı bir **ürün kararıdır**; canonical (MTR §2.1/§8, doc 19, doc 18, doc 22) **sessizdir**
+→ karar **VERİLMEDİ**, adjudication olarak kaydedildi (rapor §6.7.5, defter
+`docs/releases/evidence/2026-08-11/`). **PO kararı bekliyor.** Sessiz clamp *"böyle kalsın"*
+diye onaylanmadı da.
+
+**Raporun bir ifadesi düzeltildi:** *"9 uçta sessizce 100'e iniyor"* — ölçüldü, **5 uçta
+`meta.limit` etkin değeri zaten yankılıyordu**, 3 uçta yalnız `next_cursor` var, **1 uçta**
+(`/agent-tasks/{task_id}/tool-calls`) gerçekten hiçbir sinyal yok. Asıl kusur "kesilmeyi fark
+edememe" değil, **"sınırı önceden öğrenememe"** idi.
+
+**Yeni ölçüm, düzeltilmedi → P10-B6:** 4 uç ETKİN sayfa boyutunu yanıtta yankılamıyor.
+Yanıt gövdesi = wire contract (`lib/*.ts` + typed `AgentToolCallListResponse`) → ayrı karar,
+ayrı PR.
+
+**Bu eksende sırada:** §6.7'nin kalan kalemleri — P11-2/3/6/8 · P10-7 · P1-B1/B2 ·
+P8-B1/B2/B3 · P1-Gate3 · yeni P10-B6. **P11-1 agent işi DEĞİL** (branch protection = repo
+ayarı, insan kararı). **Blocker sayısı DEĞİŞMEDİ, verdict BLOCKED KALIR.**
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık

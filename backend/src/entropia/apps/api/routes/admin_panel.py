@@ -18,7 +18,9 @@ from entropia.application.queries import log_projection as log_query
 from entropia.application.queries import panel_backtest_log as backtest_log_query
 from entropia.application.queries import user_registry as user_registry_query
 from entropia.apps.api.deps import RequestContext, request_context
+from entropia.apps.api.pagination import clamped_limit_query
 from entropia.config import get_settings
+from entropia.domain.agent_lab.cursor import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from entropia.domain.identity.policy import require_admin_panel
 from entropia.domain.lifecycle.enums import Role
 from entropia.shared.concurrency import reconcile_occ_tokens
@@ -73,7 +75,7 @@ def _parse_dt(value: str | None, *, field: str) -> datetime | None:
 async def list_users(
     ctx: RequestContext = Depends(request_context),
     cursor: str | None = Query(default=None),
-    limit: int | None = Query(default=None),
+    limit: int | None = clamped_limit_query(default=DEFAULT_PAGE_LIMIT, maximum=MAX_PAGE_LIMIT),
 ) -> dict[str, Any]:
     require_admin_panel(ctx.actor)
     return await user_registry_query.list_registered_users(
@@ -132,7 +134,10 @@ async def role_matrix(ctx: RequestContext = Depends(request_context)) -> dict[st
 async def list_backtest_logs(
     ctx: RequestContext = Depends(request_context),
     cursor: str | None = Query(default=None),
-    limit: int | None = Query(default=None),
+    limit: int | None = clamped_limit_query(
+        default=backtest_log_query.DEFAULT_BACKTEST_LOG_LIMIT,
+        maximum=backtest_log_query.MAX_BACKTEST_LOG_LIMIT,
+    ),
 ) -> dict[str, Any]:
     """Panel / Logs PRIMARY view (P-14): the cross-user "All User Backtest Logs"
     table (User · Date · Backtest · Net Profit · ROMAD · Trades). Admin answers "which
@@ -157,7 +162,9 @@ async def list_logs(
     correlation_id: str | None = Query(default=None),
     q: str | None = Query(default=None),
     cursor: str | None = Query(default=None),
-    limit: int | None = Query(default=None),
+    limit: int | None = clamped_limit_query(
+        default=log_query.DEFAULT_LOG_LIMIT, maximum=log_query.MAX_LOG_LIMIT
+    ),
 ) -> dict[str, Any]:
     require_admin_panel(ctx.actor)
     from_at = _parse_dt(from_, field="from")

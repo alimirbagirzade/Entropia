@@ -76,6 +76,44 @@ rv-N` kullanmaya devam ediyor).
 
 ---
 
+## SAYFALAMA SINIRI (P10-B2) — iki aile, ikisi de sözleşmede
+
+`limit` taşıyan **28 query parametresi** var ve aşım karşısında **iki farklı davranış**
+sergiliyorlar. İkisi de artık `docs/openapi.json`'da **yayımlıdır**; kapı
+`tests/contract/test_pagination_limit_contract.py`, ölçülen `UNPUBLISHED = 0`.
+
+| Aile | Adet | Nasıl bildirilir | `limit` tavanı aşılınca |
+|---|---|---|---|
+| **ENFORCING** | 19 | route'ta `le=<max>` → JSON Schema `maximum` | **422** (FastAPI doğrular) |
+| **CLAMPING** | 9 | `apps/api/pagination.py::clamped_limit_query` → `x-clamp-default` + `x-clamp-maximum` | **200**, sayfa tavana **indirilir** |
+
+**CLAMPING ailesinin 9 ucu** (her biri kendi default'unu bildirir — üçü farklıdır):
+
+| Uç | Kelepçe | default | tavan |
+|---|---|---|---|
+| GET `/admin/users` | `domain/agent_lab/cursor.py::clamp_limit` | 20 | 100 |
+| GET `/admin/backtest-logs` | `queries/panel_backtest_log.py::_clamp_limit` | **25** | 100 |
+| GET `/admin/logs` | `queries/log_projection.py::_clamp_limit` | **50** | 100 |
+| GET `/agent-tasks` · `/agent-tasks/{task_id}/tool-calls` · `/lab/messages` · `/hypotheses` | `clamp_limit` | 20 | 100 |
+| GET `/view-datasets` · `/analysis-artifacts` | `clamp_limit` | 20 | 100 |
+
+**Yeni bir liste ucu eklerken:** uç aşımı **reddediyorsa** `le=<max>` yaz; **kelepçeliyorsa**
+sözleşmeyi route'a KOPYALAMA — `clamped_limit_query(default=..., maximum=...)`'dan geçir ve
+sabitleri **kendi sorgu katmanının uyguladığı** değerlerden ver. Sınırsız bırakılan bir
+`limit` kapıda kırılır.
+
+> **Kelepçeli bir parametre ASLA `maximum` emitlemez.** O keyword "bundan büyükler geçersiz"
+> demektir ve bu uçlar onları kabul eder; emitlemek üretilmiş bir istemcinin, sunucunun 200
+> döndüğü isteği reddetmesine yol açardı — eksik sözleşme yerine **yanlış** sözleşme.
+>
+> **AÇIK ÜRÜN KARARI:** aşımın sessiz clamp mi 422 red mi olacağı **adjudicate EDİLMEDİ**
+> (canonical sessiz). PO kararı bekliyor → RC raporu §6.7 / **P10-B2** + §6.7.5.
+> **P10-B6 (ölçüldü, düzeltilmedi):** 4 uç ETKİN sayfa boyutunu yanıtta yankılamıyor —
+> `/agent-tasks`, `/lab/messages`, `/hypotheses` (`next_cursor` var, `limit` yok) ve
+> `/agent-tasks/{task_id}/tool-calls` (**hiç metadata yok**).
+
+---
+
 ## health · meta · metrics · sse · auth · identity — hiçbirinde OCC yok
 
 > **O-13:** `POST /signup` ve `POST /users/{user_id}/role` artık `Idempotency-Key` okur

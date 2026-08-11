@@ -10,6 +10,8 @@
 
 import { useState } from "react";
 
+import { stringOrEmpty as str } from "@/lib/formValues";
+
 export const SIGNAL_SOURCE_KINDS = ["file", "integration"] as const;
 export const SIGNAL_RESOLUTION_KINDS = [
   "event_based",
@@ -66,10 +68,6 @@ export interface TradingSignalFormState {
 }
 
 export type FormErrors = Partial<Record<string, string>>;
-
-function str(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
 
 function section(payload: Record<string, unknown>, key: string): Record<string, unknown> {
   const value = payload[key];

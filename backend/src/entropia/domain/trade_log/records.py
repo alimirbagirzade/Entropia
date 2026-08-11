@@ -19,7 +19,7 @@ import csv
 import hashlib
 import io
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -29,6 +29,7 @@ from entropia.domain.importing.column_mapping import (
     rename_columns,
     resolve_column_mapping,
 )
+from entropia.domain.importing.timezone import parse_source_timestamp
 from entropia.domain.trade_log.enums import RecordBatchStatus, TradeDirection
 
 # --- skip reason codes (surfaced per-row in the skipped-row report) ----------
@@ -299,11 +300,11 @@ def _normalize_one(
     if direction is None:
         return SkippedRow(index, REASON_DIRECTION_INVALID, "direction is not long/short.")
 
-    entry_time = _parse_time(row.get("entry_time", ""), tz)
+    entry_time = parse_source_timestamp(row.get("entry_time", ""), tz)
     if entry_time is None:
         return SkippedRow(index, REASON_ENTRY_TIME_INVALID, "entry_time is missing or unparseable.")
 
-    exit_time = _parse_time(row.get("exit_time", ""), tz)
+    exit_time = parse_source_timestamp(row.get("exit_time", ""), tz)
     if exit_time is None:
         return SkippedRow(index, REASON_EXIT_TIME_INVALID, "exit_time is missing or unparseable.")
     if exit_time < entry_time:
@@ -396,20 +397,6 @@ def _resolve_timezone(source_timezone: str) -> ZoneInfo | None:
         return ZoneInfo(source_timezone)
     except (ZoneInfoNotFoundError, ValueError, KeyError):
         return None
-
-
-def _parse_time(value: str, tz: ZoneInfo) -> datetime | None:
-    text = (value or "").strip()
-    if not text:
-        return None
-    normalized = text.replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=tz)
-    return parsed.astimezone(UTC)
 
 
 def _parse_positive_price(value: str) -> Decimal | None:

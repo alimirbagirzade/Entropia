@@ -40,8 +40,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.commands.backtest_run_context import resolve_run_manifest_context
 from entropia.application.commands.readiness_check import (
+    _load_workspace,
     _resolve_strategy_payload,
-    record_readiness_access_denied,
     run_readiness_check,
 )
 from entropia.application.durable_audit import AuditSessionFactory, record_durable_audit
@@ -62,8 +62,8 @@ from entropia.domain.backtest.enums import (
 from entropia.domain.backtest.execution.fills import tick_data_required
 from entropia.domain.backtest.manifest import build_run_manifest
 from entropia.domain.identity import Actor
-from entropia.domain.identity.policy import ensure_can_edit, ensure_can_view, require_authenticated
-from entropia.domain.lifecycle.enums import JOB_TERMINAL_STATES, DeletionState, JobStatus
+from entropia.domain.identity.policy import ensure_can_edit, require_authenticated
+from entropia.domain.lifecycle.enums import JOB_TERMINAL_STATES, JobStatus
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.readiness.enums import (
     ReadinessIssueCode,
@@ -82,7 +82,6 @@ from entropia.infrastructure.postgres.repositories import readiness as readiness
 from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.infrastructure.queues.enqueue import enqueue_job
 from entropia.shared.errors import (
-    AccessDeniedError,
     AppError,
     BacktestResultNotFoundError,
     BacktestRunNotFoundError,
@@ -720,36 +719,6 @@ async def soft_delete_backtest_result(
 # --------------------------------------------------------------------------- #
 # Helpers                                                                     #
 # --------------------------------------------------------------------------- #
-
-
-async def _load_workspace(
-    session: AsyncSession,
-    actor: Actor,
-    composition_id: str,
-    *,
-    operation: str = "request_backtest_run",
-    audit_session_factory: AuditSessionFactory | None = None,
-) -> Any:
-    workspace = await mb_repo.get_workspace(session, composition_id)
-    if workspace is None or workspace.deletion_state != DeletionState.ACTIVE:
-        raise CompositionNotFoundError()
-    try:
-        ensure_can_view(
-            actor, owner_principal_id=workspace.owner_principal_id, visibility="private"
-        )
-    except AccessDeniedError as denial:
-        # Same event kind the Ready Check surface writes (doc 14 §12.2
-        # ``readiness_access_denied``), distinguished by ``operation`` — the RUN
-        # surface is the other door onto the same composition.
-        await record_readiness_access_denied(
-            actor,
-            composition_id=composition_id,
-            operation=operation,
-            denial_code=denial.code,
-            audit_session_factory=audit_session_factory,
-        )
-        raise
-    return workspace
 
 
 async def _record_admission_rejected(

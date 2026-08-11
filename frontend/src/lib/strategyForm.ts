@@ -14,6 +14,8 @@
 // Validate / Save on the server remain the sole authority (issues rendered
 // verbatim).
 
+import { decOrOmit, enumStr, pruneUndefined } from "@/lib/formValues";
+
 export interface InfoPanelContent {
   title: string;
   body: string;
@@ -377,6 +379,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 // Render a scalar payload value as an input string ("" for null/undefined).
+// Deliberately local: unlike formValues.ts::stringOrEmpty this renders booleans.
 function str(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -385,10 +388,6 @@ function str(value: unknown): string {
 
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
-}
-
-function enumStr(value: unknown, fallback: string): string {
-  return typeof value === "string" && value !== "" ? value : fallback;
 }
 
 export function extractFlatSections(payload: Record<string, unknown>): StrategyFlatForm {
@@ -496,26 +495,11 @@ export function extractFlatSections(payload: Record<string, unknown>): StrategyF
   };
 }
 
-// A trimmed non-empty decimal string, else undefined (→ key omitted). Decimals
-// travel as strings so Pydantic parses them exactly (no float artifact).
-function decOrOmit(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed === "" ? undefined : trimmed;
-}
-
 // A non-empty enum string, else undefined (→ key omitted so a required-no-
 // default field reports "field required" and a defaulted field takes its
 // default — the server decides, never the form).
 function enumOrOmit(value: string): string | undefined {
   return value === "" ? undefined : value;
-}
-
-function pruneUndefined(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined) out[key] = value;
-  }
-  return out;
 }
 
 // Overlay the four covered sections onto the FULL payload, preserving every

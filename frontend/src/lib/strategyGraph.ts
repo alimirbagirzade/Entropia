@@ -18,6 +18,7 @@
 // sections back over the FULL payload, preserving every uncovered key.
 
 import { ENGINE_CAPABILITY_MATRIX } from "@/lib/engineCapabilityMatrix.generated";
+import { decOrOmit, enumStr, pruneUndefined } from "@/lib/formValues";
 import type { InfoPanelContent } from "@/lib/strategyForm";
 
 // ---------------------------------------------------------------------------
@@ -583,6 +584,8 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+// Deliberately local: unlike formValues.ts::stringOrEmpty this String()s
+// non-string scalars instead of dropping them.
 function str(value: unknown): string {
   if (value === null || value === undefined) return "";
   return String(value);
@@ -590,10 +593,6 @@ function str(value: unknown): string {
 
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
-}
-
-function enumStr(value: unknown, fallback: string): string {
-  return typeof value === "string" && value !== "" ? value : fallback;
 }
 
 // Generate a stable client id for a NEW block (any string is a legal id in the
@@ -886,11 +885,6 @@ export function extractGraphSections(payload: Record<string, unknown>): Strategy
 // Merge — overlay the two covered sections back onto the FULL payload.
 // ---------------------------------------------------------------------------
 
-function decOrOmit(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed === "" ? undefined : trimmed;
-}
-
 function intOrOmit(value: string): number | undefined {
   const trimmed = value.trim();
   if (trimmed === "") return undefined;
@@ -998,14 +992,6 @@ function mergeSignalBlock(rule: string, minCount: string): Record<string, unknow
   const min = intOrOmit(minCount);
   if (rule === SIGNAL_MIN_SUPPORTING_RULE && min !== undefined) {
     out.min_supporting_count = min;
-  }
-  return out;
-}
-
-function pruneUndefined(obj: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (value !== undefined) out[key] = value;
   }
   return out;
 }

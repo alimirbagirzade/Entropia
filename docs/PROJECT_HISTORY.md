@@ -6286,3 +6286,124 @@ P4-3'te yaptığı gibi: **ölçüldü, adlandırıldı, kaydedildi.**
   tüketen araçların bunu okuması için özel destek gerekir. Bu bilinçli bir takastır:
   yanlış bir standart alan yerine doğru bir standart-dışı alan.
 - Migration yok → alembic up/down/up ve FK insert-order kanıtı **gerekmedi**.
+
+---
+
+## ADIM 38 — RC §6.7 / P11-3 + P11-6: kapının ölçtüğü ile iddia ettiği (PR pending)
+
+> **Numaralandırma notu.** Bu slice görev metninde "ADIM 37" başlığıyla geldi, ama
+> `ADIM 37` merge edilmiş **#663**'ün (sayfalama sınırı) PR başlığına ve commit
+> mesajlarına bağlıdır ve CLAUDE.md'ye göre bunlar değiştirilemez. İkinci bir "ADIM 37",
+> CLAUDE.md'nin *"İKİ slice adı çift kullanılmış"* diye kaydettiği hatayı üçüncü kez
+> üretirdi. Bu slice'ın hiçbir parçası henüz donmamış olduğu için **ADIM 38** seçildi.
+
+**Tek cümle:** İki kapı, ölçtüklerinden fazlasını ölçüyormuş gibi duruyordu — sekiz
+`-chromium-darwin.png` baseline'ı **hiçbir job assert etmiyordu** ve Tab sırası **23
+rotanın 3'ünde** yürütülüyordu; ilki silindi ve geri dönüşü kapıya bağlandı, ikincisi
+23/23'e çıkarıldı.
+
+**Ürün kodu DEĞİŞMEDİ.** `frontend/src` ve `backend/src`'e dokunulmadı; route, react-query
+key, OCC token, Idempotency-Key, hook, SSE taksonomisi ve `lib/*.ts` **aynen**. Migration
+yok → alembic up/down/up ve FK insert-order kanıtı **gerekmedi**.
+
+### P11-3 — ölçüm (b)'yi seçtirdi: sil
+
+Rapor *"sessizce bayatlayabilir"* diyordu. Ölçüm bundan sert çıktı: **zaten bayatlamıştı.**
+
+| Eksen | Ölçülen |
+|---|---|
+| Tüketici | `.github/workflows`'daki **18 `runs-on:`'un 18'i** `ubuntu-latest`; `grep -i macos` → **NONE**. `playwright.config.ts`'te `snapshotPathTemplate` yok → varsayılan platform eki. CI **yalnız `-linux`** okuyabilir |
+| Sahiplik | `-linux` seti `27bf011` *"ci: enforce Linux visual regression gate"* (2026-07-30) ile geldi. `-darwin` seti `e56575f` (2026-07-21) doğdu, **son dokunuş `7360f60` (2026-07-22)**; o tarihten beri `frontend/src`'e **67 commit** |
+| Bugünkü davranış | macOS'ta, `e2e.yml`'in seed'inin aynısıyla (`SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1`), sekiz sayfa tek tek: **6 FAIL / 2 PASS**, yükseklik sapmaları **44–539 px** |
+| Platform mu bayatlık mı? | `-darwin` ↔ `-linux` aynı sayfada **525 px'e kadar** ayrışıyor; bu makinenin bugün ürettiği yükseklikler **`-linux`'un yanına** düşüyor → **bayatlık** |
+
+`specs/11` `describe.configure({mode:"serial"})` olduğu için tek koşu ilk kırmızıda duruyor;
+sekiz sayfa **ayrı `--grep`** ile koşturuldu — yoksa "1 failed, 7 did not run" görülür ve
+kaçının bozuk olduğu bilinmezdi.
+
+**(a) açıkça değerlendirilip reddedildi:** macOS runner gerektirir, GitHub-hosted macOS
+dakikası **10×** faturalanır ve ürün `nginxinc/nginx-unprivileged:1.31-alpine` tabanlı bir
+**Linux konteyneri** olarak sevk edilir. Ürünün sevk edilmediği bir platform için Linux
+kapısını ikinci kez ödemek bu kalemi çözmezdi.
+
+**Sevk edilen:** 8 dosya `git rm` · **YENİ** `scripts/visual-baseline-platform-gate.sh`
+(`git ls-files` ile **commit'li** baseline'ları okur; `ASSERTED_PLATFORMS="linux"` dışında
+**exit 1**) · `ci.yml` → `frontend` job'ına bağlandı (statik kontrol: Docker/tarayıcı/DB
+istemez → stack kurmayan PR'ları da kapsar) · `specs/11` ve `frontend/e2e/README.md`'deki
+*"Both authoring-platform and Ubuntu CI baselines are committed"* cümlesi düzeltildi ve
+macOS'ta beklenen davranış (**missing snapshot, sahte regresyon DEĞİL**) ölçülerek yazıldı.
+
+> **Kapı ilk yazımında bu slice'ın kendi konusunu tekrarladı.** `grep -Ev "$re" || true`
+> iki hata yapıyordu: `-` ile başlayan deseni grep **opsiyon** sanıyor, `|| true` ise
+> grep'in **hata** çıkışını (2) "ihlal yok"a çeviriyordu → sekiz ihlalli ağaçta kapı
+> **`OK … EXIT=0`** bastı. **Negatif kontrol olmasa fark edilmezdi.** Düzeltildi (`-e` +
+> exit kodunun üç dallı okunması); negatif yeniden koşuldu → **exit 1, sekizini de adıyla
+> listeliyor**. Yeni bir kapı yazarken negatifini koşmak isteğe bağlı değildir.
+
+Silme **ikinci bir kapı** tarafından da yakalandı: `generate_repository_facts.py --check`
+`Playwright snapshot PNGs 16 → 8` sapmasıyla kırmızıya döndü; artefakt yeniden üretildi.
+
+### P11-6 — 3/23 → 23/23
+
+Daraltmanın spec'e yazılı gerekçesi (*"walking every tabbable element on all 23 routes
+would double this job's wall clock"*) **ölçülerek çürütüldü**: sonda rota başına tek bir
+`page.evaluate`'tir ve aynı dosyadaki yapı testi zaten 23 rotanın navigasyonunu ödüyor.
+23 rotada test **13.2 s**; `@a11y` job'ının tamamı **1.2 dk** (ADIM 29 ölçümü: 1.0 dk).
+
+`TAB_ORDER_ROUTES` artık **elle yazılmıyor** —
+`utils/screenshotMatrix.ts::TARGET_PAGES`'ten türüyor;
+`backend/tests/contract/test_a11y_audit_prep_contract.py`'nin tekil kaynak olarak
+pinlediği aynı liste. Yürütülemeyen bir rota **sessizce atlanmıyor**: `N/A` gerekçesiyle
+`tab_order_routes_NOT_walked`'a yazılır ve yürüyüş devam eder (throw etmek kalan rotaları
+düşürür ve raporu hiç ölçmediği bir kapsamı iddia eder hâle getirirdi).
+
+**Ölçülen:** `tab_order_routes_total 23` · walked **23** · `NOT_walked []` (0 N/A — Admin-only
+üçü dâhil hepsi `ensureAdmin` ile erişilebilir) · tab-order advisory'si **0** · `blocking []`
+· advisory toplamı **90** — ADIM 29 ile **birebir aynı** (yeni bulgu yok, regresyon yok).
+Düzeltilecek ürün bulgusu **çıkmadı**, issue de açılmadı.
+
+### Bu koşuda doğan iki YENİ kalem (rapor bunları bildirmemişti)
+
+- **P11-6b** — tab-sırası sondası **Tab'a hiç basmıyor** (DOM sırasını `tabindex`'ten
+  türetilen sırayla karşılaştırıyor) ve bulgularını yalnız `advisories`'e yazdığı için
+  **hiçbir rota onu kıramaz**. Görebildiği tek şey pozitif-`tabindex` yeniden
+  sıralamasıdır; odak tuzağı / erişilemez kontrol / roving-tabindex **görünmez**. Sınır
+  3 rotada da vardı — bu dalga onu **getirmedi, ölçtü**. Bilerek düzeltilmedi: gerçek bir
+  Tab yürüyüşü yeni bir modelleme kararıdır (radio grupları, `<select>`, roving tabindex)
+  ve görev metni *"yeni bir desen icat etme, mevcut olanı çoğalt"* diyor. Sınır **artefakta**
+  yazıldı — `precheck-results.json::tab_order_probe` + konsol satırı — ki 3→23 genişlemesi
+  sonradan **daha güçlü bir iddia** gibi okunmasın. Fiziksel Tab yürüyüşü yalnız
+  `specs/14-keyboard-flow.spec.ts`'te, **2 rotada** (`/login`, `/`).
+- **P11-3b** — `strategy-standalone` bugün **1135 px** ölçüldü; `-darwin` (1425) ve
+  **hayatta kalan `-linux`** (900) baseline'larının **ikisiyle de** uyuşmuyor. Sayfa
+  yüksekliği seed'e bağlı liste uzunluğuyla oynuyor. P11-3'ün sonucunu değiştirmez ama
+  `-linux` setinin **seed hassasiyeti** hakkında açık bir soru bırakır. **Ölçüldü,
+  düzeltilmedi** — bu dalga `-linux` setine dokunmadı.
+
+### DOKUNULMAYANLAR — dürüst sınır
+
+**P11 KAPANMADI.** `P11-1` (branch protection — **repo ayarı, insan kararı**, agent
+kapatamaz; yeni kapı da diğerleri gibi **job kapısıdır, required status check DEĞİLDİR**),
+**P11-2** (görsel kapsam 8→23; `CRITICAL_PAGES` sekiz sayfada bırakıldı, 15 sayfada piksel
+koruması yok — ayrı PR) ve **P11-8** (Lighthouse) **açık**. Dört blocker ve K-2..K-6
+**dokunulmadı**. Verdict **BLOCKED**, blocker sayısı **üç** (1, 2, 4).
+
+**A-08 ile KARIŞTIRILAMAZ.** Bu slice'ın hiçbir çıktısı ekran-okuyucu kanıtı değildir ve
+`docs/audit/a11y_screen_reader_audit_results.md` §1/§2'ye yazılamaz; defter BOŞ, dört
+kriter de ☐, #514 ayrışması sürüyor. Koşu
+`REMINDER: A-08 is HUMAN-BLOCKED. Nothing above counts as a screen-reader PASS.`
+satırını basmaya devam ediyor — **kaldırılmadı**.
+
+### Doğrulama
+
+`frontend/e2e` tsc **temiz** · `frontend` eslint **temiz** ·
+`test_acceptance_semantic_map.py` + `test_workflow_supply_chain.py` +
+`test_a11y_audit_prep_contract.py` → **94 passed** ·
+`generate_repository_facts.py --check` **OK** ·
+`git diff origin/main -- docs/ | grep '^-## '` → **BOŞ** (docs regresyonu yok) ·
+`@a11y` süiti **6 passed (1.2m)** · görsel kapı: macOS'ta artık **missing snapshot**
+(doğrulandı; üretilen dosya commit **edilmedi**, edilseydi kapı kırardı).
+Ham kanıt: `docs/releases/evidence/2026-08-11/`.
+
+**Linux tarafı bu makinede koşulamadı** — `@visual` kapısının `-linux` setiyle hâlâ yeşil
+olduğunu **CI job log'undan** doğrula (yeşil rozet yeterli değil).

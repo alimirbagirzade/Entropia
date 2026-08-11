@@ -29,9 +29,18 @@
 // dataset they were captured from (the R2-07/KALAN e2e stack DB). Fresh
 // stacks must regenerate baselines once:
 //   npm run screenshots:update
-// Platform note: toHaveScreenshot snapshots are platform-suffixed
-// (…-darwin.png / …-linux.png). Both authoring and Ubuntu CI baselines are
-// committed; CI only asserts and never runs --update-snapshots.
+// Platform note (RC §6.7 / P11-3, revised 2026-08-11): toHaveScreenshot
+// snapshots are platform-suffixed (…-chromium-linux.png / …-chromium-darwin.png)
+// and Playwright only ever compares against the suffix of the RUNNING platform.
+// Every runs-on: in .github/workflows is ubuntu-latest, so ONLY the -linux set
+// is committed, and scripts/visual-baseline-platform-gate.sh keeps it that way.
+// An eight-file -darwin set used to be committed beside it; no job asserted it,
+// and when it was finally measured six of the eight no longer matched what the
+// app renders on darwin (height deltas 44–539 px). They were deleted rather
+// than refreshed: a baseline nothing asserts does not protect these pages, it
+// only looks like it does. Running this suite on macOS therefore reports
+// MISSING snapshots — the honest answer — and CI never runs
+// --update-snapshots. Adding a platform means adding a job that runs it first.
 
 import { expect, test, type Page } from "@playwright/test";
 

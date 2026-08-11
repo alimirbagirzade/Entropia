@@ -856,8 +856,10 @@ açılmadı/kapatılmadı.
 | ~~**P9-F1**~~ | ~~`frontend/Dockerfile` **`npm install`** kullanıyor (`npm ci` değil) + `COPY package-lock.json*` glob'u lockfile yokluğunu tolere ediyor → reproducibility riski~~ → **2026-08-10 (ADIM 33) KAPANDI** — `npm ci` + glob'suz `COPY`; fail-closed olduğu **iki negatif durumda, her biri kontrolüyle** ölçüldü, ayrıca `frontend/.dockerignore` eklendi. Ayrıntı ve ham kanıt: **§6.7.2** | P9 |
 | **P11-1** | **`main` üzerinde branch protection YOK ve ruleset YOK** (`gh api …/protection` → 404, `…/rulesets` → `[]`) → visual/axe kapıları **job kapısıdır, required status check DEĞİLDİR**; kırmızı E2E ile merge'i mekanik engelleyen bir şey yok | P11 |
 | **P11-2** | Visual gate 23 sayfanın **8'ini** kapsıyor; kalan 15'te piksel regresyonu koruması **yok** | P11 |
-| **P11-3** | 8 `-chromium-darwin.png` baseline commit'li ama **hiçbir job onları assert etmiyor** → sessizce bayatlayabilir | P11 |
-| **P11-6** | Tab sırası 23 route'un **yalnız 3'ünde** doğrulandı | P11 |
+| ~~**P11-3**~~ | ~~8 `-chromium-darwin.png` baseline commit'li ama **hiçbir job onları assert etmiyor** → sessizce bayatlayabilir~~ → **2026-08-11 KAPANDI.** İddia doğruydu ama *"bayatlayabilir"* fazla nazikti: **zaten bayatlamıştı** — macOS'ta, `e2e.yml`'in seed'inin aynısıyla koşulduğunda **8'in 6'sı düştü** (yükseklik sapmaları **44–539 px**, `maxDiffPixelRatio 0.02`'nin çok dışında). Tüketici ölçüldü: 18 `runs-on:`'un 18'i `ubuntu-latest`, macOS runner **YOK** → **(b) SİL** seçildi; (a)'nın maliyeti (macOS dakikası 10×, üstelik ürün bir Linux konteyneri olarak sevk ediliyor) açıkça değerlendirilip **reddedildi**. Sekizi silindi; geri dönüşü **YENİ** `scripts/visual-baseline-platform-gate.sh` (→ `ci.yml` `frontend` job'ı) kırıyor ve **negatifi kanıtlı**. Ayrıntı ve ham kanıt: **§6.7.6** | P11 |
+| ~~**P11-6**~~ | ~~Tab sırası 23 route'un **yalnız 3'ünde** doğrulandı~~ → **2026-08-11 KAPANDI (kapsam ekseninde).** **23/23** yürütüldü, **0 N/A**; rota listesi artık elle yazılmıyor, `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor. Daraltmanın yazılı gerekçesi (*"walking every tabbable element on all 23 routes would double this job's wall clock"*) **ölçülerek çürütüldü**: 23 rota **13.2 s**, `@a11y` job'ının tamamı **1.2 dk** (ADIM 29: 1.0 dk). 0 sapma, 0 blocking, advisory **90** — ADIM 29 ile birebir aynı. **YENİ KALEM → P11-6b:** aynı sonda **Tab'a hiç basmıyor** ve **hiçbir rota onu kıramaz**; ölçüldü, **düzeltilmedi**, sınır artefakta yazıldı. Ayrıntı: **§6.7.6** | P11 |
+| **P11-6b** | **YENİ (2026-08-11 ölçümü, rapor bunu bildirmemişti).** `specs/20-a11y-prechecks.spec.ts`'in tab-sırası sondası adının vaat ettiğinden azını ölçüyor: **Tab tuşuna hiç basmıyor** (DOM sırasını `tabindex`'ten türetilen sırayla karşılaştırıyor) ve bulguları yalnız `advisories`'e yazdığı için **hiçbir rota onu kıramaz**. Görebildiği tek şey pozitif-`tabindex` yeniden sıralamasıdır; odak tuzağı / erişilemez kontrol / roving-tabindex **görünmez**. Sınır 3 rotada da vardı — bu dalga onu **getirmedi, ölçtü**; gerçek Tab yürüyüşü yeni bir modelleme kararıdır (radio grupları, `<select>`, roving tabindex) → **ayrı PR**. Şimdilik `precheck-results.json::tab_order_probe` + konsol satırı ile **beyan ediliyor**, ki 3→23 genişlemesi daha güçlü bir iddia gibi okunmasın. Fiziksel Tab yürüyüşü yalnız `specs/14-keyboard-flow.spec.ts`'te, **2 rotada** | P11 |
+| **P11-3b** | **YENİ (2026-08-11 ölçümü).** `strategy-standalone` bugün **1135 px** ölçüldü — `-darwin` (1425) ve **`-linux` (900)** baseline'larının **ikisiyle de** uyuşmuyor; sayfa yüksekliği seed'e bağlı liste uzunluğuyla oynuyor. P11-3'ün sonucunu değiştirmez ama **hayatta kalan `-linux` setinin seed hassasiyeti** hakkında açık bir soru bırakır. **Ölçüldü, düzeltilmedi** — bu dalga `-linux` setine dokunmadı | P11 |
 | **P11-8** | Lighthouse hâlâ bağlı değil | P11 |
 | **P10-7** | Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor) | P10 |
 | **P1-B1/B2** | `BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat | P1 |
@@ -1171,6 +1173,66 @@ sessiz clamp **sessizce onaylanmadı** — buraya kaydedildi.
 * **(B) seçilirse tuzak:** FastAPI'nin varsayılan `{"detail": [...]}` şekli adjudicated
   zarf DEĞİLDİR (O-02). `le=` taşıyan 19 uç zaten `apps/api/errors.py` handler'ından
   geçiyor, yani yeni 422'ler muhtemelen doğru zarfa düşer — **varsayma, ölç.**
+
+**Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
+
+---
+
+#### 6.7.6 P11-3 ve P11-6 KAPANDI — kapının ölçtüğü ile iddia ettiği (2026-08-11)
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** İkisi de blocker değildi; §8 hâlâ **BLOCKED**,
+açık blocker sayısı hâlâ **üç** (1, 2, 4). **P11 KAPANMADI** — aynı satırdaki **P11-1**
+(branch protection, repo ayarı → **insan kararı**), **P11-2** (görsel kapsam 8→23, ayrı PR)
+ve **P11-8** (Lighthouse) **ele alınmadı**. Tam kayıt ve ham çıktılar:
+`docs/releases/evidence/2026-08-11/P11_gate_coverage_truth.md` (+ `p11_3_gate.txt`,
+`p11_3_visual_darwin_per_page.txt`, `p11_3_baseline_dimensions.txt`,
+`p11_6_a11y_23routes.txt`, `p11_6_precheck_results.json`).
+
+**P11-3 — ölçüm (a)'yı değil (b)'yi seçtirdi.** Playwright baseline'ları platform ekli ve
+yalnız **koşan** platformun ekiyle karşılaştırılır; `.github/workflows`'daki **18
+`runs-on:`'un 18'i** `ubuntu-latest` (macOS runner **yok**) → `-darwin` setinin kapısı
+**yok**, tek gerçek tüketicisi macOS'ta `npm run visual` koşan bir kişi. O kişinin bugün ne
+gördüğü ölçüldü: `e2e.yml`'in seed'inin aynısıyla kurulan stack'te, sekiz sayfa tek tek
+koşturulunca **6 FAIL / 2 PASS**. Kontrol deneyi bunun bir platform farkı **olmadığını**
+gösteriyor: `-darwin` ile `-linux` baseline'ları aynı sayfada **525 px'e kadar** ayrışıyor
+ve bu makinenin bugün ürettiği yükseklikler **`-linux`'un yanına** düşüyor. `-darwin` bir
+platform artefaktı değil, **bayat** bir artefakt. (a) için gereken macOS runner açıkça
+değerlendirildi: dakikası **10×**, üstelik ürün `nginxinc/nginx-unprivileged` tabanlı bir
+**Linux konteyneri** olarak sevk ediliyor → reddedildi.
+
+**Sevk edilen:** 8 dosya `git rm`; **YENİ** `scripts/visual-baseline-platform-gate.sh`
+(`git ls-files` ile **commit'li** baseline'ları okur, `ASSERTED_PLATFORMS="linux"` dışında
+**exit 1**), `ci.yml` → `frontend` job'ına bağlı (statik kontrol: Docker/tarayıcı/DB
+istemez, stack kurmayan PR'ları da kapsar). `specs/11` ve `frontend/e2e/README.md`'deki
+*"Both authoring-platform and Ubuntu CI baselines are committed"* cümlesi artık yanlıştı →
+düzeltildi; macOS'ta beklenen davranış (**missing snapshot, sahte regresyon DEĞİL**)
+ölçülerek yazıldı.
+
+> **Kapının kendisi ilk yazımında bu slice'ın konusunu tekrarladı ve negatif kontrol onu
+> yakaladı.** `grep -Ev "$re" || true` iki hata yapıyordu: `-` ile başlayan deseni grep
+> **opsiyon** sanıyor, `|| true` ise grep'in **hata** çıkışını (2) "ihlal yok"a çeviriyordu
+> → sekiz ihlalli bir ağaçta kapı **`OK … EXIT=0`** bastı. Düzeltildi (`-e` + exit kodunun
+> üç dallı okunması) ve negatif yeniden koşuldu: **exit 1, sekizini de adıyla listeliyor**.
+> Silme ayrıca **ikinci bir kapı** tarafından da yakalandı — `generate_repository_facts.py
+> --check` `Playwright snapshot PNGs 16 → 8` sapmasıyla kırmızıya döndü.
+
+**P11-6 — 3/23 → 23/23.** Daraltmanın spec'e yazılı gerekçesi (*"would double this job's
+wall clock"*) **ölçülerek çürütüldü**: sonda rota başına tek bir `page.evaluate`'tir, aynı
+dosyadaki yapı testi zaten 23 rotanın navigasyonunu ödüyor → 23 rotada test **13.2 s**, job
+toplamı **1.2 dk**. Rota listesi artık elle yazılmıyor;
+`utils/screenshotMatrix.ts::TARGET_PAGES`'ten türüyor (contract testinin tekil kaynak
+olarak pinlediği liste). Yürütülemeyen bir rota **sessizce atlanmıyor**: `N/A` gerekçesiyle
+`tab_order_routes_NOT_walked`'a yazılır. Ölçülen: **23/23 walked, NOT_walked `[]`, 0
+tab-order sapması, 0 blocking**, advisory **90** — ADIM 29'un sayısıyla **birebir aynı**
+(yeni bulgu yok, regresyon yok). Düzeltilecek ürün bulgusu **çıkmadı**, dolayısıyla issue
+da açılmadı.
+
+**Bu koşuda doğan iki yeni kalem — §6.7 tablosuna eklendi: `P11-6b` ve `P11-3b`.**
+
+**A-08 ile KARIŞTIRILAMAZ.** Bu bölümün hiçbir çıktısı ekran-okuyucu kanıtı değildir ve
+`docs/audit/a11y_screen_reader_audit_results.md` §1/§2'ye yazılamaz; defter BOŞ, dört
+kriter de ☐. Koşu `REMINDER: A-08 is HUMAN-BLOCKED. Nothing above counts as a
+screen-reader PASS.` satırını basmaya devam ediyor — **kaldırılmadı**.
 
 **Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
 

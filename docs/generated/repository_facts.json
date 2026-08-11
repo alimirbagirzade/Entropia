@@ -857,7 +857,7 @@
   "visual_baselines": {
     "a11y_frozen_pages": 23,
     "a11y_frozen_serious_nodes": 45,
-    "playwright_snapshot_pngs": 16,
+    "playwright_snapshot_pngs": 8,
     "screenshot_baseline_pngs": 122,
     "screenshot_prototype_pngs": 20
   }

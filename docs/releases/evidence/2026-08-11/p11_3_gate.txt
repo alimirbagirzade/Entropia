@@ -1,0 +1,31 @@
+### NEGATIVE CONTROL — gate run BEFORE the darwin baselines are deleted
+$ scripts/visual-baseline-platform-gate.sh
+FAIL: baseline(s) committed for a platform no job asserts.
+      asserted platform(s): linux
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/create-package-chromium-darwin.png
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/mainboard-chromium-darwin.png
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/market-data-chromium-darwin.png
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/ready-check-chromium-darwin.png
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/run-result-chromium-darwin.png
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/strategy-standalone-chromium-darwin.png
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/trade-log-standalone-chromium-darwin.png
+        frontend/e2e/specs/11-visual-regression.spec.ts-snapshots/trading-signal-standalone-chromium-darwin.png
+
+      Either add a CI job that runs 'npm run visual' on that platform,
+      or delete the files. An unasserted baseline goes stale in silence.
+EXIT=1
+
+### POSITIVE — gate run AFTER the darwin baselines are deleted
+$ scripts/visual-baseline-platform-gate.sh
+OK: 8 visual baseline(s) tracked, all for asserted platform(s): linux
+EXIT=0
+
+### macOS behaviour AFTER deletion — verified, not assumed
+$ npx playwright test --grep "visual: mainboard$"
+    Error: A snapshot doesn't exist at
+      .../11-visual-regression.spec.ts-snapshots/mainboard-chromium-darwin.png, writing actual.
+  1 failed
+
+# i.e. a macOS developer now gets "you have no baseline for your platform" instead of
+# "this page regressed". Playwright wrote the actual as a NEW untracked file; it was
+# deleted rather than committed -- committing it is exactly what the gate above rejects.

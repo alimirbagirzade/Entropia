@@ -163,6 +163,15 @@ jobs:
       - name: Typecheck
         working-directory: frontend
         run: npm run typecheck
+      - name: Visual baseline platform gate (RC P11-3)
+        # Lives here, not in e2e.yml, because it is a purely static check on the
+        # committed tree: it needs git and nothing else — no Docker stack, no
+        # browser, no seeded database. Running it in a job that already pays for
+        # a checkout costs seconds, and unlike e2e.yml it also covers PRs that
+        # never bring the stack up. Its negative is proven, not assumed: with
+        # the eight -chromium-darwin.png baselines still tracked it exits 1 and
+        # names all eight (docs/releases/evidence/2026-08-11/p11_3_gate.txt).
+        run: scripts/visual-baseline-platform-gate.sh
       - name: Test + coverage gate
         working-directory: frontend
         # `npm run coverage` is `vitest run --coverage` — the same suite `npm test`

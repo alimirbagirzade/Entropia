@@ -54,7 +54,7 @@ static walk. Only a full CI run reports passes.
 
 | Fact | Value |
 |---|---|
-| Playwright snapshot PNGs | 16 |
+| Playwright snapshot PNGs | 8 |
 | Screenshot baseline PNGs | 122 |
 | Screenshot prototype PNGs | 20 |
 | a11y frozen serious nodes (`frontend/e2e/a11y-baseline.json`) | 45 across 23 pages |

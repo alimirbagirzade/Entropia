@@ -43,13 +43,38 @@ import { TARGET_PAGES, VIEWPORT_HEIGHT } from "../utils/screenshotMatrix";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPORT_DIR = path.join(__dirname, "..", "a11y-report");
 
-// Walking every tabbable element on all 23 routes would double this job's wall
-// clock for a measurement that repeats the same shell chrome 23 times. The walk
-// therefore runs on three representative surfaces: the densest page, the
-// biggest table, and a form-heavy editor. Which routes were NOT walked is
-// written into the report — a narrowed scope that does not announce itself
-// reads as full coverage later.
-const TAB_ORDER_ROUTES = ["/", "/packages/library", "/trading-signal"] as const;
+// RC §6.7 / P11-6: this walk used to run on three representative surfaces, on
+// the assumption that all 23 would double the job's wall clock. Measured, it
+// does not — the probe is ONE page.evaluate per route, and the structure test
+// above already pays the navigation for every one of the 23. The narrowing
+// bought a second or two and cost twenty routes of coverage, so the walk now
+// reads the SAME single source of truth as every other page-matrix consumer:
+// utils/screenshotMatrix.ts::TARGET_PAGES (pinned as the only list by
+// backend/tests/contract/test_a11y_audit_prep_contract.py). Do not hand-write
+// a route list here again. `tab_order_routes_NOT_walked` stays in the report —
+// now empty — so a future narrowing still has to announce itself.
+//
+// ===================== WHAT THIS PROBE DOES NOT DO =========================
+// It does not press Tab. It compares DOM order against the order a browser
+// would derive from tabindex, so the only thing it can see is positive-
+// tabindex reordering: a focus trap, an unreachable control or a roving-
+// tabindex widget does not show up here, and no route can fail this test —
+// every finding is an ADVISORY by construction (see the two-class note at the
+// top of this file). specs/14-keyboard-flow.spec.ts is the spec that
+// physically presses Tab, and it covers /login and / only. Widening this walk
+// to 23 routes widens THAT measurement and nothing more; it is not a keyboard
+// audit and it is not A-08. The report states the method in `tab_order_probe`
+// so the wider scope cannot later be read as a stronger claim.
+const TAB_ORDER_ROUTES = TARGET_PAGES.map((p) => p.path);
+
+// Stated in the artifact, not only in this comment: a reader who sees nothing
+// but precheck-results.json must still learn the probe's limit from the file.
+const TAB_ORDER_PROBE =
+  "DOM order vs tabindex-derived order, computed in-page. Tab is NEVER pressed. " +
+  "Detects positive-tabindex reordering only; cannot detect focus traps, " +
+  "unreachable controls or roving-tabindex widgets. Advisory-only: no route can " +
+  "fail this test. The physical Tab walk is specs/14-keyboard-flow.spec.ts " +
+  "(/login and / only).";
 
 interface Advisory {
   route: string;
@@ -159,6 +184,11 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
   const records: RouteRecord[] = [];
   const advisories: Advisory[] = [];
   const blocking: string[] = [];
+  // Recorded at run time, not derived from the intended list: a route that was
+  // meant to be walked but could not be is an N/A with a reason, never a gap
+  // the report quietly rounds down to "covered".
+  const tabOrderWalked: string[] = [];
+  const tabOrderNotWalked: Array<{ route: string; reason: string }> = [];
 
   test("structure, landmarks, headings and live regions across the audit matrix", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: VIEWPORT_HEIGHT });
@@ -333,13 +363,25 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
     expect(focusedIsTrigger, "focus must return to the + Add trigger after Escape").toBe(true);
   });
 
-  test("tab order follows DOM order on the representative routes", async ({ page }) => {
+  test("tab order follows DOM order on every route in the audit matrix", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: VIEWPORT_HEIGHT });
     await ensureAdmin(page);
 
     for (const route of TAB_ORDER_ROUTES) {
-      await page.goto(route);
-      await page.locator("main").waitFor();
+      // A route that will not mount is recorded as N/A with its reason and the
+      // walk continues. Throwing here would abort the remaining routes and
+      // leave the report claiming a coverage it never measured; skipping here
+      // silently would be worse still.
+      try {
+        await page.goto(route);
+        await page.locator("main").waitFor();
+      } catch (err) {
+        tabOrderNotWalked.push({
+          route,
+          reason: `route did not mount a <main> landmark: ${(err as Error).message.split("\n")[0]}`,
+        });
+        continue;
+      }
       await page.waitForTimeout(400);
 
       // Walk the first 25 Tab stops and compare against DOM order. A pure
@@ -368,6 +410,8 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
         return { diverged: n, considered: Math.min(25, expected.length) };
       });
 
+      tabOrderWalked.push(route);
+
       if (divergences.diverged > 0) {
         advisories.push({
           route,
@@ -383,8 +427,16 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
   test.afterAll(async () => {
     fs.mkdirSync(REPORT_DIR, { recursive: true });
 
-    const walked = new Set<string>(TAB_ORDER_ROUTES);
-    const notWalked = TARGET_PAGES.map((p) => p.path).filter((p) => !walked.has(p));
+    // Routes the walk never reached at all (the test aborted before them) are
+    // as unwalked as the ones that failed to mount — both belong in NOT_walked.
+    const attempted = new Set([...tabOrderWalked, ...tabOrderNotWalked.map((r) => r.route)]);
+    const notWalked = [
+      ...tabOrderNotWalked,
+      ...TAB_ORDER_ROUTES.filter((r) => !attempted.has(r)).map((route) => ({
+        route,
+        reason: "the tab-order walk did not reach this route (test aborted earlier)",
+      })),
+    ];
 
     const report = {
       disclaimer:
@@ -395,7 +447,9 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
         "and VoiceOver/Safari.",
       screen_reader_verified: false,
       routes_checked: records.length,
-      tab_order_routes_walked: [...walked],
+      tab_order_probe: TAB_ORDER_PROBE,
+      tab_order_routes_total: TAB_ORDER_ROUTES.length,
+      tab_order_routes_walked: tabOrderWalked,
       tab_order_routes_NOT_walked: notWalked,
       blocking_failures: blocking,
       advisories,
@@ -409,9 +463,13 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
     const lines = advisories.map((a) => `  ${a.route} — ${a.check}: ${a.observed} [${a.wcag}]`);
     console.log(
       `\na11y prechecks: ${records.length} route(s) inspected, ${advisories.length} advisory ` +
-        `observation(s). Tab order walked on ${walked.size} route(s); NOT walked on ` +
-        `${notWalked.length}: ${notWalked.join(", ")}.`,
+        `observation(s). Tab order walked on ${tabOrderWalked.length}/${TAB_ORDER_ROUTES.length} ` +
+        `route(s); NOT walked on ${notWalked.length}` +
+        (notWalked.length
+          ? `: ${notWalked.map((r) => `${r.route} (${r.reason})`).join(" ; ")}.`
+          : "."),
     );
+    console.log(`tab-order probe: ${TAB_ORDER_PROBE}`);
     if (lines.length) {
       console.log(
         `::warning::${advisories.length} a11y advisory observation(s) — these are NOT gated ` +

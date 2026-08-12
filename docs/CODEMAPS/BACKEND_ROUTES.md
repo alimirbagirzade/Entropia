@@ -106,8 +106,24 @@ sabitleri **kendi sorgu katmanının uyguladığı** değerlerden ver. Sınırs�
 > demektir ve bu uçlar onları kabul eder; emitlemek üretilmiş bir istemcinin, sunucunun 200
 > döndüğü isteği reddetmesine yol açardı — eksik sözleşme yerine **yanlış** sözleşme.
 >
-> **AÇIK ÜRÜN KARARI:** aşımın sessiz clamp mi 422 red mi olacağı **adjudicate EDİLMEDİ**
-> (canonical sessiz). PO kararı bekliyor → RC raporu §6.7 / **P10-B2** + §6.7.5.
+> **ÜRÜN KARARI VERİLDİ — 2026-08-12 (PO): KELEPÇE KALIR.** Canonical sessizdi; iki okuma
+> açıktı (422'ye çevirip iki aileyi birleştirmek · sevk edileni korumak). PO ikincisini
+> seçti. İki gerekçe, **ikisi de kayda geçmiştir ki bir sonraki okuyucu bunu üçüncü kez
+> "tutarsızlık" diye raporlamasın:**
+> 1. **Davranış artık SESSİZ DEĞİL.** Kapatılmaya değer kusur, istemcinin sınırı
+>    `docs/openapi.json`'dan öğrenememesiydi; `x-clamp-default`/`x-clamp-maximum` onu
+>    kapattı. Asıl kusur eksik sözleşmeydi, kelepçenin kendisi değil.
+> 2. **422'ye çevirmek ÜRETİLMİŞ İSTEMCİLERİ KIRARDI** — bugün 200 dönen bir istek
+>    reddedilmeye başlardı. Sevk edilmiş bir wire contract yalnız simetri uğruna yeniden
+>    kesilmez.
+>
+> Yani **19 ENFORCING / 9 CLAMPING ayrımı bilinçlidir, drift değildir**; üç farklı default
+> (20 · 25 · 50, tavan üçünde de 100) de bilinçlidir — her biri kendi sorgu katmanının
+> uyguladığı sabittir. Kararın gerekçesi `apps/api/pagination.py` modül docstring'inde,
+> pini `tests/contract/test_pagination_limit_contract.py`'de yaşar; iki invariant birlikte
+> kilitlidir: kelepçeli parametre `x-clamp-maximum` **yayımlar** ve JSON Schema `maximum`
+> **yayımlamaz** — biri diğerine karışırsa uç iki aileye birden girer ve karar şemadan
+> okunamaz hâle gelir. RC raporu §6.7 / **P10-B2** + **§6.7.5 KAPANDI**.
 > **P10-B6 (ölçüldü, düzeltilmedi):** 4 uç ETKİN sayfa boyutunu yanıtta yankılamıyor —
 > `/agent-tasks`, `/lab/messages`, `/hypotheses` (`next_cursor` var, `limit` yok) ve
 > `/agent-tasks/{task_id}/tool-calls` (**hiç metadata yok**).
@@ -443,10 +459,10 @@ sabitleri **kendi sorgu katmanının uyguladığı** değerlerden ver. Sınırs�
 | POST `../pre-check` (**202**, `PrecheckAcceptedResponse`) | `run_pre_check` | `cp_cmd.run_precheck` → **admission + `default` aktör dispatch** (`dispatch_create_package_job`) | `X-Request-Version` | ✔ |
 | POST `../generate-candidate` (**202**, `CandidateAcceptedResponse`) | `generate_candidate` | `cp_cmd.submit_candidate_generation` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
 | POST `../draft` | `create_draft` | `cp_cmd.create_draft_from_candidate` | **body `expected_candidate_hash`** | ✔ |
-| POST `../validate` (**200 — PO kararı bekliyor**) | `run_validation` | `cp_cmd.start_package_validation_run` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
+| POST `../validate` (**202**, `ValidationRunAcceptedResponse` — PO kararı 2026-08-12) | `run_validation` | `cp_cmd.start_package_validation_run` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
 | POST `../request-revision` | `request_revision` | `cp_cmd.request_package_revision` | `X-Request-Version` | ✔ |
 | POST `../baseline` (201) | `upload_baseline` | `cp_cmd.upload_baseline_asset` | `X-Request-Version` | ✔ |
-| POST `../baseline-parse` (**200 — PO kararı bekliyor**) | `parse_baseline` | `cp_cmd.start_baseline_parse` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
+| POST `../baseline-parse` (**202**, `BaselineParseAcceptedResponse` — PO kararı 2026-08-12) | `parse_baseline` | `cp_cmd.start_baseline_parse` → **admission + `default` aktör dispatch** | `X-Request-Version` | ✔ |
 | POST `../approve` | `approve_request` | `cp_cmd.approve_and_publish` | **body `expected_head_revision_id`** | ✔ |
 | GET `/dependency-scans/{scan_id}` | `get_scan` | `cp_query.get_dependency_scan` | yok | — |
 | GET `/validation-runs/{validation_run_id}` | `get_validation_run` | `cp_query.get_validation_run` | yok | — |
@@ -463,7 +479,7 @@ sabitleri **kendi sorgu katmanının uyguladığı** değerlerden ver. Sınırs�
 > HTTP hatası değil, worker'ın yazdığı durable `failed` attempt'tir.
 > Ayrıntı: `JOBS_AND_EVENTS.md` §`default` kuyruğu.
 
-## §DURABLE-ADMISSION STATUS — RC P8-B2 adjudication (ADIM 41)
+## §DURABLE-ADMISSION STATUS — RC P8-B2 adjudication (ADIM 41 + ADIM 47)
 
 **Durable admission** = QUEUED `jobs` satırı yazıp **iş bitmeden** dönen uç. Böyle **13**
 HTTP yüzeyi var ve üçü farklı status döndürüyordu. Küme **elle yazılmaz**: kanonik liste
@@ -475,9 +491,9 @@ admission ucunu kırmızıya çevirir** (negatifi kanıtlı).
 |---|---|---|
 | `../pre-check` | **202** | doc 07 §10.3 birebir: *"202 accepted … job/scan id, state precheck_pending/checking"* → ADIM 41'de **hizalandı** (200 idi) |
 | `../generate-candidate` | **202** | MTR §7.1 literal wire contract (`-> 202 Accepted`), §4.2 (*"202 Accepted + job_id döndür"*), doc 07 §10.3 → ADIM 41'de **hizalandı** (200 idi) |
-| `../validate` | **200** | **Kanonik status VERMİYOR** (doc 06 §7 ve doc 08 §7 yalnız async davranışı; MTR §13 "istek içinde tamamlanmaz" der, kod demez) → **PO kararı bekliyor**, kod değişmedi |
-| `../baseline-parse` | **200** | Kanonik **ucu bile** adlandırmıyor (doc 06 §7 tek baseline yüzeyi; MTR §10.2 yalnız `POST /package-revisions/{id}/baseline-assets`). Upload(201)/parse ayrımı sevk edilmiş bir ayrıştırma → hizalanacak bir şey yok → **PO kararı bekliyor** |
-| `POST /library/{entity_id}/validation-runs` | **201** | Sevk edilmiş; kanonik status vermiyor. `../validate` ile **aynı** run'ı sarar — iki sarmalayıcı iki farklı status döndürür, bu da PO kararının kapsamındadır |
+| `../validate` | **202** | **Kanonik status VERMİYOR** (doc 06 §7 ve doc 08 §7 yalnız async davranışı; MTR §13 "istek içinde tamamlanmaz" der, kod demez) → **PO KARARI 2026-08-12** ile 200'den çevrildi. **Hizalama değil KARAR**: kanonik burada 202 demiyor |
+| `../baseline-parse` | **202** | Kanonik **ucu bile** adlandırmıyor (doc 06 §7 tek baseline yüzeyi; MTR §10.2 yalnız `POST /package-revisions/{id}/baseline-assets`). Upload(201)/parse ayrımı sevk edilmiş bir ayrıştırma → hizalanacak bir şey yoktu → **PO KARARI 2026-08-12** ile 200'den çevrildi |
+| `POST /library/{entity_id}/validation-runs` | **201** | Sevk edilmiş; kanonik status vermiyor. `../validate` ile **aynı** run'ı sarar. **DÜRÜST SINIR:** PO'nun 2026-08-12 kararı yalnız `../validate` + `../baseline-parse`'ı kapsadı; bu sarmalayıcı **201'de KALDI**, yani iki sarmalayıcı hâlâ iki farklı status döndürüyor. Bu ayrışma **KAPANMADI**, kayda geçirildi — kapatmak yeni bir PO kararı ister |
 | `POST /mainboard-compositions/{id}/backtest-runs` | **202** | doc 15 §10 *"201/202"* |
 | `POST /trash-entries/{id}/purge` | **202** | doc 20 §7/§9.2 *"202 job reference"* |
 | `../retries` · `market-datasets/../analysis` · `research-datasets/../analysis` · `trade-logs/imports` · `trading-signals/imports` · `package-imports` | **202** | sevk edilmiş; kanonik status vermiyor |
@@ -487,6 +503,13 @@ admission ucunu kırmızıya çevirir** (negatifi kanıtlı).
 > döner ama `enqueue_job` çağırmaz — etkiyi worker sonradan uygular. Yani sevk edilmiş
 > desen "**etki yanıttan sonra iniyorsa 202**"tır. Bu bir **OLGU**, kanonik bir kural
 > DEĞİL — kanonik boşlukta ondan bir wire contract türetme.
+>
+> **ADIM 47 tam olarak bunu yapmadı.** `../validate` ve `../baseline-parse` 202'ye
+> **PO'nun 2026-08-12 kararıyla** çevrildi; otorite karardır, sevk edilmiş desen değil.
+> Ayrım pratikte önemlidir: ileride kanonik bir sayfa bu iki uç için bir kod adlandırırsa
+> **kanonik kazanır ve karar yeniden açılır**; bir "hepsi 202 zaten" gözlemi ise onu
+> yeniden açmaz. Tabloda ALIGNED (kanonik kodu adlandırdı) ile PO (kanonik sessiz, insan
+> seçti) etiketlerini **birleştirme** — birleştiren okuyucu bir kararı atıf sanır.
 
 ## library.py · sharing.py · package_import.py
 

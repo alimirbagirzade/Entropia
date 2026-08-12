@@ -7311,3 +7311,114 @@ Mutasyon kanıtından sonra `git checkout -- <dosya>` ile mutantları geri alır
 dosyalardaki commit edilmemiş düzeltmeler de silindi**. Fark, sembol `grep -c`'siyle
 yakalandı ve iş yeniden uygulandı. **Kural: mutasyon denemesinden önce commit et**, ya da
 mutantı `git stash` ile ayır — `checkout --` staged olmayan her şeyi götürür.
+
+---
+
+## ADIM 47 — RC §6.7'nin iki PO kararı uygulandı (§6.7.9 + §6.7.5)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice hiçbir kalemi
+READY'ye çevirmedi; ürün kararlarını **uyguladı ve gerekçeleriyle kayda geçirdi**.
+
+### (A) §6.7.9 / P8-B2 — `../validate` + `../baseline-parse` 200 → **202** (PO, 2026-08-12)
+
+**Önce yeniden ölçüldü, ADIM 41'in ölçümüne güvenilmedi.** İki komut
+(`commands/create_package.py::start_package_validation_run`,
+`::start_baseline_parse`) gerçekten `_enqueue_create_package_job` → `enqueue_job`
+çağırıyor ve iş bitmeden dönüyor; route'lar dönüşte `dispatch_create_package_job`
+tetikliyor. **Senkron olsalardı bu slice DURUP raporlayacaktı** — 202 yanlış olurdu.
+
+**Bu bir ADJUDICATION'dır, atıf değil.** Kanonik bu iki uç için hâlâ status **vermiyor**
+(`baseline-parse` için **ucu bile adlandırmıyor**). ADIM 41 tam da bu yüzden 200'de
+bırakmıştı; otorite şimdi **PO'nun 2026-08-12 kararıdır**, "repo zaten 202 döndürüyor"
+gözlemi değil. Gerekçe: 200, bu yanıtların **taşımadığı** tamamlanmış bir sonucu reklam
+ediyordu (`checks: []`, `parser_version: ""`, `parse_report: {}` — hepsi worker'ı bekleyen
+yer tutucu). Kanonik ileride bir kod adlandırırsa **kanonik kazanır ve karar yeniden açılır.**
+
+**Gövde de tiplendi (O-30 dersi, ADIM 41 şablonu — yeni desen icat edilmedi).**
+`routes/create_package.py::ValidationRunAcceptedResponse` (8 alan: `request_id`,
+`validation_run_id`, `attempt_no`, `status`, `state`, `checks`, `job_id`,
+`request_version`) ve `::BaselineParseAcceptedResponse` (8 alan: `request_id`,
+`baseline_asset_id`, `attempt_no`, `parse_status`, `parser_version`, `parse_report`,
+`job_id`, `request_version`). Bare `dict[str, Any]` drift guard'ı yeşil tutarken sözleşmeyi
+şemadan gizliyordu. `docs/openapi.json` tazelendi (**106 satır +, 10 −**; iki operation
+`200 → 202`, iki component eklendi — path/operation **sayısı** değişmedi).
+
+**Üç bağımlılık ölçüldü, tahmin edilmedi:**
+- **Frontend — DEĞİŞMEDİ, değişmesi gerekmedi.** `lib/apiClient.ts` yalnız **204**'ü ayırır,
+  gerisinde `response.ok` kullanır → 200↔202 istemciye **yapısal olarak görünmez**;
+  `lib/createPackage.ts` hiçbir status'e assert etmez.
+- **Idempotency-Key — backfill GEREKMEDİ.** `run_idempotent` yalnız **gövdeyi** saklar;
+  status route dekoratöründe yaşar ve **gövde anahtarları birebir aynı kaldı**. O-30'un
+  "eski zarf katı şema altında 500'e döner" tuzağı burada **oluşamaz**.
+- **OCC / route yolu / react-query key'leri / `ENGINE_VERSION`** — hiçbiri değişmedi.
+
+**Pin:** `tests/contract/test_p8b2_admission_status.py` — `_EXPECTED` iki satırı
+`(202, "PO 2026-08-12 — canonical silent")`; etiket **ALIGNED ile birleştirilmedi** (birleştiren
+okuyucu bir kararı atıf sanar). `test_validate_and_baseline_parse_are_202_by_product_owner_decision`
+kararı **adıyla** pinler; `test_every_202_admission_body_is_published_in_the_schema` artık
+**dört** gövdeyi doğrular. Türetilmiş admission kümesi ve on üç ucun status pini dokunulmadı.
+
+### (B) §6.7.5 / P10-B2 — kelepçe KALIR, 422'ye çevrilmez (PO, 2026-08-12)
+
+**Kod davranışı DEĞİŞMEDİ.** Kapatılan şey davranış değil, **farkın gerekçesinin yazılı
+olmamasıydı** — yazılmadığı için rapor onu bir "tutarsızlık" olarak yeniden raporlamıştı.
+Gerekçe artık üç yerde: `apps/api/pagination.py` modül docstring'i ·
+`docs/CODEMAPS/BACKEND_ROUTES.md` §SAYFALAMA SINIRI · RC §6.7.5.
+1. **Davranış artık SESSİZ DEĞİL** — asıl kusur istemcinin sınırı öğrenememesiydi;
+   `x-clamp-default`/`x-clamp-maximum` onu kapattı.
+2. **422 üretilmiş istemcileri KIRARDI** — bugün 200 dönen istek reddedilmeye başlardı.
+
+**19 ENFORCING / 9 CLAMPING ayrımı bilinçlidir**; üç farklı default (20 · 25 · 50, tavan
+üçünde de 100) da bilinçlidir — her biri kendi sorgu katmanının **uyguladığı** sabit. Tek
+ortak declarator `apps/api/pagination.py::clamped_limit_query`.
+
+**İki invariant zaten ADIM 37'de pinlenmişti** (bu slice onları **keşfetti, yeniden
+yazmadı** — kopya test eklemek yanlış olurdu): kelepçeli parametre `x-clamp-maximum`
+**yayımlar** (`test_the_two_families_partition_every_limit_parameter` +
+`test_published_bounds_equal_the_enforced_bounds`) ve JSON Schema `maximum`
+**yayımlamaz** (`test_a_clamping_parameter_never_advertises_rejection`). Bu slice
+docstring'leri karar diliyle yeniden yazdı ve
+`test_publishing_the_ceiling_did_not_change_the_over_limit_behaviour` →
+`test_the_over_limit_behaviour_is_the_decided_clamp` olarak **kararı adıyla** pinledi.
+
+### §6.7'nin durumu — SAYILDI, kickoff'un iddiası DÜZELTİLDİ
+
+Kickoff *"bununla §6.7'nin on iki kaleminin tamamı kapanır (P11-1 hariç)"* diyordu.
+**Yanlıştı** — ADIM 42'nin dersi (bayat değil, **anlamsız** sayı) burada tekrarlandı:
+iki farklı eksen tek sayıya katlanmıştı.
+- **§6.7.N alt bölümleri: 12 tane, 11'i KAPALI.** Kapanmayan **§6.7.10 / P1-Gate3**'tür ve
+  kendi başlığı zaten *"KAPANMADI"* der. **P11-1'in bir §6.7.N alt bölümü hiç olmadı.**
+- **§6.7 tablosu: 24 satır, 14 KAPALI, 10 AÇIK** → P4-3 · P10-B6 · P11-1 · P11-6b ·
+  P11-3b · P8-B3b · P1-Gate3 · P10-B3 · P10-B4 · P10-B5. Yalnız **biri** (P11-1) repo
+  ayarıdır; gerisi ölçülmüş ve düzeltilmemiş teknik kalemlerdir.
+
+Yani ADIM 47 **iki** kalem kapattı, §6.7'yi **bitirmedi**.
+
+### Doğrulama
+
+`ruff check` · `ruff format --check` · `mypy src` (**398 dosya**) temiz.
+Hedef paketler `--no-cov` ile: `test_p8b2_admission_status.py` +
+`test_pagination_limit_contract.py` + `test_openapi_contract.py` +
+`test_typed_contract_openapi.py` + `test_create_package_contract.py` → **hepsi geçti**.
+`generate_repository_facts.py --check` → **exit 0**.
+Migration **yok**, `ENGINE_VERSION` **değişmedi**, OCC/Idempotency davranışı **değişmedi**.
+
+### Dürüst sınırlar
+
+- **DB'siz ortamda tam suite KOŞULAMADI.** Bu remote container'da Postgres yok
+  (`pg_isready :5432` → no response, docker daemon kapalı) → `tests/integration`,
+  `tests/acceptance`, `tests/deterministic` ve DB'ye bağlı birkaç contract testi
+  **yerelde koşmadı**; **otorite CI'dır.** Tek yerel hata
+  (`test_auth_mode_login_gate.py::test_session_mode_login_reaches_the_credential_check`,
+  `ConnectionRefusedError :5432`) **temiz ağaçta da birebir üretildi** → ortamsal, bu
+  diffle ilgisiz. Coverage kapısı da bu yüzden yerelde doğrulanmadı.
+- **Memory checkpoint YAZILAMADI.** Bu oturumda `ecc` ve `claude-mem` MCP sunucuları
+  **bağlı değil** (araç listesinde yoklar) → kapanış ritüelinin 4. maddesi **eksiktir**,
+  atlanmadı ama yapılamadı. Bir sonraki oturumda yazılmalı.
+- **`POST /library/{id}/validation-runs` 201'de KALDI.** PO'nun kararı yalnız iki
+  Create-Package ucunu kapsadı → aynı validation run'ı saran iki uç hâlâ **iki farklı
+  status** döndürüyor. Bu ayrışma **KAPANMADI**, kayda geçirildi; kapatmak yeni bir PO
+  kararı ister.
+- **A-08 / #514'e DOKUNULMADI** — defter hâlâ boş (0/4), blocker sayısı **1**, izleme
+  issue'su kapalı. Hiçbir belge A-08'i `Complete`/`PASS` göstermez.
+- **P10-B6, P11-1, P8-B3b, P4-3, P1-Gate3, P10-B3/B4/B5 açık** — bu slice'ın kapsamı dışı.

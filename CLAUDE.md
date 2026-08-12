@@ -189,9 +189,22 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `c931063`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `6da8a95`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 46 (RC §6.6, iki KOD kalemi): #617 `per_item` 1 → 0, #618 `per_item`
+> **Son dalga — ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
+> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** (A) `../validate` +
+> `../baseline-parse` **200 → 202** + tipli gövde (`ValidationRunAcceptedResponse`,
+> `BaselineParseAcceptedResponse`); **otorite PO KARARIDIR, kanonik hâlâ sessiz** — "repo
+> zaten 202 döndürüyor" gerekçe DEĞİL. Frontend (`apiClient` yalnız 204'ü ayırır) ve
+> Idempotency (gövde aynı) **etkilenmedi**. (B) 9 kelepçeli `limit` **200 KALIR**, 422'ye
+> çevrilmez — kod değişmedi, kapanan şey **gerekçenin yazılı olmaması**ydı; 19 ENFORCING /
+> 9 CLAMPING ayrımı **bilinçlidir**. **§6.7 BİTMEDİ (kickoff'un "on iki kalem" iddiası
+> yanlıştı, SAYILDI):** §6.7.N alt bölümleri **12'de 11 kapalı** (§6.7.10/P1-Gate3 açık),
+> §6.7 tablosu **24 satırda 10 AÇIK** (P4-3 · P10-B6 · P11-1 · P11-6b · P11-3b · P8-B3b ·
+> P1-Gate3 · P10-B3/B4/B5). **`/library/{id}/validation-runs` 201'de KALDI** — karar onu
+> kapsamadı, ayrışma açık. **Bu oturumda ecc/claude-mem BAĞLI DEĞİLDİ → memory checkpoint
+> YAZILAMADI.** `PROJECT_HISTORY.md` §ADIM 47 · `docs/ADIM47_LANDED_KICKOFF.md` · RC §6.7.5 + §6.7.9.
+> Öncesinde ADIM 46 (RC §6.6, iki KOD kalemi): #617 `per_item` 1 → 0, #618 `per_item`
 > 2 → 0. BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** `query_budgets.json`
 > iki satırda da `per_item: 0` — **ratchet, tavanı yükseltme**; N+1 geri gelirse slope
 > assertion'ı kırar. **`_prefetch`'in batch SIRASI taşıyıcıdır** (`embedded_revision_id`
@@ -199,6 +212,7 @@ Before stopping a working session, produce **ALL** of the following:
 > registry'den SONRA). Yeni okuma yüzeyinde döngü içine `session.get` koyma; batch
 > karşılığını yaz. **#617/#618 issue durumu insan kararıdır.**
 > `PROJECT_HISTORY.md` §ADIM 46 · `docs/ADIM46_LANDED_KICKOFF.md` · RC §6.6.
+>
 > Öncesinde ADIM 45 (RC blocker 2 KAPANDI): blocker sayısı 2 → 1, GERİYE YALNIZ A-08
 > KALDI, verdict BLOCKED KALIR. `flows` artık `e2e.yml::acceptance-flows` olarak
 > **bloklayıcı** bir CI kapısı ve **gerçekten koştu** (job `94097720164` → **67 passed /

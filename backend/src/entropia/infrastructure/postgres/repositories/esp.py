@@ -9,6 +9,7 @@ layer validates legality (state machine) and authorization (policy) first.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -119,6 +120,25 @@ async def get_registry_by_key(
         EmbeddedResolverRegistry.canonical_key == canonical_key
     )
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def get_registry_by_keys(
+    session: AsyncSession, canonical_keys: Sequence[str]
+) -> dict[str, EmbeddedResolverRegistry]:
+    """Resolve many registry entries in ONE query, keyed by ``canonical_key`` (#618).
+
+    The batch counterpart of :func:`get_registry_by_key` for a caller that re-validates
+    a whole pin SET at once, mirroring ``packages.get_revisions``: an empty input
+    short-circuits without a round trip, duplicate keys collapse, and a key with no row
+    is ABSENT from the map — the same ``None`` the per-key reader returns, so the
+    caller's fail-closed branch stays byte-identical. ``canonical_key`` is UNIQUE, so
+    keying the map by it cannot silently drop an entry. Never a per-ref N+1.
+    """
+    keys = list(dict.fromkeys(canonical_keys))
+    if not keys:
+        return {}
+    stmt = select(EmbeddedResolverRegistry).where(EmbeddedResolverRegistry.canonical_key.in_(keys))
+    return {row.canonical_key: row for row in (await session.execute(stmt)).scalars().all()}
 
 
 async def get_trusted_active_by_entity(

@@ -404,15 +404,18 @@ async def _resolve_market_data_issues(
     revisions = await market_repo.get_revisions(
         session, [_market_pin(item) for item in items if _is_strategy(item)]
     )
+    # #617: the second leg, batched the same way. Built AFTER the revision map because a
+    # Root is only reachable through the revision that pins it. A Root that is absent or
+    # is not a market dataset is absent from this map exactly as ``get_dataset_root``
+    # returned ``None`` for it — the NOT_APPROVED blocker below is unchanged.
+    roots = await market_repo.get_dataset_roots(
+        session, [revision.entity_id for revision in revisions.values()]
+    )
     for item in items:
         if not item.available or item.kind != MainboardItemKind.STRATEGY:
             continue
         revision = revisions.get(_market_pin(item))
-        root = (
-            await market_repo.get_dataset_root(session, revision.entity_id)
-            if revision is not None
-            else None
-        )
+        root = roots.get(revision.entity_id) if revision is not None else None
         if (
             revision is not None
             and revision.revision_state == MarketRevisionState.APPROVED

@@ -10,9 +10,11 @@
 > `entropia_v18_remediation_status.md` A-08 satırı ve `v18_final_acceptance.md` §6
 > AÇIK kalır; bu belgenin varlığı hiçbir satırı Complete yapmaz.
 >
-> **Takip issue'su GitHub #514 KAPALI (2026-08-07T03:52:03Z, `completed`) — denetim
-> yine de koşulmadı.** Kapatma, aşağıdaki reçetenin tek satırını bile karşılamaz.
-> Ayrışmanın kanonik kaydı ve açık duran iki insan çözüm yolu:
+> **Takip issue'su GitHub #514 yeniden AÇIK** (`2026-08-12T11:08:58Z`, `reopened`;
+> öncesinde `2026-08-07T03:52:03Z`'de `completed` ile kapatılmıştı). **Denetim
+> başladı ama bitmedi** — SR-2'nin ilk oturumu 2026-08-12'de koştu, SR-1 hiç
+> başlamadı. Ne kapatma ne de yeniden açma aşağıdaki reçetenin tek satırını
+> karşılar; kapı §çıkış kriterleridir. Ayrışmanın kanonik kaydı ve nasıl çözüldüğü:
 > [`docs/audit/a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
 > §STATUS ▸ *Tracking-issue state*.
 
@@ -37,7 +39,7 @@ görevi tamamlayabiliyor mu?** Bunun otomatik karşılığı yok, çünkü:
 
 | Rol | Sorumluluk | Not |
 |---|---|---|
-| **Denetimi yapan** | Ekran okuyucuyu düzenli kullanan bir denetçi (tercihen görme engelli kullanıcı ya da sertifikalı a11y denetçisi) | **ATANMADI.** Atama ve kanıt takibi GitHub #514'e bağlıydı; **#514 2026-08-07'de kapatıldı**, dolayısıyla hâlihazırda hiçbir açık kayıt bu atamayı izlemiyor. |
+| **Denetimi yapan** | Ekran okuyucuyu düzenli kullanan bir denetçi (tercihen görme engelli kullanıcı ya da sertifikalı a11y denetçisi) | **HÂLÂ ATANMADI.** SR-2'nin 1. oturumunu ürün sahibi kendisi koştu (`neither` — ekran okuyucuyu düzenli kullanmıyor); bu, oturumun kaydettiği hücreler için kanıttır ama **rolü doldurmaz**. Atama takibi GitHub #514'te açık (yeniden açıldı `2026-08-12`). |
 | **Ortam** | Seeded Compose stack (E2E ile aynı fixture: `SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1`), Admin oturumu | Aynı fixture, aksi halde boş sayfalar denetimi eksik gösterir |
 | **Bulguların kaydı** | Her bulgu → `v18_visual_deviations.md` biçiminde FIX / PO-APPROVE statüsü | Bu belgeye değil |
 

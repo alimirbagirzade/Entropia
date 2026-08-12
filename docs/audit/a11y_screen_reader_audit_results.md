@@ -28,43 +28,52 @@
 > empty. A `—` is not a quiet `PASS`, and the completion counters are
 > deliberately not rounded up.
 >
-> **The tracking issue is CLOSED while this worksheet is 2/184 filled.** Read the
-> divergence block below before citing **GitHub #514** as tracking anything.
-> `#514` carries the `human-only` label; an agent or automated scan must not
-> close it — nor re-open it.
+> **The tracking issue is OPEN again.** A human re-opened **GitHub #514** on
+> `2026-08-12T11:08:58Z` in order to run this audit, which is what resolved the
+> closure/evidence divergence recorded below — read that block before citing the
+> issue's history. `#514` carries the `human-only` label; an agent or automated
+> scan must not close it — nor re-open it. It stays open until §5's four exit
+> criteria are `☑`, and this worksheet is at **2 / 184**.
 >
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.
 
-### Tracking-issue state — closure/evidence divergence (recorded 2026-08-07)
+### Tracking-issue state — closure/evidence divergence (recorded 2026-08-07, resolved 2026-08-12)
 
 This block is the **canonical record** of the divergence. Every other document
-points here instead of restating it.
+points here instead of restating it. **It is kept after the resolution**: the
+issue was closed without evidence twice, and that pattern is a finding in its own
+right, not something a later re-open erases.
 
 | Fact | Value | How to re-derive |
 |---|---|---|
-| GitHub **#514** state | **CLOSED** — `2026-08-07T03:52:03Z`, `state_reason: completed` | `gh issue view 514 --json state,closedAt,stateReason` |
+| GitHub **#514** state | **OPEN** — re-opened `2026-08-12T11:08:58Z` by the owner, `state_reason: reopened`; the prior closure was `2026-08-07T03:52:03Z` with `state_reason: completed` | `gh issue view 514 --json state,closedAt,stateReason` |
 | Issue label | `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"* | `gh issue view 514 --json labels` |
 | Audit performed? | **STARTED, NOT DONE** — SR-2 opened 2026-08-12; **2 / 184** Section A cells, **0 / 10** flows; SR-1 never started | §1, §2 below |
 | Exit criteria met? | **0 / 4** — all four still `☐` | §5 below |
 | Findings committed? | **NO** — the register holds only its placeholder row | §3 below |
 
-**A closed issue is not evidence of a completed audit.** These facts are in
-conflict, and this file records the conflict rather than resolving it. Both
-readings below stay open: choosing between them is a **human** decision an agent
-may neither make nor enact, because each one either changes the issue's state or
-adds a signature.
+**A closed issue is not evidence of a completed audit.** From 2026-08-07 to
+2026-08-12 this file recorded the conflict rather than resolving it, because
+choosing between the two readings below was a **human** decision an agent could
+neither make nor enact — each one either changes the issue's state or adds a
+signature. **On 2026-08-12 the owner enacted reading (B)** and re-opened the
+issue, stating that the audit was the remaining human-only release gate. Reading
+(A) was therefore never taken: **no signed permanent deviation for A-08 exists**,
+and none may be written on an agent's initiative.
 
 | Reading | What it would mean | What it requires — human action |
 |---|---|---|
 | **(A) Deliberate acceptance** | The product owner knowingly accepted shipping without the audit | A **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — recorded in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). **No signer has been supplied, so no such record exists**, and none may be written on an agent's initiative. |
-| **(B) Closed in error** | The tracking issue was closed by mistake | A human **re-opens #514**. That would make it the **second** evidence-free closure to be reverted — the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
+| **(B) Closed in error** — **ENACTED 2026-08-12** | The tracking issue was closed by mistake | A human **re-opens #514**. Done: the owner re-opened it at `2026-08-12T11:08:58Z`. This is the **second** evidence-free closure to be reverted — the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
 
 Neither reading lets A-08 be reported as done. Under **(A)** what is accepted is
-the *absence* of the audit, not a result; under **(B)** the audit is simply still
-outstanding. The recurrence is itself the finding: **#514 has now been closed
-twice without a single committed result**, which is why §5's exit criteria — not
-the issue's state — are the gate.
+the *absence* of the audit, not a result; under **(B)** — the one taken — the
+audit is simply still outstanding, and the session recorded in §1 is the first
+work against it. The recurrence is itself the finding: **#514 was closed twice
+without a single committed result**, which is why §5's exit criteria — not the
+issue's state — are the gate. That cuts both ways: the issue being open again is
+no more a result than its being closed was.
 
 ---
 
@@ -369,11 +378,12 @@ flows. After that, the entire SR-1 combination.
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.
 
-**Closing the tracking issue satisfies none of the four.** GitHub #514 was closed
-on `2026-08-07T03:52:03Z` with this table still at `0 / 4`; the closure changed
-the issue's state, not this file's contents, and it added no auditor, no version
-string and no finding. The gate is this table. See the divergence block in the
-STATUS banner above.
+**The tracking issue's state satisfies none of the four — in either direction.**
+GitHub #514 was closed on `2026-08-07T03:52:03Z` with this table still at `0 / 4`;
+the closure changed the issue's state, not this file's contents, and it added no
+auditor, no version string and no finding. Re-opening it on `2026-08-12T11:08:58Z`
+added none of those things either. The gate is this table. See the divergence
+block in the STATUS banner above.
 
 ---
 

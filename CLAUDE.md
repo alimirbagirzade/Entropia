@@ -305,8 +305,9 @@ Before stopping a working session, produce **ALL** of the following:
 > uzlaştırması, #631), ADIM 28 (#628/#630), ADIM 27
 > (#626/#627), ADIM 26 (#624), ADIM 25 (#622) — **ADIM 23/24 artık `PROJECT_HISTORY.md`'de
 > KAYITLI** (borç kapandı).
-> **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
-> izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
+> **Açık sınırlar:** **A-08 denetimi BAŞLADI ama BİTMEDİ** (SR-2'nin ilk oturumu 2026-08-12;
+> **2/184** hücre, **0/10** akış, SR-1 hiç başlamadı → dört çıkış kriteri de ☐) ve
+> izleme issue'su #514 **2026-08-12'de yeniden AÇILDI** — hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
 > K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
@@ -380,18 +381,20 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **hâlâ yapılmadı**.
-  ADIM 28 (#628) **iskeleyi**, ADIM 44 **koşulabilirliği** kurdu — `scripts/a11y-audit-stack.sh`
-  (güncel main'de **9/9 doğrulandı**) + `docs/implementation/a11y_screen_reader_audit_runbook.md`
-  + `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
-  Takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmış, 2026-08-03'te yeniden açılmış,
-  2026-08-07'de yine kanıtsız kapatılmıştır**; kapatma yetkisi insandadır, agent kapatamaz.
-  Kapalı issue ile boş defter arasındaki ayrışma **sürüyor**; ADIM 29 onu **çözmedi, KAYDETTİ**
-  — kanonik blok `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue
-  state*, diğer tüm belgeler oraya işaret eder. Açık duran iki çözüm yolu da **insan işidir**:
-  (A) imzalı kalıcı sapma (D-10 biçimi: adı verilmiş imzalayan + ISO tarih + kapsam) —
-  **imzalayan verilmediği için böyle bir kayıt YOK**; (B) #514'ün insan eliyle yeniden
-  açılması. Hiçbirini agent yapamaz.
+- **Açık iş (dürüst sınır):** ekran okuyucu denetimi **BAŞLADI, BİTMEDİ**. ADIM 28 (#628)
+  **iskeleyi**, ADIM 44 **koşulabilirliği** kurdu; **2026-08-12'de SR-2 (VoiceOver/Safari)
+  ilk oturumu koştu** — defter artık boş değil ama **184 Section A hücresinin 2'si** dolu,
+  **10 akışın 0'ı**, **SR-1 (NVDA/Firefox) hiç başlamadı** → dört çıkış kriteri de ☐ ve
+  hiçbir belge A-08'i
+  `Complete`/`PASS` gösteremez. Oturumu **ürün sahibi kendisi** koştu
+  (`neither`); denetçi rolü **hâlâ atanmadı**.
+  Takip **GitHub #514 ŞU AN AÇIK** — `2026-08-12T11:08:58Z`'de insan eliyle yeniden açıldı
+  (`reopened`), öncesinde 2026-07-30 ve 2026-08-07'de **iki kez kanıtsız kapatılmıştı**.
+  Yani ADIM 29'un kaydettiği ayrışma **(B) yolu ile ÇÖZÜLDÜ**; (A) — imzalı kalıcı sapma —
+  **hiç yazılmadı ve yazılmamalıdır**. Kanonik blok
+  `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue state*.
+  **Agent bu issue'yu ne kapatabilir ne açabilir** (`human-only` etiketi + issue gövdesi);
+  issue'nun durumu kanıt değildir — kapı §5 çıkış kriterleridir.
   Visual regression ve axe-core ratchet'i CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi
   **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**; WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu
   ölçüt için uyumlu sayılamaz.

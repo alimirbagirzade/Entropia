@@ -89,7 +89,7 @@ jobs:
       - name: Install uv
         # SHA-pinned for the same reason as ci.yml: `astral-sh` is a third party and
         # `@v7` is a mutable tag. Bumped by dependabot's github-actions ecosystem.
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -212,7 +212,7 @@ jobs:
             -d "{\"username\":\"perf_admin\",\"password\":\"${LOADGEN_PASSWORD}\",\"email\":\"perf_admin@perf.entropia.test\",\"display_name\":\"Perf Admin\"}" \
             > /dev/null
 
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: "3.12"
       - name: Install dependencies

@@ -7423,263 +7423,9 @@ Migration **yok**, `ENGINE_VERSION` **değişmedi**, OCC/Idempotency davranış�
   issue'su kapalı. Hiçbir belge A-08'i `Complete`/`PASS` göstermez.
 - **P10-B6, P11-1, P8-B3b, P4-3, P1-Gate3, P10-B3/B4/B5 açık** — bu slice'ın kapsamı dışı.
 
-## ADIM 48 — kabul kriteri borç defteri, sınıf B parti 01 (doc 05 Trade Log backend yüzeyi)
-
-**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice bir blocker
-kalemi değildir; ADIM 42'nin (RC §6.7.10 / P1-Gate3) ürettiği borç defterini **işlemeye
-başlar**. Ürün kodu **DEĞİŞMEDİ** — tek satır bile. Migration yok, `ENGINE_VERSION`
-değişmedi, OCC/Idempotency/route yolları/react-query key'leri değişmedi.
-
-### Parti seçimi ve gerekçesi
-
-Defterdeki **95** açık sınıf-B kriterinin **18'i doc 05 (Trade Log)** altındaydı —
-tek belgedeki en büyük tutarlı küme. Parti bu kümeden **sekiz** kriter aldı; hepsi
-**backend server-truth** ekseninde ve hepsi aynı tanıma uyuyor: *davranış `backend/src`'te
-sevk edilmiş, hiçbir assertion onu adlandırmıyor.*
-
-| ID | Kapanan clause | Kapatan test |
-|---|---|---|
-| `TL-03` | c2 + c3 (boş `display_name` 422; hiçbir revision/pin yazılmaz) | `test_trade_log_config.py::test_blank_display_name_is_a_structural_error` · `test_trade_log_contract.py::test_blank_display_name_rejected_before_db` · `test_trade_log_persistence.py::test_blank_display_name_persists_no_revision_or_item` |
-| `TL-06` | c3 (tırnaklı alan içindeki ayraç) | `test_trade_log_records.py::test_quoted_field_may_contain_the_active_delimiter` |
-| `TL-07` | c4 (rapor SATIR NUMARASINI adlandırır) | `test_trade_log_records.py::test_skipped_row_names_its_source_row_number` |
-| `TL-08` | c3 (non-finite fiyat reddi) | `test_trade_log_records.py::test_non_finite_prices_skip_rows` |
-| `TL-15` | c5 (Pin replay'i çift satır yazmaz) | `test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event` |
-| `TL-17` | c4 (Admin YABANCI Trade Log'u değiştirebilir) | `test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log` |
-| `TL-21` | c2 (Supervisor Trash yüzeylerinde reddedilir) | `test_trash_page.py::test_trash_surfaces_reject_non_admin` (**yeni `supervisor` parametresi**) |
-| `TL-23` | c3 (Trade Log save/import/export Result üretmez) | `test_trade_log_persistence.py::test_trade_log_pipeline_creates_no_backtest_result` |
-
-### Ölçüm — tavanlar DÜŞTÜ, hiçbir şey yükselmedi
-
-`acceptance_semantic_scan.py --ratchet` **383 kriter / 1175 clause** üzerinde:
-**partial 126 → 118**, **sınıf B 95 → 87**. `uncovered` (8), **A** (1), **C** (6) ve
-**D** (32) tavanları **el değmeden** kaldı — bir sınıf-B slice'ı onları hareket
-ettiremez, ettirmemeli. `total_criteria` **383'te sabit** (taban, tavan değil): hiçbir
-kayıt silinmedi, hiçbir kriter yeniden sınıflandırılmadı. Defter (`--write-ledger`)
-yeniden üretildi; diff **tam olarak** bu sekiz satırı düşürüyor.
-
-Kapının hâlâ ısırdığı doğrulandı: tavan elle 86'ya çekildiğinde
-`debt_class.B: 87 measured, ceiling 86 (+1)` ile **exit 1**.
-
-### "İşaretlemek ≠ kapsamak" — negatif kontroller
-
-Bu dalganın kovaladığı hata, kriteri kapsamayan bir teste `covered` demektir. Vakumda
-geçebilecek her assertion **elle negatif kontrolden geçirildi**:
-
-* `TL-15.c5` — replay'den `Idempotency-Key` **çıkarılınca** çağrı
-  `ROW_VERSION_CONFLICT` ile patlıyor. Yani replay'in orijinal sonucu döndürmesini
-  sağlayan şey gerçekten idempotency zarfıdır; test tüketilmiş `expected_row_version`'ı
-  **bilerek** yeniden gönderir.
-* `TL-17.c4` — `ADMIN` yerine akran `USER2` konulunca test `AccessDenied` ile düşüyor.
-  Yani "Admin YAPABİLİR" bir hibe iddiasıdır, "herkes yapabilir" değil. Aynı testte
-  `SUPERVISOR` **reddedilir** (akran, override değil) — kriterin adlandırdığı ama
-  kimsenin assert etmediği rol.
-* `TL-03.c3` — `display_name` geçerliye çevrilince reddin kendisi kayboluyor; yani
-  sayaçları donduran şey boş isimdir, çözülemeyen bir binding değil.
-* `TL-03.c2` (wire) — `details` alan yolu bozulunca 422 gövdesi assertion'ı düşüyor.
-
-`TL-06.c3` ve `TL-08.c3` yapıları gereği ayırt edicidir: ilki tırnaklı alanın
-**sağındaki** sütunları okur (naif `split(",")` burada kayar), ikincisi `Decimal("NaN")`
-ve `Decimal("inf")`'in **hatasız parse ettiği**, yalnız açık `is_finite()` kapısının
-reddettiği literalleri sürer.
-
-### DOKUNULMAYANLAR — ve neden (bu, raporun asıl çıktısı)
-
-* **Sınıf D'ye dokunulmadı.** Kriterin adlandırdığı kod/alan/hata sınıfı yok; test
-  yazmak boşluğu **gizlemek** olurdu. Ürün işi, PO'da kalır.
-* **Sınıf C'ye dokunulmadı** (doğası gereği iddia edilemez, gerekçeli).
-* **Sınıf A (1 kalem, `MB-25`) alınmadı** — bir adjudication ister, test slice'ı değil.
-* **`TL-11.c3` · `TL-12.c3` · `TL-20.c3` bilerek dışarıda bırakıldı.** Üçü de
-  *Trade Log içeren bir kompozisyon üzerinde TAMAMLANMIŞ bir Backtest Run* ister.
-  Manifest bu pini gerçekten taşıyor (`backtest_run_context.py::_external_entry`,
-  `MainboardItemKind.TRADE_LOG` dalı) — yani sınıf B doğru — ama repoda **hiçbir test**
-  bir trade_log'u run kompozisyonuna sokmuyor; o makineyi kurmak partiyi ikiye katlardı.
-  Bir sonraki parti için **en yüksek değerli** üçlü budur (üçü tek harness'ı paylaşır).
-* **`TL-16` alınmadı ve sınıfı ŞÜPHELİ.** `c4` *"409 zarfı sunucunun kanonik güncel
-  durumunu taşır"* diyor; `shared/errors.py::WorkObjectRevisionConflictError` **hiç
-  `details` taşımıyor** ve `commands/trade_log.py` onu **argümansız** raise ediyor. Bu,
-  hiçbir testin kapatamayacağı bir boşluktur — yani **B değil D** görünüyor. Yeniden
-  sınıflandırma **yapılmadı**: B→D geçişi **D tavanını YÜKSELTİRDİ** ve tavan yalnız
-  aşağı iner. Bu bir **bulgudur, karar değil** — PO/insan kapısına bırakıldı.
-* **`TL-01.c4` alınmadı.** Kriter `GET /packages` diyor; sevk edilen katalog
-  `GET /library` (`library_query.list_packages`). Bu bir **ad/yol sapması** (sınıf A
-  ekseni) ve bir test slice'ının tek başına karara bağlayacağı şey değil.
-* **`TL-18`** (expand/collapse yan etkisizliği) saf istemci ifşasıdır; frontend
-  yüzeyi bu partinin dışındaydı.
-
-### Dürüst sınırlar
-
-- **Ürün kusuru bulunmadı.** Sekiz kriterin sekizi de **ilk koşuda geçti**: bunlar
-  davranışın kilitlenmesidir, kusur keşfi değil. Bu yüzden yeni issue açılmadı.
-- **`TL-16`'nın olası yanlış sınıflandırması AÇIK bırakıldı** (yukarıya bakınız) —
-  defter hâlâ onu B sayıyor, bu bilinçlidir.
-- **Kalan borç sınıf bazında: A=1 · B=87 · C=6 · D=32 (açık toplam 126).** Sınıf B'nin
-  doc 05 kalıntısı **10 kriter** (`TL-01 · TL-02 · TL-11 · TL-12 · TL-13 · TL-14 ·
-  TL-16 · TL-20 · TL-22` + `TL-18` uncovered).
-- **A-08 / #514'e DOKUNULMADI** — defter boş (0/4), izleme issue'su kapalı, blocker 1.
-- **`P1-Gate3` KAPANMADI.** 126 kalem açık; bu parti borcun **%6'sını** kapattı.
-- **Memory checkpoint YAZILAMADI (ritüel madde 4) — ve sebebi merge sonrası ÖLÇÜLDÜ.**
-  ADIM 47 ile aynı boşluk, iki oturumdur birikiyordu. İlk iki kayıt *"bir sonraki
-  oturumda yazılmalı"* dedi; ikincisi geldiğinde koşul değişmemişti, çünkü sorun
-  **oturuma özel değil ortama yapısaldır:** bu iş Claude Code on the web (remote
-  container) üzerinde yürüyor ve o ortamda `ecc` / `claude-mem` / `codebase-memory-mcp`
-  **hiç kayıtlı değil** — `/root/.claude.json`'da bu projenin `mcpServers` listesi
-  **boş (`[]`)**, repoda `.mcp.json` **yok**, araç aramasında `ecc` **sıfır eşleşme**
-  veriyor. Bağlı olanlar `github` / `Figma` / `Google_Drive` / `Claude_Code_Remote`;
-  hiçbiri knowledge graph değil. **Yani borç bu ortamdan kapatılamaz** ve aynı ortamda
-  açılan bir sonraki slice de aynı şekilde kaçırır — *"bir dahaki sefere"* demek onu
-  kapatmıyordu.
-  **Yapılan:** checkpoint içeriği **tam metin** hâlde
-  `docs/memory/PENDING_CHECKPOINTS.md`'ye yazıldı (iki ecc entity'si + iki claude-mem
-  observation'ı, ilişkileriyle). Bağlı bir **yerel** oturum onu yeniden türetmeden
-  yapıştırır ve dosyayı siler — belge kendini tüketir. **Kalıcı çözüm insan kararıdır:**
-  ya sunucular remote ortama kaydedilir (`.mcp.json`), ya remote oturumlar ritüelin
-  4. maddesinden resmen muaf tutulur. Üçüncü seçenek yok.
-- **Codemap tazelemesi gerekmedi (ritüel madde 5)** — slice yeni endpoint / tablo /
-  sayfa / job / dramatiq aktörü eklemedi; `backend/src`, `alembic` ve `frontend/src`
-  ağaçlarına **hiç dokunulmadı**, o yüzden `repository_facts.md` girdileri de değişmedi.
-
----
-## ADIM 49 — RC §6.5: K-2 ve K-4 KAPANDI (PO kararı), K-6 ikiye ayrıldı (PR #685)
-
-> **NUMARA NOTU.** Bu slice ADIM 48 olarak yazılmaya başlandı. `#686` (kabul borcu
-> sınıf B) main'e **ADIM 48 adıyla** merge edilince — iki slice paralel yürüdü —
-> repo kuralı uygulandı: **merge edilmiş ad kazanır**, taşınan taraf bu slice oldu.
-> Branch'in commit mesajlarında hâlâ `adim-48` yazar ve **öyle kalacaktır** (yazılmış
-> commit mesajı değiştirilmez); slice'ın adı **ADIM 49**'dur. Çakışma `doc-status`
-> kapısı tarafından yakalandı (iki belge birden `current` iddia etti), gözle değil.
-
-**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok,
-`ENGINE_VERSION` değişmedi, OCC/Idempotency/route yolları/react-query key'leri/
-`app/nav.ts` **değişmedi**. Bu bir presentation-only frontend slice'ı + belge kaydıdır.
-
-### Nasıl başladı — brifing, sonra karar
-
-Oturum kod yazarak değil, **karar brifingi** üreterek başladı: beş gözlemin (K-2..K-6)
-her biri için *ne / kaç rotada / hangi WCAG ölçütü · düzeltmenin ölçülen maliyeti ·
-düzeltmemenin bedeli · öneri*. Brifing `docs/ADIM49_KICKOFF.md` olarak repoya yazıldı
-ve **dört paste-ready prompt** taşıyor (P-1..P-4). PO ardından **P-1'i** seçti:
-K-2 + K-4 FIX. K-3 ve K-6b hâlâ karar bekliyor, K-5 ve K-6a **A-08'e bağımlı**.
-
-### Sevk edilen (K-2)
-
-`app/Layout.tsx` shell'in **ilk çocuğu** olarak `Skip to main content` linki render
-ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. Stil `global.css`
-`.skip-link` / `.skip-link:focus`.
-
-Üç tasarım kararı, gerekçeleriyle:
-
-1. **Büyük negatif offset değil, `clip`.** Odaklanan ekran-dışı bir öğe bazı
-   tarayıcılarda sayfayı yana kaydırır; `clip` + `clip-path: inset(50%)` bunu yapmaz.
-   Öğe **her durumda akış dışıdır** → shell'in flex kolonu ve görsel baseline'lar
-   etkilenmez. **Bu bir iddia olarak yazıldı, sonra ÖLÇÜLDÜ:** görsel kapı
-   (`@visual`, job `94223919309`) **23/23 passed** (4.0 dk) — 23 rotanın hiçbirinde
-   piksel sapması yok ve **tek bir baseline yeniden üretilmedi**. Kapı kırmızıya
-   dönseydi düzeltilecek olan **CSS** olacaktı, baseline değil.
-2. **Tetikleyici `:focus`, `:focus-visible` DEĞİL.** Bu kontrole yalnız klavyeyle
-   ulaşılır ve **K-6a'nın hâlâ açık olduğu heuristiğe bağlanmamalıdır**.
-3. **`main`'e `outline: none` YAZILMADI.** Atlamadan sonra workspace'in etrafında
-   odak halkası boyanır; bu görülebilir bir geri bildirimdir ve onu susturmak K-6'nın
-   şikâyet ettiği desenin ta kendisi olurdu.
-
-**Kayda geçen dürüst sınır:** WCAG **2.4.1 zaten karşılanıyordu** — banner/navigation/
-main landmark'ları ARIA11 tekniğini sağlıyor, axe `bypass` kuralı bu yüzden **hep
-yeşildi**. Yani bu bir **uygunluk** düzeltmesi değil, klavye kullanıcısı için
-**ergonomi** düzeltmesidir. §6.5'in ilk yazımı kalemi "WCAG 2.4.1" diye etiketleyerek
-olduğundan ağır göstermişti; kayıt düzeltildi.
-
-### Sevk edilen (K-4)
-
-`pages/UserManual.tsx` sayfayı artık `<h1 className="page-title">` ile adlandırıyor
-(23 route'ta 1 istisnaydı). `.page-title` **sınıf tabanlı** olduğu için değişiklik
-**yalnız semantik** — görsel diff yok.
-
-**Yan etki gizlenmedi:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu, yani
-taşımadığı bir atlamayı **taşımaya başladı** ve **K-5'in kümesine girdi**.
-
-### Pinler ve bilerek KOYULMAYAN kapı
-
-- **YENİ** `frontend/src/test/skipLink.test.tsx` — K-2'nin **üç parçalı** sözleşmesi:
-  (1) link shell'in ilk öğesi, (2) `href` gerçek bir öğeye çözülüyor, (3) hedef
-  `main` landmark'ı ve odak tutabiliyor. Yalnız (1)'i assert eden bir test hedefin
-  adı değişince yeşil kalırdı. **Negatifi kanıtlandı:** kırık `href` → exit 1;
-  `tabIndex` kalkarsa → exit 1.
-- `specs/17-page-coverage.spec.ts` `/user-manual` `level: 2 → 1` — K-4'ün regresyon
-  pini **burada**, çünkü bu spec sayfanın gerçek projeksiyonunu bekler.
-- **Eksik `<h1>`'i precheck'te BLOCKING yapmak değerlendirildi ve YAPILMADI.** O sonda
-  ilk DOM'u okur ve sayfaların ilk veri render'ıyla **yarışır** (K-5/K-7 sayılarının
-  koşudan koşuya oynamasının sebebi budur) → **çırpınan kapı, kapısızlıktan kötüdür.**
-  Gerekçe spec'in içine yazıldı.
-
-### K-6 İKİYE AYRILDI — birleşik kalem yanıltıcıydı
-
-- **K-6a (halka görünüyor mu, 2.4.7): A-08 bekliyor.** Ek bulgu: **mevcut sondanın
-  çıktısı bu soruya kanıt DEĞİLDİR.** `specs/20-a11y-prechecks.spec.ts` programatik
-  `el.focus()` kullanıyor; tarayıcılar `:focus-visible`'ı programatik odakta
-  eşleştirmez → `before === after` **beklenen bir ölçüm artefaktı**. Halka
-  `global.css`'te `:focus-visible { outline: 2px solid var(--accent) }` olarak
-  **yazılıdır**; §6.5'in *"UA varsayılan halkası boyanıyor olabilir"* tahmini
-  gereksizdi.
-- **K-6b (halkanın kontrastı, 1.4.11): A-08'i BEKLEMEZ, ölçüldü, DÜŞÜYOR.**
-  `#00a9e8` beyaza karşı **2.68 : 1**, `#f5f5f5` üzerinde **2.46 : 1**; ölçüt **3 : 1**.
-  axe bu kuralı **koşmuyor**; **D-10 (45 düğüm) 1.4.3 eksenidir ve bunu KAPSAMAZ**.
-  → PO kararı bekliyor (renk değişimi **veya** imzalı sapma); prompt
-  `docs/ADIM49_KICKOFF.md` §P-3.
-
-### K-5 hakkında ölçülen iki şey — ikisi de "düzelt" demiyor
-
-1. **Maliyet artık sayı:** merdiveni bir basamak kaydırmak **204 başlık / ~40 dosya**
-   (`<h3>` 98/36, `<h4>` 76/23, `<h5>` 28/6, `<h6>` 2/1). Asıl tuzak CSS'te: başlık
-   stilleri **tag-scoped descendant selector**'larla yazılmış (`.card h3`, `.card h4`,
-   `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) → tag değişip
-   selector unutulan her yerde başlık UA varsayılanına düşer.
-2. **K-4'ün fix'i K-5'i büyüttü — ÖLÇÜLDÜ.** CI job `94221023796` (`@a11y`,
-   6 passed, axe ratchet **45/45** değişmedi) satırı birebir bastı:
-   `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`
-   → **K-5 21 / 23 → 22 / 23**; set dışında yalnız `/` kaldı.
-
-**Advisory toplamı 90 → 67, dökümü tam:** skip link (K-2) **23 → 0**, `<h1>` yok
-(K-4) **1 → 0**, heading outline (K-5) **21 → 22**, `contentinfo` (K-3) 23 (aynı),
-`aria-live` (K-7) 21 (aynı), focus indicator (K-6) 1 (aynı). 23+22+21+1 = **67** —
-job'ın kendi özet satırıyla birebir. **Hiçbir sınıf susturulmadı**, iki sınıf
-**kayboldu** çünkü kusur kalktı.
-
-**Ölçümün sınırı, yazılmadan geçilmiyor:** bu **tek ve SOĞUK** bir koşudur. Defterin
-kendi kuralı soğuk koşunun *eksik* raporladığını söyler (ADIM 44: K-5'i 18 gösterdi,
-yerleşmiş değer 21) → bugünkü **22 bir TABANdır**, yerleşmiş değer değil. Üç oynak
-rota (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) bu koşuda **üçü de**
-rapor etti.
-
-### Doğrulama
-
-- Yerel: `npm run lint` / `typecheck` / `build` temiz; **vitest 722 passed / 71 dosya**
-  (`--no-file-parallelism`); coverage kapısı geçti, **line %84.90**.
-- CI: Frontend job ✅.
-- **Yerelde KOŞULAMAYAN:** `@a11y` precheck, `@visual`, `@lighthouse` — bu oturumun
-  host'unda **docker yok**. Ölçüm CI'dan alındı: `@a11y` **6 passed** (advisory 67,
-  ratchet 45/45), `@visual` **23/23 passed**, journey suite **39 passed / 1 skipped**.
-
-### Honest boundary
-
-- **A-08'e DOKUNULMADI.** Defter hâlâ boş (0/4), `#514` hâlâ kapalı. K-2/K-4'ün
-  kapanması A-08'i **ilerletmez**; bu kalemler hiçbir zaman blocker değildi.
-- **K-3 ve K-6b karar bekliyor** — ikisi de A-08'e bağımlı **değil**, ikisi de bu
-  slice'ın kapsamı dışında bırakıldı (PO yalnız P-1'i seçti).
-- **Memory checkpoint** (`ecc` + `claude-mem`): bu oturumda MCP sunucuları **bağlı
-  değil** → ritüelin 4. maddesi **yapılamadı**, atlanmadı.
-- **Codemap tazelenmedi ve tazelenmesi GEREKMİYOR:** slice yeni route / sayfa /
-  `lib/*` / query-key / endpoint / job eklemedi; `FRONTEND_MAP.md` bu eksenlerde
-  haritalanmıştır, shell landmark'larını haritalamaz.
-
 ---
 
-## ADIM 50 — K-6b: odak halkasının kontrastı (WCAG 1.4.11), tek CSS deklarasyonu (#688)
-
-> **NUMARA NOTU.** Bu slice ADIM 48 olarak yazıldı. Aynı gün ÜÇ slice paralel yürüdü ve
-> üçü de kendini ADIM 48 sandı: `#686` **main'e o adla merge edildi ve adı KORUR**;
-> RC §6.5'in K-2 + K-4 slice'ı **ADIM 49** oldu (#685); bu slice **ADIM 50**'dir.
-> Kural: **merge edilmiş ad kazanır.** Commit mesajları yazıldıkları hâlde kalır.
-> Kaydı önce `ADIM48_LANDED_KICKOFF.md`'nin içine yazılmıştı; merge iki slice'ın metnini
-> üst üste yığınca `docs/ADIM50_LANDED_KICKOFF.md`'ye ayrıldı.
+## ADIM 48 — K-6b: odak halkasının kontrastı (WCAG 1.4.11), tek CSS deklarasyonu
 
 **Dalganın tipi:** presentation-only erişilebilirlik düzeltmesi. **Tek ürün kodu değişikliği
 bir deklarasyondur** — `frontend/src/styles/global.css` `:focus-visible` kuralında
@@ -7798,3 +7544,406 @@ etmek) **ürün kararıdır** ve bir hazırlık slice'ının onları verme yetki
   atlanmadı, yapılamadı. **ADIM 47 ile üst üste ikinci oturum** — biriken borç: ADIM 47 +
   ADIM 48. Bir sonraki bağlı oturumda **ikisi birden** yazılmalı.
 - **Codemap tazelenmedi** çünkü gerekmedi: yeni endpoint / tablo / sayfa / job **yok**.
+## ADIM 48 — kabul kriteri borç defteri, sınıf B parti 01 (doc 05 Trade Log backend yüzeyi)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice bir blocker
+kalemi değildir; ADIM 42'nin (RC §6.7.10 / P1-Gate3) ürettiği borç defterini **işlemeye
+başlar**. Ürün kodu **DEĞİŞMEDİ** — tek satır bile. Migration yok, `ENGINE_VERSION`
+değişmedi, OCC/Idempotency/route yolları/react-query key'leri değişmedi.
+
+### Parti seçimi ve gerekçesi
+
+Defterdeki **95** açık sınıf-B kriterinin **18'i doc 05 (Trade Log)** altındaydı —
+tek belgedeki en büyük tutarlı küme. Parti bu kümeden **sekiz** kriter aldı; hepsi
+**backend server-truth** ekseninde ve hepsi aynı tanıma uyuyor: *davranış `backend/src`'te
+sevk edilmiş, hiçbir assertion onu adlandırmıyor.*
+
+| ID | Kapanan clause | Kapatan test |
+|---|---|---|
+| `TL-03` | c2 + c3 (boş `display_name` 422; hiçbir revision/pin yazılmaz) | `test_trade_log_config.py::test_blank_display_name_is_a_structural_error` · `test_trade_log_contract.py::test_blank_display_name_rejected_before_db` · `test_trade_log_persistence.py::test_blank_display_name_persists_no_revision_or_item` |
+| `TL-06` | c3 (tırnaklı alan içindeki ayraç) | `test_trade_log_records.py::test_quoted_field_may_contain_the_active_delimiter` |
+| `TL-07` | c4 (rapor SATIR NUMARASINI adlandırır) | `test_trade_log_records.py::test_skipped_row_names_its_source_row_number` |
+| `TL-08` | c3 (non-finite fiyat reddi) | `test_trade_log_records.py::test_non_finite_prices_skip_rows` |
+| `TL-15` | c5 (Pin replay'i çift satır yazmaz) | `test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event` |
+| `TL-17` | c4 (Admin YABANCI Trade Log'u değiştirebilir) | `test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log` |
+| `TL-21` | c2 (Supervisor Trash yüzeylerinde reddedilir) | `test_trash_page.py::test_trash_surfaces_reject_non_admin` (**yeni `supervisor` parametresi**) |
+| `TL-23` | c3 (Trade Log save/import/export Result üretmez) | `test_trade_log_persistence.py::test_trade_log_pipeline_creates_no_backtest_result` |
+
+### Ölçüm — tavanlar DÜŞTÜ, hiçbir şey yükselmedi
+
+`acceptance_semantic_scan.py --ratchet` **383 kriter / 1175 clause** üzerinde:
+**partial 126 → 118**, **sınıf B 95 → 87**. `uncovered` (8), **A** (1), **C** (6) ve
+**D** (32) tavanları **el değmeden** kaldı — bir sınıf-B slice'ı onları hareket
+ettiremez, ettirmemeli. `total_criteria` **383'te sabit** (taban, tavan değil): hiçbir
+kayıt silinmedi, hiçbir kriter yeniden sınıflandırılmadı. Defter (`--write-ledger`)
+yeniden üretildi; diff **tam olarak** bu sekiz satırı düşürüyor.
+
+Kapının hâlâ ısırdığı doğrulandı: tavan elle 86'ya çekildiğinde
+`debt_class.B: 87 measured, ceiling 86 (+1)` ile **exit 1**.
+
+### "İşaretlemek ≠ kapsamak" — negatif kontroller
+
+Bu dalganın kovaladığı hata, kriteri kapsamayan bir teste `covered` demektir. Vakumda
+geçebilecek her assertion **elle negatif kontrolden geçirildi**:
+
+* `TL-15.c5` — replay'den `Idempotency-Key` **çıkarılınca** çağrı
+  `ROW_VERSION_CONFLICT` ile patlıyor. Yani replay'in orijinal sonucu döndürmesini
+  sağlayan şey gerçekten idempotency zarfıdır; test tüketilmiş `expected_row_version`'ı
+  **bilerek** yeniden gönderir.
+* `TL-17.c4` — `ADMIN` yerine akran `USER2` konulunca test `AccessDenied` ile düşüyor.
+  Yani "Admin YAPABİLİR" bir hibe iddiasıdır, "herkes yapabilir" değil. Aynı testte
+  `SUPERVISOR` **reddedilir** (akran, override değil) — kriterin adlandırdığı ama
+  kimsenin assert etmediği rol.
+* `TL-03.c3` — `display_name` geçerliye çevrilince reddin kendisi kayboluyor; yani
+  sayaçları donduran şey boş isimdir, çözülemeyen bir binding değil.
+* `TL-03.c2` (wire) — `details` alan yolu bozulunca 422 gövdesi assertion'ı düşüyor.
+
+`TL-06.c3` ve `TL-08.c3` yapıları gereği ayırt edicidir: ilki tırnaklı alanın
+**sağındaki** sütunları okur (naif `split(",")` burada kayar), ikincisi `Decimal("NaN")`
+ve `Decimal("inf")`'in **hatasız parse ettiği**, yalnız açık `is_finite()` kapısının
+reddettiği literalleri sürer.
+
+### DOKUNULMAYANLAR — ve neden (bu, raporun asıl çıktısı)
+
+* **Sınıf D'ye dokunulmadı.** Kriterin adlandırdığı kod/alan/hata sınıfı yok; test
+  yazmak boşluğu **gizlemek** olurdu. Ürün işi, PO'da kalır.
+* **Sınıf C'ye dokunulmadı** (doğası gereği iddia edilemez, gerekçeli).
+* **Sınıf A (1 kalem, `MB-25`) alınmadı** — bir adjudication ister, test slice'ı değil.
+* **`TL-11.c3` · `TL-12.c3` · `TL-20.c3` bilerek dışarıda bırakıldı.** Üçü de
+  *Trade Log içeren bir kompozisyon üzerinde TAMAMLANMIŞ bir Backtest Run* ister.
+  Manifest bu pini gerçekten taşıyor (`backtest_run_context.py::_external_entry`,
+  `MainboardItemKind.TRADE_LOG` dalı) — yani sınıf B doğru — ama repoda **hiçbir test**
+  bir trade_log'u run kompozisyonuna sokmuyor; o makineyi kurmak partiyi ikiye katlardı.
+  Bir sonraki parti için **en yüksek değerli** üçlü budur (üçü tek harness'ı paylaşır).
+* **`TL-16` alınmadı ve sınıfı ŞÜPHELİ.** `c4` *"409 zarfı sunucunun kanonik güncel
+  durumunu taşır"* diyor; `shared/errors.py::WorkObjectRevisionConflictError` **hiç
+  `details` taşımıyor** ve `commands/trade_log.py` onu **argümansız** raise ediyor. Bu,
+  hiçbir testin kapatamayacağı bir boşluktur — yani **B değil D** görünüyor. Yeniden
+  sınıflandırma **yapılmadı**: B→D geçişi **D tavanını YÜKSELTİRDİ** ve tavan yalnız
+  aşağı iner. Bu bir **bulgudur, karar değil** — PO/insan kapısına bırakıldı.
+* **`TL-01.c4` alınmadı.** Kriter `GET /packages` diyor; sevk edilen katalog
+  `GET /library` (`library_query.list_packages`). Bu bir **ad/yol sapması** (sınıf A
+  ekseni) ve bir test slice'ının tek başına karara bağlayacağı şey değil.
+* **`TL-18`** (expand/collapse yan etkisizliği) saf istemci ifşasıdır; frontend
+  yüzeyi bu partinin dışındaydı.
+
+### Dürüst sınırlar
+
+- **Ürün kusuru bulunmadı.** Sekiz kriterin sekizi de **ilk koşuda geçti**: bunlar
+  davranışın kilitlenmesidir, kusur keşfi değil. Bu yüzden yeni issue açılmadı.
+- **`TL-16`'nın olası yanlış sınıflandırması AÇIK bırakıldı** (yukarıya bakınız) —
+  defter hâlâ onu B sayıyor, bu bilinçlidir.
+- **Kalan borç sınıf bazında: A=1 · B=87 · C=6 · D=32 (açık toplam 126).** Sınıf B'nin
+  doc 05 kalıntısı **10 kriter** (`TL-01 · TL-02 · TL-11 · TL-12 · TL-13 · TL-14 ·
+  TL-16 · TL-20 · TL-22` + `TL-18` uncovered).
+- **A-08 / #514'e DOKUNULMADI** — defter boş (0/4), izleme issue'su kapalı, blocker 1.
+- **`P1-Gate3` KAPANMADI.** 126 kalem açık; bu parti borcun **%6'sını** kapattı.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4) — ve sebebi merge sonrası ÖLÇÜLDÜ.**
+  ADIM 47 ile aynı boşluk, iki oturumdur birikiyordu. İlk iki kayıt *"bir sonraki
+  oturumda yazılmalı"* dedi; ikincisi geldiğinde koşul değişmemişti, çünkü sorun
+  **oturuma özel değil ortama yapısaldır:** bu iş Claude Code on the web (remote
+  container) üzerinde yürüyor ve o ortamda `ecc` / `claude-mem` / `codebase-memory-mcp`
+  **hiç kayıtlı değil** — `/root/.claude.json`'da bu projenin `mcpServers` listesi
+  **boş (`[]`)**, repoda `.mcp.json` **yok**, araç aramasında `ecc` **sıfır eşleşme**
+  veriyor. Bağlı olanlar `github` / `Figma` / `Google_Drive` / `Claude_Code_Remote`;
+  hiçbiri knowledge graph değil. **Yani borç bu ortamdan kapatılamaz** ve aynı ortamda
+  açılan bir sonraki slice de aynı şekilde kaçırır — *"bir dahaki sefere"* demek onu
+  kapatmıyordu.
+  **Yapılan:** checkpoint içeriği **tam metin** hâlde
+  `docs/memory/PENDING_CHECKPOINTS.md`'ye yazıldı (iki ecc entity'si + iki claude-mem
+  observation'ı, ilişkileriyle). Bağlı bir **yerel** oturum onu yeniden türetmeden
+  yapıştırır ve dosyayı siler — belge kendini tüketir. **Kalıcı çözüm insan kararıdır:**
+  ya sunucular remote ortama kaydedilir (`.mcp.json`), ya remote oturumlar ritüelin
+  4. maddesinden resmen muaf tutulur. Üçüncü seçenek yok.
+- **Codemap tazelemesi gerekmedi (ritüel madde 5)** — slice yeni endpoint / tablo /
+  sayfa / job / dramatiq aktörü eklemedi; `backend/src`, `alembic` ve `frontend/src`
+  ağaçlarına **hiç dokunulmadı**, o yüzden `repository_facts.md` girdileri de değişmedi.
+
+---
+
+## ADIM 49 — P11-1 KAPANDI: main'de required status check ruleset'i (PR #683 + repo ayarı)
+
+**Tarih:** 2026-08-12 · **PR:** #683 (`74bbd70`) · **Repo ayarı:** ruleset `20765617`,
+`2026-08-12T23:14:40+03:00` · **Migration yok** · **`ENGINE_VERSION` değişmedi** ·
+**`backend/src`, `alembic`, `frontend/src` ağaçlarına HİÇ dokunulmadı.**
+
+RC §6.7 tablosunun **repo dışı** tek kalemi kapandı. ADIM 45 `flows`'u CI kapısı
+yapmıştı ama kendi kaydında *"required status check olmadan bu kapı merge'i
+DURDURAMAZ"* diyordu; bu slice o cümleyi geçersiz kıldı — 16 kapının hepsi için.
+
+### Ölçülen başlangıç durumu (kanıt, varsayım değil)
+
+| Sorgu | Sonuç |
+|---|---|
+| `GET /branches/main` → `.protection` | `enabled: false`, `enforcement_level: "off"`, `contexts: []` |
+| `GET /rulesets` | `[]` |
+| `GET /rules/branches/main` | `[]` |
+| `GET /branches/main/protection` | **`403`** — oturum token'ı admin değil |
+
+`403` yüzünden "beklenen 404" alınamadı; ama `branches/main` gövdesi aynı gerçeği
+doğrudan söylüyor. **Token'ın körlüğü sonradan çürütüldü:** probe ruleset'i canlıyken
+aynı token onu `count: 1` olarak gördü → önceki `[]` **gerçek yokluktu**, yetki
+artefaktı değil. Doğrulama yöntemi bu deneyle **kalibre edildi**.
+
+### Sınıflandırma — 16 ZORUNLU / 1 ayrıldı / 5 gürültü
+
+Kapıların çoğu ayrı bir check **değil**, bir job'ın **adımı**. Bu yüzden required
+liste kapı listesinden kısadır ve şu eşleşme kayda geçer:
+
+- **23-rota görsel regresyon** = `npm run visual`, `E2E — real browser …(F-23)`
+  job'ının **içinde**. Görsel kapının bloklayıcı olması **o satıra** bağlı.
+- **coverage (backend ≥90) · docs-truth · şema paritesi · OpenAPI drift ·
+  acceptance ratchet · pip-audit** = `Backend — lint, type, test` adımları.
+- **frontend coverage · visual baseline platform gate · npm-audit-gate** =
+  `Frontend — lint, typecheck, build, test` adımları.
+
+**Ayrılan (Tier 2, 1 kalem): çıplak `CodeQL`.** Farklı app üretiyor
+(`github-advanced-security` / `57789`; diğer 21'i `github-actions` / `15368`),
+**yalnız PR'da** var (main commit'inde 21, PR head'inde 22 check) ve semantiği
+deterministik kapı değil, **alert triage**. Taramanın koştuğu zaten
+`CodeQL — python` + `CodeQL — javascript-typescript` ile garanti.
+
+**Gürültü (Tier 3, 5 kalem):** nightly/manual job'lar, PR'da `skipped`.
+`Nightly failure notice` ayrıca **iki workflow'dan aynı adla** üretiliyor —
+tek-anlamlı required yapılamaz.
+
+**Dependabot:** ayrılacak gürültü **yok**. `.github/dependabot.yml` var ama
+Dependabot PR'ları **aynı 22 check'i** koşar, kendi job'ını üretmez.
+
+### Lighthouse — insan kararıyla ZORUNLU
+
+İlk taslak Lighthouse'u Tier 2'de tutuyordu (ölçülmüş **98–100 varyansı**; çırpınan
+bir required check insanı kapıya güvenmemeye alıştırır). **Karar tersine çevrildi ve
+kayda geçti** (runbook §2.1). Kaydın taşıdığı asıl bilgi çırpınma anında **ne
+yapılmayacağı**:
+
+- Skor **`LH_REPEATS` geçişin MEDYANI** (varsayılan 3) → gürültünün ilacı **tekrar
+  sayısı**, taban değil.
+- **`armed: false` + boş `floors` → spec uyarı basıp GEÇER** (bootstrap durumu).
+  Required olduktan sonra asıl risk budur: bir PR bu bayrağı çevirirse kapı **yeşil**
+  görünürken hiçbir şey ölçmez. Bu bir düzeltme değil, kapının kaldırılmasıdır.
+- `TARGET_PAGES`'te olup `floors`'ta olmayan rota **FAIL** — tabansız rota delik sayılır.
+- **Düzeltilen bir hata:** ilk taslak Lighthouse tabanının "üç yerde pinli" olduğunu
+  yazmıştı; o **loadgen gecikme bandı** (P10-7), farklı kapı. Lighthouse tabanı **tek
+  dosyada**: `frontend/e2e/lighthouse-baseline.json`, rota+kategori bazında.
+
+### Ne landed
+
+| Dosya | Ne |
+|---|---|
+| `.github/rulesets/main-required-status-checks.json` | `gh api --input` gövdesi. **Elle yazılmadı — ölçülen check-run yanıtından ÜRETİLDİ.** GitHub bu yolu **otomatik OKUMAZ**; dosya ayarın versiyonlanmış kaydı ve istek gövdesidir. |
+| `scripts/required-checks-preflight.sh` | Salt-okuma ön kontrol. Payload'ı GitHub'ın **gerçekten ürettiği** check listesiyle diff'ler; göremediği adı `FATAL` + `exit 1` ile reddeder. |
+| `docs/implementation/required_status_checks_setup.md` | Ölçüm · üç kademeli sınıflandırma · alan alan komut açıklaması · arayüz adımları · uyarılar · geri alma · bakım sırası. |
+
+### Yürürlüğe giren ayar (ölçülen)
+
+`enforcement: active`, `conditions.ref_name.include: ["~DEFAULT_BRANCH"]`
+(dal yeniden adlandırılırsa kural **kendiliğinden** takip etsin diye; `"main"` yazılmadı),
+`bypass_actors: []`, kurallar: `deletion` · `non_fast_forward` · `pull_request`
+(`required_approving_review_count: 0`) · `required_status_checks`
+(`strict_required_status_checks_policy: true`, 16 context, hepsi `integration_id: 15368`).
+
+**`pull_request` kuralı dekoratif değil, taşıyıcıdır:** required status check'ler
+**yalnız PR merge'ini** kapsar — o kural olmasa `git push origin main` on altısını da
+atlardı. `0` onay bilinçli: tek kişilik repoda kendi PR'ını onaylayamazsın, `1` yazmak
+kalıcı kilit demek.
+
+### Doğrulama (canlı ruleset ↔ main'deki payload, programatik)
+
+Tüm kontroller geçti: ruleset sayısı 1 · zarf birebir · **canlı kural tipleri = dala
+ETKİN uygulananlar** (`/rules/branches/main`) · `strict: true` · **16 ad +
+`integration_id` sıra dâhil birebir** · **kilitlenme kontrolü: üretilmemiş ad YOK** ·
+çift üretilen ad required değil · `current_user_can_bypass: "never"`.
+
+GitHub iki varsayılan ekledi — `required_reviewers: []`, `allowed_merge_methods:
+["merge","squash","rebase"]`. **Sapma değil, sunucu normalizasyonu.**
+
+### Kayda değer iki olay
+
+- **Sahte 422.** "422 alıyorum" teşhisi yanlıştı: o koşuda `cd /path/to/Entropia`
+  (belgedeki **yer tutucu**) patlamış, komut ev dizininde koşup dosyayı bulamamış ve
+  **`exit=1`** vermişti. Gerçek payload ilk denemede **`201`**. **Ders: `gh api`'nin
+  exit code'unu ve gövdesini ayrı ayrı oku; "hata veriyor" bir hata SINIFI değildir.**
+- **Probe ruleset'i** (`20765470`, tek `deletion` kuralı) zarfı izole etmek için
+  kuruldu, işi bitince **silindi** — silindiği doğrulandı (envanterde yok).
+
+### Dürüst sınırlar
+
+- **`bypass_actors` bağımsız doğrulanamadı.** GET yanıtı bu alanı salt-okuma
+  token'ına **hiç vermiyor**. Kanıt, POST yanıtındaki `[]` ve onunla tutarlı
+  `current_user_can_bypass: "never"` — agent ölçümü değil.
+- **Ruleset repoda DEĞİL.** Silinirse ya da `Disabled` yapılırsa **hiçbir CI kapısı
+  fark etmez**; tek iz bu kayıttır. Drift'i yakalayacak bir kapı **yazılmadı** (canlı
+  ruleset'i `.github/rulesets/*.json` ile karşılaştıran bir job) — **açık iş**.
+- **A-08 DEĞİŞMEDİ.** Defter boş (0/4), #514 kapalı, blocker sayısı **1**, verdict
+  **BLOCKED**. Buradaki hiçbir check A-08 kanıtı değildir.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4).** `ecc` ve `claude-mem` MCP
+  sunucuları bu oturumda da bağlı değil. **Sebep oturuma özel değil, ortama yapısaldır**
+  (#690 ölçtü: remote container'da bu sunucular kayıtlı değil) — o PR bunu önceden
+  görüp *"aynı ortamda açılan ADIM 49 da aynı şekilde başarısız olur"* demişti ve
+  **öyle oldu**. Borç **ADIM 47 + 48 + 49**, üç oturum. Atlanmadı, **yapılamadı**.
+  İçerik türetilmeyi beklemiyor: **hazır** — `docs/memory/PENDING_CHECKPOINTS.md`
+  (bu slice Entity C + üçüncü observation'ı ekledi). Kalıcı çözüm (remote'a `.mcp.json`
+  ya da ritüel 4'ün remote muafiyeti) **insan kararıdır**.
+- **Codemap tazelemesi gerekmedi (ritüel madde 5)** — yeni endpoint / tablo / sayfa /
+  job / dramatiq aktörü yok; ürün ağaçlarına dokunulmadı.
+- **ADIM 48 numarası İKİ slice tarafından kullanılmış** (K-6b odak halkası **ve**
+  kabul borcu sınıf B parti 01, iki paralel oturum). `ADIM48_LANDED_KICKOFF.md`
+  içinde **iki H1** yan yana duruyor, CLAUDE.md'de iki "Son dalga — ADIM 48" bloğu
+  var. Bu slice **49** alarak çakışmayı büyütmedi; **48'in ayrıştırılması insan
+  kararıdır** (CLAUDE.md'nin kendi kuralı: numaralar yeniden atanmaz, başlık ekiyle
+  ayrılır).
+
+### Bundan sonra kırılacak şeyler (bilerek)
+
+- **main'e doğrudan push kapandı.** Her değişiklik PR'dan geçer.
+- **Her PR 16 yeşil check ister** ve `strict: true` yüzünden dal main ile güncel olmalı.
+  `Backend` ~48 dakika sürüyor (ölçüldü) → **seri merge pahalı**. Bu bilinçli bir bedel;
+  gerekçesi runbook §3'te, tek alanı çeviren komut da orada.
+- **Muafiyet yok, sahibi dâhil** (`current_user_can_bypass: "never"`). Kurtarma yolu
+  bypass aramak değil: ruleset'i `Disabled` yap ya da sil (`20765617`).
+
+### Bakım kuralı (yeni kapı / yeniden adlandırma)
+
+Bir job'ın `name:` alanını değiştirmek **kapıyı sessizce açar**. Sıra: (1) workflow'da
+`name:` değiştir → (2) payload'da **aynı** adı güncelle → (3) PR merge olup yeni ad
+**en az bir kez üretildikten sonra** `scripts/required-checks-preflight.sh <pr>` koş →
+(4) `gh api --method PUT …/rulesets/20765617 --input <payload>`. **Ters sıra kilitler.**
+Yeni bloklayıcı kapı eklerken de aynı sıra: önce merge, sonra required.
+Ön kontrolün *"Produced but NOT required"* bölümü bu adımın hatırlatıcısıdır.
+
+---
+
+## ADIM 50 — RC §6.5: K-2 ve K-4 KAPANDI (PO kararı), K-6 ikiye ayrıldı (PR #685)
+
+> **NUMARA NOTU.** Bu slice ADIM 48 olarak yazıldı, sonra 49, sonunda **ADIM 50** oldu. `#686` (kabul borcu
+> Aynı gün **dört** oturum paralel yürüdü: `#686` ve `#688` main'e **ADIM 48** adıyla,
+> `#691` **ADIM 49** adıyla girdi. Kural: **merge edilmiş ad kazanır, numaralar yeniden
+> atanmaz** → taşınan taraf hep merge edilmemiş olan, yani bu slice oldu (iki kez).
+> Branch'in commit mesajlarında hâlâ `adim-48` yazar ve **öyle kalacaktır** (yazılmış
+> commit mesajı değiştirilmez); slice'ın adı **ADIM 49**'dur. Çakışma `doc-status`
+> kapısı tarafından yakalandı (iki belge birden `current` iddia etti), gözle değil.
+
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok,
+`ENGINE_VERSION` değişmedi, OCC/Idempotency/route yolları/react-query key'leri/
+`app/nav.ts` **değişmedi**. Bu bir presentation-only frontend slice'ı + belge kaydıdır.
+
+### Nasıl başladı — brifing, sonra karar
+
+Oturum kod yazarak değil, **karar brifingi** üreterek başladı: beş gözlemin (K-2..K-6)
+her biri için *ne / kaç rotada / hangi WCAG ölçütü · düzeltmenin ölçülen maliyeti ·
+düzeltmemenin bedeli · öneri*. Brifing `docs/ADIM50_KICKOFF.md` olarak repoya yazıldı
+ve **dört paste-ready prompt** taşıyor (P-1..P-4). PO ardından **P-1'i** seçti:
+K-2 + K-4 FIX. K-3 ve K-6b hâlâ karar bekliyor, K-5 ve K-6a **A-08'e bağımlı**.
+
+### Sevk edilen (K-2)
+
+`app/Layout.tsx` shell'in **ilk çocuğu** olarak `Skip to main content` linki render
+ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. Stil `global.css`
+`.skip-link` / `.skip-link:focus`.
+
+Üç tasarım kararı, gerekçeleriyle:
+
+1. **Büyük negatif offset değil, `clip`.** Odaklanan ekran-dışı bir öğe bazı
+   tarayıcılarda sayfayı yana kaydırır; `clip` + `clip-path: inset(50%)` bunu yapmaz.
+   Öğe **her durumda akış dışıdır** → shell'in flex kolonu ve görsel baseline'lar
+   etkilenmez. **Bu bir iddia olarak yazıldı, sonra ÖLÇÜLDÜ:** görsel kapı
+   (`@visual`, job `94223919309`) **23/23 passed** (4.0 dk) — 23 rotanın hiçbirinde
+   piksel sapması yok ve **tek bir baseline yeniden üretilmedi**. Kapı kırmızıya
+   dönseydi düzeltilecek olan **CSS** olacaktı, baseline değil.
+2. **Tetikleyici `:focus`, `:focus-visible` DEĞİL.** Bu kontrole yalnız klavyeyle
+   ulaşılır ve **K-6a'nın hâlâ açık olduğu heuristiğe bağlanmamalıdır**.
+3. **`main`'e `outline: none` YAZILMADI.** Atlamadan sonra workspace'in etrafında
+   odak halkası boyanır; bu görülebilir bir geri bildirimdir ve onu susturmak K-6'nın
+   şikâyet ettiği desenin ta kendisi olurdu.
+
+**Kayda geçen dürüst sınır:** WCAG **2.4.1 zaten karşılanıyordu** — banner/navigation/
+main landmark'ları ARIA11 tekniğini sağlıyor, axe `bypass` kuralı bu yüzden **hep
+yeşildi**. Yani bu bir **uygunluk** düzeltmesi değil, klavye kullanıcısı için
+**ergonomi** düzeltmesidir. §6.5'in ilk yazımı kalemi "WCAG 2.4.1" diye etiketleyerek
+olduğundan ağır göstermişti; kayıt düzeltildi.
+
+### Sevk edilen (K-4)
+
+`pages/UserManual.tsx` sayfayı artık `<h1 className="page-title">` ile adlandırıyor
+(23 route'ta 1 istisnaydı). `.page-title` **sınıf tabanlı** olduğu için değişiklik
+**yalnız semantik** — görsel diff yok.
+
+**Yan etki gizlenmedi:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu, yani
+taşımadığı bir atlamayı **taşımaya başladı** ve **K-5'in kümesine girdi**.
+
+### Pinler ve bilerek KOYULMAYAN kapı
+
+- **YENİ** `frontend/src/test/skipLink.test.tsx` — K-2'nin **üç parçalı** sözleşmesi:
+  (1) link shell'in ilk öğesi, (2) `href` gerçek bir öğeye çözülüyor, (3) hedef
+  `main` landmark'ı ve odak tutabiliyor. Yalnız (1)'i assert eden bir test hedefin
+  adı değişince yeşil kalırdı. **Negatifi kanıtlandı:** kırık `href` → exit 1;
+  `tabIndex` kalkarsa → exit 1.
+- `specs/17-page-coverage.spec.ts` `/user-manual` `level: 2 → 1` — K-4'ün regresyon
+  pini **burada**, çünkü bu spec sayfanın gerçek projeksiyonunu bekler.
+- **Eksik `<h1>`'i precheck'te BLOCKING yapmak değerlendirildi ve YAPILMADI.** O sonda
+  ilk DOM'u okur ve sayfaların ilk veri render'ıyla **yarışır** (K-5/K-7 sayılarının
+  koşudan koşuya oynamasının sebebi budur) → **çırpınan kapı, kapısızlıktan kötüdür.**
+  Gerekçe spec'in içine yazıldı.
+
+### K-6 İKİYE AYRILDI — birleşik kalem yanıltıcıydı
+
+- **K-6a (halka görünüyor mu, 2.4.7): A-08 bekliyor.** Ek bulgu: **mevcut sondanın
+  çıktısı bu soruya kanıt DEĞİLDİR.** `specs/20-a11y-prechecks.spec.ts` programatik
+  `el.focus()` kullanıyor; tarayıcılar `:focus-visible`'ı programatik odakta
+  eşleştirmez → `before === after` **beklenen bir ölçüm artefaktı**. Halka
+  `global.css`'te `:focus-visible { outline: 2px solid var(--accent) }` olarak
+  **yazılıdır**; §6.5'in *"UA varsayılan halkası boyanıyor olabilir"* tahmini
+  gereksizdi.
+- **K-6b (halkanın kontrastı, 1.4.11): A-08'i BEKLEMEZ, ölçüldü, DÜŞÜYOR.**
+  `#00a9e8` beyaza karşı **2.68 : 1**, `#f5f5f5` üzerinde **2.46 : 1**; ölçüt **3 : 1**.
+  axe bu kuralı **koşmuyor**; **D-10 (45 düğüm) 1.4.3 eksenidir ve bunu KAPSAMAZ**.
+  → PO kararı bekliyor (renk değişimi **veya** imzalı sapma); prompt
+  `docs/ADIM50_KICKOFF.md` §P-3.
+
+### K-5 hakkında ölçülen iki şey — ikisi de "düzelt" demiyor
+
+1. **Maliyet artık sayı:** merdiveni bir basamak kaydırmak **204 başlık / ~40 dosya**
+   (`<h3>` 98/36, `<h4>` 76/23, `<h5>` 28/6, `<h6>` 2/1). Asıl tuzak CSS'te: başlık
+   stilleri **tag-scoped descendant selector**'larla yazılmış (`.card h3`, `.card h4`,
+   `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) → tag değişip
+   selector unutulan her yerde başlık UA varsayılanına düşer.
+2. **K-4'ün fix'i K-5'i büyüttü — ÖLÇÜLDÜ.** CI job `94221023796` (`@a11y`,
+   6 passed, axe ratchet **45/45** değişmedi) satırı birebir bastı:
+   `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`
+   → **K-5 21 / 23 → 22 / 23**; set dışında yalnız `/` kaldı.
+
+**Advisory toplamı 90 → 67, dökümü tam:** skip link (K-2) **23 → 0**, `<h1>` yok
+(K-4) **1 → 0**, heading outline (K-5) **21 → 22**, `contentinfo` (K-3) 23 (aynı),
+`aria-live` (K-7) 21 (aynı), focus indicator (K-6) 1 (aynı). 23+22+21+1 = **67** —
+job'ın kendi özet satırıyla birebir. **Hiçbir sınıf susturulmadı**, iki sınıf
+**kayboldu** çünkü kusur kalktı.
+
+**Ölçümün sınırı, yazılmadan geçilmiyor:** bu **tek ve SOĞUK** bir koşudur. Defterin
+kendi kuralı soğuk koşunun *eksik* raporladığını söyler (ADIM 44: K-5'i 18 gösterdi,
+yerleşmiş değer 21) → bugünkü **22 bir TABANdır**, yerleşmiş değer değil. Üç oynak
+rota (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) bu koşuda **üçü de**
+rapor etti.
+
+### Doğrulama
+
+- Yerel: `npm run lint` / `typecheck` / `build` temiz; **vitest 722 passed / 71 dosya**
+  (`--no-file-parallelism`); coverage kapısı geçti, **line %84.90**.
+- CI: Frontend job ✅.
+- **Yerelde KOŞULAMAYAN:** `@a11y` precheck, `@visual`, `@lighthouse` — bu oturumun
+  host'unda **docker yok**. Ölçüm CI'dan alındı: `@a11y` **6 passed** (advisory 67,
+  ratchet 45/45), `@visual` **23/23 passed**, journey suite **39 passed / 1 skipped**.
+
+### Honest boundary
+
+- **A-08'e DOKUNULMADI.** Defter hâlâ boş (0/4), `#514` hâlâ kapalı. K-2/K-4'ün
+  kapanması A-08'i **ilerletmez**; bu kalemler hiçbir zaman blocker değildi.
+- **K-3 ve K-6b karar bekliyor** — ikisi de A-08'e bağımlı **değil**, ikisi de bu
+  slice'ın kapsamı dışında bırakıldı (PO yalnız P-1'i seçti).
+- **Memory checkpoint** (`ecc` + `claude-mem`): bu oturumda MCP sunucuları **bağlı
+  değil** → ritüelin 4. maddesi **yapılamadı**, atlanmadı.
+- **Codemap tazelenmedi ve tazelenmesi GEREKMİYOR:** slice yeni route / sayfa /
+  `lib/*` / query-key / endpoint / job eklemedi; `FRONTEND_MAP.md` bu eksenlerde
+  haritalanmıştır, shell landmark'larını haritalamaz.
+
+---

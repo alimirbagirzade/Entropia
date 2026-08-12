@@ -189,29 +189,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `1b1c8bb`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `2e75c51`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 50 (K-6b: odak halkası kontrastı, WCAG 1.4.11, #688): TEK CSS deklarasyonu.**
-> `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli
-> **hiçbir** zeminde 3:1'i geçmiyordu (beyaz 2.68:1, `#f5f5f5` 2.46:1, `.dropdown-blue`
-> **1.00:1**), yenisi **her** zeminde geçiyor (beyaz 15.91:1; en kötü zemin `#0092c8`
-> `.menu-blue:hover` **4.50:1**). **axe bunu KOŞMAZ** — yeşil ratchet bu soru için kanıt
-> değildi. **Bu D-10 DEĞİL** (D-10 = 1.4.3 metin ekseni; bu 1.4.11 metin-dışı) ve **v18
-> sapması DEĞİL** (mockup hiçbir odak durumu tarif etmiyor); `--accent` token'ına ve
-> palete DOKUNULMADI. **K-6 defterde İKİYE ayrıldı: K-6b KAPANDI (ölçülü), K-6a AÇIK —
-> yalnız A-08 kapatabilir.** Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED.
-> **`npm run visual` / `npm run a11y` YERELDE KOŞMADI** (ortam Docker Hub blob CDN'ine
-> **403**) → **otorite CI**; görsel diff çıkarsa **tabanı güncelleme**, selector'ı daralt.
-> **Memory checkpoint YAZILAMAZ, sebebi YAPISAL (ölçüldü 2026-08-12, #690):** remote
-> container'da `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok) →
-> borç bu ortamdan kapatılamaz, **yerel** oturum ister; *"bir dahaki sefere"* demek onu
-> kapatmıyordu. İçerik **hazır bırakıldı**: **`docs/memory/PENDING_CHECKPOINTS.md`**
-> (yapıştır-ve-sil). Borç **ÜÇ slice**: ADIM 47 + 49 + 50 — dosya 47 + 48 adıyla yazılmıştı,
-> numaralandırma uzlaştırmasından sonra kastettiği slice'lar bunlardır. Sunucuları kaydetmek
-> ya da remote'u md. 4'ten muaf tutmak **insan kararıdır**.
-> `PROJECT_HISTORY.md` §ADIM 50 · `docs/ADIM50_LANDED_KICKOFF.md`.
->
-> **Öncesinde ADIM 49 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
+> **Son dalga — ADIM 50 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
 > BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Skip link (`Layout.tsx`
 > `.skip-link` + `<main id="main-content" tabIndex={-1}>`) ve `/user-manual` `<h1>`.
 > **K-2 bir UYGUNLUK düzeltmesi DEĞİLDİ** — 2.4.1 landmark'larla (ARIA11) zaten
@@ -222,16 +202,50 @@ Before stopping a working session, produce **ALL** of the following:
 > `17-page-coverage.spec.ts` `level: 1`. **K-6 İKİYE ayrıldı:** K-6a (halka görünüyor mu)
 > A-08 bekler ve **mevcut sonda ona kanıt üretmez** (programatik `el.focus()`
 > `:focus-visible`'ı eşleştirmez); **K-6b ölçüldü ve DÜŞÜYOR** — `#00a9e8` ↔ beyaz
-> **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **ADIM 50'de KAPANDI**
-> (halka `var(--text)`). **K-3 hâlâ PO'da** — prompt `docs/ADIM49_KICKOFF.md` §P-2. Frontend **722 passed /
-> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 49 · RC §6.5.
-> **NUMARA ÇAKIŞMASI (üçüncü kez):** bu slice ADIM 48 olarak yazıldı, `#686` main'e
-> **ADIM 48 adıyla** merge edilince **ADIM 49'a taşındı** — merge edilmiş ad kazanır.
-> Branch commit mesajları `adim-48` yazmaya devam eder. Çakışmayı gözle değil,
-> **`doc-status` kapısı** yakaladı (iki belge birden `current` iddia etti).
+> **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **`#688`'de KAPANDI**
+> (halka `var(--text)`; main'de ADIM 48 adıyla kayıtlı). **K-3 hâlâ PO'da** — prompt `docs/ADIM50_KICKOFF.md` §P-2. Frontend **722 passed /
+> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 50 · RC §6.5.
+> **NUMARA ÇAKIŞMASI (aynı gün DÖRT oturum):** bu slice ADIM 48 yazıldı → 49 denendi →
+> `#691` 49'u merge edilmiş adla alınca **ADIM 50** oldu. Kural: **numaralar yeniden
+> atanmaz, merge edilmiş ad kazanır**; taşınan taraf hep merge edilmemiş olandır. Branch
+> commit mesajları `adim-48` yazar. Çakışmayı gözle değil **`doc-status` kapısı** yakaladı.
+> **Başkasının slice'ını yeniden düzenleme:** K-6b'yi ayrı belgeye taşıma denemesi
+> `#691`'in kaydı üzerine **geri alındı** — o düzenleme bir **insan kararıdır**.
 >
-> Öncesinde ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi, #686):
-> **8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
+> Öncesinde ADIM 49 (P11-1 KAPANDI): **main'de required status check ruleset'i
+> `20765617` AKTİF** (PR #683 hazırlığı + ayarı insan uyguladı). **16 zorunlu check**,
+> hepsi `integration_id: 15368`; `pull_request` (0 onay) · `strict: true` ·
+> `bypass_actors: []`. **ÇALIŞMA ŞEKLİ DEĞİŞTİ: main'e doğrudan push YOK, her PR 16 yeşil
+> check + main ile güncellik ister** (`Backend` ~48 dk — bilinçli bedel). **Yeni CI job'ı
+> ya da `name:` değişikliğinde SIRA: önce merge → adın üretildiğini gör →
+> `scripts/required-checks-preflight.sh <pr>` → `PUT …/rulesets/20765617`. TERS SIRA TÜM
+> MERGE'LERİ KİLİTLER.** Lighthouse **insan kararıyla** zorunlu; çırpınırsa **taban
+> indirilmez** (`LH_REPEATS` medyanı) ve **`armed: false` kapının sessiz kapatma
+> düğmesidir**. Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED. **Ruleset repoda
+> DEĞİL — silinirse hiçbir kapı fark etmez (drift kapısı açık iş).** **Memory checkpoint
+> yine YAZILAMADI** (ortam yapısal — remote'ta `ecc`/`claude-mem` kayıtlı değil) → borç
+> **ADIM 47 + 48 + 49**; sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md`.
+> `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
+> Öncesinde **ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
+> `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli
+> **hiçbir** zeminde 3:1'i geçmiyordu (beyaz 2.68:1, `#f5f5f5` 2.46:1, `.dropdown-blue`
+> **1.00:1**), yenisi **her** zeminde geçiyor (beyaz 15.91:1; en kötü zemin `#0092c8`
+> `.menu-blue:hover` **4.50:1**). **axe bunu KOŞMAZ** — yeşil ratchet bu soru için kanıt
+> değildi. **Bu D-10 DEĞİL** (D-10 = 1.4.3 metin ekseni; bu 1.4.11 metin-dışı) ve **v18
+> sapması DEĞİL** (mockup hiçbir odak durumu tarif etmiyor); `--accent` token'ına ve
+> palete DOKUNULMADI. **K-6 defterde İKİYE ayrıldı: K-6b KAPANDI (ölçülü), K-6a AÇIK —
+> yalnız A-08 kapatabilir.** Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED.
+> **`npm run visual` / `npm run a11y` YERELDE KOŞMADI** (ortam Docker Hub blob CDN'ine
+> **403**) → **otorite CI**; görsel diff çıkarsa **tabanı güncelleme**, selector'ı daralt.
+> **Memory checkpoint YAZILAMAZ, sebebi YAPISAL (ölçüldü 2026-08-12):** remote container'da
+> `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok) → borç bu ortamdan
+> kapatılamaz, **yerel** oturum ister. İçerik **hazır bırakıldı**:
+> **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil).
+> Sunucuları kaydetmek ya da remote'u md. 4'ten muaf tutmak **insan kararıdır**.
+> `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
+> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
+> **Son dalga — ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
+> 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
 > DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kapananlar: `TL-03` `TL-06` `TL-07`
 > `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. **Ürün kodu DEĞİŞMEDİ** (tek satır bile).
 > **RATCHET YALNIZ AŞAĞI İNER** — `uncovered`/A/C/**D** tavanları el değmedi,
@@ -366,10 +380,8 @@ Before stopping a working session, produce **ALL** of the following:
 > izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
-> **K-2 + K-4 KAPANDI (ADIM 49)**, **K-6b KAPANDI (ADIM 50)**; **yalnız K-3 PO kararı
-> bekliyor** (A-08'e bağımlı DEĞİL), **K-5 + K-6a A-08 bekliyor**, K-7 ölçüldü ama
-> düzeltilmedi. K-5/K-7'nin
-> sayısı **koşudan koşuya oynuyor** (ilk koşu soğuk, eksik raporlar) ·
+> K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
+> (ilk koşu soğuk, eksik raporlar) ·
 > **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
 > serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·
 > delivery proof'u **CI kapısı değil** · **monitörü izleyen yok** ·
@@ -413,10 +425,10 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler (backend 2026-08-10 / ADIM 31'de ölçüldü; frontend 2026-08-12 / ADIM 48):**
+- **Testler (backend 2026-08-10 / ADIM 31'de ölçüldü; frontend 2026-08-06 / ADIM 25):**
   **otorite CI'dır.** Backend tam suite **3987 passed / 1 xfailed / 0 failed**, coverage
-  **%93.53** (kapı ≥90) — ADIM 48 backend'e dokunmadı. Frontend ADIM 48'de yeniden ölçüldü:
-  **722 passed / 71 dosya**, **%84.90 line** (ADIM 25: 721/70, %84.92). **Dikkat (eski bir hata, tekrarlama):** ADIM 17
+  **%93.53** (kapı ≥90) — ADIM 31 frontend'e dokunmadı, o yüzden frontend sayıları ADIM 25
+  ölçümüdür ve yeniden koşulmadı: **721 passed / 70 dosya**, **%84.92 line**. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
   koşusunda pytest'in özet satırı ve exit code'u yakalanmamıştı — çıktıyı dosyaya yaz, `$?`'i
   **ayrı** oku. **Bilinçli `xfail(strict)` sayısı 1'dir** (eskiden 4 yazıyordu — **bayat**):
   `test_research_point_in_time_parity.py:583`, tek issue **#558** (available-time policy pin'i

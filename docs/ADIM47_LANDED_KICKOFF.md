@@ -1,11 +1,10 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — sonrasında ÜÇ slice landed (2026-08-12):** **ADIM 48** (kabul borcu
-> sınıf B, #686 · `docs/ADIM48_LANDED_KICKOFF.md`), **ADIM 49** (RC §6.5 / K-2 + K-4,
-> #685 · `docs/ADIM49_KICKOFF.md`) ve **ADIM 50** (K-6b odak halkası, #688 ·
-> `docs/ADIM50_LANDED_KICKOFF.md`). **Canlı kickoff ADIM 50'dir.** Aşağısı ADIM 47
-> kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri bayat olabilir.
-> **Memory checkpoint borcu ADIM 47'den DEVREDİYOR ve büyüdü** — 47 + 49 + 50 üçü birden
-> yazılmayı bekliyor. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
+> **SUPERSEDED — sonrasında ÜÇ slice landed (2026-08-12):** **ADIM 48** (#686 kabul borcu
+> + #688 K-6b, `docs/ADIM48_LANDED_KICKOFF.md`), **ADIM 49** (P11-1 ruleset kaydı, #691,
+> `docs/ADIM49_LANDED_KICKOFF.md`) ve **ADIM 50** (RC §6.5 / K-2 + K-4, #685,
+> `docs/ADIM50_KICKOFF.md`). **Canlı kickoff ADIM 50'dir.** Aşağısı ADIM 47 kapanışındaki
+> durumu kaydeder; sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Değişmeyen:**
+> blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
 
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 

@@ -1,9 +1,9 @@
 <!-- doc-status: current -->
-# ADIM 50 LANDED — #514 izleme ayrışması kapandı (A-08 blocker AÇIK) · sıradaki slice için kickoff
+# ADIM 51 LANDED — #514 izleme ayrışması kapandı (A-08 blocker AÇIK) · sıradaki slice için kickoff
 
-> **Bu belge ADIM 50 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →
+> **Bu belge ADIM 51 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →
 > `docs/generated/repository_facts.md` (üretilmiş, CI'da `--check` bloklayıcı).
-> Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 50.
+> Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 51.
 
 > **NUMARA NOTU — bu slice İKİ KEZ taşındı: ADIM 48 → 49 → 50.** İş sürerken **main
 > altımdan DÖRT KEZ değişti**: #683 (P11-1 hazırlığı), #686 (kabul borcu B/01), #688
@@ -17,7 +17,7 @@
 
 ## Nerede duruyoruz
 
-**Base:** `origin/main` @ `2e75c51` (#691, P11-1). **Kod değişmedi** — ADIM 50 yalnız
+**Base:** `origin/main` @ `ce823a8` (#685, ADIM 50 — K-2 + K-4). **Kod değişmedi** — ADIM 51 yalnız
 belge uzlaştırmasıdır. Migration yok, `ENGINE_VERSION` değişmedi, alembic head
 `0043_i08_registry_strategy_fks`.
 
@@ -30,7 +30,7 @@ belge uzlaştırmasıdır. Migration yok, `ENGINE_VERSION` değişmedi, alembic 
 | 6.3 | Alertmanager | ✅ KAPANDI (ADIM 31) |
 | 6.4 | react-router `GHSA-qwww-vcr4-c8h2` | ✅ KAPANDI (ADIM 44, #678) |
 
-## ADIM 50 ne yaptı
+## ADIM 51 ne yaptı
 
 **#514 bir insan tarafından yeniden açıldı** (`2026-08-12T11:08:58Z`,
 `state_reason=reopened`) ve repository bunu **hiçbir yerde kaydetmemişti**. RC raporu
@@ -68,7 +68,7 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
 |---|---|---|
 | **A-08 denetimi** | **insan** | tek blocker; SR-2 (VoiceOver/Safari/macOS) **kullanıcının kendi makinesinde** koşulabilir |
 | ~~P11-1~~ | — | ✅ **KAPANDI (#691)** — ruleset `20765617` main'de **AKTİF**: 16 zorunlu check, `strict: true`, `bypass_actors: []`. **Çalışma şekli değişti:** main'e doğrudan push YOK; her PR 16 yeşil check + main ile güncellik ister. Yeni CI job'ı eklerken **SIRA:** önce merge → ad üretilsin → `required-checks-preflight.sh` → ruleset güncelle. **Ters sıra TÜM merge'leri kilitler.** |
-| K-2..K-7 | insan | **K-6b #688 ile KAPANDI** (odak halkası `var(--text)`, ölçülen en kötü zemin 4.50:1 ≥ 3:1). Kalanlar ürün kararı; **K-5/K-6a/K-7 A-08'den ÖNCE cevaplanamaz** |
+| K-2..K-7 | insan | **K-2 + K-4 #685, K-6b #688 ile KAPANDI** (odak halkası `var(--text)`, ölçülen en kötü zemin 4.50:1 ≥ 3:1). Kalanlar ürün kararı; **K-3/K-5/K-6a/K-7 A-08'den ÖNCE cevaplanamaz** |
 | #558 / #559 | insan | kod açıkken COMPLETED kapalı; yeniden açmak insan işi |
 | Kriter borç defteri (sınıf B) | agent | **parti 01 #686 ile landed** (8 kriter, `partial` 126 → 118). Sıradaki parti: `TL-11.c3`+`TL-12.c3`+`TL-20.c3`. **Sınıf D'ye test yazma — boşluğu gizler** |
 | PR B2a → B2b | agent | post-V1; `SHARED_ALLOCATION_STATUS=future_dev` |
@@ -82,11 +82,13 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
   (VoiceOver/Safari/macOS). Tek kombinasyon A-08'i karşılamaz.
 - Denetçinin sertifikalı olması **şart değil** — defterin §0 alanı `neither` yazmayı
   kaldırır ve sınırı dürüstçe kayda geçirir.
-- **Beklenen gözlemler, yeni bulgu sayma** (**K-6b ARTIK DEĞİL — #688 kapattı**): K-2 (skip link yok, 23/23) · K-3 (contentinfo
-  landmark yok, 23/23) · K-4 (`/user-manual`'da `<h1>` yok) · K-5 (h1→h3 atlaması, 21/23) ·
-  K-7 (ilk DOM'da `aria-live` yok, 21/23) · **K-6a** (odak GÖRÜLEBİLİR mi — yalnız A-08
-  kapatır; ölçülebilir kontrast ≠ görülebilirlik) · D-10 (kontrast, **ayrı eksen**).
-- **ORTAM TUZAĞI (ADIM 50'de ölçüldü):** uzak konteyner oturumları **Linux**'tadır;
+- **Beklenen gözlemler, yeni bulgu sayma** — **liste KÜÇÜLDÜ, güncelini kullan:**
+  **KAPANDI (yeniden kaydetme):** K-2 skip link (#685) · K-4 `/user-manual` `<h1>` (#685) ·
+  K-6b odak halkası kontrastı (#688).
+  **HÂLÂ AÇIK, beklenen:** K-3 (contentinfo landmark yok, 23/23) · K-5 (h1→h3 atlaması —
+  **21 değil 22**, `/user-manual` K-4 kapanınca kümeye girdi) · K-7 (ilk DOM'da `aria-live`
+  yok) · **K-6a** (odak GÖRÜLEBİLİR mi — yalnız A-08 kapatır) · D-10 (kontrast, **ayrı eksen**).
+- **ORTAM TUZAĞI (ADIM 51'de ölçüldü):** uzak konteyner oturumları **Linux**'tadır;
   `a11y-audit-stack.sh` orada ayağa kalksa bile kullanıcının **macOS Safari**'sinden
   erişilemez. Kâtiplik oturumu, yığının **kullanıcının kendi makinesinde** kaldırılmasını
   gerektirir.
@@ -101,13 +103,13 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
   karıştırma — ikisi AYRI, biri diğerini kapatmaz.
 - Verdict'e `READY` yazma; A-08 kapanmadan **BLOCKED** kalır.
 
-## Açık borç (ADIM 50'nin kapatmadığı)
+## Açık borç (ADIM 51'in kapatmadığı)
 
 - **Memory checkpoint YAZILAMADI — ve sebebi YAPISAL, #690'da ölçüldü.** Remote
   container'da `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok),
   yani borç **bu ortamdan kapatılamaz**; yerel bir oturum ister. #690 içeriği hazır
   bıraktı → **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil).
-  **ADIM 50 aynı ortamda koştu ve aynı sebeple kaçırdı** → o dosyaya **ADIM 50 girişi de
+  **ADIM 51 aynı ortamda koştu ve aynı sebeple kaçırdı** → o dosyaya **ADIM 51 girişi de
   gerekiyor**; borç artık dört slice. Sunucuları kaydetmek ya da remote oturumları
   ritüelin 4. maddesinden muaf tutmak **insan kararıdır**.
 - **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde).
@@ -115,12 +117,12 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
 
 ### AÇIK KUSUR — main'de İKİ slice "ADIM 48" adını taşıyor (DÜZELTİLMEDİ, bilerek)
 
-`origin/main` @ `2e75c51` şu anda **çakışmalı**:
+`origin/main` @ `ce823a8` şu anda **çakışmalı**:
 - `docs/PROJECT_HISTORY.md`'de **iki `## ADIM 48` bölümü** — `:7428` (#688, K-6b odak
   halkası) ve `:7547` (#686, kabul borcu B/01).
 - `docs/ADIM48_LANDED_KICKOFF.md`'de **iki `# ADIM 48 LANDED` başlığı** ard arda.
 
-**ADIM 50 bunu DÜZELTMEDİ ve düzeltmemelidir.** İki sebep:
+**ADIM 51 bunu DÜZELTMEDİ ve düzeltmemelidir.** İki sebep:
 1. **İkisi de merge edilmiş.** CLAUDE.md kuralı: merged başlıklar ve commit mesajları
    değiştirilemez → yeniden numaralandırma yasak. Belgelenmiş çare **başlık ekidir**
    (`ADIM 16 (sevk edilen)` / `ADIM 16 (ADR §12)` emsali).
@@ -130,10 +132,10 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
 
 ⇒ Çare **insan kararıdır**: ya başlık eki verilir (`ADIM 48 (K-6b)` / `ADIM 48 (borç B/01)`)
 ve kapı bilerek bir kez aşılır, ya da çakışma emsallerdeki gibi **kayda geçip kalır**.
-ADIM 50 yalnızca **kaydetti**. Ayrıca `docs/ADIM48_LANDED_KICKOFF.md`'nin banner'ı artık
+ADIM 51 yalnızca **kaydetti**. Ayrıca `docs/ADIM48_LANDED_KICKOFF.md`'nin banner'ı artık
 iki başlığın neden ard arda durduğunu söylüyor (okuyan "bozuk" sanmasın).
 
-### YENİ BULGU (ADIM 50) — docs-regresyon kapısının İKİ kör noktası · ÖLÇÜLDÜ
+### YENİ BULGU (ADIM 51) — docs-regresyon kapısının İKİ kör noktası · ÖLÇÜLDÜ
 
 Bu oturumda main iki kez altımdan değişti ve **merge iki kez içerik SİLDİ**:
 
@@ -151,7 +153,7 @@ o bir ürün kararıdır. **Kural, bugünkü hâliyle:** bir merge sonrası **el
 `git log origin/main -1 --stat` ile dokunulan her dosyanın içeriğinin hâlâ orada olduğunu
 gör. Yeşil kapı "hiçbir şey kaybolmadı" demek DEĞİLDİR.
 
-### YENİ BULGU (ADIM 50) — `A08_COMPLETE` kapısının kapsamı dar · ÖLÇÜLDÜ, DÜZELTİLMEDİ
+### YENİ BULGU (ADIM 51) — `A08_COMPLETE` kapısının kapsamı dar · ÖLÇÜLDÜ, DÜZELTİLMEDİ
 
 `scripts/generate_repository_facts.py::INVARIANT_GLOBS` yalnız şunları tarıyor: `README.md`,
 `CLAUDE.md`, `backend/`+`frontend/`+`docs/README.md`, `docs/CODEMAPS/*.md`,
@@ -164,7 +166,7 @@ gör. Yeşil kapı "hiçbir şey kaybolmadı" demek DEĞİLDİR.
 (`docs/ADIM<n>_LANDED_KICKOFF.md`). Yani *"A-08 Complete yazılmasını"* engellemek için var
 olan kapı, bu ifadenin en çok önem taşıdığı belgeleri **okumuyor**.
 
-**Negatif kanıt (ADIM 50'de ölçüldü):** canlı kickoff'a `A-08 denetimi tamamlandı ve PASS.`
+**Negatif kanıt (ADIM 51'de ölçüldü):** canlı kickoff'a `A-08 denetimi tamamlandı ve PASS.`
 satırı eklendi → kapı **exit 0** verdi (yakalamadı). Satır geri alındı.
 
 **Neden tek satırlık bir düzeltme DEĞİL.** Glob'ları genişletmek bugün **7 sahte kırmızı**
@@ -188,7 +190,7 @@ budur), **sonra** `INVARIANT_GLOBS` genişletilir. Ters sırada yapılırsa 7 sa
 gelir ve düzeltme "glob'u geri al" diye geri alınır.
 
 **Ayrıca (küçük ama tuzak):** kural **satır tabanlıdır** ve `[^\n]{0,80}` newline geçmez —
-`A-08` ile `Complete` farklı satırlara denk gelirse kural **hiç ateşlenmez**. ADIM 50'de
+`A-08` ile `Complete` farklı satırlara denk gelirse kural **hiç ateşlenmez**. ADIM 51'de
 bir yeniden sarma tam da bunu tersine çevirdi (yakalanmayan satır yakalanır oldu). Bir
 satırı yeniden sararken kapının davranışını değiştirdiğini bil.
 
@@ -211,13 +213,13 @@ ENTROPIA V18 — DEVİR: RC kapanışı, tek kalan blocker A-08
 Bu repoda main iş sırasında İKİ KEZ altımdan değişti. Aşağıdaki her sayı
 2026-08-12 ölçümüdür; yeniden türet.
 
-BASE: origin/main @ <ADIM 50 merge sha>
+BASE: origin/main @ <ADIM 51 merge sha>
 
 ════════════════ NEREDE DURUYORUZ ════════════════
 Kanonik rapor: docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md
 Verdict: BLOCKED — dört blocker'dan ÜÇÜ kapandı, biri kaldı (A-08).
 
-ADIM 50 (kod değişmedi) A-08'in İZLEME ayrışmasını kapattı: #514
+ADIM 51 (kod değişmedi) A-08'in İZLEME ayrışmasını kapattı: #514
 2026-08-12T11:08:58Z'de bir İNSAN tarafından yeniden AÇILDI, 8 belge
 uzlaştırıldı. AYRIŞMANIN KAPANMASI DENETİMİN YAPILMASI DEĞİLDİR —
 defter hâlâ boş (0/4, 0/46 rota, 0/20 akış, 0 SR-BULGU).
@@ -266,7 +268,7 @@ UYARI: var olmayan bir job adını required yapmak TÜM merge'leri kilitler.
 |---|---|
 | A-08 denetimi | insan — tek blocker |
 | ~~P11-1~~ KAPANDI (#691, ruleset 20765617) | — |
-| K-2..K-7 | insan — K-6b #688'de KAPANDI; K-5/K-6a/K-7 A-08'den ÖNCE cevaplanamaz |
+| K-2..K-7 | insan — K-6b #688'de KAPANDI; K-3/K-5/K-6a/K-7 A-08'den ÖNCE cevaplanamaz |
 | #558 / #559 | insan |
 | Kriter borç defteri | agent — YALNIZ sınıf B; sınıf D'ye test yazmak boşluğu GİZLER |
 | PR B2a → B2b | agent — post-V1 |

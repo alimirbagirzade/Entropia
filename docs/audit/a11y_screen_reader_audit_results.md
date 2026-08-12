@@ -350,6 +350,28 @@ screen-reader user is actually impeded. They are where to look first.
 observations** once the numbers settle. The figure previously recorded here was
 `85`, from the ADIM 28 preparation run.
 
+**Re-measured again 2026-08-12 (ADIM 48, after K-2 + K-4 landed)** — CI job
+`94221023796`, a **single cold run** on a fresh stack: 23 routes, **0 blocking
+failures**, **67 advisory observations**. The drop is fully accounted for and
+nothing was suppressed:
+
+| Class | ADIM 44 (settled) | ADIM 48 (CI) | Why |
+|---|---:|---:|---|
+| skip link (K-2) | 23 | **0** | fixed — the class no longer fires on any route |
+| no `<h1>` (K-4) | 1 | **0** | fixed |
+| heading outline (K-5) | 21 | **22** | **+1: `/user-manual`**, moved in by K-4's fix |
+| `contentinfo` (K-3) | 23 | 23 | untouched |
+| `aria-live` (K-7) | 21 | 21 | untouched |
+| focus indicator (K-6) | 1 | 1 | untouched |
+| **total** | **90** | **67** | −23 −1 +1 |
+
+**Two caveats that keep this honest.** (1) This is **one cold run**, and rule 1 below
+says a cold run *under-reports* — so `22` for K-5 is a **floor**, not a settled figure;
+the three flaky routes (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) all
+happened to report in this run. (2) The `/user-manual` line is not an inference from
+the count: the run printed the skip verbatim, which is what makes K-4's side effect a
+**measurement** rather than a prediction.
+
 > **Read the count caveat below before trusting any reach number in this table.**
 > Two of the six classes are **not reproducible run to run**; four are rock-stable
 > and can be taken at face value. The methodology note under the table says which.
@@ -357,8 +379,11 @@ observations** once the numbers settle. The figure previously recorded here was
 | # | Observation | Reach | Status | What the audit should settle |
 |---|---|---|---|---|
 | K-1 | **D-10 — 45 accent-blue low-contrast nodes.** PO-signed permanent deviation dated 2026-07-30. WCAG 2.2 AA **1.4.3 is not met**; the product is not compliant for that criterion. | — | Adjudicated — **do not re-file** | Nothing. It is a *low-vision* axis, not a screen-reader one. Record anything **new** you hit. |
-| K-2 | **No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1. | 23 / 23 routes | Open — reported, not gated | Whether the rotor makes this a non-issue in practice, or whether it really costs a jump per page. |
+| K-2 | ~~**No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1.~~ → **FIXED 2026-08-12 (PO decision, PR #685).** `Layout.tsx` renders a clipped `Skip to main content` link as the shell's first child; `<main>` carries `id="main-content"` + `tabIndex={-1}`. **Recorded with the fix:** 2.4.1 was **already met** through the banner/navigation/main landmarks (technique ARIA11) — which is why axe's `bypass` rule stayed green throughout — so this was an **ergonomics** fix for keyboard users, not a conformance one. | was 23 / 23 routes | **FIXED** | Nothing structural. If the link is announced misleadingly (wrong name, wrong destination), file it as a **new** finding. |
 | K-3 | **No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist. | 23 / 23 routes | Open — reported, not gated | Whether the absence is felt during landmark navigation, or is cosmetic. |
+| K-4 | ~~**`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`).~~ → **FIXED 2026-08-12 (PO decision, PR #685).** The page now uses `<h1 class="page-title">` like the other 22 routes; `.page-title` is class-based, so the change is semantic only. Regression pin: `specs/17-page-coverage.spec.ts` declares `level: 1` (a *blocking* precheck for a missing `<h1>` was considered and **deliberately not added** — that probe races each page's first data render, and a flapping gate is worse than none). **Side effect, not hidden:** this page's outline is now `h1 → h3` where it was `h2 → h3`, so it **entered K-5's set** — measured, not predicted: CI job `94221023796` printed `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`, taking K-5 from `21 / 23` to `22 / 23`. | was 1 route | **FIXED** | A-1 still applies: is the page title announced on load? The fix changed the level, not the announcement. |
+| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is now — with K-2 and K-4 fixed — the highest-reach observation left in the set. **`/market-data` skips two levels** (`h1 → h4`) and `/packages/library` carries a second skip (`h2 "Import package" → h5 "Recent imports"`). | **22 / 23 routes** — re-measured 2026-08-12 (ADIM 48, CI job `94221023796`); was `21 / 23`. **The +1 is `/user-manual`**, which K-4's fix moved into this set (`h1 "User Manual" → h3 "ENTROPIA USER MANUAL"`) — a known, accepted cost, not a discovery. Only `/` is now outside the set. ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 22 pages' outlines — the measured cost of doing so is **204 headings across ~40 files**, plus five tag-scoped CSS rules (`.card h3`, `.card h4`, `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) that silently drop a heading to the UA default if a tag moves without them. |
+| K-6 | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7 / 1.4.11. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. |
 | K-4 | **`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`) — a divergence already recorded in `frontend/e2e/utils/pageTruth.ts:15`. Every other route uses `<h1>`. | 1 route | Open — reported, not gated | A-1: is the page title announced on load? |
 | K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **21 / 23 routes** — re-derived 2026-08-12, **unchanged**; ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 21 pages' outlines. |
 | K-6a | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. **A-08 settles this one; nothing else does.** |

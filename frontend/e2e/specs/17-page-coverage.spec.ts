@@ -104,7 +104,11 @@ const CONTRACTS: PageContract[] = [
   {
     route: "/user-manual",
     heading: "User Manual",
-    level: 2,
+    // K-4 (2026-08-12): was `level: 2`. This page now names itself with an <h1>
+    // like the other 22 routes, so the divergence this field existed for is gone.
+    // Kept explicit rather than deleted: `level` defaults to 1, and a silent
+    // default would not record that the value CHANGED.
+    level: 1,
     // The reader's own search projection, not the admin-only document list.
     api: "/manual/search?q=",
     projection: (page) => page.getByLabel("Search query"),

@@ -1,9 +1,10 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — ADIM 48 (2026-08-12); canlı kickoff artık ADIM 49.** Güncel kickoff
-> `docs/ADIM49_LANDED_KICKOFF.md`. Aşağısı ADIM 47 kapanışındaki durumu kaydeder;
-> sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Özellikle:** aşağıdaki
-> *"izleme issue'su kapalı"* ifadesi **bayattır** — #514 `2026-08-12T11:08:58Z`'de
-> insan eliyle yeniden AÇILDI (ADIM 49). A-08 yine de **BLOCKED**: defter boş, `0/4`.
+> **SUPERSEDED — sonrasında ÜÇ slice landed (2026-08-12):** **ADIM 48** (#686 kabul borcu
+> + #688 K-6b, `docs/ADIM48_LANDED_KICKOFF.md`), **ADIM 49** (P11-1 ruleset kaydı, #691,
+> `docs/ADIM49_LANDED_KICKOFF.md`) ve **ADIM 50** (RC §6.5 / K-2 + K-4, #685,
+> `docs/ADIM50_KICKOFF.md`). **Canlı kickoff ADIM 50'dir.** Aşağısı ADIM 47 kapanışındaki
+> durumu kaydeder; sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Değişmeyen:**
+> blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
 
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 

@@ -99,6 +99,67 @@ class CandidateAcceptedResponse(BaseModel):
     request_version: int
 
 
+class ValidationRunAcceptedResponse(BaseModel):
+    """Validation-run admission body — ``202`` by PRODUCT-OWNER DECISION (2026-08-12).
+
+    ADJUDICATION (RC P8-B2 / readiness §6.7.9). The conflict: this endpoint is a durable
+    admission exactly like pre-check / generate-candidate — it appends the ``queued`` run
+    row, enqueues a job and returns before any verdict exists — but canonical never names
+    a status for it. doc 06 §7 describes only the behaviour ("returns validation_run_id;
+    rows show queued/running"), doc 08 §7 lists the endpoint without a code, and MTR §13
+    mandates only that long validate work leaves the request. Two readings were open:
+    (a) keep the shipped ``200``, because inventing a wire contract in a canonical gap is
+    what this project refuses to do; (b) align to the shipped durable-admission pattern,
+    because ``200`` advertises a completed result this response does not carry. The PO
+    chose (b) on 2026-08-12. Canonical does NOT say 202 here — the decision does, and the
+    reason it is recorded rather than absorbed is that a later reader must not "fix" it
+    back by pattern-matching. Pinned by ``test_p8b2_admission_status.py``.
+
+    Nothing here is a validation RESULT: ``checks`` is empty at admission (the seven
+    mandatory checks land when ``jobs.create_package.run_validation_job`` completes) and
+    ``status`` is the run row's own ``queued``. Declaring the model is what puts the shape
+    into ``docs/openapi.json``; a bare ``dict`` kept the drift guard green while the
+    contract stayed invisible (O-30).
+    """
+
+    request_id: str
+    validation_run_id: str
+    attempt_no: int
+    status: str
+    state: str
+    checks: list[Any]
+    job_id: str
+    request_version: int
+
+
+class BaselineParseAcceptedResponse(BaseModel):
+    """Baseline-parse admission body — ``202`` by PRODUCT-OWNER DECISION (2026-08-12).
+
+    ADJUDICATION (RC P8-B2 / readiness §6.7.9), the same decision as
+    ``ValidationRunAcceptedResponse`` and with one gap MORE: canonical does not merely
+    omit a status here, it does not name the ENDPOINT. doc 06 §7 has a single baseline
+    surface ("asset upload and parse are async") and MTR §10.2 lists only
+    ``POST /package-revisions/{id}/baseline-assets``, so splitting upload (201) from parse
+    is a shipped decomposition with nothing to align TO. The PO chose the durable-admission
+    ``202`` on 2026-08-12 for both endpoints together. Pinned by
+    ``test_p8b2_admission_status.py``.
+
+    ``parser_version`` and ``parse_report`` are the command's deliberate placeholders (see
+    ``cp_cmd.start_baseline_parse``): no parse evidence exists at admission, and empty
+    values keep the body assignable to the client's ``BaselineParseResult`` while making
+    it impossible to render a parser version or a row count the worker has not produced.
+    """
+
+    request_id: str
+    baseline_asset_id: str
+    attempt_no: int
+    parse_status: str
+    parser_version: str
+    parse_report: dict[str, Any]
+    job_id: str
+    request_version: int
+
+
 class DraftBody(BaseModel):
     expected_candidate_hash: str | None = None
 
@@ -241,24 +302,24 @@ async def create_draft(
     )
 
 
-@router.post("/create-package/requests/{request_id}/validate")
+@router.post(
+    "/create-package/requests/{request_id}/validate",
+    response_model=ValidationRunAcceptedResponse,
+    status_code=202,
+)
 async def run_validation(
     request_id: str,
     ctx: RequestContext = Depends(request_context),
     request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
-    """STILL 200 ON PURPOSE — the sibling admissions above are 202 (RC P8-B2).
+    """Admit a Validation Tests run: writes a durable QUEUED job and returns before the
+    verdict exists, so the four Create-Package admissions now agree on ``202``.
 
-    This is an admission exactly like pre-check / generate-candidate: it writes a
-    durable QUEUED job and returns before the run exists. What it does NOT have is a
-    canonical status: doc 06 §7 describes the behaviour ("returns validation_run_id;
-    rows show queued/running") and doc 08 §7 lists the endpoint, but neither names a
-    code, and the Master Technical Reference §13 mandates only that long analyze/parse/
-    validate work leaves the request. The repo's own 202 habit is a FACT, not a rule —
-    inventing a wire contract in a canonical gap is what this project refuses to do,
-    so the status stays as shipped and the decision sits with the PO. Do not "fix" the
-    asymmetry without that decision; ``test_p8b2_admission_status.py`` pins it.
+    The status is a PO DECISION of 2026-08-12, not a canonical alignment — canonical
+    names no status for this endpoint. The full adjudication (what conflicted, the two
+    readings, who chose and why) lives on ``ValidationRunAcceptedResponse``; do not
+    re-derive it from the sibling routes. ``test_p8b2_admission_status.py`` pins it.
     """
     result = await cp_cmd.start_package_validation_run(
         ctx.session,
@@ -315,7 +376,11 @@ async def upload_baseline(
     )
 
 
-@router.post("/create-package/requests/{request_id}/baseline-parse")
+@router.post(
+    "/create-package/requests/{request_id}/baseline-parse",
+    response_model=BaselineParseAcceptedResponse,
+    status_code=202,
+)
 async def parse_baseline(
     request_id: str,
     ctx: RequestContext = Depends(request_context),
@@ -326,12 +391,9 @@ async def parse_baseline(
     stored CSV is read and the terminal passed/failed status written by the durable
     ``default``-queue worker, so closing the tab never cancels it.
 
-    STILL 200 ON PURPOSE — same reason as ``run_validation`` (RC P8-B2). Canonical does
-    not merely omit a status for this endpoint, it does not name the ENDPOINT: doc 06
-    §7 has one baseline surface ("asset upload and parse are async") and MTR §10.2
-    lists only ``POST /package-revisions/{id}/baseline-assets``. Splitting upload (201)
-    from parse is a shipped decomposition, so there is nothing to align TO. PO decision;
-    pinned by ``test_p8b2_admission_status.py``.
+    ``202`` is a PO DECISION of 2026-08-12, not a canonical alignment — canonical does
+    not even name this endpoint. The full adjudication lives on
+    ``BaselineParseAcceptedResponse``. ``test_p8b2_admission_status.py`` pins it.
     """
     result = await cp_cmd.start_baseline_parse(
         ctx.session,

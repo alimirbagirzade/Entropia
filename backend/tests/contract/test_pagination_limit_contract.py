@@ -1,7 +1,9 @@
 """Every ``limit`` query parameter publishes its page ceiling (RC finding P10-B2).
 
-Two families ship, and the difference between them is a PRODUCT decision this test
-deliberately does not make -- it only forces both to be visible in the schema:
+Two families ship, and the difference between them is a PRODUCT-OWNER DECISION of
+2026-08-12: the clamping family KEEPS clamping and is not converted to 422. These tests
+force both families to be visible in the schema and keep them from bleeding into each
+other; they do not re-open the decision.
 
 * ENFORCING (19 params): ``le=<max>`` -> JSON Schema ``maximum`` -> over-limit is 422.
 * CLAMPING (9 params): bounded in the query layer -> over-limit is 200 with a smaller
@@ -17,9 +19,11 @@ came back 200 with 100 rows. The tests below lock three things:
    advertising a rejection the server does not perform is worse than publishing nothing;
 3. the published numbers equal the ones the query layer actually enforces.
 
-The over-limit BEHAVIOR is unchanged by this slice and is pinned as such below. Whether
-clamping or rejecting is correct is an open adjudication for the product owner, recorded
-in ``docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md`` section 6.7 (P10-B2).
+The over-limit BEHAVIOR is the shipped clamp, and the PO decision of 2026-08-12 keeps it
+that way. The reasoning is on ``apps/api/pagination.py`` and in
+``docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md`` section 6.7 (P10-B2 / §6.7.5),
+in one line: the ceiling is now PUBLISHED, so the behavior is not silent, and rejecting
+what the server answers 200 today would break generated clients for symmetry alone.
 """
 
 from __future__ import annotations
@@ -114,6 +118,12 @@ def test_a_clamping_parameter_never_advertises_rejection() -> None:
 
     Emitting it would trade an under-specified contract for a false one: a generated
     client would refuse a request this server answers 200.
+
+    This is also what keeps the two families from bleeding into each other. The PO
+    decision of 2026-08-12 is a decision about WHICH family an endpoint joins; a
+    parameter emitting both ``maximum`` and ``x-clamp-maximum`` would belong to both at
+    once and make the decision unreadable from the schema. Together with the partition
+    assertion above, every ``limit`` lands in exactly one family or fails here.
     """
     for path, schema in _limit_parameters():
         if "x-clamp-maximum" not in schema:
@@ -133,11 +143,12 @@ def test_published_bounds_equal_the_enforced_bounds() -> None:
         assert schema["x-clamp-maximum"] == expected_maximum, path
 
 
-def test_publishing_the_ceiling_did_not_change_the_over_limit_behaviour() -> None:
-    """This slice publishes the shipped clamp; it does not decide clamp-vs-reject.
+def test_the_over_limit_behaviour_is_the_decided_clamp() -> None:
+    """The PO decided on 2026-08-12 that these endpoints CLAMP rather than reject.
 
-    If a later change makes the clamping family REJECT instead, this pin fails and forces
-    the product decision to be recorded rather than absorbed as a refactor side effect.
+    If a later change makes the clamping family REJECT instead, this pin fails — and that
+    is the point: reversing a recorded product decision must be a deliberate act with its
+    own reasoning, never a refactor side effect or a symmetry sweep.
     """
     assert clamp_limit(MAX_PAGE_LIMIT + 1) == MAX_PAGE_LIMIT
     assert clamp_limit(100_000) == MAX_PAGE_LIMIT

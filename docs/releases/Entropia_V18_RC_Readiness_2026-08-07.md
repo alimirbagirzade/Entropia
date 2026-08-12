@@ -1072,7 +1072,7 @@ açılmadı/kapatılmadı.
 | ~~**P4-1**~~ | ~~`alembic check` **exit 255** (40 gerçek index-adı sapması) ve **hiçbir CI workflow'u onu koşmuyor** → sahipsiz, izlenmeyen~~ → **2026-08-10 (ADIM 34) KAPANDI** — 40 sapmanın 40'ı kapatıldı (index ekseni ölçülen **0**), kapı CI'ya bağlandı ve negatifiyle kanıtlandı. **`alembic check` yine de exit 255**, ayrı bir sınıf yüzünden — ayrıntı ve ham kanıt: **§6.7.3** | P4 |
 | ~~**P4-2**~~ | ~~`agent_event.seq`'te alembic yolunda fazladan non-unique index; `create_all` yolunda yok → iki kurulum yolu bu noktada bit-özdeş değil (fonksiyonel etki yok)~~ → **2026-08-10 (ADIM 34) KAPANDI** — iki kurulum yolu index ekseninde **bit-özdeş** (361/361, 0 sapma); fonksiyonel etkisizlik deneysel kanıtlandı. Ayrıntı: **§6.7.3** | P4 |
 | **P4-3** | **YENİ (ADIM 34 ölçümü, rapor bunu bildirmemişti).** §6.7'nin *"tip/server-default değişimi = 0"* iddiası **yanlıştı**: aynı `alembic check` koşusu **60 `modify_default`** işlemi de emitliyor (40 tabloda 60 kolon; DB'de server default var, model onu yalnız Python tarafında bildiriyor). P4-2 ile aynı aileden gerçek bir model↔migration ayrışması; **ölçüldü, düzeltilmedi** (modele `server_default` eklemek `create_all` şemasını değiştirir → ayrı karar, ayrı PR). Sayı ADIM 34 kapısında **tavana** bağlandı: büyüyemez | P4 |
-| **P10-B2** | ~~9 uçta sayfalama sınırı **şemada yayımlanmıyor**~~ → **2026-08-11 (ADIM 37): YAYIMLAMA KAPANDI, AŞIM DAVRANIŞI AÇIK.** Dokuz ucun dokuzu da artık default + tavan bildiriyor (`x-clamp-default` / `x-clamp-maximum`), kapı + negatif kanıt bağlı, `UNPUBLISHED = 0`. **Kalem KAPANMADI:** aşımın sessiz clamp mi 422 red mi olacağı bir **ürün kararıdır**, canonical **sessizdir** ve bu slice onu **VERMEDİ** → **PO kararı bekliyor**. Raporun *"sessizce 100'e iniyor"* ifadesi de düzeltildi: 5 uçta `meta.limit` etkin değeri **zaten yankılıyordu**, 1 uçta gerçekten sessiz. Ayrıntı, adjudication ve ham kanıt: **§6.7.5** | P10 |
+| **P10-B2** | ~~9 uçta sayfalama sınırı **şemada yayımlanmıyor**~~ → **2026-08-11 (ADIM 37): YAYIMLAMA KAPANDI, AŞIM DAVRANIŞI AÇIK.** Dokuz ucun dokuzu da artık default + tavan bildiriyor (`x-clamp-default` / `x-clamp-maximum`), kapı + negatif kanıt bağlı, `UNPUBLISHED = 0`. ~~**Kalem KAPANMADI:** aşımın sessiz clamp mi 422 red mi olacağı bir **ürün kararıdır**, canonical **sessizdir** ve bu slice onu **VERMEDİ** → **PO kararı bekliyor**.~~ → **2026-08-12 (ADIM 47): KALEM KAPANDI.** PO **kelepçenin kalmasına** karar verdi (422'ye çevrilmez); gerekçe kayda geçti — sınır artık yayımlandığı için davranış **sessiz değil**, ve 422 üretilmiş istemcileri kırardı. **19 ENFORCING / 9 CLAMPING ayrımı bilinçlidir.** Kod davranışı değişmedi; iki invariant (clamped → `x-clamp-maximum` VAR, `maximum` YOK) testte kilitli. **P10-B6 açık kalır.** Raporun *"sessizce 100'e iniyor"* ifadesi de düzeltildi: 5 uçta `meta.limit` etkin değeri **zaten yankılıyordu**, 1 uçta gerçekten sessiz. Ayrıntı, adjudication ve ham kanıt: **§6.7.5** | P10 |
 | **P10-B6** | **YENİ (ADIM 37 ölçümü, rapor bunu bildirmemişti).** Dört uç uyguladığı **etkin** sayfa boyutunu yanıtta yankılamıyor: `/agent-tasks`, `/lab/messages`, `/hypotheses` (`next_cursor` var, `limit` yok) ve `/agent-tasks/{task_id}/tool-calls` (**hiçbir sayfalama metadata'sı yok** — ne cursor, ne has_more, ne limit). MTR §8'in `Response meta.pagination` sözleşmesiyle ayrışır; ama sevk edilen `meta: {cursor, has_more, limit}` şekli **zaten** MTR §8'in ad ekseninden ayrı → bu dört uçtan büyük, daha eski bir sapma. **Ölçüldü, düzeltilmedi** (yanıt gövdesi = wire contract; `lib/*.ts` + typed `AgentToolCallListResponse` okuyor → ayrı karar, ayrı PR) | ADIM 37 |
 | ~~**P9-F2**~~ | ~~**SPA origin'inde CSP yok** — `frontend/nginx-security-headers.conf` CSP vermiyor; yürütülebilir bundle'ı sunan origin budur. API'de CSP var ve testli; statik origin için **hiçbir test/kapı/belge yok**~~ → **2026-08-10 (ADIM 32) KAPANDI** — politika sevk edildi, canlı yanıtta ölçüldü, CI kapısına bağlandı. Ayrıntı ve ham kanıt: **§6.7.1** | P9 |
 | ~~**P9-F1**~~ | ~~`frontend/Dockerfile` **`npm install`** kullanıyor (`npm ci` değil) + `COPY package-lock.json*` glob'u lockfile yokluğunu tolere ediyor → reproducibility riski~~ → **2026-08-10 (ADIM 33) KAPANDI** — `npm ci` + glob'suz `COPY`; fail-closed olduğu **iki negatif durumda, her biri kontrolüyle** ölçüldü, ayrıca `frontend/.dockerignore` eklendi. Ayrıntı ve ham kanıt: **§6.7.2** | P9 |
@@ -1085,7 +1085,7 @@ açılmadı/kapatılmadı.
 | ~~**P11-8**~~ | ~~Lighthouse hâlâ bağlı değil~~ → **2026-08-12 (ADIM 43) KAPANDI.** İddia doğruydu. Lighthouse **ratchet olarak** bağlandı (`e2e.yml` → `lighthouse` job'ı + `specs/21-lighthouse.spec.ts` + `frontend/e2e/lighthouse-baseline.json`), mutlak eşik olarak **değil**: bugünkü ölçülen skor **taban**, yalnız yükselebilir, **pay çıkarılmadı** — a11y ve ADIM 42 kabul-kriteri ratchet'leriyle **aynı** desen, yeni desen icat edilmedi. **Kapsam: 23/23 rota, kapsanmayan 0.** Liste elle yazılmadı, `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor; matriste olup tabanı olmayan rota **kırmızı** verir (boşluk, geçiş değil). **Gürültü tolerans genişleterek değil stabilize edilerek çözüldü:** atılan warm-up + rota başına 3 koşunun **medyanı** → ölçülen tekrar yayılımı **3 kategoride de 0 puan** (yani susturulacak gürültü yoktu; taban bu yüzden paysız). **İki otorite çakışması da önlendi:** (1) **a11y kategorisi hiç İSTENMİYOR** — axe sevk edilmiş otorite olarak kalıyor, rakip bir a11y sayısı **üretilmiyor**; **hiçbir Lighthouse çıktısı A-08 kanıtı değildir** ve defterin §1/§2'sine yazılamaz (A-08 hâlâ **yapılmadı**, defter hâlâ **boş**). (2) **Performans ayrımı iki belgeye de yazıldı** — `loadgen.py` **sunucuyu** ölçer (uç-nokta p95, kontrol-normalize, gecelik), Lighthouse **tarayıcıyı** (rota başına boyama/etkileşim skoru, PR'da); `performance/README.md` §8 zaten *frontend rendering*'i yük sürücüsünün kapsamı **dışında** ilan etmişti — bu kapı o **beyan edilmiş boşluğu** dolduruyor, ikinci bir görüş değil. **Ölçülen taban:** performance **100** (22 rota) / **98** (`panel-management`), best-practices **96** (23 rota), seo **82** (23 rota). **İki dürüst sınır tabanın kendi `provenance`'ına yazıldı:** performance localhost + desktop preset'te **doygun** (taban 100 = *"hiç kötüleşemez"*, mevcut en katı ratchet — ama gerçek bir kullanıcı makinesinde hızlı olduğunun kanıtı **değil**); best-practices 96 ve seo 82 **gerçek kusurlardır**, ölçülen değerinde donduruldu ve **AÇIK bırakıldı** — bir CI slice'ı ürün kodunu da değiştirmez. Ayrıntı ve ham kanıt: **§6.7.12** | P11 |
 | ~~**P10-7**~~ | ~~Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor)~~ → **2026-08-12 (ADIM 43) KAPANDI — planlanan ikinci PR'a GEREK KALMADI.** Bu satırın *"aktivasyon için 5 gecelik baseline gerekiyor"* kısmı **bayattı**: 2026-08-07'de yazıldı, bir daha okunmadı. Toplayıcı **zaten vardı** (`performance.yml` → `load-full`, cron `23 4 * * *`, ADIM 24'ten beri) ve **zaten koşuyordu**; beşinci gece **2026-08-11**'de doldu. Ölçüm: **altı** ardışık yeşil gece (08-07..08-12), altısı da `github-ubuntu-latest`, 16/40, **sıfır hata**, altısında da `loadgen-baseline` artefaktı mevcut ve süresi dolmamış. Bant **türetildi, seçilmedi**: ham kontrol kayması **1.71×** (normalizasyonun varlık nedeni), dondurulmuş baseline'a karşı herhangi bir gecenin ürettiği **en kötü** oran **1.62×** (`admin_logs`) → README §6 adım 3'ün *"gözlenen yayılımın ~1.5 katı"* = `1.5 × 1.62 = 2.43` → **`--max-ratio 2.5`**. Kanıt: altı gecenin altısı da **PASS** (1.54× pay); enjekte edilen **3.0× regresyon FAIL** — negatif, sentetik fixture'da değil **gerçek** baseline üzerinde; **2.4× regresyon geçer** ve bandın bu gerçek sınırı gizlenmeden yazıldı. §6 adım 5'in *"kullanılabilir bant yok, kapalı bırak"* çıkışı **mevcuttu ve alınmadı**. Baseline artık **takipli dosya** (`docs/performance/baseline_ci.json`) → kapı 30 günlük artefakt saklamasına **bağlı değil**. Gecelik koşunun iptal edilemeyeceği **log'dan** doğrulandı (`schedule` olayında `github.ref` = `refs/heads/main` → `cancel-in-progress` false; altı koşunun altısı da `success` + artefakt). **Kapının göremediği, açıkça yazıldı:** 2.5× altındaki hiçbir şey · PR'daki hiçbir şey (kapı **gecelik**) · başka hiçbir runner class · altı örnek bir kuyruğu sınırlayamaz. Ayrıntı ve ham kanıt: **§6.7.11** | P10 |
 | ~~**P1-B1/B2**~~ | ~~`BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat~~ → **2026-08-11 (ADIM 40) KAPANDI — sayı güncellenerek DEĞİL, sahipliği değiştirilerek.** İkisi de yeniden ölçüldü, ikisi de doğru çıktı. B1: üç sayı codemap'ten **silindi**, üretilmiş satıra taşındı (`repository_facts.md` §Summary ▸ *Application modules*); ölçüm ayrıca sayının **göremediği** kusuru buldu — `jobs` tablosunda `delivery.py` ve `heartbeat.py`'nin **hiç satırı yoktu** (14 satır / 16 modül), ikisi eklendi. B2: `CLAUDE.md`'den sayı **kaldırıldı**, otorite `BACKEND_ROUTES.md` §DUAL-TOKEN'ın tek tek sayan listesi (**17**). Tekrarı **yeni kapı** engelliyor: `check_codemap_coverage`, negatifi 5 testle kanıtlı. Ayrıntı: **§6.7.8** | P1 |
-| ~~**P8-B1**~~ · ~~**P8-B3**~~ · **P8-B2 KARARA BAĞLANDI (kısmen — iki uç PO'da)** | ~~`pending_data_job_dispatch` docstring gerekçesi bayat~~ → **KAPANDI (ADIM 40):** gerekçe yeniden yazıldı — `None` **admission** yüzünden dönüyor (replay yeni iş admit etmedi, dispatch edilecek şey yok); *"gövdede terminal-state guard yok"* öncülü ADIM 21'de sona ermişti (`trade_log.py`/`trading_signal.py` gövdeleri `claim_job_for_delivery` çağırıyor — bu koşuda doğrulandı). **Davranış ve imza DEĞİŞMEDİ.** ~~`JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış~~ → **KAPANDI (ADIM 40):** aktör tablosunun **"Satır" kolonu silindi** (aktör adı zaten sembolün kendisi; 12 değerin 11'i bayattı, yalnız `system_heartbeat :39` tutuyordu) ve tablonun tamlığı + kuyruk eşlemesi kapıya bağlandı. ~~**P8-B2** (Create-Package 200 ↔ diğer dokuz 202) BU SLICE'A GİRMEDİ ve AÇIK~~ → **2026-08-11 (ADIM 41) KARARA BAĞLANDI — kod ekseninde YARISI, ürün ekseninde AÇIK.** Ölçüm: **13** durable admission ucu (küme `enqueue_job` transitive closure'ından **türetildi**, elle sayılmadı), **hepsi** kuyruğa alıp iş bitmeden dönüyor → senkron uç **yok**. Raporun *"diğer dokuz 202"* ifadesi de **yanlıştı**: gerçek dağılım **4×200 + 1×201 + 8×202**. Kanonik uç uç soruldu: `pre-check` (doc 07 §10.3) ve `generate-candidate` (MTR §7.1 literal wire contract) **202 der** → ikisi **hizalandı** ve gövdeleri `dict[str, Any]`'den tiplenip şemada **yayımlandı**; `validate` ve `baseline-parse` için kanonik **status vermiyor** (baseline-parse için **ucu bile adlandırmıyor**) → **kod DEĞİŞMEDİ, PO kararı bekliyor**. Sevk edilmiş 202 deseni bir **olgu** olarak kaydedildi, kanonik boşlukta kural olarak kullanılmadı. Yeni kapı sınıflandırılmamış admission ucunu kırmızıya çevirir (negatifi kanıtlı). **P8 KAPANMADI.** Ayrıca **YENİ: P8-B3b** (aşağıda). Ayrıntı: **§6.7.8** + **§6.7.9** | P8 |
+| ~~**P8-B1**~~ · ~~**P8-B3**~~ · **P8-B2 KARARA BAĞLANDI (kısmen — iki uç PO'da)** | ~~`pending_data_job_dispatch` docstring gerekçesi bayat~~ → **KAPANDI (ADIM 40):** gerekçe yeniden yazıldı — `None` **admission** yüzünden dönüyor (replay yeni iş admit etmedi, dispatch edilecek şey yok); *"gövdede terminal-state guard yok"* öncülü ADIM 21'de sona ermişti (`trade_log.py`/`trading_signal.py` gövdeleri `claim_job_for_delivery` çağırıyor — bu koşuda doğrulandı). **Davranış ve imza DEĞİŞMEDİ.** ~~`JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış~~ → **KAPANDI (ADIM 40):** aktör tablosunun **"Satır" kolonu silindi** (aktör adı zaten sembolün kendisi; 12 değerin 11'i bayattı, yalnız `system_heartbeat :39` tutuyordu) ve tablonun tamlığı + kuyruk eşlemesi kapıya bağlandı. ~~**P8-B2** (Create-Package 200 ↔ diğer dokuz 202) BU SLICE'A GİRMEDİ ve AÇIK~~ → **2026-08-11 (ADIM 41) KARARA BAĞLANDI — kod ekseninde YARISI, ürün ekseninde AÇIK.** Ölçüm: **13** durable admission ucu (küme `enqueue_job` transitive closure'ından **türetildi**, elle sayılmadı), **hepsi** kuyruğa alıp iş bitmeden dönüyor → senkron uç **yok**. Raporun *"diğer dokuz 202"* ifadesi de **yanlıştı**: gerçek dağılım **4×200 + 1×201 + 8×202**. Kanonik uç uç soruldu: `pre-check` (doc 07 §10.3) ve `generate-candidate` (MTR §7.1 literal wire contract) **202 der** → ikisi **hizalandı** ve gövdeleri `dict[str, Any]`'den tiplenip şemada **yayımlandı**; `validate` ve `baseline-parse` için kanonik **status vermiyor** (baseline-parse için **ucu bile adlandırmıyor**) → ~~**kod DEĞİŞMEDİ, PO kararı bekliyor**~~ → **2026-08-12 (ADIM 47): PO KARARI GELDİ — ikisi de 200 → 202**, gövdeleri tiplendi (`ValidationRunAcceptedResponse` · `BaselineParseAcceptedResponse`) ve şemada yayımlandı. Otorite **karardır, sevk edilmiş desen değil** (kanonik hâlâ sessiz). **P8-B2 KAPANDI.** **Dürüst sınır:** PO `POST /library/{id}/validation-runs` (201) ucunu kapsam dışı bıraktı → aynı run'ı saran iki uç hâlâ farklı status döndürüyor, bu ayrışma **KAPANMADI**. Sevk edilmiş 202 deseni bir **olgu** olarak kaydedildi, kanonik boşlukta kural olarak kullanılmadı. Yeni kapı sınıflandırılmamış admission ucunu kırmızıya çevirir (negatifi kanıtlı). **P8 KAPANMADI** — **P8-B3b** açık (aşağıda). (P8-B2'nin kendisi ADIM 47'de kapandı.) Ayrıntı: **§6.7.8** + **§6.7.9** | P8 |
 | **P8-B3b** | **YENİ (ADIM 40 ölçümü, rapor bunu bildirmemişti).** `JOBS_AND_EVENTS.md`'in **gövdesinde** ~30 adet `dosya.py:NN` / `:NN` referansı daha var (`sse.py:270`, `_wait_for_tick:166`, `actors.py:334`, …) — aktör tablosuyla **aynı** yapısal kusur: her düzenleme onları kaydırır. B3 ölçümü yalnız aktör tablosunu kapsıyordu, bu yüzden yalnız o kapatıldı; gerisini sembol adına çevirmek her referansın **tek tek doğrulanmasını** ister → **ayrı PR**. Sınır dosyanın kendisine yazıldı. **Ölçüldü, düzeltilmedi** | ADIM 40 |
 | ~~**P6-6**~~ | ~~`dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir~~ → **2026-08-10 (ADIM 36) KAPANDI** — yanlış-negatif **yeniden üretildi** (sağlam yedek, `exit 1`), harici çağrılar sınırlandı, **yeni `exit 3` = "doğrulanamadı"** eklendi; "yedek bozuk" (1) ile karışmıyor, "sağlam" (0) ile **asla**. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
 | ~~**P6-ek**~~ | ~~`e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma~~ → **2026-08-10 (ADIM 36) KAPANDI** — asılı kalma **yeniden üretildi** (25s'de hâlâ koşuyordu), preflight sınırlandı; takılı daemon'a karşı **sınırlı sürede `exit 2`** ölçüldü, "daemon yok" teşhisi ayrı mesajda korundu. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
@@ -1093,6 +1093,25 @@ açılmadı/kapatılmadı.
 | **P10-B3** | **Bildirim yolunun DELIVERY kanıtı bir CI kapısı DEĞİL** (ADIM 31). Config yarısı kapılı (`scripts/alert-notification-gate.sh` + 21 contract testi); teslimat yarısı yalnız `scripts/alert-notification-proof.sh` ile ölçülür ve o üç konteyner + dakikalarca wall-clock ister. Kapıya bağlamak **insan kararıdır** (maliyet). Regresyon sessizce dönebilir | ADIM 31 |
 | **P10-B4** | **Monitörü izleyen yok.** Alertmanager erişilemezse Prometheus yeniden dener ve `prometheus_notifications_errors_total` sayacını artırır — **kendi** `/metrics`'inde, ki onu hiçbir şey scrape etmiyor. Sessizce teslim etmeyi bırakmış bir bildirim yolu, sessiz bir sistemden ayırt edilemez. Döngüsel olmayan bir çözüm ikinci bir Prometheus ister; denenmedi | ADIM 31 |
 | **P10-B5** | **On-call rotasyonu / escalation policy / acknowledgement YOK.** Alertmanager'ın ack kavramı yoktur; `repeat_interval` mekanizmanın tamamıdır. Kimin uyandırılacağı `ALERTMANAGER_NOTIFY_URL`'in ucundaki sistemde yaşar — **repo dışı, organizasyonel karar** | ADIM 31 |
+
+> **§6.7'nin durumu — ADIM 47 sonrası, SAYILDI (2026-08-12).** ADIM 47'nin kickoff'u
+> *"bununla §6.7'nin on iki kaleminin tamamı kapanır (P11-1 hariç)"* diyordu. **Bu iddia
+> yanlıştır ve düzeltilmiştir** — ADIM 42'nin dersi burada tekrar geçerli: bayat değil,
+> **anlamsız** bir sayıydı; iki farklı şeyi ("§6.7.N alt bölümleri" ile "§6.7 tablosu")
+> tek sayıya katlıyordu.
+>
+> * **§6.7.N yazım alt bölümleri: 12 tane, 11'i KAPALI.** Kapanmayan **§6.7.10 /
+>   P1-Gate3**'tür ve kendi başlığında zaten *"ELE ALINABİLİR HALE GELDİ — KAPANMADI"*
+>   yazar. P11-1'in bir §6.7.N alt bölümü hiç olmadı, yani "P11-1 hariç" ifadesi bu
+>   eksene uymuyordu.
+> * **§6.7 tablosu: 24 satır, 14'ü KAPALI, 10'u AÇIK** → **P4-3** · **P10-B6** ·
+>   **P11-1** · **P11-6b** · **P11-3b** · **P8-B3b** · **P1-Gate3** · **P10-B3** ·
+>   **P10-B4** · **P10-B5**. Bunların yalnız biri (P11-1) repo ayarıdır; gerisi ölçülmüş
+>   ve düzeltilmemiş teknik kalemlerdir.
+>
+> Yani ADIM 47 **iki** kalem kapattı (P10-B2 / §6.7.5 ve P8-B2 / §6.7.9), §6.7'yi
+> **bitirmedi**. **Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08); §8 BLOCKED.** Hiçbir kalem
+> bu slice'ta READY'ye çevrilmedi.
 
 #### 6.7.1 P9-F2 KAPANDI — SPA origin'inde CSP (ADIM 32, 2026-08-10)
 
@@ -1318,7 +1337,45 @@ geri konuldu, ikisinde de **exit 1**; geri alınınca yeniden exit 0.
 
 ---
 
-#### 6.7.5 P10-B2 — sayfalama sınırı YAYIMLANDI, aşım davranışı AÇIK (ADIM 37, 2026-08-11)
+#### 6.7.5 P10-B2 **KAPANDI** — sınır yayımlandı (ADIM 37), kelepçe PO kararıyla korundu (ADIM 47)
+
+> **KAPANIŞ — ADIM 47, 2026-08-12.** Aşağıdaki ADIM 37 kaydı **tarihsel olarak doğrudur ve
+> değiştirilmemiştir**; açık bıraktığı tek soru — *aşım sessiz clamp mi, 422 red mi?* —
+> 2026-08-12'de **PO tarafından cevaplandı: KELEPÇE KALIR.** Dokuz parametre 200 dönmeye
+> devam eder, 422'ye çevrilmez.
+>
+> **Bu bir "yapılacak iş yok" kararı DEĞİLDİ.** Kapatılması gereken şey davranış değil,
+> **farkın gerekçesinin yazılı olmamasıydı** — nitekim yazılmadığı için bu rapor onu bir
+> "tutarsızlık" olarak yeniden raporladı. Gerekçe artık üç yerde birden yaşıyor
+> (`apps/api/pagination.py` modül docstring'i · `docs/CODEMAPS/BACKEND_ROUTES.md`
+> §SAYFALAMA SINIRI · burası):
+> 1. **Davranış artık SESSİZ DEĞİL.** Gerçek kusur, istemcinin sınırı `docs/openapi.json`'dan
+>    öğrenememesiydi; `x-clamp-default` / `x-clamp-maximum` onu kapattı. Kusur eksik
+>    sözleşmeydi, kelepçenin kendisi değil.
+> 2. **422'ye çevirmek ÜRETİLMİŞ İSTEMCİLERİ KIRARDI** — bugün 200 dönen bir istek
+>    reddedilmeye başlardı. Sevk edilmiş bir wire contract yalnız simetri uğruna yeniden
+>    kesilmez.
+>
+> Yani **19 ENFORCING / 9 CLAMPING ayrımı BİLİNÇLİDİR**, drift değil; üç farklı default
+> (`clamp_limit` → 20 · `panel_backtest_log::_clamp_limit` → 25 ·
+> `log_projection::_clamp_limit` → 50; tavan üçünde de 100) de bilinçlidir — her biri kendi
+> sorgu katmanının **uyguladığı** sabittir. Tek ortak declarator
+> `apps/api/pagination.py::clamped_limit_query`; yeni bir kelepçeli `limit` ondan geçmelidir.
+>
+> **Pin — iki invariant birlikte kilitli** (`tests/contract/test_pagination_limit_contract.py`):
+> kelepçeli parametre `x-clamp-maximum` **YAYIMLAR** (`test_the_two_families_partition_every_limit_parameter`
+> + `test_published_bounds_equal_the_enforced_bounds`) **ve** JSON Schema `maximum`
+> **YAYIMLAMAZ** (`test_a_clamping_parameter_never_advertises_rejection`). İkincisi iki
+> sınıfın birbirine karışmasını engeller: her iki anahtarı da emitleyen bir uç iki aileye
+> birden girer ve karar şemadan **okunamaz** hâle gelir. **KOD DAVRANIŞI DEĞİŞMEDİ** — bu
+> kalem yalnız belge + test ekseninde kapandı; `test_the_over_limit_behaviour_is_the_decided_clamp`
+> kelepçeyi karar olarak pinler, bir simetri süpürgesi onu sessizce ters çeviremez.
+>
+> **Kapsam dışı kalan (KAPANMADI):** **P10-B6** — 4 uç etkin sayfa boyutunu yanıtta
+> yankılamıyor. Ayrı bulgu, bu kararın konusu değil.
+> **Verdict ve blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), §8 BLOCKED.**
+
+**(ADIM 37, 2026-08-11 kaydı — tarihsel, değiştirilmedi.)**
 
 > **Numara notu:** bu slice'ın kickoff prompt'u kendisini "ADIM 36" diye adlandırıyordu.
 > **ADIM 36 doludur** (P6-ek + P6-6 harness fail-fast, PR #658, §6.7.4). Merge edilmiş
@@ -1619,7 +1676,50 @@ gövde ve `__all__` aynı, fonksiyonun beş assert'i (`test_gateway_parity_s4.py
 
 ---
 
-#### 6.7.9 P8-B2 KARARA BAĞLANDI — iki uç hizalandı, iki uç PO'da (ADIM 41, 2026-08-11)
+#### 6.7.9 P8-B2 **KAPANDI** — iki uç hizalandı (ADIM 41), iki uç PO kararıyla çevrildi (ADIM 47)
+
+> **KAPANIŞ — ADIM 47, 2026-08-12.** Aşağıdaki ADIM 41 kaydı **tarihsel olarak doğrudur ve
+> değiştirilmemiştir**; PO'ya sorulan soru en altta duruyor. **Cevap 2026-08-12'de geldi:**
+> `../validate` ve `../baseline-parse` **200 → 202**. Bu, aşağıda önerilen (1) seçeneği
+> **değil**, onun Create-Package yarısıdır: PO `POST /library/{id}/validation-runs` (201)
+> ucunu kapsam dışında bıraktı, o uç **201'de KALDI** → iki sarmalayıcı hâlâ aynı validation
+> run'ı iki farklı status'le sarıyor. **Bu ayrışma KAPANMADI, kayda geçirildi**; kapatmak
+> yeni bir PO kararı ister.
+>
+> **Karar bir ATIF DEĞİL.** Kanonik bu iki uç için hâlâ bir status **vermiyor** (baseline-parse
+> için ucu bile adlandırmıyor). Otorite PO'nun kararıdır, "repo zaten 202 döndürüyor" gözlemi
+> değil — ADIM 41'in reddettiği çıkarım hâlâ reddediliyor. İleride kanonik bir sayfa bu
+> uçlar için bir kod adlandırırsa **kanonik kazanır ve karar yeniden açılır**.
+> Gerekçe: 200, bu yanıtların taşımadığı **tamamlanmış bir sonucu** reklam ediyordu
+> (`checks: []`, `parser_version: ""` — hepsi worker'ı bekleyen yer tutucular).
+>
+> **Yapılanlar (ADIM 47):** iki route `status_code=202` + **tipli** gövde
+> (`ValidationRunAcceptedResponse` 8 alan · `BaselineParseAcceptedResponse` 8 alan) —
+> bare `dict[str, Any]` sözleşmeyi şemadan gizlerdi (O-30 dersi, ADIM 41 ile aynı şablon,
+> yeni desen icat edilmedi). `docs/openapi.json` tazelendi. **Semantik DEĞİŞMEDİ:** iki uç
+> bu slice'tan önce de durable job kuyruğa alıyordu, sonra da alıyor — değişen yalnız sevk
+> edilen semantiğin **doğru status ile adlandırılması**.
+>
+> **Üç bağımlılık YENİDEN ölçüldü (ADIM 41'in ölçümüne güvenilmedi):**
+> * iki komut (`start_package_validation_run`, `start_baseline_parse`) gerçekten
+>   `_enqueue_create_package_job` → `enqueue_job` çağırıp iş bitmeden dönüyor → 202 doğru;
+>   senkron olsalardı bu slice DURUP raporlayacaktı.
+> * **Frontend:** `lib/apiClient.ts` yalnız **204**'ü ayırır, gerisinde `response.ok`
+>   kullanır → 200↔202 istemciye görünmez; `lib/createPackage.ts` hiçbir status'e assert
+>   etmez. **Frontend kodu ve testleri DEĞİŞMEDİ** (değişmesi gerekmedi).
+> * **Idempotency-Key:** `run_idempotent` yalnız **gövdeyi** saklar; status route
+>   dekoratöründe yaşar ve gövde anahtarları **birebir aynı kaldı** → O-30'un "eski zarf
+>   katı şema altında 500'e döner" tuzağı burada oluşamaz, **backfill gerekmedi**.
+>
+> **Pin:** `tests/contract/test_p8b2_admission_status.py` — `_EXPECTED` iki satırda 202'ye
+> çevrildi (etiket `PO 2026-08-12 — canonical silent`, **ALIGNED etiketiyle birleştirilmedi**),
+> `test_validate_and_baseline_parse_are_202_by_product_owner_decision` kararı adıyla pinler,
+> `test_every_202_admission_body_is_published_in_the_schema` artık **dört** gövdeyi birden
+> doğrular. Türetilmiş admission kümesi ve on üç ucun status pini **olduğu gibi duruyor**.
+>
+> **Verdict ve blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), §8 BLOCKED.**
+
+**(ADIM 41, 2026-08-11 kaydı — tarihsel, değiştirilmedi.)**
 
 **Verdict ve blocker sayısı DEĞİŞMEDİ.** P8-B2 blocker değildi; §8 hâlâ **BLOCKED**, açık
 blocker sayısı hâlâ **üç** (1, 2, 4). **Kalem KAPANMADI** — dördün ikisi PO'da.

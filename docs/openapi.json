@@ -767,6 +767,56 @@
         "title": "AvailableTimePolicy",
         "type": "string"
       },
+      "BaselineParseAcceptedResponse": {
+        "description": "Baseline-parse admission body — ``202`` by PRODUCT-OWNER DECISION (2026-08-12).\n\nADJUDICATION (RC P8-B2 / readiness §6.7.9), the same decision as\n``ValidationRunAcceptedResponse`` and with one gap MORE: canonical does not merely\nomit a status here, it does not name the ENDPOINT. doc 06 §7 has a single baseline\nsurface (\"asset upload and parse are async\") and MTR §10.2 lists only\n``POST /package-revisions/{id}/baseline-assets``, so splitting upload (201) from parse\nis a shipped decomposition with nothing to align TO. The PO chose the durable-admission\n``202`` on 2026-08-12 for both endpoints together. Pinned by\n``test_p8b2_admission_status.py``.\n\n``parser_version`` and ``parse_report`` are the command's deliberate placeholders (see\n``cp_cmd.start_baseline_parse``): no parse evidence exists at admission, and empty\nvalues keep the body assignable to the client's ``BaselineParseResult`` while making\nit impossible to render a parser version or a row count the worker has not produced.",
+        "properties": {
+          "attempt_no": {
+            "title": "Attempt No",
+            "type": "integer"
+          },
+          "baseline_asset_id": {
+            "title": "Baseline Asset Id",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "parse_report": {
+            "additionalProperties": true,
+            "title": "Parse Report",
+            "type": "object"
+          },
+          "parse_status": {
+            "title": "Parse Status",
+            "type": "string"
+          },
+          "parser_version": {
+            "title": "Parser Version",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "request_version": {
+            "title": "Request Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id",
+          "baseline_asset_id",
+          "attempt_no",
+          "parse_status",
+          "parser_version",
+          "parse_report",
+          "job_id",
+          "request_version"
+        ],
+        "title": "BaselineParseAcceptedResponse",
+        "type": "object"
+      },
       "BatchAssignmentRequest": {
         "properties": {
           "changes": {
@@ -5247,6 +5297,56 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "ValidationRunAcceptedResponse": {
+        "description": "Validation-run admission body — ``202`` by PRODUCT-OWNER DECISION (2026-08-12).\n\nADJUDICATION (RC P8-B2 / readiness §6.7.9). The conflict: this endpoint is a durable\nadmission exactly like pre-check / generate-candidate — it appends the ``queued`` run\nrow, enqueues a job and returns before any verdict exists — but canonical never names\na status for it. doc 06 §7 describes only the behaviour (\"returns validation_run_id;\nrows show queued/running\"), doc 08 §7 lists the endpoint without a code, and MTR §13\nmandates only that long validate work leaves the request. Two readings were open:\n(a) keep the shipped ``200``, because inventing a wire contract in a canonical gap is\nwhat this project refuses to do; (b) align to the shipped durable-admission pattern,\nbecause ``200`` advertises a completed result this response does not carry. The PO\nchose (b) on 2026-08-12. Canonical does NOT say 202 here — the decision does, and the\nreason it is recorded rather than absorbed is that a later reader must not \"fix\" it\nback by pattern-matching. Pinned by ``test_p8b2_admission_status.py``.\n\nNothing here is a validation RESULT: ``checks`` is empty at admission (the seven\nmandatory checks land when ``jobs.create_package.run_validation_job`` completes) and\n``status`` is the run row's own ``queued``. Declaring the model is what puts the shape\ninto ``docs/openapi.json``; a bare ``dict`` kept the drift guard green while the\ncontract stayed invisible (O-30).",
+        "properties": {
+          "attempt_no": {
+            "title": "Attempt No",
+            "type": "integer"
+          },
+          "checks": {
+            "items": {},
+            "title": "Checks",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "request_version": {
+            "title": "Request Version",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "validation_run_id": {
+            "title": "Validation Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "validation_run_id",
+          "attempt_no",
+          "status",
+          "state",
+          "checks",
+          "job_id",
+          "request_version"
+        ],
+        "title": "ValidationRunAcceptedResponse",
+        "type": "object"
+      },
       "ViewDatasetQueryRequest": {
         "properties": {
           "marker_refs": {
@@ -9086,7 +9186,7 @@
     },
     "/api/v1/create-package/requests/{request_id}/baseline-parse": {
       "post": {
-        "description": "Admit the head baseline's parse (F-01c). Returns ``parsing`` immediately; the\nstored CSV is read and the terminal passed/failed status written by the durable\n``default``-queue worker, so closing the tab never cancels it.\n\nSTILL 200 ON PURPOSE — same reason as ``run_validation`` (RC P8-B2). Canonical does\nnot merely omit a status for this endpoint, it does not name the ENDPOINT: doc 06\n§7 has one baseline surface (\"asset upload and parse are async\") and MTR §10.2\nlists only ``POST /package-revisions/{id}/baseline-assets``. Splitting upload (201)\nfrom parse is a shipped decomposition, so there is nothing to align TO. PO decision;\npinned by ``test_p8b2_admission_status.py``.",
+        "description": "Admit the head baseline's parse (F-01c). Returns ``parsing`` immediately; the\nstored CSV is read and the terminal passed/failed status written by the durable\n``default``-queue worker, so closing the tab never cancels it.\n\n``202`` is a PO DECISION of 2026-08-12, not a canonical alignment — canonical does\nnot even name this endpoint. The full adjudication lives on\n``BaselineParseAcceptedResponse``. ``test_p8b2_admission_status.py`` pins it.",
         "operationId": "parse_baseline_api_v1_create_package_requests__request_id__baseline_parse_post",
         "parameters": [
           {
@@ -9132,13 +9232,11 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Parse Baseline Api V1 Create Package Requests  Request Id  Baseline Parse Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/BaselineParseAcceptedResponse"
                 }
               }
             },
@@ -9464,7 +9562,7 @@
     },
     "/api/v1/create-package/requests/{request_id}/validate": {
       "post": {
-        "description": "STILL 200 ON PURPOSE — the sibling admissions above are 202 (RC P8-B2).\n\nThis is an admission exactly like pre-check / generate-candidate: it writes a\ndurable QUEUED job and returns before the run exists. What it does NOT have is a\ncanonical status: doc 06 §7 describes the behaviour (\"returns validation_run_id;\nrows show queued/running\") and doc 08 §7 lists the endpoint, but neither names a\ncode, and the Master Technical Reference §13 mandates only that long analyze/parse/\nvalidate work leaves the request. The repo's own 202 habit is a FACT, not a rule —\ninventing a wire contract in a canonical gap is what this project refuses to do,\nso the status stays as shipped and the decision sits with the PO. Do not \"fix\" the\nasymmetry without that decision; ``test_p8b2_admission_status.py`` pins it.",
+        "description": "Admit a Validation Tests run: writes a durable QUEUED job and returns before the\nverdict exists, so the four Create-Package admissions now agree on ``202``.\n\nThe status is a PO DECISION of 2026-08-12, not a canonical alignment — canonical\nnames no status for this endpoint. The full adjudication (what conflicted, the two\nreadings, who chose and why) lives on ``ValidationRunAcceptedResponse``; do not\nre-derive it from the sibling routes. ``test_p8b2_admission_status.py`` pins it.",
         "operationId": "run_validation_api_v1_create_package_requests__request_id__validate_post",
         "parameters": [
           {
@@ -9510,13 +9608,11 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Run Validation Api V1 Create Package Requests  Request Id  Validate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ValidationRunAcceptedResponse"
                 }
               }
             },

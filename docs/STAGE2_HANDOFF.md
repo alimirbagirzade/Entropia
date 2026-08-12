@@ -5519,14 +5519,66 @@ Paste-ready resume prompt: `docs/ADIM46_LANDED_KICKOFF.md` en altta.
 
 ---
 
+## Stage — ADIM 47: RC §6.7'nin iki PO kararı uygulandı (PR pending)
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi.
+**OpenAPI: DEĞİŞTİ** (bilerek) — iki operation `200 → 202`, iki component eklendi;
+path/operation **sayısı** aynı.
+
+**(A) §6.7.9 / P8-B2 KAPANDI.** `POST /create-package/requests/{id}/validate` ve
+`../baseline-parse` **200 → 202** (PO kararı **2026-08-12**). **Otorite karardır, kanonik
+DEĞİL** — kanonik bu iki uç için hâlâ status vermiyor (`baseline-parse` için ucu bile
+adlandırmıyor). Sevk edilmiş 202 deseni bir **olgu**dur, gerekçe değil; ADIM 41'in bu
+çıkarımı reddi **hâlâ geçerli**. İki komut kod yazılmadan önce **yeniden ölçüldü**: ikisi de
+`enqueue_job`'a ulaşıp iş bitmeden dönüyor → 202 doğru (senkron olsalardı slice DURACAKTI).
+
+**(B) §6.7.5 / P10-B2 KAPANDI.** 9 kelepçeli `limit` **200 KALIR** (PO kararı 2026-08-12).
+**Kod davranışı değişmedi**; kapanan şey gerekçenin yazılı olmamasıydı.
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+
+- `apps/api/routes/create_package.py::ValidationRunAcceptedResponse` (8 alan) ve
+  `::BaselineParseAcceptedResponse` (8 alan) — YENİ tipli admission gövdeleri. Yeni bir
+  admission ucu eklerken **bu şablonu** kullan; `dict[str, Any]` dönüşü sözleşmeyi şemadan
+  gizler (O-30). Alanlar komutun döndürdüğü yer tutucuları **aynen** yansıtır — `checks: []`,
+  `parser_version: ""`, `parse_report: {}`; sentezlenmiş bir verdict ASLA yazma.
+- `tests/contract/test_p8b2_admission_status.py::_EXPECTED` — 13 admission ucunun kanonik
+  status tablosu. Etiketler **ayrıdır**: `ALIGNED` (kanonik kodu adlandırdı) ≠ `PO <tarih>`
+  (kanonik sessiz, insan seçti). **Birleştirme** — birleştiren okuyucu kararı atıf sanar.
+  Yeni admission ucu **sınıflandırılmazsa** kapı kırmızıya döner (küme türetilir).
+- `apps/api/pagination.py::clamped_limit_query` — kelepçeli `limit`'in TEK declarator'ı;
+  modül docstring'i artık PO kararının gerekçesini taşır.
+- `tests/contract/test_pagination_limit_contract.py` — iki invariant **birlikte** kilitli:
+  kelepçeli parametre `x-clamp-maximum` **yayımlar** ve `maximum` **yayımlamaz**. İkisi
+  birden emitleyen uç iki aileye birden girer ve karar şemadan okunamaz hâle gelir.
+
+**Test sayıları:** hedef paketler geçti (`test_p8b2_admission_status` ·
+`test_pagination_limit_contract` · `test_openapi_contract` · `test_typed_contract_openapi` ·
+`test_create_package_contract`). `ruff`/`mypy` temiz, `generate_repository_facts --check` OK.
+
+**Dürüst sınırlar:** **blocker sayısı DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+· **Tam suite YERELDE KOŞMADI** — bu container'da Postgres yok (docker daemon kapalı);
+DB'ye bağlı testlerin **otoritesi CI'dır**. Tek yerel hata temiz ağaçta da üretildi (ortamsal).
+· **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` bu oturumda bağlı değil (ritüel md. 4 **eksik**).
+· **`POST /library/{id}/validation-runs` 201'de KALDI** — PO kararı onu kapsamadı; iki
+sarmalayıcı hâlâ farklı status döndürüyor, ayrışma **açık**.
+· **§6.7 BİTMEDİ:** alt bölümlerde 12'de 11 kapalı (§6.7.10/P1-Gate3 açık), tabloda
+**24 satırda 10 AÇIK** (P4-3 · P10-B6 · P11-1 · P11-6b · P11-3b · P8-B3b · P1-Gate3 ·
+P10-B3/B4/B5). Kickoff'un *"on iki kalemin tamamı kapanır"* iddiası **yanlıştı, sayıldı.**
+
+Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38, 39, 40, 41 ve 45 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge slice'ıydı, motor
-> eksenine dokunmadı. Test ekseninde kalan RC §6.7 kalemleri: **P11-1** (branch
-> protection — repo ayarı, **insan kararı**, agent işi değil), **P11-6b**, **P11-8**
-> (Lighthouse). Belge ekseninde kalan: **P8-B2'nin PO yarısı** (`../validate` +
-> `../baseline-parse` + `validation-runs` — ADIM 41 ölçtü, kararı PO'ya bıraktı),
-> **P8-B3b**. Paste-ready resume prompt: `docs/ADIM41_LANDED_KICKOFF.md` en altta.
+> **ADIM 38, 39, 40, 41, 45, 46 ve 47 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
+> slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
+> (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
+> ayrışma **açık**. RC §6.7'de kalanlar: **P11-1** (branch protection — repo ayarı,
+> **insan kararı**, agent işi değil), **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**,
+> **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
+> Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

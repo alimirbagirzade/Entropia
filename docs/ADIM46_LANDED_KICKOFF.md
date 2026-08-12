@@ -1,4 +1,7 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 47 (2026-08-12).** Canlı kickoff artık
+> `docs/ADIM47_LANDED_KICKOFF.md`. Aşağısı ADIM 46 kapanışındaki durumu kaydeder;
+> sayıları ve "sıradaki iş" maddeleri bayat olabilir.
 
 # ADIM 46 LANDED — RC §6.6'nın iki canlı N+1'i kapandı (#617 + #618, PR #681)
 

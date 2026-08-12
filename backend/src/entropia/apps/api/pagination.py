@@ -11,6 +11,8 @@ Two families of list endpoints ship in this API and they differ in how they trea
   ``queries/panel_backtest_log.py::_clamp_limit``). An over-limit value is reduced to
   the ceiling and the request SUCCEEDS with a smaller page.
 
+The split is a PRODUCT-OWNER DECISION of 2026-08-12 (see below), not an oversight.
+
 The clamping family published nothing at all -- no default, no ceiling -- so a client
 could not learn either bound from ``docs/openapi.json`` (RC readiness finding P10-B2).
 This module publishes both, and publishes them honestly: it deliberately does NOT emit
@@ -20,11 +22,24 @@ false one -- a generated client would raise on a request the server answers 200.
 ceiling travels as ``x-clamp-maximum``, an extension no code generator can mistake for
 a validation bound.
 
-Scope note: WHETHER clamping or rejecting is the right over-limit behavior is a product
-decision that no canonical page document settles. It is recorded as an open adjudication
-in ``docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md`` (section 6.7, P10-B2) and is
-NOT decided here. This module publishes the behavior that ships today and changes none
-of it.
+WHETHER clamping or rejecting is the right over-limit behavior is a product decision that
+no canonical page document settles. ADIM 37 published the bound and left the question
+open; **the product owner decided on 2026-08-12 that the clamping family KEEPS clamping**
+and is not converted to 422. Two reasons, both recorded so the next reader does not file
+the split as an inconsistency for a third time:
+
+* the behavior is no longer SILENT. The gap worth closing was that a client could not
+  learn either bound from ``docs/openapi.json``; ``x-clamp-default`` / ``x-clamp-maximum``
+  closed that, and an under-specified contract was the actual defect, not the clamp.
+* converting would BREAK GENERATED CLIENTS. A request that answers 200 today would start
+  being rejected — a shipped wire contract cannot be re-cut for symmetry alone.
+
+So the two families are a DELIBERATE split, not a drift: 19 parameters ENFORCE (JSON
+Schema ``maximum`` -> 422), 9 CLAMP (``x-clamp-maximum`` -> 200). The three different
+defaults are deliberate too (20 / 25 / 50, ceiling 100 in all three) — each is the
+constant its own query layer applies. Recorded in
+``docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md`` section 6.7 (P10-B2, §6.7.5) and
+pinned by ``tests/contract/test_pagination_limit_contract.py``.
 """
 
 from __future__ import annotations

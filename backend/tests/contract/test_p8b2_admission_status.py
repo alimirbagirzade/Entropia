@@ -14,8 +14,12 @@ The split below is NOT a style preference, it is what canonical says endpoint by
   repeats it ("202 Accepted + job_id dondur"), doc 07 §10.3 repeats it again. Shipped
   200 -> ALIGNED to 202.
 * ``validate`` / ``baseline-parse`` — canonical describes the ASYNC BEHAVIOUR (doc 06 §7,
-  MTR §13) but names NO status, and for baseline-parse names no endpoint at all. The
-  repo's 202 habit is a fact, not a rule, so these stay as shipped: **PO decision**.
+  MTR §13) but names NO status, and for baseline-parse names no endpoint at all. ADIM 41
+  left both at the shipped 200 and referred the gap to the product owner. **The PO decided
+  on 2026-08-12: align both to 202.** Shipped 200 -> DECIDED 202. The distinction from the
+  two above survives in ``_EXPECTED``: those are ALIGNED (canonical named the code), these
+  are PO (canonical is silent and a human chose). Do not collapse the two labels — a future
+  reader who reads "202 everywhere" as canonical would treat a decision as a citation.
 * the remaining nine keep their shipped statuses; they are pinned here so a later
   "let's make these consistent" sweep cannot flip a published contract by accident.
 
@@ -41,8 +45,11 @@ _EXPECTED: dict[str, tuple[int, str]] = {
     # Create Package plane
     "/create-package/requests/{request_id}/pre-check": (202, "ALIGNED doc 07 §10.3"),
     "/create-package/requests/{request_id}/generate-candidate": (202, "ALIGNED MTR §7.1"),
-    "/create-package/requests/{request_id}/validate": (200, "PO — canonical silent"),
-    "/create-package/requests/{request_id}/baseline-parse": (200, "PO — canonical silent"),
+    "/create-package/requests/{request_id}/validate": (202, "PO 2026-08-12 — canonical silent"),
+    "/create-package/requests/{request_id}/baseline-parse": (
+        202,
+        "PO 2026-08-12 — canonical silent",
+    ),
     # Shipped elsewhere, unchanged by P8-B2
     "/library/{entity_id}/validation-runs": (201, "shipped; canonical silent on status"),
     "/mainboard-compositions/{composition_id}/backtest-runs": (202, "doc 15 §10 '201/202'"),
@@ -150,15 +157,23 @@ def test_the_two_endpoints_canonical_gives_a_status_are_202(app) -> None:
 
 
 @pytest.mark.contract
-def test_validate_and_baseline_parse_stay_200_until_the_po_decides(app) -> None:
-    """Deliberate asymmetry, not an oversight.
+def test_validate_and_baseline_parse_are_202_by_product_owner_decision(app) -> None:
+    """A DECISION, not a citation — the distinction is the point of this test.
 
-    Both are admissions, both would read better as 202 — and neither has a canonical
-    status to align to. Flipping them here would invent a wire contract in a canonical
-    gap. Whoever gets the PO decision changes THIS test first.
+    Both endpoints are durable admissions with no canonical status to align to. ADIM 41
+    left them at the shipped 200 rather than invent a wire contract in a canonical gap,
+    and referred the gap to the product owner. The PO chose 202 on 2026-08-12: a 200
+    advertises a completed result these responses do not carry, and the four
+    Create-Package admissions now answer with one status.
+
+    Nothing about the endpoints' semantics moved — both enqueued a durable job before
+    this slice and both still do. If a later reader looks for the canonical page that
+    mandates 202 here, there is none, and finding none must not be read as licence to
+    revert: the authority is the recorded decision, kept alongside its reasoning on
+    ``ValidationRunAcceptedResponse`` / ``BaselineParseAcceptedResponse``.
     """
-    assert _status_of(app, "/create-package/requests/{request_id}/validate") == 200
-    assert _status_of(app, "/create-package/requests/{request_id}/baseline-parse") == 200
+    assert _status_of(app, "/create-package/requests/{request_id}/validate") == 202
+    assert _status_of(app, "/create-package/requests/{request_id}/baseline-parse") == 202
 
 
 @pytest.mark.contract
@@ -171,9 +186,11 @@ def test_the_other_nine_admissions_keep_their_published_status(app) -> None:
 
 
 @pytest.mark.contract
-def test_both_aligned_bodies_are_published_in_the_schema(app) -> None:
+def test_every_202_admission_body_is_published_in_the_schema(app) -> None:
     """202 with a bare ``dict`` would hide the body from the schema exactly as the purge
-    202 once did (O-30). Both admission bodies are typed and their keys are visible."""
+    202 once did (O-30). All four Create-Package admission bodies are typed and their keys
+    are visible — the two the PO moved on 2026-08-12 included, which is why flipping the
+    status alone would not have been the whole change."""
     schema = app.openapi()
     components = schema["components"]["schemas"]
     for name, keys in (
@@ -196,6 +213,32 @@ def test_both_aligned_bodies_are_published_in_the_schema(app) -> None:
         (
             "CandidateAcceptedResponse",
             {"request_id", "state", "candidate_hash", "job_id", "request_version"},
+        ),
+        (
+            "ValidationRunAcceptedResponse",
+            {
+                "request_id",
+                "validation_run_id",
+                "attempt_no",
+                "status",
+                "state",
+                "checks",
+                "job_id",
+                "request_version",
+            },
+        ),
+        (
+            "BaselineParseAcceptedResponse",
+            {
+                "request_id",
+                "baseline_asset_id",
+                "attempt_no",
+                "parse_status",
+                "parser_version",
+                "parse_report",
+                "job_id",
+                "request_version",
+            },
         ),
     ):
         assert name in components, f"{name} is not published in the OpenAPI schema"

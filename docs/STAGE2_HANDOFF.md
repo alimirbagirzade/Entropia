@@ -5354,6 +5354,49 @@ negatifi ampirik kanıtlandı.
 
 ---
 
+## ADIM 43 — RC §6.7 / P11-8 + P10-7: Lighthouse ratchet'i + latency ratio kapısı landed (PR #676)
+
+**Migration:** yok · **Yeni tablo:** yok · **Ürün kodu:** DEĞİŞMEDİ (`ENGINE_VERSION`,
+OpenAPI, alembic head sabit). **CI/kapı** slice'ı.
+
+**Ne landed:**
+
+* **P10-7 KAPANDI — ve saat zaten dolmuştu.** Brief bu kalemi *"kapanmaz, yalnız saati
+  başlatır"* diye planlıyordu. Ölçüm bunu çürüttü: toplayıcı **ADIM 24'ten beri** vardı
+  (`performance.yml` → `load-full`, cron `23 4 * * *`) ve **altı** yeşil gece birikmişti
+  (08-07…08-12; hepsi `github-ubuntu-latest`, 16/40, sıfır hata, artefaktları duruyor).
+  Beşinci gece **08-11**'de dolmuştu → planlanan ikinci PR **gereksiz**.
+* **Bant türetildi.** Ham kontrol kayması **1.71×**; dondurulmuş baseline'a karşı en kötü
+  gece **1.62×** → README §6 adım 3 (`~1.5×`) → **`--max-ratio 2.5`**. Baseline = altı
+  gecenin medyanı (`31461912952`, 08-11, `4e9512d2`), artık **takipli dosya**
+  (`docs/performance/baseline_ci.json`) → artefakt saklamasına bağlı değil.
+* **Negatif kanıtlı, gerçek baseline üzerinde:** altı gece PASS (1.54× pay) · 3.0× FAIL ·
+  2.4× geçer (sınır gizlenmedi). §6 adım 5'in *"bant yok, kapalı bırak"* çıkışı **alınmadı**.
+* **P11-8 KAPANDI.** Lighthouse **ratchet** olarak bağlandı (`e2e.yml` → `lighthouse`,
+  `specs/21-lighthouse.spec.ts`, `lighthouse-baseline.json`) — axe deseninin aynısı, yeni
+  desen icat edilmedi. **23/23 rota, kapsanmayan 0**, liste `TARGET_PAGES`'ten türüyor.
+  Gürültü **stabilize** edildi (warm-up + 3 koşunun medyanı) → tekrar yayılımı **0 puan**.
+  Kapı **UNARMED** sevk edildi, ilk CI koşusu ölçtü, ikinci commit dondurdu.
+* **Ölçülen taban:** performance **100** (22 rota) / **98** (`panel-management`) ·
+  best-practices **96** · seo **82**.
+* **İki otorite çakışması önlendi:** Lighthouse **a11y kategorisi hiç istenmiyor** (axe
+  otorite; **hiçbir çıktısı A-08 kanıtı değil**) · performans ayrımı iki belgeye yazıldı
+  (`loadgen` = sunucu, Lighthouse = tarayıcı; `performance/README.md` §8'in beyan ettiği
+  boşluk).
+
+**Dürüst sınırlar:** Lighthouse performance localhost'ta **doygun** (taban 100 = *"hiç
+kötüleşemez"*, gerçek cihaz kanıtı **değil**) · BP 96 / SEO 82 **gerçek kusur**, donduruldu
+**düzeltilmedi** (ayrı PR; `routes[].deductions` onları isimlendirmeye devam eder) · ratio
+kapısı **2.5× altını görmez** ve **PR'da koşmaz** · bant **altı** geceye / **tek** runner
+class'a dayanıyor · **P11 ve P10 KAPANMADI** (P11-1 = insan kararı, P11-6b, P10-B2'nin PO
+yarısı, B3–B6) · Lighthouse kapısı P11-1 açık olduğu için *required status check* değil.
+
+**Test sayıları:** `test_loadgen.py` **32 → 38 passed**. Üretilmiş: backend collected
+**3497 → 3503**, e2e call sites **80 → 84 / 22 spec**. Kanıt:
+`docs/releases/evidence/2026-08-12/`. Rapor: **§6.7.11** + **§6.7.12**.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40 ve 41 bunu DEĞİŞTİRMEDİ** — üçü de test/kapı/belge slice'ıydı, motor

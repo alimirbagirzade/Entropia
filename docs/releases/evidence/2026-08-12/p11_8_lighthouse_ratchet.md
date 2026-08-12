@@ -119,3 +119,112 @@ an explicit `::warning::`. A second commit freezes those floors and sets `"armed
 
 An unarmed gate is loud. A **missing** baseline file is still a hard failure — a deleted
 or unreadable baseline must never degrade into "every score is allowed".
+
+## 8. What the bootstrap run measured
+
+Run `31571413853`, job `94034026749`, branch `ci/rc-p11p8-lighthouse-and-latency-baseline`,
+commit `d169912`. Job wall clock **9 m 48 s** end to end (stack boot, npm and browser
+install included); the ratchet step itself **7.6 min** for 23 routes x 3 passes plus the
+warm-up — 70 Lighthouse runs. Comfortably inside the 75-minute timeout, so the full matrix
+was affordable and **no subset was ever needed**.
+
+| Category | Frozen floor |
+|---|---|
+| `performance` | **100** on 22 routes, **98** on `panel-management` |
+| `best-practices` | **96** on all 23 |
+| `seo` | **82** on all 23 |
+
+**Worst repeat spread in that run: 0 points, in every category, on every route.**
+
+That number is true of the run and **false as a description of the gate**, which the very
+next run proved — see §10. It is left here as measured rather than quietly upgraded into a
+property, because "zero spread" as a general claim is exactly the kind of sentence that
+ages badly and then gets cited.
+
+Per-route metrics differentiate the pages even where the score does not — CLS runs from
+0.000 to 0.085 (`panel-management`), Speed Index from 87 ms to 197 ms. That is the evidence
+the run really visited 23 distinct authenticated pages rather than scoring one shell 23
+times.
+
+### The two limits this measurement exposes
+
+**1. `performance` is saturated.** 100 on 22 of 23 routes is a real measurement, not
+rounding — but it is measured against a **localhost** stack on Lighthouse's own desktop
+preset (rtt 40 ms, 10 Gbps, `cpuSlowdownMultiplier: 1`; the shipped preset, not a
+hand-loosened one). At that setting the score has almost no headroom left to lose, so:
+
+* as a **ratchet** it is the strictest setting available — the floor says *"may not get
+  worse at all"*, and any measurable degradation fails;
+* as **evidence about real-world speed** it says very little. Nobody may cite "Lighthouse
+  performance 100" as a claim that the app is fast on a user's machine. It is not that.
+
+The asymmetry is written into the baseline's own `provenance.sensitivity_boundary`, so it
+travels with the number instead of living only here.
+
+**2. `best-practices` 96 and `seo` 82 are real deductions, and they are FROZEN, not
+fixed.** This is a CI/gate slice; a defect found by a new gate is recorded and left open in
+its own PR. Freezing has one consequence worth stating plainly: **a frozen deduction is an
+invisible one** unless something keeps naming it. That is exactly why the spec was extended
+to record `routes[].deductions` — the weighted audits that actually cost each route its
+points — so even a green run still carries the list of what is wrong.
+
+## 9. The armed run — and the claim it falsified
+
+Run `31572385301`, job on commit `e707c61`, gate **armed**. Result: **green**, and 22 of
+23 routes reproduced the frozen floors byte for byte.
+
+The twenty-third did not, and it is the most useful thing this slice measured:
+
+```
+bootstrap run   panel-management: performance=98[98-98]
+armed run       panel-management: performance=98[98-100]
+```
+
+Same median, wider range. **So "worst repeat spread: 0 points" was true of one run and is
+not a property of this gate.** One route has real repeat variance, and the second run
+found it. Three consequences, all of them recorded rather than smoothed over:
+
+1. **The median is what held the floor**, not the absence of noise. Both runs medianed 98
+   on that route. This is the stabilisation in §3 doing exactly the job it was added for —
+   had the gate frozen a single pass, the floor would have been 100 and the armed run
+   would have failed on weather at the first attempt.
+2. **`panel-management`'s performance floor must stay at 98.** A future run that medians
+   100 will make the tightened map suggest raising it; taking that suggestion arms a gate
+   that fails the next time the same route medians 98. This is pinned in the baseline as
+   `provenance.do_not_tighten` so it is read at the moment somebody is about to do it.
+3. **The baseline's `provenance.repeat_spread_points` now records both runs**, not the
+   flattering one.
+
+## 10. What is actually frozen — the deductions, named
+
+Recorded from the armed run's `routes[].deductions`. These are the audits that cost each
+route its missing points, i.e. exactly what the floors are freezing:
+
+| Category | Audit | Weight | Routes | What it says |
+|---|---|---|---|---|
+| best-practices | `errors-in-console` | 1 | **23 / 23** | Browser errors were logged to the console |
+| seo | `meta-description` | 1 | **23 / 23** | Document does not have a meta description |
+| seo | `robots-txt` | 1 | **23 / 23** | robots.txt is not valid |
+| performance | `cumulative-layout-shift` | 25 | **1 / 23** | `panel-management`, CLS 0.085 |
+
+Three of the four are **whole-app** defects, not per-page ones — they reproduce on every
+route because they live in the shell (`index.html`) or at the origin (`/robots.txt`). The
+fourth is a single page's layout shift, and it is also the reason that page scores 98
+instead of 100.
+
+**`errors-in-console` on all 23 routes deserves a second look by whoever picks it up:** a
+console error on every authenticated page is a plausible symptom of something real, not a
+lint nit, and this gate cannot tell which.
+
+## 11. Open, not fixed
+
+Product code is untouched. Every deduction above stays **open** and belongs in its own PR,
+tracked as **[#677](https://github.com/alimirbagirzade/Entropia/issues/677)** rather than
+left only in this file — a defect recorded solely inside the artefact that froze it is a
+defect nobody will read again. The issue names the acceptance the same way #617 and #618
+do: each fix lands with its floor tightened, so the repair and its proof arrive together.
+
+**P11 is NOT closed:** `P11-1` (branch protection) is a repository setting and a human
+decision, and `P11-6b` remains open. Because P11-1 is open, this gate — like the visual and
+axe gates beside it — is a job, **not** a required status check: nothing mechanically stops
+a merge over a red Lighthouse run today.

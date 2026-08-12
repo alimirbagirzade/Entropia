@@ -6860,3 +6860,119 @@ sonra yeniden koşulmadı — otorite CI'dır.** Sonraki koşuda `-q` yerine `-r
 > **Numara notu:** bu slice oturum promptunda `ADIM 39` diye adlandırılmıştı; main'de
 > ADIM 39/40/41 zaten merge olmuştu (#665–#668), bu yüzden kayıt **ADIM 42** olarak açıldı.
 > Repo kuralı gereği merge edilmiş numaralar yeniden atanmaz.
+
+---
+
+## ADIM 43 — RC §6.7 / P11-8 + P10-7: Lighthouse ratchet'i bağlandı, latency ratio kapısı açıldı (PR #676)
+
+**Migration:** yok · **Yeni tablo:** yok · **Ürün kodu:** DEĞİŞMEDİ (`ENGINE_VERSION`,
+OpenAPI, alembic head sabit). Bu bir **CI/kapı** slice'ıdır.
+
+### P10-7 — saat zaten dolmuştu (asıl bulgu)
+
+Brief bu kalemi *"kapanmaz, yalnız saati başlatır"* diye planlıyordu; rapor satırı da
+*"aktivasyon için 5 gecelik baseline gerekiyor"* diyordu. **Kod yazmadan önce ölçüldü ve
+ikisi de yanlış çıktı:**
+
+* Gece işi **zaten vardı** — `performance.yml` → `load-full`, cron `23 4 * * *`,
+  **ADIM 24'ten beri**. Yazılacak bir toplayıcı yoktu.
+* **Altı** ardışık yeşil gece birikmişti (2026-08-07 … 08-12), altısı da
+  `github-ubuntu-latest`, 16/40, **sıfır hata**, altısında da `loadgen-baseline` artefaktı
+  mevcut ve süresi dolmamış. §6'nın istediği beşinci gece **08-11**'de dolmuştu.
+
+Yani bu slice saati başlatmadı; **okudu ve kapıyı açtı.** Planlanan ikinci PR (brief'in
+"ADIM 40b"si) **gereksiz** kaldı.
+
+**Bant türetildi, seçilmedi.** Ham kontrol (`meta`) altı gecede **1.71×** kaydı —
+normalizasyonun varlık nedeni ve ham p95 kapısının neden hiç seçenek olmadığının kanıtı.
+Kontrol-normalize eksende senaryo bazlı en kötü max/min yayılım **1.92×**; ama kapının
+gerçekte ölçtüğü nicelik bu değil — her gece **dondurulmuş baseline'a** karşı bakılır ve o
+eksende en kötü oran **1.62×** (`admin_logs`, 08-07). README §6 adım 3 (*"gözlenen
+yayılımın ~1.5 katı"*) → `1.5 × 1.62 = 2.43` → bir ondalığa **yukarı** → **`--max-ratio 2.5`**.
+Gevşek okuma (1.5 × 1.92 = 2.88) **reddedildi**: daha geniş bant için daha zayıf kanıt.
+
+**Baseline = altı gecenin medyanı** (run `31461912952`, 2026-08-11, `4e9512d2`; çift sayı
+olduğu için alt-orta). En hızlı geceyi dondurmak her sıradan geceyi regresyon gösterirdi,
+en yavaşı bir regresyonu gizlerdi.
+
+**Negatif kanıtlandı, gerçek baseline üzerinde:** altı gecenin altısı **PASS** (1.54× pay) ·
+enjekte **3.0× FAIL** · enjekte **2.4× geçer** (bandın gerçek sınırı, gizlenmedi).
+§6 adım 5'in *"kullanılabilir bant yok, kapalı bırak"* çıkışı **mevcuttu ve alınmadı**.
+
+**Kalıcılık:** baseline artık **takipli dosya** (`docs/performance/baseline_ci.json`), yani
+kapı 30 günlük artefakt saklamasına **bağlı değil**. Artefakt yalnız *girdi*.
+
+**Concurrency kusuru bu kapıyı vurmuyor — varsayılmadı, iki yoldan doğrulandı:** ifade
+okundu (`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`; `schedule` olayında
+`github.ref` **zaten** `refs/heads/main` → false) **ve** altı koşunun job + artefakt
+listesi tek tek çekildi (hiçbiri cancelled, `nightly-failure-notice` hiç ateşlemedi).
+
+**Bant üç yerde pinli** — workflow `--max-ratio`, `test_loadgen.py::_BAND`, README §6 —
+ve `test_the_nightly_actually_passes_the_band_this_file_pins` ayrışırlarsa kırmızıya
+çeviriyor. Bandı yalnız workflow'da genişletmek **mümkün değil**.
+
+### P11-8 — Lighthouse, eşik değil ratchet
+
+`e2e.yml` → yeni `lighthouse` job'ı + `specs/21-lighthouse.spec.ts` +
+`frontend/e2e/lighthouse-baseline.json`. Desen **icat edilmedi**: axe ratchet'i
+(`a11y-baseline.json`) ve ADIM 42'nin kriter ratchet'i ne yapıyorsa aynısı — bugünkü
+ölçülen skor **taban**, yalnız yükselir, **pay çıkarılmaz**. Tek eksen farkı: axe kötü
+düğüm **tavanı** dondurur, bu iyi skor **tabanı** dondurur.
+
+* **Kapsam 23/23, kapsanmayan 0.** Liste elle yazılmadı;
+  `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor (ADIM 39'un dersi). Matriste olup tabanı
+  olmayan rota **kırmızı** verir — boşluk, geçiş değil.
+* **Gürültü stabilize edilerek çözüldü, tolerans genişletilerek değil:** atılan warm-up +
+  rota başına 3 koşunun medyanı. Ölçülen tekrar yayılımı **3 kategoride de 0 puan** —
+  susturulacak gürültü yoktu, taban bu yüzden paysız.
+* **Bootstrap UNARMED.** İlk commit `armed: false` + boş `floors` ile sevk edildi: koşmamış
+  bir işten eşik uydurmak, tam da "uydurma" yasağının kendisiydi. İlk CI koşusu **ölçtü**,
+  ikinci commit **dondurdu**. Dosyanın **yokluğu** hâlâ sert hata — silinmiş bir taban asla
+  "her skor serbest"e dönüşmez.
+
+**Ölçülen taban** (run `31571413853`, 23 rota × 3 koşu, ratchet adımı **7.6 dk**):
+performance **100** (22 rota) / **98** (`panel-management`) · best-practices **96** (23) ·
+seo **82** (23).
+
+**İki otorite çakışması önlendi:**
+
+1. **a11y kategorisi hiç İSTENMİYOR.** axe sevk edilmiş otorite; rakip bir a11y sayısı
+   **üretilmiyor**. Ve mutlak kural: **hiçbir Lighthouse çıktısı A-08 kanıtı değildir**,
+   defterin §1/§2'sine yazılamaz. A-08 hâlâ **yapılmadı**, defter hâlâ **boş**.
+2. **Performans ayrımı iki belgeye de yazıldı.** `loadgen.py` = **sunucu** (uç-nokta p95,
+   kontrol-normalize, gecelik); Lighthouse = **tarayıcı** (rota başına boyama/etkileşim).
+   `performance/README.md` §8 zaten *frontend rendering*'i yük sürücüsünün kapsamı **dışında**
+   ilan etmişti — bu kapı o **beyan edilmiş boşluğu** dolduruyor, ikinci görüş değil.
+
+### Dürüst sınırlar
+
+* **Lighthouse performance DOYGUN.** Localhost + Lighthouse'un kendi desktop preset'inde
+  22/23 rota 100 alıyor. Taban 100 = *"hiç kötüleşemez"* (en katı ratchet), ama **gerçek
+  bir kullanıcı makinesinde hızlı olduğunun kanıtı DEĞİL**. Uyarı tabanın kendi
+  `provenance.sensitivity_boundary`'sine yazıldı, sayıyla birlikte seyahat etsin diye.
+* **BP 96 ve SEO 82 gerçek kusurdur — donduruldu, DÜZELTİLMEDİ** (CI slice'ı ürün kodunu
+  değiştirmez). Donmuş bir kusur **görünmez** bir kusurdur; bu yüzden spec
+  `routes[].deductions` (puanı götüren ağırlıklı audit'ler) kaydediyor — yeşil koşu bile
+  neyin bozuk olduğunun listesini taşıyor. Ayrı PR'lar.
+* **Ratio kapısı 2.5× altını görmez** ve **PR'da koşmaz** (gecelik). Latency'yi 3× bozan
+  PR yeşil merge olur, ertesi sabah `load-full` + `nightly-failure-notice` yakalar — §1'in
+  bilinçli takası. Bant **altı** geceye, **tek** runner class'a dayanıyor; altı örnek bir
+  kuyruğu sınırlayamaz.
+* **P11 KAPANMADI** (P11-1 branch protection = insan kararı; P11-6b açık).
+  **P10 KAPANMADI** (P10-B2'nin PO yarısı, B3, B4, B5, B6 açık).
+* Lighthouse kapısı bugün *required status check* **değil**, yalnız bir job — çünkü
+  P11-1 açık.
+
+### Kanıt
+
+`docs/releases/evidence/2026-08-12/` → `p10_7_nightly_baselines.md` ·
+`p10_7_control_normalised_spread.txt` · `p10_7_ratio_gate_replay.txt` ·
+`p11_8_lighthouse_ratchet.md`. Rapor: **§6.7.11** (P10-7) + **§6.7.12** (P11-8).
+
+**Test sayıları:** `test_loadgen.py` **32 → 38 passed** (6 yeni: baseline gerçekliği,
+kontrol varlığı, kimlik-yeşil, 3× negatif, bant türetimi, üç-sahip drift guard).
+Üretilmiş sayılar: backend collected **3497 → 3503**, e2e call sites **80 → 84 / 22 spec**.
+
+> **Numara notu:** bu slice oturum promptunda `ADIM 40` diye adlandırılmıştı; main'de
+> ADIM 40/41/42 zaten merge olmuştu (#666–#669), bu yüzden kayıt **ADIM 43** olarak açıldı.
+> Repo kuralı gereği merge edilmiş numaralar yeniden atanmaz.

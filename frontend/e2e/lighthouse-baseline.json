@@ -29,13 +29,21 @@
     "conditions": "seeded Compose stack (SEED_E2E_GOLDEN + SEED_ESP_TA + SEED_RATIONALE), Admin session, 1440x900 desktop form factor, simulated throttling at Lighthouse's own desktop preset (rttMs 40, throughputKbps 10240, cpuSlowdownMultiplier 1), maxWaitForLoad 20000 ms, median of 3 passes per route after a discarded warm-up",
     "routes_scored": 23,
     "repeat_spread_points": {
-      "performance": 0,
-      "best-practices": 0,
-      "seo": 0
+      "measuring_run_31571413853": {
+        "performance": 0,
+        "best-practices": 0,
+        "seo": 0
+      },
+      "confirming_run_31572385301": {
+        "performance": 2,
+        "best-practices": 0,
+        "seo": 0
+      }
     },
     "measured_pre_merge": "Measured on the P11-8 branch, not on main: the whole point of the run was to record the tree WITH the gate in it. The next main run must reproduce these numbers exactly \u2014 if it does not, this file is wrong, not the run.",
-    "stability": "Worst repeat spread was 0 points in every category on all 23 routes. That is why the floor is the measured score with NO margin subtracted: there is no noise here to leave room for. If a future run starts flapping, the answer is more repeats or a warm-up change \u2014 never a lower floor.",
-    "sensitivity_boundary": "performance sits at 100 on 22 of 23 routes. That is a real measurement, not a rounding artefact, and it is also this gate's weakest axis: against a localhost stack on the desktop preset the score is saturated, so only a substantial regression will move it. A floor of 100 means 'may not get worse at all' \u2014 the strictest ratchet available \u2014 but it is not evidence that the app is fast on a real user's machine. The per-route FCP/LCP/TBT/CLS/SI in lighthouse-report/lighthouse-results.json do differentiate the routes and are reported, never gated."
+    "stability": "The measuring run saw 0 points of spread everywhere. The very next run did NOT: panel-management's performance passes came in 98-100 while its median stayed 98. So 'zero spread' is a property of one run, not of this gate, and it is recorded that way on purpose. What actually holds the floor is the MEDIAN, and it held: both runs reported 98 for that route. If a future run starts flapping, the answer is more repeats or a warm-up change - never a lower floor.",
+    "sensitivity_boundary": "performance sits at 100 on 22 of 23 routes. That is a real measurement, not a rounding artefact, and it is also this gate's weakest axis: against a localhost stack on the desktop preset the score is saturated, so only a substantial regression will move it. A floor of 100 means 'may not get worse at all' \u2014 the strictest ratchet available \u2014 but it is not evidence that the app is fast on a real user's machine. The per-route FCP/LCP/TBT/CLS/SI in lighthouse-report/lighthouse-results.json do differentiate the routes and are reported, never gated.",
+    "do_not_tighten": "panel-management/performance must stay at 98. It is the one route with measured repeat variance (98-100 across 3 passes), so a run whose median reads 100 will make the tightened map suggest raising it. Taking that suggestion arms a gate that fails the next time the same route medians at 98 - a flapping gate nobody asked for. Every other floor may be tightened normally when a real improvement lands."
   },
   "policy": {
     "categories": "performance, best-practices, seo",

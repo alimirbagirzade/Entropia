@@ -1,0 +1,71 @@
+==============================================================================
+FACT 1 — the payload the harness sent BEFORE ADIM 45 was silently dropped
+==============================================================================
+evidence.test_vectors = "rc-harness"  (a STRING)
+  -> validation_state=failed  vectors_run=0
+  _extract_vectors keeps only dicts, so the string yielded ZERO vectors.
+  The recorded SKIP reason ('the harness does not synthesise test
+  vectors') described THIS, and it is now fixed.
+
+==============================================================================
+FACT 2 — the NEW payload parses, and still fails closed on the probe key
+==============================================================================
+  -> validation_state=failed  vectors_run=2
+     contract_schema    passed     | Signature well-formed.
+     test_vectors       failed     | No executable compute for 'af.probe.rc.v1'; cannot certify test vectors.
+     timing_integrity   passed     | No repaint flag.
+
+  vectors_run 0 -> 2. The refusal is now provably about EXECUTABILITY of
+  the canonical key, never about absence of evidence. This is what the
+  harness pins in [c2].
+
+==============================================================================
+FACT 3 — the vectors are ARITHMETICALLY correct for every MA variant
+==============================================================================
+  A constant close series is implementation-independent: sma/ema/rma/wma
+  all return the constant after their `length`-bar warm-up. So these
+  vectors are not 'vectors that happen to fail' — they PASS wherever the
+  compute exists, which is exactly what makes FACT 2 a statement about
+  the key rather than about the payload.
+  ta.sma     -> validation_state=passed  vectors_run=2
+  ta.ema     -> validation_state=passed  vectors_run=2
+  ta.rma     -> validation_state=passed  vectors_run=2
+  ta.wma     -> validation_state=passed  vectors_run=2
+
+==============================================================================
+WHY THE POSITIVE activate->deprecate LEG STAYS A SKIP — the three-way lock
+==============================================================================
+1. VALIDATABLE_RESOLVER_KEYS = ['ta.ema', 'ta.rma', 'ta.rsi', 'ta.sma', 'ta.vwap', 'ta.wma']
+   Anything outside this set fails closed by design (doc 09 §7).
+2. apps/seed.py::_ESP_TA_RESOLVERS seeds ta.sma/ema/rma/atr/rsi/wma/vwap
+   as TRUSTED_ACTIVE under SEED_ESP_TA=1 — which the flows stack sets,
+   because the browser layer's Pre-Check needs them resolvable.
+3. esp/state_machine.py::_ALLOWED — activation legality:
+     candidate        -> ['trusted_active', 'unavailable']
+     trusted_active   -> ['deprecated', 'unavailable']
+     deprecated       -> ['unavailable']
+     unavailable      -> []
+
+   Activation is legal ONLY from `candidate`; `deprecated` is terminal
+   apart from `unavailable`. A key that is already trusted_active can
+   never be re-activated, and a deprecated one can never come back.
+
+=> INTERSECTION IS EMPTY. On a SEED_ESP_TA stack there is no canonical
+   key that is both validatable and activatable, and no ordering of
+   harness calls creates one. The SKIP is STRUCTURAL, not laziness.
+
+   Closing it would need a second Compose stack seeded WITHOUT
+   SEED_ESP_TA (a new 12-container CI job for one assertion) or a change
+   to seed.py — product code, out of scope for a CI-wiring slice.
+   In-process coverage remains: tests/integration/test_esp_persistence.py
+
+==============================================================================
+WHAT [c5] NOW PINS
+==============================================================================
+  ResolverValidationRequired  code=RESOLVER_VALIDATION_REQUIRED   http=409
+  ResolverEvidenceRequired    code=RESOLVER_EVIDENCE_REQUIRED     http=409
+
+  commands/esp.py::_ensure_validation_passed calls _ensure_activation_
+  evidence FIRST, so with the OLD string payload the refusal could have
+  been either one and 'not 200' could not tell them apart. [c5] now
+  requires 409 RESOLVER_VALIDATION_REQUIRED specifically.

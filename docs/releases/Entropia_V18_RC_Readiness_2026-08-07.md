@@ -15,6 +15,26 @@
 > **2026-08-10 (ADIM 31) — blocker sayısı 4 → 3.** Eski blocker **(3) Alertmanager yok**
 > **KAPANDI**: bildirim yolu sevk edildi, fail-closed, ve ateşleyen gerçek bir alarmın bir
 > alıcıya ulaştığı uçtan uca ölçüldü (§6.3). Verdict **BLOCKED kalır** — 1, 2 ve 4 açıktır.
+>
+> **2026-08-12 (ADIM 44) — blocker sayısı 3 → 2.** Eski blocker **(4) react-router HIGH
+> advisory'si imzasız dondurulmuş** **KAPANDI** — ve **imzayla değil, KALDIRMAYLA**:
+> advisory upstream'de yeniden kapsamlandı (`first_patched` 7.x için **7.18.2**), kurulu
+> ağaç **zaten 7.18.2**, `npm audit` **0 vulnerability**. Var olmayan bir açığa imza
+> atılmaz; `FROZEN_ADVISORIES` silindi (§6.4). Verdict **BLOCKED kalır** — 1 ve 2 açıktır.
+>
+> **2026-08-12 (ADIM 45) — blocker sayısı 2 → 1.** Eski blocker **(2) kabul akışları /
+> `flows` bir CI kapısı değil** **KAPANDI**: `e2e.yml::acceptance-flows` bağlandı ve
+> **gerçekten koştu** (job **94097720164**, **67 passed / 0 failed / 1 skipped**,
+> `duration_seconds=137`), maliyet ölçüldü, iki SKIP'ten biri kapandı ve diğeri yapısal
+> gerekçeyle kayda geçti (§6.2). Verdict **BLOCKED kalır**.
+>
+> **Bugün açık olan TEK blocker: (1) A-08 insan kabul denetimi.** Defter hâlâ boştur ve
+> imzalı sapması yoktur; takip issue'su **#514 2026-08-12'de bir insan tarafından yeniden
+> AÇILDI** (`state=OPEN`, `stateReason=REOPENED`, etiket `human-only`) — kapatma yetkisi
+> insandadır, agent kapatamaz. **Bu belge hiçbir yerde `READY` demez.** Blocker 2'nin
+> kapanması **P11-1'i (branch protection) kapatmaz**: bir *required status check* kuralı
+> olmadan kırmızı bir check merge'i fiilen durduramaz ve bu bir depo ayarı + insan
+> kararıdır.
 
 ---
 
@@ -646,7 +666,105 @@ yok** (dosyadaki tek kimlik `D-1`); D-10 gerçekte
 `docs/implementation/a11y_ci_ratchet_and_adjudication.md:206-221`'de. İşaretçi yanlış olsa
 da **kararı güçlendirir**: her iki yerde de A-08 için sapma yok.
 
-### 6.2 Uçtan uca kabul akışları — **KISMEN KAPANDI**, blocker hâlâ **AÇIK** (P5 + P6)
+### 6.2 Uçtan uca kabul akışları — **KAPANDI 2026-08-12 (ADIM 45)**, eski blocker 2 (P5 + P6)
+
+> **2026-08-12 / ADIM 45 — BLOCKER 2 KAPANDI.** Bu bölümün açık kalan tek ekseni
+> ("`flows` bir CI kapısı değildir") kapatıldı. Aşağıdaki her sayı **2026-08-12 CI
+> koşusunundur**; ham kanıt `docs/releases/evidence/2026-08-12/` · özet
+> `P6B2_flows_ci_gate.md`. Ölçüm: `origin/main` @ `853a358` + dal
+> `ci/rc-blocker2-flows-gate` (PR #680). **Ürün kodu değişmedi** — yalnız harness,
+> workflow ve belgeler.
+>
+> **1. Kapı bağlandı ve GERÇEKTEN KOŞTU.** `e2e.yml`'e yeni **`acceptance-flows`**
+> job'ı: `scripts/e2e-acceptance.sh flows`. Yeni harness **icat edilmedi** — `flows`
+> alt-komutu ve `scripts/lib/acceptance-flows.sh` ADIM 30'dan beri vardı.
+> **Rozet kanıt değildir, job LOG'u kanıttır** (run
+> [31591633498](https://github.com/alimirbagirzade/Entropia/actions/runs/31591633498),
+> job **94097720164**, conclusion **success**):
+>
+> | Ölçüm | Değer |
+> |---|---|
+> | Verdict satırı | **`67 passed, 0 failed, 1 skipped`** → `E2E ACCEPTANCE OK` |
+> | Harness süresi | **`duration_seconds=137`** |
+> | Job wall-clock | `11:23:39Z → 11:26:35Z` = **2m56s** |
+> | Yığın | 12 konteyner, **yedi düzlem** `broker-connected restarts=0` |
+> | Tarayıcı katmanı | `npm ci ok` · `chromium available` · **dört yolculuk, 5 passed** |
+>
+> Hızlı yeşil bir koşunun geçmesi gereken kontrol **yığının gerçekten kalktığıdır**:
+> `up --build` 11:23:5x, seed PASS 11:25:22, sonra yedi düzlem sağlıklı. Ham:
+> `p6b2_acceptance_flows_ci_job.log` (639 satır).
+>
+> **Maliyet ölçüldü:** ikinci bir tam yığın (12 konteyner), ~3 dk runner. **Kardeş job**
+> olduğu için `e2e`/`a11y`/`lighthouse`/`e2e-dev` ile **paralel** koşar → workflow
+> wall-clock'una **~0** ekler (`lighthouse`'ın 75 dk bütçesi baskındır), yalnız dakika
+> faturasına. §6.2 bu maliyeti "kabul edilemezse nightly'ye al ya da paralelleştir" diye
+> öngörmüştü; **ikisi de gerekmedi. Kapsam KISILMADI, kapı advisory DEĞİL**
+> (`continue-on-error` yok, `|| true` yok; `tee`'nin etrafındaki `set -o pipefail`
+> taşıyıcıdır — onsuz adım tee'nin exit code'unu alır ve düşen bir koşu yeşil raporlar).
+>
+> **2. İki SKIP karara bağlandı — skip 2 → 1, pass 60 → 67.**
+> **(ii) Tool Gateway çağrı günlüğü KAPANDI.** Seed'e task **eklenmedi** — tohumlanmış
+> bir satır yalnız "uç bir fixture'ı projekte edebiliyor"u kanıtlardı. `[d5]` artık
+> `[d4]`'ün directive'ini `agent-coordinator` düzlemi tükettiğinde
+> `agent_loop.py::_spawn_followup_task`'ın ürettiği **GERÇEK** task'ı bekliyor
+> (`source=directive` pinli, USER **403**). Aynı bekleyiş **4. tavizsiz kuralı**
+> "admission KABUL EDİLDİ"den "**admission durable düzlem tarafından TÜKETİLDİ**"e
+> yükseltir — kimsenin almadığı bir 202 tam da o kuralın yakalamak için var olduğu sessiz
+> kusurdur ve bugüne dek buradaki hiçbir şey onu fark etmezdi. **Dürüst sınır:** günlük
+> **sunuluyor** diye iddia edilir, **boş değil** diye değil (`0 call(s) logged`);
+> executor'ın o an bir çağrı dağıtmış olması zamanlama olgusudur, sayı iddia etmek adımı
+> güçlendirmez, **flaky** yapardı. Sayı basılır, sıfıra regresyon görünür.
+> **(i) Pozitif ESP `activate`→`deprecate` SKIP KALIYOR — gerekçesi DÜZELTİLDİ.** Kayıtlı
+> gerekçe "harness test vektörü sentezlemiyor"du; **yarısı doğruydu ve o yarı artık
+> düzeltildi** — gerçek vektörler gönderiliyor, `vectors_run` **0 → 2**. Asıl gerekçe
+> **yapısaldır**, sevk edilmiş üç değişmezin kilidi: (1) doğrulama yalnız
+> `VALIDATABLE_RESOLVER_KEYS`'in **altı** kanonik anahtarı için PASS olabilir (doc 09 §7
+> fail-closed); (2) `seed.py::_ESP_TA_RESOLVERS` `SEED_ESP_TA=1` altında **altısını da**
+> `trusted_active` tohumlar (tarayıcı katmanının Pre-Check'i onları çözebilsin diye);
+> (3) `esp/state_machine.py::_ALLOWED` aktivasyona **yalnız `candidate`'ten** izin verir,
+> `deprecated` ise `unavailable` dışında terminaldir. **KESİŞİM BOŞ** — `SEED_ESP_TA`
+> yığınında hem doğrulanabilir hem etkinleştirilebilir bir anahtar YOKTUR ve hiçbir çağrı
+> sıralaması onu yaratmaz. Kapatmak ya `SEED_ESP_TA`'sız **ikinci** bir Compose yığını
+> (tek bir iddia için yepyeni 12 konteynerlik job) ya da `seed.py` değişikliği (**ürün
+> kodu**, bu slice'ın kapsamı dışı) ister. In-process kapsam duruyor:
+> `backend/tests/integration/test_esp_persistence.py`. Sevk edilmiş doğrulayıcıya karşı
+> **ölçüldü** (`p6b2_esp_vector_local_proof.txt`): probe anahtar → `failed / 2`, eski
+> string → `failed / 0`, `ta.sma/ema/rma/wma` → **`passed / 2`** — yani vektörler her MA
+> varyantı için **aritmetik olarak doğrudur**, red **anahtar** yüzündendir, düşsün diye
+> ayarlanmış bir yük yüzünden değil. **İki yeni pin bu kararı çürümekten korur:** `[c2]`
+> `validation_state=failed`'i pinler (rastgele bir anahtar sertifikalanabilir hale
+> gelirse kapı **kırmızıya** döner ve bu karar yeniden açılmaya zorlanır), `[c5]` ise
+> **`409 RESOLVER_VALIDATION_REQUIRED`**'ı pinler — `_ensure_validation_passed` önce
+> `_ensure_activation_evidence`'ı çağırdığı için eski string yükte red iki kapıdan biri
+> olabilirdi ve "200 değil" ikisini ayırt edemezdi.
+>
+> **3. Skip tavanı — kapıyı bağlamanın açtığı deliği kapatır.** SKIP koşuyu düşürmez;
+> yerel komut için sorun değildi, **kapı** için şu demek: sessizce **koşmayı bırakan** bir
+> adım (kaybolmuş tarayıcı zinciri, tohumlanmayan fixture, geçerken eklenmiş bir
+> `af_skip`) kapıyı yeşil tutarken dünden **az** ölçer — kapının önlemek için bağlandığı
+> "regresyon sessizce geri gelebilir" kusurunun bir kat yukarısı. `E2E_MAX_SKIPS`
+> **karara bağlanmış** sayıyı pinler (CI: **1**); tanımsız = tavan yok, yani yerel koşu ve
+> `install-acceptance.yml` (`legacy`, sıfır skip) **etkilenmez**. Skip'e izin belgesi
+> **değildir** — yükseltmek bir §6.2 kararıdır ve hata mesajı bunu söyler.
+>
+> **4. Concurrency (brief'in 3. kalemi) — premisi BAYATTI.** Brief `ci.yml` kusurunu bu
+> kapı için "ÖLÜMCÜL" saydı; kusur **ADIM 34'te onarılmıştı ve hâlâ onarılıdır**:
+> `ci.yml:9-14` ve `e2e.yml:10-12`'nin ikisi de
+> `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` taşır → main'de **false**.
+> Yeni job **e2e.yml'e** kondu ki **zaten doğru olan** bloğu miras alsın; ikinci bir blok
+> yazmak kusurun geri dönmesi için ikinci bir şans olurdu. Tarihsel hasar API'den
+> doğrulandı ve **tam olarak** kaydedilir: `e8d1d48` (#633) CI run `31189395028` ve
+> `bc59dae` (#634) CI run `31189634665` — ikisi de `cancelled`, **`total_jobs=0`**.
+> **Önemli incelik:** iptal edilen koşu her iki SHA'da da **`CI`**'dır;
+> `E2E`/`Security`/`Performance`/`Install acceptance` o SHA'larda **başarılıdır** — yani
+> **`e2e.yml` hiç kurban olmadı**. "CI'ları hiç koşmadı" ifadesi "hiçbir şey koşmadı" diye
+> okunmasın diye böyle yazıldı. Ham: `p6b2_concurrency_verification.txt`.
+>
+> **KAPANMAYANLAR (bu bölüm onları kapatmaz):** **P11-1 branch protection** — bir
+> **required status check** kuralı olmadan kırmızı bir check merge'i **fiilen
+> durduramaz**; bu bir depo ayarı ve **insan kararıdır**. O ayar konana dek bu kapı dürüst
+> rapor verir ama merge düğmesini tutmaz. **Blocker 1 (A-08)** dokunulmadı; **verdict
+> A-08 açıkken hâlâ BLOCKED**, blocker sayısı **2 → 1**.
 
 > **2026-08-10 / ADIM 30 güncellemesi.** Bu bölüm 2026-08-07'de yazıldı ve iki iddia
 > taşıyordu. Her ikisi de **yeniden ölçüldü**; biri düzeltildi, biri kısmen kapandı.
@@ -717,11 +835,19 @@ Gateway çağrı günlüğü egzersiz edilmedi — taze tohumlanmış yığında
 `package_root` 15→15, `audit_events` 69→69, `outbox_events` 40→40, **mükerrer artefakt yok**.
 Üç auth modunun sonucu §6.2.1'dedir.
 
-> **Blocker neden hâlâ AÇIK.** Kapsam boşluğu kapandı ve beş akış koştu, ama **`flows` bir
-> CI kapısı değildir** — yerel bir komuttur, hiçbir workflow onu koşmaz, dolayısıyla bir
-> regresyon sessizce geri gelebilir. Kapıya bağlamak ayrı bir karardır (CI'da 12 konteynerlik
-> ikinci bir yığın + koşu süresi) ve bu slice'ta **yapılmadı**. Yukarıdaki iki SKIP de açık
-> iştir. Bu yüzden kayıt "kapandı" değil, **"kısmen kapandı"**dır.
+> **~~Blocker neden hâlâ AÇIK.~~ — 2026-08-12 (ADIM 45) İTİBARIYLA GEÇERSİZ; kayıt için
+> duruyor, silinmedi.** O tarihte yazılan gerekçe şuydu: *"Kapsam boşluğu kapandı ve beş
+> akış koştu, ama **`flows` bir CI kapısı değildir** — yerel bir komuttur, hiçbir workflow
+> onu koşmaz, dolayısıyla bir regresyon sessizce geri gelebilir. Kapıya bağlamak ayrı bir
+> karardır (CI'da 12 konteynerlik ikinci bir yığın + koşu süresi) ve bu slice'ta
+> **yapılmadı**. Yukarıdaki iki SKIP de açık iştir."*
+>
+> **Üçü de kapatıldı.** Kapı `e2e.yml::acceptance-flows` olarak bağlandı ve koştu
+> (**67 passed / 0 failed / 1 skipped**, job **94097720164**); maliyet ölçüldü (~3 dk,
+> paralel kardeş job → workflow wall-clock'una ~0); SKIP (ii) **kapandı**, SKIP (i)
+> **yapısal** gerekçeyle kayda geçti. Ayrıntı bu bölümün başındaki **ADIM 45** bloğunda.
+> Bu yüzden kayıt artık "kısmen kapandı" değil, **KAPANDI**'dır — ama §8'in verdict'i
+> **BLOCKED** kalır, çünkü blocker 1 (A-08) açıktır.
 
 #### 6.2.1 Üç auth modu (P5 kalem 2) — 2026-08-10 koşusu
 
@@ -1100,6 +1226,11 @@ yanlış-negatifi), düzeltmeyle **12 passed / 23.3s**.
 **BLOCKED** kalır. `flows` hâlâ bir CI kapısı **değildir** (§6.2 — ADIM 30'un ekseni, bu
 slice ona dokunmaz). Ürün kodu değişmedi. Aynı kusur sınıfı **yalnız bu iki script içinde**
 tarandı; diğer script'lere süpürme yapılmadı.
+
+> **Sonradan not (2026-08-12 / ADIM 45).** Yukarıdaki *"`flows` hâlâ bir CI kapısı
+> değildir"* cümlesi **ADIM 36'nın kendi sınırının kaydıdır ve o gün doğruydu**; bugün
+> geçerli değildir — kapı ADIM 45'te bağlandı (§6.2). Cümle silinmedi: bir slice'ın ne
+> yapmadığını söylediği yer, sonradan doğru çıktı diye yeniden yazılmaz.
 
 Ham kanıt: `docs/releases/evidence/2026-08-10/P6FF_harness_failfast.md` +
 `p6ff_measurements.txt` · `p6ff_tests_before_fix.txt` · `p6ff_tests_after_fix.txt`.
@@ -1830,15 +1961,23 @@ Ek olarak: `SHARED_ALLOCATION_STATUS` **`future_dev`** (containment KAPALI, §4)
 
 > ## **BLOCKED**
 >
-> V18 Release Candidate `1f4b88b` **sevk edilemez**: **iki** kapatılmamış blocker'ı vardır —
+> V18 Release Candidate `1f4b88b` **sevk edilemez**: **2026-08-12 (ADIM 45) itibarıyla
+> geriye TEK kapatılmamış blocker kalmıştır** —
 > **(1)** A-08 insan ekran okuyucu kabul denetimi hiç koşulmadı (0/4 çıkış kriteri, 0/46
-> rota, 0/20 akış, 0 bulgu kaydı) ve yerine geçecek imzalı sapma **yok**, izleme issue'su
-> #514 ise **kanıtsız kapatılmış**; **(2)** kabul akışları — **2026-08-10'da kısmen
-> kapandı** (§6.2): harness kapsamı yazıldı, beş akış da koştu (**60 passed / 0 failed /
-> 2 skipped**, tarayıcı katmanı **5 passed**), ama `flows` hâlâ **bir CI kapısı değildir**,
-> yani regresyon sessizce geri gelebilir. Tek imzalı sapma **D-10**'dur ve kapsamı
-> **yalnız WCAG 1.4.3**'tür — bu ikisinden hiçbirini kapsamaz, dolayısıyla
-> "READY WITH SIGNED DEVIATIONS" **açık değildir**.
+> rota, 0/20 akış, 0 bulgu kaydı) ve yerine geçecek imzalı sapma **yok**. İzleme issue'su
+> #514 **2026-08-12'de bir insan tarafından yeniden AÇILDI** (`state=OPEN`,
+> `stateReason=REOPENED`, etiket `human-only`) — bu, kapalı-issue ↔ boş-defter
+> ayrışmasını **(B) yoluyla** çözer, ama **denetimi koşmaz**; iş hâlâ açıktır.
+> **~~(2) kabul akışları~~ — 2026-08-12 / ADIM 45'te KAPANDI** (§6.2): `flows` artık
+> `e2e.yml::acceptance-flows` olarak **bir CI kapısıdır** ve gerçekten koşmuştur
+> (job **94097720164**, **67 passed / 0 failed / 1 skipped**, `duration_seconds=137`,
+> tarayıcı katmanı **5 passed**). Tek imzalı sapma **D-10**'dur ve kapsamı **yalnız WCAG
+> 1.4.3**'tür — kalan blocker'ı kapsamaz, dolayısıyla "READY WITH SIGNED DEVIATIONS"
+> **açık değildir**.
+>
+> **Blocker 2'nin kapanması bir sevk kararı DEĞİLDİR** ve iki şeyi kapatmaz: **P11-1
+> branch protection** (required status check olmadan kırmızı bir check merge'i fiilen
+> durduramaz — depo ayarı + insan kararı) ve elbette **A-08**. Verdict **BLOCKED**.
 >
 > **(1) hakkında, ADIM 44'ün yaptığı ve YAPMADIĞI:** denetim **koşulabilir hâle geldi**
 > (yığın güncel main'de yeniden doğrulandı, precheck sayıları tazelendi, denetçi
@@ -1884,7 +2023,7 @@ visual **8/8** · axe **45/45 tavan, critical 0**.
 | # | Blocker | İnsan kararı |
 |---|---|---|
 | 1 | `A-08-HUMAN-GATE-UNMET` | (A) denetimi koştur — **önce #514'ü yeniden aç** — iki SR kombinasyonu, 23 rota + 10 akış, dört kriter ☑; **veya** (B) D-10 biçiminde imzalı kalıcı sapma. **ADIM 44 (A)'nın önündeki hazırlık engellerini kaldırdı** (yığın doğrulandı, precheck sayıları tazelendi, `docs/implementation/a11y_screen_reader_audit_runbook.md` yazıldı) — geriye kalan **randevu ve insan saati**, ki ikisi de repo dışıdır |
-| 2 | Kabul akışları | ~~Harness'a (a)–(e) kapsamını **yaz** … üç auth modu + health + smoke + `worker-restart-smoke.sh` koştur~~ → **2026-08-10'da yapıldı** (§6.2 / §6.2.1). Kalan insan kararı: **`flows`'u bir CI kapısına bağla** (CI'da 12 konteynerlik ikinci yığın + süre maliyeti kabul edilecek mi?) ve §6.2'deki iki SKIP'i kapat |
+| 2 | Kabul akışları | ~~Harness'a (a)–(e) kapsamını **yaz** … üç auth modu + health + smoke + `worker-restart-smoke.sh` koştur~~ → **2026-08-10'da yapıldı** (§6.2 / §6.2.1). ~~Kalan insan kararı: **`flows`'u bir CI kapısına bağla** (CI'da 12 konteynerlik ikinci yığın + süre maliyeti kabul edilecek mi?) ve §6.2'deki iki SKIP'i kapat~~ → **2026-08-12 / ADIM 45'te KAPANDI**: kapı `e2e.yml::acceptance-flows` olarak bağlandı ve koştu (**67/0/1**, `duration_seconds=137`); maliyet ölçüldü ve **kabul edildi** (kardeş job → workflow wall-clock'una ~0); SKIP (ii) kapandı, SKIP (i) **yapısal** gerekçeyle kayda geçti. **BLOCKER 2 KAPANDI.** Kalan insan kararı **bu satırda değil, P11-1'de**: required status check olmadan bu kapı merge'i durduramaz |
 | ~~3~~ | ~~Alertmanager~~ | ~~(A) receiver + routing + silence + on-call + Prometheus config provenance kapısı; **veya** (B) imzalı kalıcı sapma~~ → **2026-08-10'da (A) SEVK EDİLDİ, blocker KAPANDI** (§6.3). Kalan insan kararları blocker DEĞİL, §6.7'ye kaydedildi: **P10-B3** delivery proof'u bir CI kapısına bağlamak (maliyet kararı) · **P10-B5** on-call rotasyonu / escalation / ack (repo dışı) |
 | ~~4~~ | ~~react-router freeze~~ | ~~Kaydı `.github/security-allowlist.json` disiplinine taşı (**zorunlu `owner` + `expires`**)~~ → **2026-08-12'de (ADIM 44) KAPANDI, ama taşınarak değil DÜŞÜRÜLEREK** (§6.4): imza sahibi verilmişti, kayıt yine de yazılmadı — advisory upstream'de yeniden kapsamlandırıldı ve kurulu ağaç zaten yamalıydı. **Kalan insan kararı YOK** |
 

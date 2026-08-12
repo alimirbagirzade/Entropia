@@ -7092,3 +7092,136 @@ sayısı **4 → 2** (blocker 3 ADIM 31'de, blocker 4 burada kapandı); **verdic
 kalır**. Tedarik zinciri tarafında kapanan şey **bu advisory ve bu asimetridir** — `npm
 audit` yalnız iki npm workspace'ini, Trivy yalnız iki imajı görür; container kapısı hâlâ
 sadece `security.yml`'ın tetikleyicilerinde (main'e push, PR, haftalık cron) koşar.
+
+---
+
+## ADIM 45 — RC blocker 2 KAPANDI: `flows` bir CI kapısı oldu (PR #680)
+
+**Base:** `origin/main` @ `853a358` · **Dal:** `ci/rc-blocker2-flows-gate` ·
+**Ürün kodu DEĞİŞMEDİ** (harness + workflow + belgeler). Migration yok, `ENGINE_VERSION`
+değişmedi, alembic head `0043_i08_registry_strategy_fks` aynı.
+**Ham kanıt:** `docs/releases/evidence/2026-08-12/P6B2_flows_ci_gate.md` +
+`p6b2_acceptance_flows_ci_job.log` (639 satır) + `p6b2_esp_vector_local_proof.txt` +
+`p6b2_concurrency_verification.txt`.
+
+### Ne kapandı
+
+RC §6.2 blocker'ı **tek bir eksende** açıktı ve belgenin kendi cümlesiyle: *"`flows` bir CI
+KAPISI DEĞİLDİR — yerel bir komuttur, hiçbir workflow onu koşmaz, dolayısıyla bir regresyon
+sessizce geri gelebilir."* Kapsam ADIM 30'da yazılmıştı; **eksik olan kapıydı**.
+
+**Yeni harness icat EDİLMEDİ.** `e2e.yml`'e tek bir job eklendi — `acceptance-flows` —
+ve var olan `scripts/e2e-acceptance.sh flows` alt-komutunu koşuyor.
+
+**Rozet kanıt değildir, job LOG'u kanıttır.** Run `31591633498`, job **94097720164**,
+conclusion **success**:
+
+| Ölçüm | Değer |
+|---|---|
+| Verdict | **`67 passed, 0 failed, 1 skipped`** → `E2E ACCEPTANCE OK` |
+| Harness | **`duration_seconds=137`** |
+| Job | `11:23:39Z → 11:26:35Z` = **2m56s** |
+| Yığın | 12 konteyner, yedi düzlem `broker-connected restarts=0` |
+| Tarayıcı | `npm ci ok` · `chromium available` · **dört yolculuk, 5 passed** |
+
+Hızlı yeşil bir koşunun geçmesi gereken kontrol **yığının gerçekten kalktığıdır**:
+`up --build` 11:23:5x → seed PASS 11:25:22 → yedi düzlem sağlıklı. Kontrol edildi.
+
+**Maliyet ölçüldü ve kabul edildi.** §6.2 "12 konteynerlik ikinci yığın + süre" maliyetini
+öngörmüş, kabul edilemezse **nightly'ye alma ya da paralelleştirme** önermişti. İkisi de
+gerekmedi: kardeş job olduğu için `e2e`/`a11y`/`lighthouse`/`e2e-dev` ile paralel koşar →
+workflow wall-clock'una **~0** ekler (`lighthouse`'ın 75 dk bütçesi baskındır).
+**Kapsam KISILMADI, kapı advisory DEĞİL.**
+
+### Üç tuzak, üçü de bilerek kapatıldı
+
+1. **`tee` exit code'u.** `bash … | tee log` adımı **tee'nin** statüsünü alır; `set -o
+   pipefail` olmasaydı **düşen bir kabul koşusu yeşil raporlardı** — kapının kendi
+   tesisatının, kapının yakalamak için var olduğu kusuru üretmesi. `pipefail` + `|| rc=$?`
+   (runner shell'i `bash -e`; çıplak çağrı adımı anında öldürür ve **duration satırı tam da
+   sayının en çok gerektiği koşuda kaybolurdu**).
+2. **Sessiz SKIP kayması.** SKIP koşuyu düşürmez. Yerel komut için sorun değildi; **kapı**
+   için sessizce koşmayı bırakan bir adım kapıyı yeşil tutarken dünden az ölçer.
+   **`E2E_MAX_SKIPS`** karara bağlanmış sayıyı pinler (CI: **1**); tanımsız = tavan yok →
+   yerel koşu ve `install-acceptance.yml` (`legacy`, sıfır skip) etkilenmez.
+3. **Chromium sistem bağımlılıkları.** Harness kendi `npx playwright install chromium`'unda
+   `--with-deps` kullanamaz (root ister) → çıplak runner'da indirme başarılı olur, **başlatma
+   düşer** ve tarayıcı katmanı SKIP'e döner. Job onu **önceden** `--with-deps` ile kurar;
+   `E2E_MAX_SKIPS` zaten bu sessiz kaybı kırmızıya çevirir.
+
+### İki SKIP — skip 2 → 1, pass 60 → 67
+
+**(ii) Tool Gateway çağrı günlüğü — KAPANDI.** Seed'e task **eklenmedi**: tohumlanmış bir
+satır yalnız "uç bir fixture'ı projekte edebiliyor"u kanıtlardı. `[d5]` artık `[d4]`'ün
+directive'ini `agent-coordinator` düzlemi tükettiğinde
+`commands/agent_loop.py::_spawn_followup_task`'ın ürettiği **GERÇEK** task'ı bekliyor
+(`agttask_01KZTVGX139HHVH8JV1WKA03FC`, `source=directive` pinli, USER **403**). Aynı bekleyiş
+**4. tavizsiz kuralı** "admission KABUL EDİLDİ"den "**durable düzlem tarafından TÜKETİLDİ**"e
+yükseltir — kimsenin almadığı bir 202 tam da o kuralın yakalamak için var olduğu sessiz
+kusurdur ve bugüne dek buradaki hiçbir şey onu fark etmezdi. Bütçe: `CYCLE_SLEEP_SECONDS`
+10 → 90s (dokuz döngü), sınırlı. **Dürüst sınır:** günlük **sunuluyor** diye iddia edilir,
+**boş değil** diye değil (`0 call(s) logged`) — executor'ın o an bir çağrı dağıtmış olması
+zamanlama olgusudur; sayı iddia etmek adımı güçlendirmez, **flaky** yapardı.
+
+**(i) Pozitif ESP `activate`→`deprecate` — SKIP KALIYOR, gerekçesi DÜZELTİLDİ.** Kayıtlı
+gerekçe *"harness test vektörü sentezlemiyor"*du. **Yarısı doğruydu ve o yarı düzeltildi**:
+eski yük `"test_vectors":"rc-harness"` — bir **STRING**, `_extract_vectors` onu düşürüyordu →
+`vectors_run=0`. Artık gerçek vektörler gidiyor → **`vectors_run=2`**.
+
+Asıl gerekçe **yapısaldır** — sevk edilmiş üç değişmezin kilidi:
+
+1. doğrulama yalnız `indicators.py::VALIDATABLE_RESOLVER_KEYS`'in **altı** anahtarı için PASS
+   olabilir (`ta.sma/ema/rma/wma/rsi/vwap`); gerisi doc 09 §7 gereği fail-closed;
+2. `apps/seed.py::_ESP_TA_RESOLVERS` `SEED_ESP_TA=1` altında **altısını da**
+   `trusted_active` tohumlar — çünkü tarayıcı katmanının Pre-Check'i onları çözebilmeli;
+3. `esp/state_machine.py::_ALLOWED` aktivasyona **yalnız `candidate`'ten** izin verir;
+   `deprecated` ise `unavailable` dışında terminaldir.
+
+**KESİŞİM BOŞ.** `SEED_ESP_TA` yığınında hem doğrulanabilir hem etkinleştirilebilir bir
+anahtar **yoktur** ve hiçbir çağrı sıralaması onu yaratmaz. Kapatmak ya `SEED_ESP_TA`'sız
+**ikinci** bir Compose yığını (tek iddia için yepyeni 12 konteynerlik job) ya da `seed.py`
+değişikliği (**ürün kodu**) ister. In-process kapsam duruyor:
+`backend/tests/integration/test_esp_persistence.py`.
+
+**Sevk edilmiş doğrulayıcıya karşı ölçüldü** (Docker'sız, `p6b2_esp_vector_local_proof.txt`):
+probe anahtar → `failed / 2`; eski string → `failed / 0`; **`ta.sma/ema/rma/wma` →
+`passed / 2`**. Yani vektörler her MA varyantı için **aritmetik olarak doğrudur** (sabit
+kapanış serisi: her MA `length`-bar ısınmadan sonra sabiti döner → **uygulamadan
+bağımsız**), dolayısıyla red **anahtar** yüzündendir, düşsün diye ayarlanmış bir yük
+yüzünden değil.
+
+**İki yeni pin bu kararı çürümekten korur.** `[c2]` `validation_state=failed`'i pinler —
+rastgele bir anahtar sertifikalanabilir hale gelirse kapı **kırmızıya döner** ve bu karar
+yeniden açılmaya zorlanır, "sessizce iyileşmiş harness" diye geçip gitmez. `[c5]` ise
+**`409 RESOLVER_VALIDATION_REQUIRED`**'ı pinler: `_ensure_validation_passed` önce
+`_ensure_activation_evidence`'ı çağırdığı için **eski string yükte red iki kapıdan biri
+olabilirdi** ve "200 değil" ikisini ayırt edemezdi.
+
+### Concurrency (brief'in 3. kalemi) — premisi BAYATTI
+
+Brief `ci.yml` kusurunu bu kapı için "ÖLÜMCÜL" saydı. **Kusur ADIM 34'te onarılmıştı ve hâlâ
+onarılıdır:** `ci.yml:9-14` ve `e2e.yml:10-12`'nin ikisi de
+`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` taşır → main'de **false**.
+
+Yeni job **`e2e.yml`'e** kondu ki **zaten doğru olan** bloğu miras alsın — workflow düzeyi
+concurrency her job'a uygulanır, yani job'a özel hiçbir şey yazılmadı ve kusurun geri gelmesi
+için **yeni bir yer açılmadı**. Ayrı bir workflow kendi bloğunu isterdi: ikinci bir şans.
+
+Tarihsel hasar API'den doğrulandı: `e8d1d48` (#633) CI run `31189395028` ve `bc59dae` (#634)
+CI run `31189634665` — ikisi de `cancelled`, **`total_jobs=0`** (tek bir job dağıtılmadan
+iptal). **Önemli incelik, kayda geçirildi:** iptal edilen koşu her iki SHA'da da **`CI`**'dır;
+`E2E`/`Security`/`Performance`/`Install acceptance` o SHA'larda **başarılıdır** — yani
+**`e2e.yml` hiç kurban olmadı**. "CI'ları hiç koşmadı" cümlesi "hiçbir şey koşmadı" diye
+okunmasın diye böyle yazıldı.
+
+### Bu slice'ın KAPATMADIĞI şeyler (dürüst sınır)
+
+* **P11-1 branch protection** — bir **required status check** kuralı olmadan kırmızı bir check
+  merge'i **fiilen durduramaz**. Depo ayarı + **insan kararı**. O ayar konana dek bu kapı
+  dürüst rapor verir ama merge düğmesini **tutmaz**. Kapsam dışıydı ve öyle kaldı.
+* **Blocker 1 (A-08)** — dokunulmadı. Defter hâlâ boş, dört çıkış kriteri de ☐. Takip issue'su
+  **#514 2026-08-12'de bir İNSAN tarafından yeniden AÇILDI** (`state=OPEN`,
+  `stateReason=REOPENED`, etiket `human-only`) — bu, kapalı-issue ↔ boş-defter ayrışmasını
+  **(B) yoluyla** çözer ama **denetimi koşmaz**. Agent kapatamaz.
+* **Verdict `BLOCKED` kalır.** Blocker sayısı **2 → 1**; geriye **yalnız A-08** kaldı.
+  Hiçbir belge `READY` demez.

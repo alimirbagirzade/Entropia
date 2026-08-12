@@ -215,6 +215,30 @@ async def test_blank_provider_rejected_before_db(app) -> None:
 
 
 @pytest.mark.contract
+async def test_blank_display_name_rejected_before_db(app) -> None:
+    """TL-03: the blank-NAME half of "blank name or provider", on the wire.
+
+    Runs against ``_DummySession`` — reaching the database at all would raise, so a
+    200/500 here would mean the identity check does not fire before persistence.
+    """
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        payload = _valid_payload(identity={"display_name": "   "})
+        async with await _client(app) as c:
+            resp = await c.post("/api/v1/trade-logs", json={"payload": payload})
+        assert resp.status_code == 422
+        body = resp.json()["error"]
+        assert body["code"] == "TRADE_LOG_VALIDATION_FAILED"
+        assert any(
+            str(issue.get("field", "")).startswith("identity.display_name")
+            for issue in body["details"]
+        )
+    finally:
+        next(gen, None)
+
+
+@pytest.mark.contract
 async def test_price_context_conflict_rejected_before_db(app) -> None:
     gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
     next(gen)

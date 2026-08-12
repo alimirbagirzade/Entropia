@@ -7506,3 +7506,106 @@ numaralandırılmadı** — ikisi de başka yerlerden kimlikle anılıyor.
   `Complete` ayrı satırlara düşerse kural **hiç ateşlenmez**. Bu slice'ta bir yeniden sarma
   önce kapıyı kırmızıya çevirdi (STAGE2_HANDOFF), sonra özgün sarma düzenine dönülerek
   çözüldü. **Bir satırı yeniden sararken kapının davranışını değiştirdiğini bil.**
+---
+
+## ADIM 48 — kabul kriteri borç defteri, sınıf B parti 01 (doc 05 Trade Log backend yüzeyi)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice bir blocker
+kalemi değildir; ADIM 42'nin (RC §6.7.10 / P1-Gate3) ürettiği borç defterini **işlemeye
+başlar**. Ürün kodu **DEĞİŞMEDİ** — tek satır bile. Migration yok, `ENGINE_VERSION`
+değişmedi, OCC/Idempotency/route yolları/react-query key'leri değişmedi.
+
+### Parti seçimi ve gerekçesi
+
+Defterdeki **95** açık sınıf-B kriterinin **18'i doc 05 (Trade Log)** altındaydı —
+tek belgedeki en büyük tutarlı küme. Parti bu kümeden **sekiz** kriter aldı; hepsi
+**backend server-truth** ekseninde ve hepsi aynı tanıma uyuyor: *davranış `backend/src`'te
+sevk edilmiş, hiçbir assertion onu adlandırmıyor.*
+
+| ID | Kapanan clause | Kapatan test |
+|---|---|---|
+| `TL-03` | c2 + c3 (boş `display_name` 422; hiçbir revision/pin yazılmaz) | `test_trade_log_config.py::test_blank_display_name_is_a_structural_error` · `test_trade_log_contract.py::test_blank_display_name_rejected_before_db` · `test_trade_log_persistence.py::test_blank_display_name_persists_no_revision_or_item` |
+| `TL-06` | c3 (tırnaklı alan içindeki ayraç) | `test_trade_log_records.py::test_quoted_field_may_contain_the_active_delimiter` |
+| `TL-07` | c4 (rapor SATIR NUMARASINI adlandırır) | `test_trade_log_records.py::test_skipped_row_names_its_source_row_number` |
+| `TL-08` | c3 (non-finite fiyat reddi) | `test_trade_log_records.py::test_non_finite_prices_skip_rows` |
+| `TL-15` | c5 (Pin replay'i çift satır yazmaz) | `test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event` |
+| `TL-17` | c4 (Admin YABANCI Trade Log'u değiştirebilir) | `test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log` |
+| `TL-21` | c2 (Supervisor Trash yüzeylerinde reddedilir) | `test_trash_page.py::test_trash_surfaces_reject_non_admin` (**yeni `supervisor` parametresi**) |
+| `TL-23` | c3 (Trade Log save/import/export Result üretmez) | `test_trade_log_persistence.py::test_trade_log_pipeline_creates_no_backtest_result` |
+
+### Ölçüm — tavanlar DÜŞTÜ, hiçbir şey yükselmedi
+
+`acceptance_semantic_scan.py --ratchet` **383 kriter / 1175 clause** üzerinde:
+**partial 126 → 118**, **sınıf B 95 → 87**. `uncovered` (8), **A** (1), **C** (6) ve
+**D** (32) tavanları **el değmeden** kaldı — bir sınıf-B slice'ı onları hareket
+ettiremez, ettirmemeli. `total_criteria` **383'te sabit** (taban, tavan değil): hiçbir
+kayıt silinmedi, hiçbir kriter yeniden sınıflandırılmadı. Defter (`--write-ledger`)
+yeniden üretildi; diff **tam olarak** bu sekiz satırı düşürüyor.
+
+Kapının hâlâ ısırdığı doğrulandı: tavan elle 86'ya çekildiğinde
+`debt_class.B: 87 measured, ceiling 86 (+1)` ile **exit 1**.
+
+### "İşaretlemek ≠ kapsamak" — negatif kontroller
+
+Bu dalganın kovaladığı hata, kriteri kapsamayan bir teste `covered` demektir. Vakumda
+geçebilecek her assertion **elle negatif kontrolden geçirildi**:
+
+* `TL-15.c5` — replay'den `Idempotency-Key` **çıkarılınca** çağrı
+  `ROW_VERSION_CONFLICT` ile patlıyor. Yani replay'in orijinal sonucu döndürmesini
+  sağlayan şey gerçekten idempotency zarfıdır; test tüketilmiş `expected_row_version`'ı
+  **bilerek** yeniden gönderir.
+* `TL-17.c4` — `ADMIN` yerine akran `USER2` konulunca test `AccessDenied` ile düşüyor.
+  Yani "Admin YAPABİLİR" bir hibe iddiasıdır, "herkes yapabilir" değil. Aynı testte
+  `SUPERVISOR` **reddedilir** (akran, override değil) — kriterin adlandırdığı ama
+  kimsenin assert etmediği rol.
+* `TL-03.c3` — `display_name` geçerliye çevrilince reddin kendisi kayboluyor; yani
+  sayaçları donduran şey boş isimdir, çözülemeyen bir binding değil.
+* `TL-03.c2` (wire) — `details` alan yolu bozulunca 422 gövdesi assertion'ı düşüyor.
+
+`TL-06.c3` ve `TL-08.c3` yapıları gereği ayırt edicidir: ilki tırnaklı alanın
+**sağındaki** sütunları okur (naif `split(",")` burada kayar), ikincisi `Decimal("NaN")`
+ve `Decimal("inf")`'in **hatasız parse ettiği**, yalnız açık `is_finite()` kapısının
+reddettiği literalleri sürer.
+
+### DOKUNULMAYANLAR — ve neden (bu, raporun asıl çıktısı)
+
+* **Sınıf D'ye dokunulmadı.** Kriterin adlandırdığı kod/alan/hata sınıfı yok; test
+  yazmak boşluğu **gizlemek** olurdu. Ürün işi, PO'da kalır.
+* **Sınıf C'ye dokunulmadı** (doğası gereği iddia edilemez, gerekçeli).
+* **Sınıf A (1 kalem, `MB-25`) alınmadı** — bir adjudication ister, test slice'ı değil.
+* **`TL-11.c3` · `TL-12.c3` · `TL-20.c3` bilerek dışarıda bırakıldı.** Üçü de
+  *Trade Log içeren bir kompozisyon üzerinde TAMAMLANMIŞ bir Backtest Run* ister.
+  Manifest bu pini gerçekten taşıyor (`backtest_run_context.py::_external_entry`,
+  `MainboardItemKind.TRADE_LOG` dalı) — yani sınıf B doğru — ama repoda **hiçbir test**
+  bir trade_log'u run kompozisyonuna sokmuyor; o makineyi kurmak partiyi ikiye katlardı.
+  Bir sonraki parti için **en yüksek değerli** üçlü budur (üçü tek harness'ı paylaşır).
+* **`TL-16` alınmadı ve sınıfı ŞÜPHELİ.** `c4` *"409 zarfı sunucunun kanonik güncel
+  durumunu taşır"* diyor; `shared/errors.py::WorkObjectRevisionConflictError` **hiç
+  `details` taşımıyor** ve `commands/trade_log.py` onu **argümansız** raise ediyor. Bu,
+  hiçbir testin kapatamayacağı bir boşluktur — yani **B değil D** görünüyor. Yeniden
+  sınıflandırma **yapılmadı**: B→D geçişi **D tavanını YÜKSELTİRDİ** ve tavan yalnız
+  aşağı iner. Bu bir **bulgudur, karar değil** — PO/insan kapısına bırakıldı.
+* **`TL-01.c4` alınmadı.** Kriter `GET /packages` diyor; sevk edilen katalog
+  `GET /library` (`library_query.list_packages`). Bu bir **ad/yol sapması** (sınıf A
+  ekseni) ve bir test slice'ının tek başına karara bağlayacağı şey değil.
+* **`TL-18`** (expand/collapse yan etkisizliği) saf istemci ifşasıdır; frontend
+  yüzeyi bu partinin dışındaydı.
+
+### Dürüst sınırlar
+
+- **Ürün kusuru bulunmadı.** Sekiz kriterin sekizi de **ilk koşuda geçti**: bunlar
+  davranışın kilitlenmesidir, kusur keşfi değil. Bu yüzden yeni issue açılmadı.
+- **`TL-16`'nın olası yanlış sınıflandırması AÇIK bırakıldı** (yukarıya bakınız) —
+  defter hâlâ onu B sayıyor, bu bilinçlidir.
+- **Kalan borç sınıf bazında: A=1 · B=87 · C=6 · D=32 (açık toplam 126).** Sınıf B'nin
+  doc 05 kalıntısı **10 kriter** (`TL-01 · TL-02 · TL-11 · TL-12 · TL-13 · TL-14 ·
+  TL-16 · TL-20 · TL-22` + `TL-18` uncovered).
+- **A-08 / #514'e DOKUNULMADI** — defter boş (0/4), izleme issue'su kapalı, blocker 1.
+- **`P1-Gate3` KAPANMADI.** 126 kalem açık; bu parti borcun **%6'sını** kapattı.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4).** Bu oturumda da `ecc` ve
+  `claude-mem` MCP sunucuları **bağlı değil** (ToolSearch'te yoklar) — ADIM 47 ile aynı
+  boşluk, **iki oturumdur birikiyor**. Atlanmadı, **yapılamadı**; bir sonraki oturumda
+  ADIM 47 **ve** ADIM 48 için yazılmalı.
+- **Codemap tazelemesi gerekmedi (ritüel madde 5)** — slice yeni endpoint / tablo /
+  sayfa / job / dramatiq aktörü eklemedi; `backend/src`, `alembic` ve `frontend/src`
+  ağaçlarına **hiç dokunulmadı**, o yüzden `repository_facts.md` girdileri de değişmedi.

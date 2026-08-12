@@ -1,0 +1,105 @@
+{
+  "name": "main — required status checks (RC P11-1)",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "~DEFAULT_BRANCH"
+      ],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "Backend — lint, type, test",
+            "integration_id": 15368
+          },
+          {
+            "context": "Frontend — lint, typecheck, build, test",
+            "integration_id": 15368
+          },
+          {
+            "context": "Alert rules and notification path",
+            "integration_id": 15368
+          },
+          {
+            "context": "Docker — build images",
+            "integration_id": 15368
+          },
+          {
+            "context": "E2E — real browser vs. Docker Compose stack (F-23)",
+            "integration_id": 15368
+          },
+          {
+            "context": "A11Y — axe-core scan vs. the seeded stack (R2-14)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Acceptance flows (a)-(e) — five flows vs. an isolated stack (RC §6.2)",
+            "integration_id": 15368
+          },
+          {
+            "context": "E2E — dev-auth acceptance (X-Actor-Id, no login)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Lighthouse — score ratchet vs. the seeded stack (RC P11-8)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Migration + provisioning acceptance",
+            "integration_id": 15368
+          },
+          {
+            "context": "Fresh install from empty volumes",
+            "integration_id": 15368
+          },
+          {
+            "context": "CodeQL — python",
+            "integration_id": 15368
+          },
+          {
+            "context": "CodeQL — javascript-typescript",
+            "integration_id": 15368
+          },
+          {
+            "context": "Secret scan (gitleaks)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Container scan + SBOM",
+            "integration_id": 15368
+          },
+          {
+            "context": "Load smoke — every scenario answers (PR gate)",
+            "integration_id": 15368
+          }
+        ]
+      }
+    }
+  ]
+}

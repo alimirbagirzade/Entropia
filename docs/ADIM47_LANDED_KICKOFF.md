@@ -4,6 +4,7 @@
 > sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Özellikle:** bu belgenin
 > A-08 / #514 hakkındaki *"izleme issue'su kapalı"* ifadesi **bayattır** — #514
 > `2026-08-12T11:08:58Z`'de insan eliyle yeniden AÇILDI (ADIM 48).
+> sayıları ve "sıradaki iş" maddeleri bayat olabilir.
 
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 

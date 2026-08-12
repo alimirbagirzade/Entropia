@@ -122,6 +122,35 @@ A missing or unreadable baseline fails the run rather than allowing everything.
 | You fixed nodes and CI warns "baseline is LOOSER than reality" | Copy `a11y-report/axe-baseline.tightened.json`'s `pages` into `a11y-baseline.json` and commit. Improvements never fail the run — this warning is the only thing pushing back on drift. |
 | You need the current real numbers | `a11y-report/axe-baseline.measured.json` from any run (CI uploads it in the `a11y-report` artifact). Do **not** read the committed `a11y-report/axe-results.json`: that is the dated 2026-07-22 R2-14 acceptance evidence and is stale on purpose. |
 
+## RC P11-8 — Lighthouse score ratchet
+
+`npm run lighthouse` (specs/21) needs the same seeded stack, and runs on every PR in the
+E2E workflow's `lighthouse` job. Same shape as the axe ratchet above, one axis flipped:
+axe freezes a **ceiling** of bad nodes, this freezes a **floor** of good score.
+
+The boundary is `lighthouse-baseline.json`: a frozen **minimum score per route, per
+category**, measured as the median of `LH_REPEATS` passes after a discarded warm-up.
+Below the floor fails. A route in `utils/screenshotMatrix.ts::TARGET_PAGES` with no floor
+also fails — an unbaselined route is a hole, not a pass. Improvements never fail but print
+a tightened map. A missing or unreadable baseline fails the run.
+
+Two boundaries this gate does not cross, neither negotiable:
+
+* **`accessibility` is not requested as a category.** axe-core owns that question, with
+  per-rule ceilings and a written adjudication record. Nothing Lighthouse produces is
+  A-08 evidence, ever.
+* **It measures the browser, not the server.** `scripts/loadgen.py` and
+  `docs/performance/README.md` own endpoint latency. A green score here says nothing about
+  a query that doubled; a green nightly there says nothing about a bundle regression.
+
+| Situation | What to do |
+|---|---|
+| The gate went red on a route you touched | Fix the cause. Lowering a floor to get green is the one move never allowed. |
+| The drop is a deliberate, accepted trade-off | Lower the floor **with a written reason**, the same way an axe ceiling is raised. |
+| CI warns "the floor is LOWER than reality" | Copy `lighthouse-report/lighthouse-baseline.tightened.json`'s `floors` in and commit. |
+| You need to know *why* a score is what it is | `lighthouse-report/lighthouse-results.json` → `routes[].deductions` names the weighted audits costing each route its points, beside per-route FCP/LCP/TBT/CLS/SI (reported, never gated). |
+| The gate starts flapping | Raise `LH_REPEATS` or revisit the warm-up. Do **not** widen a floor. Measured spread on 2026-08-12 was **0 points** in all three categories. |
+
 ## R2-13 — Screenshot matrix + visual regression
 
 Three opt-in Playwright layers (all excluded from plain `npm test`):

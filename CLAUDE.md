@@ -189,9 +189,24 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `66bdeb4`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `c8bba97`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 42 (RC §6.7 / P1-Gate3, kabul kriteri kapsamı):** sayılar **bayat
+> **Son dalga — ADIM 43 (RC §6.7 / P11-8 + P10-7, iki kapı):** **P10-7 KAPANDI — saat zaten
+> dolmuştu** (toplayıcı ADIM 24'ten beri koşuyordu, **altı** yeşil gece birikmişti). Bant
+> ölçümden türedi (`1.5 × 1.62` → **`--max-ratio 2.5`**); baseline artık **takipli dosya**
+> (`docs/performance/baseline_ci.json`), artefakt saklamasına bağlı değil. **Bandı yalnız
+> workflow'da genişletemezsin** — üç yerde pinli (workflow · `test_loadgen.py::_BAND` ·
+> README §6), drift testi kırmızıya çevirir. **P11-8 KAPANDI:** Lighthouse **ratchet** olarak
+> bağlandı, **23/23 rota** (liste `screenshotMatrix.ts::TARGET_PAGES` türevi — **elle liste
+> yazma**, tabansız rota kırmızı verir). **Lighthouse a11y kategorisi ASLA açılmaz** (axe
+> otoritedir) ve **hiçbir çıktısı A-08 kanıtı DEĞİLDİR**; `loadgen` = **sunucu**,
+> Lighthouse = **tarayıcı**, biri diğerinin sorusuna cevap veremez. **Taban indirilmez,
+> tolerans genişletilmez** — gürültü → `LH_REPEATS`/warm-up. `panel-management` performance
+> tabanı **98'de KALMALI** (ölçülmüş 98–100 varyansı; 100'e sıkılaştırmak çırpınan kapı verir).
+> Donmuş kusurlar (`errors-in-console` 23/23, `meta-description` 23/23, `robots-txt` 23/23,
+> CLS 1/23) **AÇIK → #677**. `PROJECT_HISTORY.md` §ADIM 43 · `docs/ADIM43_LANDED_KICKOFF.md` ·
+> §6.7.11 + §6.7.12. **P11 ve P10 KAPANMADI.**
+> Öncesinde ADIM 42 (RC §6.7 / P1-Gate3, kabul kriteri kapsamı): sayılar **bayat
 > değildi** (229/131/8 birebir yeniden üretildi); kalem "sayı yanlış" diye değil **"sayı
 > anlamsız"** diye açıktı. 139 kaydın tamamı okundu, **üç sınıf veriye uymadı** → A/B/C/**D**;
 > açık borcun **%24'ü sınıf D = uygulama boşluğu, hiçbir test kapatamaz**. Borç

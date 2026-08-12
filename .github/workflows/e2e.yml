@@ -257,6 +257,125 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  # ===========================================================================
+  # RC §6.7 / P11-8 — Lighthouse, wired as a RATCHET.
+  #
+  # Deliberately a sibling of `a11y` rather than a step inside it: both walk the
+  # same route matrix as Admin, but Lighthouse drives its OWN browser (it needs
+  # the DevTools port) and takes several passes per route, so folding it in
+  # would turn one 40-minute job into one 80-minute job whose failure message no
+  # longer says which gate went red.
+  #
+  # NOT on a schedule, on purpose. This is a per-PR gate like `a11y`, so the
+  # `cancel-in-progress: github.ref != 'refs/heads/main'` at the top of this
+  # workflow is right for it: superseding a PR run is what you want, and a push
+  # to main is never cancelled. The nightly-cancellation hazard belongs to
+  # performance.yml's `load-full` (the P10-7 baseline collector), which fires on
+  # a `schedule` event — there `github.ref` IS `refs/heads/main`, so
+  # cancel-in-progress evaluates false and no night can be cancelled by the next
+  # one. Verified from the run log rather than assumed: six consecutive
+  # scheduled runs, 2026-08-07..08-12, each completed with a `loadgen-baseline`
+  # artifact (docs/releases/evidence/2026-08-12/p10_7_nightly_baselines.md).
+  # ===========================================================================
+  lighthouse:
+    name: Lighthouse — score ratchet vs. the seeded stack (RC P11-8)
+    runs-on: ubuntu-latest
+    # Longer than `a11y` because the run is route-count x LH_REPEATS, and a
+    # Lighthouse pass cannot end on network-quiet against a page holding an SSE
+    # stream — it runs to the spec's own maxWaitForLoad cut instead.
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the .env for the Compose stack
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's/^ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=.*/ENTROPIA_BOOTSTRAP_ADMIN_EMAIL=e2e_admin@e2e.entropia.test/' \
+            -e "s#^ENTROPIA_SERVICE_TOKEN=.*#ENTROPIA_SERVICE_TOKEN=e2e-only-$(openssl rand -hex 24)#" \
+            .env
+
+      - name: Start the Docker Compose stack
+        # Same bounded retry as the sibling jobs: a registry/BuildKit transport
+        # blip kills the job in ~30s before anything runs, while a genuinely
+        # broken build fails all three attempts identically.
+        run: |
+          for attempt in 1 2 3; do
+            if docker compose up -d --build; then
+              exit 0
+            fi
+            echo "::warning::docker compose up failed (attempt ${attempt}/3); retrying"
+            docker compose down --remove-orphans --volumes || true
+            sleep $((attempt * 10))
+          done
+          echo "::error::docker compose up failed after 3 attempts"
+          exit 1
+
+      - name: Wait for the API and web app to become ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/api/v1/health/ready >/dev/null 2>&1 \
+              && curl -fsS http://localhost:8080 >/dev/null 2>&1; then
+              echo "Stack is ready."
+              exit 0
+            fi
+            echo "Waiting for stack... ($i/60)"
+            sleep 5
+          done
+          echo "Stack did not become ready in time." >&2
+          docker compose ps
+          docker compose logs --tail 200
+          exit 1
+
+      - name: Seed the E2E golden fixture (R2-07) + live ESP registry (R2-12)
+        # The same seed as the a11y job, for the same reason: the matrix is
+        # walked as Admin, and an empty Library or Results page would be scored
+        # for a render no user ever gets.
+        run: docker compose exec -T -e SEED_E2E_GOLDEN=1 -e SEED_ESP_TA=1 -e SEED_RATIONALE=1 api python -m entropia.apps.seed
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/e2e/package-lock.json
+
+      - name: Install E2E dependencies
+        working-directory: frontend/e2e
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: frontend/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the Lighthouse ratchet
+        working-directory: frontend/e2e
+        env:
+          E2E_BASE_URL: http://localhost:8080
+          E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
+        run: npm run lighthouse
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail 500
+
+      - name: Upload the Lighthouse report (scores, spread, re-baseline input)
+        # Always uploaded: on a pass it is the evidence artifact, on a failure it
+        # names the route and category that dropped, and in the unarmed
+        # bootstrap state it carries the measured floors to freeze.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-report
+          path: |
+            frontend/e2e/lighthouse-report/
+            frontend/e2e/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v
+
   # audit TEST-09 / §9.6 — a SEPARATE, explicit dev-auth stack (its own runner, so
   # its own Compose project + volumes, never the session job's). The session job
   # above proves the normal session profile; this one proves the dev profile

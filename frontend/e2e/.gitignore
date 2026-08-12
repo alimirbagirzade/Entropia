@@ -17,3 +17,10 @@ a11y-report/precheck-results.json
 # contents into a11y-baseline.json — never a record in their own right.
 a11y-report/axe-baseline.measured.json
 a11y-report/axe-baseline.tightened.json
+
+# The Lighthouse ratchet's re-baselining INPUT, ignored for exactly the reason
+# above: you copy their contents into lighthouse-baseline.json's `floors`. A
+# committed `measured` file would sit beside the tracked lighthouse-results.json
+# looking like a second, rival floor. CI uploads both as build artifacts.
+lighthouse-report/lighthouse-baseline.measured.json
+lighthouse-report/lighthouse-baseline.tightened.json

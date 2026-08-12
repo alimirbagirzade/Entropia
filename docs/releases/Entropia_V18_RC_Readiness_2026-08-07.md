@@ -866,8 +866,8 @@ açılmadı/kapatılmadı.
 | ~~**P11-6**~~ | ~~Tab sırası 23 route'un **yalnız 3'ünde** doğrulandı~~ → **2026-08-11 KAPANDI (kapsam ekseninde).** **23/23** yürütüldü, **0 N/A**; rota listesi artık elle yazılmıyor, `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor. Daraltmanın yazılı gerekçesi (*"walking every tabbable element on all 23 routes would double this job's wall clock"*) **ölçülerek çürütüldü**: 23 rota **13.2 s**, `@a11y` job'ının tamamı **1.2 dk** (ADIM 29: 1.0 dk). 0 sapma, 0 blocking, advisory **90** — ADIM 29 ile birebir aynı. **YENİ KALEM → P11-6b:** aynı sonda **Tab'a hiç basmıyor** ve **hiçbir rota onu kıramaz**; ölçüldü, **düzeltilmedi**, sınır artefakta yazıldı. Ayrıntı: **§6.7.6** | P11 |
 | **P11-6b** | **YENİ (2026-08-11 ölçümü, rapor bunu bildirmemişti).** `specs/20-a11y-prechecks.spec.ts`'in tab-sırası sondası adının vaat ettiğinden azını ölçüyor: **Tab tuşuna hiç basmıyor** (DOM sırasını `tabindex`'ten türetilen sırayla karşılaştırıyor) ve bulguları yalnız `advisories`'e yazdığı için **hiçbir rota onu kıramaz**. Görebildiği tek şey pozitif-`tabindex` yeniden sıralamasıdır; odak tuzağı / erişilemez kontrol / roving-tabindex **görünmez**. Sınır 3 rotada da vardı — bu dalga onu **getirmedi, ölçtü**; gerçek Tab yürüyüşü yeni bir modelleme kararıdır (radio grupları, `<select>`, roving tabindex) → **ayrı PR**. Şimdilik `precheck-results.json::tab_order_probe` + konsol satırı ile **beyan ediliyor**, ki 3→23 genişlemesi daha güçlü bir iddia gibi okunmasın. Fiziksel Tab yürüyüşü yalnız `specs/14-keyboard-flow.spec.ts`'te, **2 rotada** | P11 |
 | **P11-3b** | **YENİ (2026-08-11 ölçümü).** `strategy-standalone` bugün **1135 px** ölçüldü — `-darwin` (1425) ve **`-linux` (900)** baseline'larının **ikisiyle de** uyuşmuyor; sayfa yüksekliği seed'e bağlı liste uzunluğuyla oynuyor. P11-3'ün sonucunu değiştirmez ama **hayatta kalan `-linux` setinin seed hassasiyeti** hakkında açık bir soru bırakır. **Ölçüldü, düzeltilmedi** — bu dalga `-linux` setine dokunmadı. → **2026-08-11 açık sorusu CEVAPLANDI (P11-2 ölçümü, §6.7.7):** yükseklik **seed'e** değil **journey-suite sonrası duruma** duyarlı; `e2e.yml` görsel kapıyı `npm test`'ten SONRA koşuyor, yani CI o durumu her koşuda üretiyor. Aynı 1135 px **Linux'ta da** ölçüldü → platform artefaktı **değil**. `-linux` seti runner'da iki kez 23/23 geçti | P11 |
-| **P11-8** | Lighthouse hâlâ bağlı değil | P11 |
-| **P10-7** | Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor) | P10 |
+| ~~**P11-8**~~ | ~~Lighthouse hâlâ bağlı değil~~ → **2026-08-12 (ADIM 43) KAPANDI.** İddia doğruydu. Lighthouse **ratchet olarak** bağlandı (`e2e.yml` → `lighthouse` job'ı + `specs/21-lighthouse.spec.ts` + `frontend/e2e/lighthouse-baseline.json`), mutlak eşik olarak **değil**: bugünkü ölçülen skor **taban**, yalnız yükselebilir, **pay çıkarılmadı** — a11y ve ADIM 42 kabul-kriteri ratchet'leriyle **aynı** desen, yeni desen icat edilmedi. **Kapsam: 23/23 rota, kapsanmayan 0.** Liste elle yazılmadı, `screenshotMatrix.ts::TARGET_PAGES`'ten türüyor; matriste olup tabanı olmayan rota **kırmızı** verir (boşluk, geçiş değil). **Gürültü tolerans genişleterek değil stabilize edilerek çözüldü:** atılan warm-up + rota başına 3 koşunun **medyanı** → ölçülen tekrar yayılımı **3 kategoride de 0 puan** (yani susturulacak gürültü yoktu; taban bu yüzden paysız). **İki otorite çakışması da önlendi:** (1) **a11y kategorisi hiç İSTENMİYOR** — axe sevk edilmiş otorite olarak kalıyor, rakip bir a11y sayısı **üretilmiyor**; **hiçbir Lighthouse çıktısı A-08 kanıtı değildir** ve defterin §1/§2'sine yazılamaz (A-08 hâlâ **yapılmadı**, defter hâlâ **boş**). (2) **Performans ayrımı iki belgeye de yazıldı** — `loadgen.py` **sunucuyu** ölçer (uç-nokta p95, kontrol-normalize, gecelik), Lighthouse **tarayıcıyı** (rota başına boyama/etkileşim skoru, PR'da); `performance/README.md` §8 zaten *frontend rendering*'i yük sürücüsünün kapsamı **dışında** ilan etmişti — bu kapı o **beyan edilmiş boşluğu** dolduruyor, ikinci bir görüş değil. **Ölçülen taban:** performance **100** (22 rota) / **98** (`panel-management`), best-practices **96** (23 rota), seo **82** (23 rota). **İki dürüst sınır tabanın kendi `provenance`'ına yazıldı:** performance localhost + desktop preset'te **doygun** (taban 100 = *"hiç kötüleşemez"*, mevcut en katı ratchet — ama gerçek bir kullanıcı makinesinde hızlı olduğunun kanıtı **değil**); best-practices 96 ve seo 82 **gerçek kusurlardır**, ölçülen değerinde donduruldu ve **AÇIK bırakıldı** — bir CI slice'ı ürün kodunu da değiştirmez. Ayrıntı ve ham kanıt: **§6.7.12** | P11 |
+| ~~**P10-7**~~ | ~~Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor)~~ → **2026-08-12 (ADIM 43) KAPANDI — planlanan ikinci PR'a GEREK KALMADI.** Bu satırın *"aktivasyon için 5 gecelik baseline gerekiyor"* kısmı **bayattı**: 2026-08-07'de yazıldı, bir daha okunmadı. Toplayıcı **zaten vardı** (`performance.yml` → `load-full`, cron `23 4 * * *`, ADIM 24'ten beri) ve **zaten koşuyordu**; beşinci gece **2026-08-11**'de doldu. Ölçüm: **altı** ardışık yeşil gece (08-07..08-12), altısı da `github-ubuntu-latest`, 16/40, **sıfır hata**, altısında da `loadgen-baseline` artefaktı mevcut ve süresi dolmamış. Bant **türetildi, seçilmedi**: ham kontrol kayması **1.71×** (normalizasyonun varlık nedeni), dondurulmuş baseline'a karşı herhangi bir gecenin ürettiği **en kötü** oran **1.62×** (`admin_logs`) → README §6 adım 3'ün *"gözlenen yayılımın ~1.5 katı"* = `1.5 × 1.62 = 2.43` → **`--max-ratio 2.5`**. Kanıt: altı gecenin altısı da **PASS** (1.54× pay); enjekte edilen **3.0× regresyon FAIL** — negatif, sentetik fixture'da değil **gerçek** baseline üzerinde; **2.4× regresyon geçer** ve bandın bu gerçek sınırı gizlenmeden yazıldı. §6 adım 5'in *"kullanılabilir bant yok, kapalı bırak"* çıkışı **mevcuttu ve alınmadı**. Baseline artık **takipli dosya** (`docs/performance/baseline_ci.json`) → kapı 30 günlük artefakt saklamasına **bağlı değil**. Gecelik koşunun iptal edilemeyeceği **log'dan** doğrulandı (`schedule` olayında `github.ref` = `refs/heads/main` → `cancel-in-progress` false; altı koşunun altısı da `success` + artefakt). **Kapının göremediği, açıkça yazıldı:** 2.5× altındaki hiçbir şey · PR'daki hiçbir şey (kapı **gecelik**) · başka hiçbir runner class · altı örnek bir kuyruğu sınırlayamaz. Ayrıntı ve ham kanıt: **§6.7.11** | P10 |
 | ~~**P1-B1/B2**~~ | ~~`BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat~~ → **2026-08-11 (ADIM 40) KAPANDI — sayı güncellenerek DEĞİL, sahipliği değiştirilerek.** İkisi de yeniden ölçüldü, ikisi de doğru çıktı. B1: üç sayı codemap'ten **silindi**, üretilmiş satıra taşındı (`repository_facts.md` §Summary ▸ *Application modules*); ölçüm ayrıca sayının **göremediği** kusuru buldu — `jobs` tablosunda `delivery.py` ve `heartbeat.py`'nin **hiç satırı yoktu** (14 satır / 16 modül), ikisi eklendi. B2: `CLAUDE.md`'den sayı **kaldırıldı**, otorite `BACKEND_ROUTES.md` §DUAL-TOKEN'ın tek tek sayan listesi (**17**). Tekrarı **yeni kapı** engelliyor: `check_codemap_coverage`, negatifi 5 testle kanıtlı. Ayrıntı: **§6.7.8** | P1 |
 | ~~**P8-B1**~~ · ~~**P8-B3**~~ · **P8-B2 KARARA BAĞLANDI (kısmen — iki uç PO'da)** | ~~`pending_data_job_dispatch` docstring gerekçesi bayat~~ → **KAPANDI (ADIM 40):** gerekçe yeniden yazıldı — `None` **admission** yüzünden dönüyor (replay yeni iş admit etmedi, dispatch edilecek şey yok); *"gövdede terminal-state guard yok"* öncülü ADIM 21'de sona ermişti (`trade_log.py`/`trading_signal.py` gövdeleri `claim_job_for_delivery` çağırıyor — bu koşuda doğrulandı). **Davranış ve imza DEĞİŞMEDİ.** ~~`JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış~~ → **KAPANDI (ADIM 40):** aktör tablosunun **"Satır" kolonu silindi** (aktör adı zaten sembolün kendisi; 12 değerin 11'i bayattı, yalnız `system_heartbeat :39` tutuyordu) ve tablonun tamlığı + kuyruk eşlemesi kapıya bağlandı. ~~**P8-B2** (Create-Package 200 ↔ diğer dokuz 202) BU SLICE'A GİRMEDİ ve AÇIK~~ → **2026-08-11 (ADIM 41) KARARA BAĞLANDI — kod ekseninde YARISI, ürün ekseninde AÇIK.** Ölçüm: **13** durable admission ucu (küme `enqueue_job` transitive closure'ından **türetildi**, elle sayılmadı), **hepsi** kuyruğa alıp iş bitmeden dönüyor → senkron uç **yok**. Raporun *"diğer dokuz 202"* ifadesi de **yanlıştı**: gerçek dağılım **4×200 + 1×201 + 8×202**. Kanonik uç uç soruldu: `pre-check` (doc 07 §10.3) ve `generate-candidate` (MTR §7.1 literal wire contract) **202 der** → ikisi **hizalandı** ve gövdeleri `dict[str, Any]`'den tiplenip şemada **yayımlandı**; `validate` ve `baseline-parse` için kanonik **status vermiyor** (baseline-parse için **ucu bile adlandırmıyor**) → **kod DEĞİŞMEDİ, PO kararı bekliyor**. Sevk edilmiş 202 deseni bir **olgu** olarak kaydedildi, kanonik boşlukta kural olarak kullanılmadı. Yeni kapı sınıflandırılmamış admission ucunu kırmızıya çevirir (negatifi kanıtlı). **P8 KAPANMADI.** Ayrıca **YENİ: P8-B3b** (aşağıda). Ayrıntı: **§6.7.8** + **§6.7.9** | P8 |
 | **P8-B3b** | **YENİ (ADIM 40 ölçümü, rapor bunu bildirmemişti).** `JOBS_AND_EVENTS.md`'in **gövdesinde** ~30 adet `dosya.py:NN` / `:NN` referansı daha var (`sse.py:270`, `_wait_for_tick:166`, `actors.py:334`, …) — aktör tablosuyla **aynı** yapısal kusur: her düzenleme onları kaydırır. B3 ölçümü yalnız aktör tablosunu kapsıyordu, bu yüzden yalnız o kapatıldı; gerisini sembol adına çevirmek her referansın **tek tek doğrulanmasını** ister → **ayrı PR**. Sınır dosyanın kendisine yazıldı. **Ölçüldü, düzeltilmedi** | ADIM 40 |
@@ -1585,6 +1585,171 @@ tablosu hâlâ kapsam dışı.
 
 **P1-Gate3 KAPANMADI** — ele alınabilir hale geldi. **Blocker sayısı DEĞİŞMEDİ (üç).
 §8 verdict BLOCKED kalır.**
+
+---
+
+#### 6.7.11 P10-7 KAPANDI — saat zaten dolmuştu (ADIM 43, 2026-08-12)
+
+**Bu kalemin en pahalı kısmı kod değildi, okumaktı.** Satır *"aktivasyon için 5 gecelik
+baseline gerekiyor"* diyordu; slice'ın brief'i de saati **başlatmayı** planlıyordu. İkisi
+de yanlıştı. Önce ölçüldü:
+
+| Soru | Cevap |
+|---|---|
+| Gece işi var mı? | **Var** — `performance.yml` → `load-full`, cron `23 4 * * *`, **ADIM 24'ten beri**. Yazılacak bir şey yoktu. |
+| Kaç gece birikmiş? | **Altı** — 2026-08-07 … 08-12. Altısı da `success`, altısında da `loadgen-baseline` artefaktı, hepsi `github-ubuntu-latest`, 16/40, **sıfır hata**. §6 beş istiyor; beşinci **08-11**'de doldu. |
+| Baseline nerede kalıcı? | Artefakt (30 gün) yalnız **girdi**. Kapının baseline'ı artık **takipli dosya** → saklama süresine bağlı değil. |
+
+Yani bu PR bir saat başlatmadı; **saati okudu ve kapıyı açtı**. Planlanan ikinci PR'a
+gerek kalmadı.
+
+**Bant türetildi, seçilmedi.** Ham kontrol (`meta`: kimliksiz, DB okumasız) altı gecede
+**1.71×** kaydı — normalizasyonun varlık nedeni tam olarak bu ve ham p95 kapısının neden
+hiç seçenek olmadığının kanıtı. Kontrol-normalize edilmiş eksende:
+
+* senaryo bazında en kötü **max/min** yayılım: **1.92×** (`hypotheses`);
+* ama kapının gerçekte değerlendirdiği nicelik bu değil — her gece **dondurulmuş
+  baseline'a** karşı ölçülür. O eksende herhangi bir gecenin ürettiği en kötü oran
+  **1.62×** (`admin_logs`, 08-07 gecesi).
+
+README §6 adım 3 *"gözlenen yayılımın kabaca 1.5 katı"* diyor. Kapının ölçtüğü niceliğe
+uygulandığında: `1.5 × 1.62 = 2.43` → bir ondalığa **yukarı** yuvarlanarak
+**`--max-ratio 2.5`**. Gevşek okuma (1.5 × 1.92 = 2.88) **reddedildi**: daha geniş bir
+bant için daha zayıf bir kanıt olurdu.
+
+**Baseline olarak hangi gece donduruldu ve neden.** §6 adım 3 *"medyan koşu"* diyor. Altı
+gece, 16 karşılaştırılabilir senaryonun medyan kontrol-normalize p95'ine göre
+sıralandığında ortada tek koşu yok (çift sayı) → **alt-orta** alındı: run `31461912952`,
+2026-08-11, `4e9512d2`. En hızlı geceyi dondurmak her sıradan geceyi regresyon gibi
+gösterirdi; en yavaşı dondurmak bir regresyonu gizlerdi.
+
+**Negatif kanıtlandı, sentetik fixture'da değil gerçek baseline'da:**
+
+```
+altı gecenin altısı da            PASS   (en kötü 1.62x, banda 1.54x pay)
+enjekte 3.0x regresyon            FAIL   ← negatif kontrol
+enjekte 2.4x regresyon            geçer  ← bandın gerçek sınırı
+```
+
+**§6 adım 5 alınmadı, ve bu bir karardır.** Prosedür açıkça *"yayılım o kadar genişse ki
+kullanılabilir bant yoktur — bunu yaz ve kapıyı kapalı bırak"* çıkışını sunuyor. Bant
+gözlenen her geceyi 1.54× payla geçtiği ve hâlâ 3.0×'i yakaladığı için o çıkış
+**kullanılmadı**; gerekçe README §6'ya yazıldı.
+
+**Kapının GÖREMEDİĞİ (gizlenmedi, yazıldı):**
+
+* **2.5× altındaki hiçbir şey.** Gözlenen 1.62× hava durumu ile 2.5× bandı arasındaki bir
+  regresyon merge olur ve kalır. Bant geniş, çünkü **altı örnek bir kuyruğu sınırlayamaz**.
+  Daraltmak, arkasında daha çok gece olan **sonraki** bir karardır — kırmızı bir geceyi
+  susturmak için yapılan bir düzenleme **değil**.
+* **PR'daki hiçbir şey.** Kapı **geceliktir**. Latency'yi 3× bozan bir PR yeşil merge olur
+  ve ertesi sabah `load-full` + `nightly-failure-notice` ile yakalanır. Bu, §1'in bilerek
+  yaptığı takas.
+* **Başka hiçbir runner class.** §2 zaten karşılaştırmayı yasaklıyor.
+* Altı gecenin üçü iki sha üzerinde (`2cf7283d` iki kez) → örneklem **beş** ayrı commit.
+
+**Concurrency kusuru bu kapıyı vurmuyor — varsayılmadı, iki yoldan doğrulandı.** İfade
+okundu: `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`, ve bir `schedule`
+olayında `github.ref` **zaten** `refs/heads/main` → false. Log okundu: altı ardışık
+zamanlanmış koşunun altısı da `success` + gerçek artefakt, hiçbiri cancelled,
+`nightly-failure-notice` hiç ateşlemedi. Yeşil rozet buna yetmezdi; her koşunun **job ve
+artefakt listesi** tek tek çekildi.
+
+**Bant tek yerde yaşamıyor, üç yerde ve birbirini tutmak zorunda:** workflow'un
+`--max-ratio`'su, `test_loadgen.py`'deki `_BAND`/`_OBSERVED_WORST_RATIO`, ve README §6.
+`test_the_nightly_actually_passes_the_band_this_file_pins` ayrışırlarsa kırmızıya
+çeviriyor → bandı yalnız workflow'da genişletmek **mümkün değil**.
+
+Ham kanıt: `docs/releases/evidence/2026-08-12/p10_7_nightly_baselines.md` ·
+`p10_7_control_normalised_spread.txt` · `p10_7_ratio_gate_replay.txt`.
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** P10-7 blocker değildi; §8 hâlâ **BLOCKED**, açık
+blocker sayısı hâlâ **üç** (1, 2, 4). **P10 KAPANMADI** — P10-B2'nin PO yarısı, P10-B3,
+P10-B4, P10-B5 ve P10-B6 açık.
+
+---
+
+#### 6.7.12 P11-8 KAPANDI — Lighthouse ratchet olarak bağlandı (ADIM 43, 2026-08-12)
+
+İddia doğruydu: bağlı değildi. Bağlandı — **eşik olarak değil, ratchet olarak**.
+
+**Neden ratchet.** *"performance ≥ 90"* gibi bir eşik, kimsenin ölçmediği bir sayıdır: 2
+vCPU'luk paylaşımlı bir runner'da ya hiç kırılmayacak kadar düşük olur ya da hava
+durumundan kırılacak kadar yüksek. Repo bu muhakemeyi zaten yazmıştı
+(`performance/README.md` §1) ve soruyu zaten **iki kez aynı** cevaplamıştı: axe
+(`a11y-baseline.json`) ölçülen düğüm sayısını dondurur, ADIM 42 ölçülen kriter sayısını
+dondurur. Üçüncüsü **yeni desen icat etmedi**, ikincisinin şeklini aldı. Tek eksen farkı:
+axe kötü düğüm **tavanı**, bu iyi skor **tabanı** dondurur.
+
+**Kapsam: 23/23, kapsanmayan 0.** Liste elle yazılmadı; `screenshotMatrix.ts::TARGET_PAGES`
+— axe scan'in, klavye sondalarının ve (ADIM 39'dan beri) görsel kapının **aynı** tekil
+kaynağı. Matriste olup tabanı olmayan rota **kırmızı** verir: tabansız rota bir **boşluktur**,
+geçiş değil. Alt küme seçilmedi çünkü gerekmedi — job uçtan uca **9 dk 48 sn**, ratchet
+adımı **7.6 dk** (23 × 3 + warm-up = 70 Lighthouse koşusu), 75 dk timeout'un çok içinde.
+
+**Gürültü stabilize edildi, tolerans genişletilmedi.** Atılan warm-up (ilk koşu V8 ısınmasını
+ve soğuk HTTP önbelleğini emer; matristeki ilk rotanın kalıcı olarak kötü görünmesini
+engeller) + rota başına 3 koşunun **medyanı**. `cpuSlowdownMultiplier: 1` — Lighthouse'un
+kendi desktop preset'i, elle gevşetilmiş bir ayar değil; runner zaten yavaş, üstüne 4×
+mobil yavaşlatma koymak kimsede olmayan bir cihazı modellerdi.
+
+**Ölçülen taban** (ölçüm koşusu `31571413853`): performance **100** (22 rota) / **98**
+(`panel-management`) · best-practices **96** (23) · seo **82** (23).
+
+**İki otorite çakışması da önlendi:**
+
+1. **a11y kategorisi hiç İSTENMİYOR.** `CATEGORIES` = `performance, best-practices, seo`.
+   axe sevk edilmiş otoritedir (kural-bazlı düğüm tavanları + yazılı adjudication + D-10);
+   ikinci ve daha kaba bir a11y sayısı onunla **çelişebilirdi**, bu yüzden **üretilmiyor**.
+   Ve mutlak kural: **hiçbir Lighthouse çıktısı A-08 kanıtı değildir** — defter bir insanın
+   NVDA/VoiceOver ile **duyduğunu** kaydeder, hiçbir DOM tarayıcısı (axe dahil) oraya
+   yazamaz. A-08 hâlâ **yapılmadı**, defter hâlâ **boş**, dört çıkış kriteri de ☐.
+2. **Performans ayrımı iki belgeye de yazıldı.** `loadgen.py` **sunucuyu** ölçer (uç-nokta
+   p95, kontrol-normalize, gecelik); Lighthouse **tarayıcıyı** (FCP/LCP/TBT/CLS/SI → rota
+   başına kategori skoru, PR'da). `performance/README.md` §8 zaten *frontend rendering*'i
+   yük sürücüsünün kapsamı **dışında** ilan etmişti; bu kapı o **beyan edilmiş boşluğu**
+   dolduruyor — ikinci görüş değil, eksik yarı. Yeşil bir gece bundle regresyonu hakkında,
+   yeşil bir Lighthouse skoru ikiye katlanmış bir sorgu hakkında **hiçbir şey söylemez**.
+
+**Kapı UNARMED sevk edildi, sonra donduruldu.** İlk commit `armed: false` + boş `floors`:
+hiç koşmamış bir işten eşik uydurmak, tam da yasaklanan uydurmaydı. İlk koşu **ölçtü** ve
+`::warning::` ile kapının kapalı olduğunu bağırdı; ikinci commit dondurdu. Dosyanın
+**yokluğu** hâlâ sert hatadır — silinmiş bir taban asla *"her skor serbest"*e dönüşmez.
+
+**Armed koşu (`31572385301`) yeşil — ve bir iddiayı çürüttü.** 23 rotanın 22'si tabanı
+birebir üretti. Yirmi üçüncüsü üretmedi ve bu slice'ın en öğretici ölçümü oldu:
+`panel-management` performance **medyanı 98'de kaldı** ama aralığı `[98-98]` → `[98-100]`
+**genişledi**. Yani ölçüm koşusunun *"yayılım 0 puan"*u **o koşunun özelliğiydi, kapının
+değil** — ve rapor bunu düzeltilmiş halde taşıyor, güzel olanı değil. Üç sonuç:
+**(a)** tabanı tutan şey gürültüsüzlük değil **medyandı** — kapı tek koşuyu dondursaydı
+taban 100 olur ve armed koşu ilk denemede hava durumundan düşerdi; **(b)**
+`panel-management`'ın tabanı **98'de kalmalı**, `provenance.do_not_tighten` bunu tam da
+birinin yükseltmek üzere olduğu anda okunacak yere pinledi; **(c)**
+`provenance.repeat_spread_points` artık **iki koşuyu birden** kaydediyor.
+
+**Dondurulan kusurlar isimlendirildi ve AÇIK bırakıldı** — `errors-in-console` (**23/23**
+rota), `meta-description` (**23/23**), `robots-txt` (**23/23**), `cumulative-layout-shift`
+(1/23, `panel-management`, CLS 0.085). Üçü **uygulama geneli** kusurdur (shell veya origin
+kaynaklı), sayfa başına değil. Donmuş bir kusur **görünmez** bir kusurdur; bu yüzden spec
+`routes[].deductions`'ı kaydeder (yeşil koşu bile listeyi taşır) **ve** kalem
+**[#677](https://github.com/alimirbagirzade/Entropia/issues/677)** olarak açıldı — kabul,
+#617/#618 emsalindeki gibi: her düzeltme kendi tabanını sıkılaştırarak gelir.
+
+**Dürüst sınırlar:** Lighthouse performance localhost + desktop preset'te **doygun** —
+taban 100 mevcut **en katı** ratchet'tir (*"hiç kötüleşemez"*), ama **gerçek bir kullanıcı
+makinesinde hızlı olduğunun kanıtı DEĞİLDİR** ve hiç kimse onu öyle alıntılayamaz; uyarı
+tabanın kendi `provenance.sensitivity_boundary`'sine yazıldı ki sayıyla birlikte seyahat
+etsin · SSE akışı yüzünden Lighthouse'un network-quiet koşulu hiç ateşlenemez, trace **20
+sn**'de kesilir (FCP/LCP çok öncesinde düşer; sonrası ölçülmez) · ham metrikler
+**raporlanır, kapılmaz** · **P11-1 açık olduğu için bu kapı da *required status check*
+değil**, yalnız bir job — kırmızı bir Lighthouse koşusunun üstünden merge etmeyi bugün
+mekanik olarak engelleyen bir şey yok.
+
+Ham kanıt: `docs/releases/evidence/2026-08-12/p11_8_lighthouse_ratchet.md`.
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** P11-8 blocker değildi; §8 hâlâ **BLOCKED**, açık
+blocker sayısı hâlâ **üç** (1, 2, 4). **P11 KAPANMADI** — **P11-1** (branch protection,
+**insan kararı**) ve **P11-6b** açık.
 
 ---
 

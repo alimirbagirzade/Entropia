@@ -1,0 +1,17 @@
+band = 2.5x   baseline = docs/performance/baseline_ci.json (2026-08-11T05:33:04Z, sha 4e9512d2)
+
+nightly run    date         verdict  worst normalised ratio vs baseline
+31152127539    2026-08-07   PASS     1.62x (admin_logs)
+31241156717    2026-08-08   PASS     1.02x (admin_logs)
+31296683657    2026-08-09   PASS     1.10x (admin_logs)
+31359834251    2026-08-10   PASS     1.31x (instruments)
+31461912952    2026-08-11   PASS     1.00x (admin_logs)
+31567849357    2026-08-12   PASS     1.37x (admin_logs)
+
+worst ratio any observed night produced: 1.62x (31152127539 / admin_logs)
+headroom to the shipped band            : 1.54x
+
+NEGATIVE CONTROL — inject a 3.00x regression into 'admin_logs':
+  FAIL: warm/admin_logs: p95 922.557ms / control 193.51ms = 4.77 control-units, baseline 307.519ms / 193.51ms = 1.59 -> 3.00x (band 2.5x)
+
+BOUNDARY — a 2.40x regression (inside the 2.5x band): no failure (expected)

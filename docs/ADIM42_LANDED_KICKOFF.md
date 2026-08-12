@@ -1,4 +1,10 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED by `docs/ADIM43_LANDED_KICKOFF.md` (ADIM 43, 2026-08-12).** Bu belge
+> yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`.
+> **Hâlâ geçerli olan kısım:** P1-Gate3'ün A/B/C/D borç sınıflandırması, ratchet'i ve
+> üretilmiş defteri — ADIM 43 onlara dokunmadı.
+
 # ADIM 42 landed — kickoff / devam tohumu
 
 > **ADIM 42 = RC §6.7 / P1-Gate3.** Kabul kriteri kapsamı **ölçüldü, sınıflandırıldı,

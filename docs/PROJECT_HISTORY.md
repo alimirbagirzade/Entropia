@@ -7225,3 +7225,89 @@ okunmasın diye böyle yazıldı.
   **(B) yoluyla** çözer ama **denetimi koşmaz**. Agent kapatamaz.
 * **Verdict `BLOCKED` kalır.** Blocker sayısı **2 → 1**; geriye **yalnız A-08** kaldı.
   Hiçbir belge `READY` demez.
+
+## ADIM 46 — RC §6.6: iki canlı N+1 kapandı (#617 + #618), PR #681
+
+**Kapsam:** RC readiness §6.6'nın **iki KOD kalemi**. A-08 (tek kalan blocker) bu slice'a
+**girmedi**; blocker sayısı **1 kaldı**, verdict **BLOCKED**.
+
+### Önce ölç — rapor bayat değildi
+
+Rapor 2026-08-07'den; ADIM 42–45 arasında kapanmış olabilirdi. **Kod yazılmadan önce**
+`c931063` üzerinde mevcut kapıyla (`tests/integration/test_query_budgets.py` — yeni ölçüm
+aracı **icat edilmedi**) yeniden ölçüldü:
+
+| yüzey | n=1 | n=11 | slope |
+|---|---|---|---|
+| `readiness_check.market_data_leg` | 2 | **12** | **1.0 / Strategy item** |
+| `dependency_pins.ensure_pinned_resolvers_active` | 2 | **22** | **2.0 / pin** |
+
+Kayıtlı sayılarla **birebir**. İkisi de canlıydı → düzeltmeye devam edildi.
+
+**Ölçüm yöntemi notu (tekrar kullanılabilir):** kapı yalnız **bütçenin altına** inildiğinde
+sayı basar; bütçeye eşitken sessizdir. Bugünkü ham sayıyı almak için tavanları geçici
+olarak yükselten **salt-okuma bir pytest plugin'i** kullanıldı (scratchpad'de, repo'ya
+girmedi) — `query_budgets.json`'a dokunmadan gerçek sayıyı yazdırır.
+
+### Düzeltme
+
+**#617** — `commands/readiness_check.py::_resolve_market_data_issues`, `get_dataset_root`'u
+**döngü içinde** çağırıyordu; Ready Check kullanıcının beklediği bir sayfa olduğu için
+kompozisyonun Strategy sayısı doğrudan gecikmeyi belirliyordu. YENİ
+`market_repo.get_dataset_roots` (per-id okuyucunun batch karşılığı) döngüden önce bir kez
+çözülüyor. **`entity_type` kapısı SQL'e taşındı**: Root yoksa DA market dataset değilse DE
+map'te **yok** — per-id okuyucunun ikisi için de döndürdüğü `None`'ın aynısı, yani
+`MARKET_DATASET_NOT_APPROVED` blocker'ı değişmedi.
+
+**#618** — `queries/dependency_pins.py::_pin_defect` her ref için registry entry + pinned
+revision okuyordu. YENİ `esp_repo.get_registry_by_keys`; iki taraf da YENİ `_prefetch`'te
+toplanıyor, `_pin_defect` **saf fonksiyona** dönüştü. **Batch sırası taşıyıcıdır ve
+tesadüf değildir:** `embedded_revision_id` vermeyen bir ref, entry'sinin
+`trusted_active_revision_id`'sine düşer → revizyon id'leri ancak registry map'i
+kurulduktan SONRA bilinebilir. Anahtarı bulunmayan bir ref revizyon batch'ine **katkı
+vermez** (zaten `key_not_found`; fallback ettirmek alakasız bir satırı batch'e sokardı).
+
+### Sonra
+
+İki yüzey de **n=1'de ve n=11'de 2 statement, slope 0**. `query_budgets.json` iki satırda
+da `queries_large: 2` / `per_item: 0`'a **sıkıldı**.
+
+### Regresyonun sessizce geri gelememesi — iki ayrı kanıt
+
+1. **Ratchet = sorgu sayısı kapısı, dişi kanıtlandı.** Yalnız `src/` geri alınınca kapı
+   *"readiness_check.market_data_leg: 12 queries at n=11, budget 2"* ve
+   *"dependency_pins…: 22 queries at n=11, budget 2"* ile kırmızıya düşüyor.
+2. **Sorgu sayısı davranışı KANITLAMAZ.** Eşdeğerlik ayrı dosyada:
+   `tests/integration/test_batched_dereference_equivalence.py` (**13 test**) — iki taraftaki
+   fail-closed durumlar, per-pin defect sözlüğünün **tamamı** snapshot ref sırasında,
+   fallback dalı, ve **pozitif yollar** (bunlar daha önce hiç test edilmemişti: seed edilen
+   her revizyon DRAFT'tı, yani "hiçbir şey dönmese" bütün fail-closed assertion'ları yine
+   geçerdi). **Mutasyonla sınandı:** batch'ten `entity_type` kapısını düşürmek ve revizyon
+   batch'ini registry fallback'i olmadan kurmak testleri kırmızıya çeviriyor.
+
+### Doğrulama
+
+`ruff check` · `ruff format --check` · `mypy src` temiz. Tam suite **tek çağrıda**:
+**3523 collected, 0 failed**, coverage **%93.66** (kapı ≥90).
+`generate_repository_facts.py --check` OK (+13 test / +1 dosya; capability matrix ve tek
+strict `xfail` **değişmedi**). `git diff origin/main -- docs/ | grep '^-## '` **boş**.
+
+Migration **yok**, `ENGINE_VERSION` **değişmedi**, OpenAPI **değişmedi**.
+
+### Dürüst sınırlar
+
+- **A-08 / #514'e dokunulmadı** — defter hâlâ **boş** (0/4). Blocker sayısı **1**.
+- **#558 / #559'a dokunulmadı** — ürün kararı; strict `xfail` yerinde duruyor.
+- §6.6'nın beş satırı artık **tek durumda değil**: #617/#618'in kod yarısı kapandı,
+  #514/#558/#559 açık. Rapora bu ayrım **açıkça** yazıldı ki tablo tek durum gibi
+  okunmasın.
+- **Hiçbir issue durumu bu slice'ın kanıtı değildir** — kanıt ölçümdür.
+- RC raporundaki `readiness_check.py:401-406` / `dependency_pins.py:114-115` **satır
+  numaraları öldü**; belgeye sembol adları yazıldı. **Satır numarası yazma.**
+
+### Bir tuzak, kayda geçsin
+
+Mutasyon kanıtından sonra `git checkout -- <dosya>` ile mutantları geri alırken **aynı
+dosyalardaki commit edilmemiş düzeltmeler de silindi**. Fark, sembol `grep -c`'siyle
+yakalandı ve iş yeniden uygulandı. **Kural: mutasyon denemesinden önce commit et**, ya da
+mutantı `git stash` ile ayır — `checkout --` staged olmayan her şeyi götürür.

@@ -1,50 +1,4 @@
-<!-- doc-status: historical -->
-> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
-> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
-> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
-> (üretilmiş, CI'da `--check` ile kapılı).
-
-<!-- GENERATED FILE — do not edit by hand.
-     Regenerate with:
-       cd backend && uv run python ../docs/audit/acceptance_semantic_scan.py \
-           --root .. --write-report docs/audit/acceptance_semantic_traceability.md
-     The source of truth is docs/audit/acceptance_semantic_map.yaml. -->
-
-# Semantic acceptance traceability — coverage report
-
-Every number below is derived from `docs/audit/acceptance_semantic_map.yaml`, which
-maps each acceptance criterion in `docs/spec/01..22` to the **test node ids** that
-assert it, clause by clause. `docs/audit/acceptance_semantic_scan.py` re-resolves
-every cited node against the live test tree and fails CI when one is absent, when a
-criterion claims coverage it cannot cite, or when a server-truth axis rests on a
-rendered UI.
-
-> **This is not a project-completion percentage.** It measures one thing: how much
-> of the written acceptance contract is tied to a test that actually asserts it. A
-> criterion counted `uncovered` here may well be implemented correctly — the claim
-> is only that nothing in the suite proves it. Reading these tables as "the product
-> is N% done" is a category error.
-
-Its predecessor, `acceptance_id_scan.py`, asked whether the string `PC-19` appeared
-anywhere in a test file. A docstring satisfied it. Nothing below is satisfied by a
-comment.
-
-## Scope boundary — what these tables do NOT cover
-
-The map covers every acceptance row in the **page documents** `docs/spec/01..22`,
-which are the canonical per-page acceptance contract.
-
-It does **not** yet cover the module-level acceptance tables inside
-`docs/spec/Entropia_V18_Master_Technical_Reference_v1_0.md` — 21 sections titled
-"Kabul Kriterleri" / "Kabul Testleri" / "Acceptance tests". Those are the upstream
-originals the page documents restate (Master §11.3, for example, maps onto doc 08's
-Package Library rows), but the wording differs and some rows have no page
-equivalent, so they are a second corpus rather than a duplicate. Mapping them is
-tracked as follow-up work; they are named here so their absence is visible rather
-than silently counted as covered.
-
-`docs/E2E_ACCEPTANCE.md` and the stage handoff documents are likewise out of scope
-for this map.
+OK: 383 criteria / 1175 clauses validate against the live test tree
 
 ## Coverage by document
 
@@ -249,3 +203,6 @@ for this map.
 | `PC-15` | D | An Agent runs Pre-Check through the Tool Gateway with the browser closed and the scan/audit/checkpoint provenance is stored. | Empirically re-checked, not inherited: `domain/agent_lab/tool_gateway.py::ToolName` enumerates task/data-bundle/proposal/backtest/result/artifact/followup/documentation/ view-dataset/allocation/trade-log/strategy/trading-signal families and contains no pre-check or create-package member; grepping the gateway for `precheck` / `create_package` returns nothing. No test drives `run_precheck` with an AGENT principal either. This is the doc 07 face of the §E.3 Tool Gateway gap — an implementation gap first, a test gap second. |
 | `AM-13` | D | An Agent asking a Result for net_profit/max_drawdown/romad gets registry metadata plus immutable values, leaving the human profile untouched. | There is no metric-bearing Agent surface to test. The only result-facing tool literal is `ToolName.RESULT_QUERY = "result.query"`, and `agent_tools.py::_handle_result_query` returns exactly `{found, result_id, run_id}` (or `{found, run_id, state, result_id}`) — no metric keys, no registry metadata. The `agent_dataset` export composes trade_ledger / signal_events / equity_curve / diagnostics / summary rows and is likewise metric-free (`test_agent_dataset_composes_every_persisted_artifact` enumerates the kinds). So no test can honestly be mapped here. |
 | `AM-15` | D | Soft-deleting a non-default profile root keeps Results/metric values, falls the resolver back, and keeps restore/purge Admin-only. | `metric_profile` is not in `domain/trash/page.py::TRASH_OBJECT_LOCATIONS` (the ten registered types are work_object, workspace, package, package_request, market_dataset, research_dataset, rationale_family, backtest_result, hypothesis_artifact, manual_document). Per the project's own K-06 rule a type absent from that catalogue has no soft-delete path that writes a trash entry, so there is no implemented behaviour to test and no test exists. The resolver-fallback clause is equally untested — no test soft-deletes a profile root and re-reads `get_resolved_metric_profile`. |
+
+acceptance ratchet OK: 126 partial / 8 uncovered against a frozen ceiling of 126 / 8; classes {'A': 1, 'B': 95, 'C': 6, 'D': 32}.
+GATE3_EXIT=0

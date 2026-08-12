@@ -25,6 +25,19 @@ What makes it fail (exit 1):
   * `evidence_type` that disagrees with where the node actually lives
   * a server-truth axis proven only by a jsdom render, or `async_recovery`
     proven only by a unit test  (see AXIS_RULES)
+  * a `partial`/`uncovered` criterion with no `debt_class`, or a settled one carrying one
+
+What makes `--ratchet` fail (exit 1):
+
+  * the count of `partial` / `uncovered` criteria, or of any A/B/C/D debt class,
+    rising above the frozen ceiling in `docs/audit/acceptance_coverage_baseline.json`
+  * the criteria corpus SHRINKING below its frozen size — deleting an inconvenient
+    row must not read as progress
+
+The validator proves the map does not lie about itself. It does NOT bound how much
+of the contract is unproven, which is how 131 partial + 8 uncovered criteria passed
+green for months. `--ratchet` freezes that debt as a ceiling instead, the same trade
+the a11y ratchet already makes in this repo (`frontend/e2e/a11y-baseline.json`).
 
 Resolution is STATIC — `ast` for Python, title extraction for vitest/playwright.
 No database, no test run, no network: this is safe to run as a fast CI gate and
@@ -39,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import os
 import re
 import sys
@@ -49,6 +63,7 @@ from typing import Any
 import yaml
 
 MAP_PATH = "docs/audit/acceptance_semantic_map.yaml"
+BASELINE_PATH = "docs/audit/acceptance_coverage_baseline.json"
 
 # --------------------------------------------------------------------------
 # Vocabulary
@@ -78,6 +93,31 @@ STATUSES_REQUIRING_NOTES = (
     "not_applicable",
     "product_decision_required",
 )
+
+#: Debt taxonomy (ADIM 42 / RC §6.7 P1-Gate3). "partial" hid at least four
+#: different situations behind one word, which made the aggregate number
+#: unplannable: nobody can budget "131 partial" without knowing how much of it a
+#: test could even close. Every partial/uncovered criterion carries exactly one:
+#:
+#:   A  NAME DRIFT       — the behaviour ships, under a different name than the
+#:                         spec row uses. Costs an adjudication plus a one-line pin.
+#:   B  TEST DEBT        — the behaviour is implemented, the assertion is missing.
+#:                         A test closes it. This is the only class a test slice owns.
+#:   C  NOT ASSERTABLE   — the open clause is a statement about a DOCUMENT, a
+#:                         deliberately-closed V1 feature, or a scenario Production
+#:                         cannot construct. To be justified, never "closed".
+#:   D  IMPLEMENTATION   — the code, field, error class or Agent tool the criterion
+#:                         names does not exist. NO test can close it; it needs
+#:                         product work, and several need a product ruling first.
+#:
+#: The A/B/C/D split is the point: without it, class D debt (product work) reads as
+#: test debt and gets budgeted to the wrong slice.
+DEBT_CLASSES = ("A", "B", "C", "D")
+
+#: Only open debt is classified. A `covered` row has nothing to plan, and the three
+#: "settled" statuses are already argued in `notes`; forcing a class onto them would
+#: invite re-litigating a closed decision at every edit.
+STATUSES_REQUIRING_DEBT_CLASS = ("partial", "uncovered")
 
 #: evidence_type -> the path prefix a node of that type must live under. This is
 #: what stops "unit test" from being claimed for an integration file (and back).
@@ -345,6 +385,31 @@ def validate(document: Any, index: TestIndex) -> list[Violation]:
         if isinstance(doc_path, str) and not index.file_exists(doc_path):
             out.append(Violation("UNKNOWN_DOCUMENT", where, f"no such spec file: {doc_path}"))
 
+        # ---- debt class
+        # A new `partial` row that arrives unclassified is exactly how "131 partial"
+        # became an opaque number in the first place, so the gate refuses it.
+        debt_class = record.get("debt_class")
+        if status in STATUSES_REQUIRING_DEBT_CLASS:
+            if debt_class not in DEBT_CLASSES:
+                out.append(
+                    Violation(
+                        "DEBT_CLASS_REQUIRED",
+                        where,
+                        f"status {status!r} needs a `debt_class` in "
+                        f"{'/'.join(DEBT_CLASSES)} — an unclassified open criterion "
+                        "cannot be planned, budgeted or ratcheted",
+                    )
+                )
+        elif debt_class is not None:
+            out.append(
+                Violation(
+                    "DEBT_CLASS_NOT_ALLOWED",
+                    where,
+                    f"status {status!r} is not open debt, so it must not carry a "
+                    f"`debt_class` (found {debt_class!r})",
+                )
+            )
+
         notes = record.get("notes")
         if status in STATUSES_REQUIRING_NOTES and not (isinstance(notes, str) and notes.strip()):
             out.append(
@@ -574,7 +639,21 @@ def validate(document: Any, index: TestIndex) -> list[Violation]:
 # Report
 
 
-REPORT_PREAMBLE = """<!-- GENERATED FILE — do not edit by hand.
+#: Both artefacts live under `docs/audit/`, which
+#: `scripts/generate_repository_facts.py::ALWAYS_HISTORICAL_GLOBS` requires to be
+#: marked `historical`. The banner is emitted HERE rather than hand-prepended to the
+#: output: it was hand-prepended once, and the next regeneration silently deleted it
+#: and turned the documentation-truth gate red. A generated file's header has to be
+#: generated too.
+HISTORICAL_BANNER = """<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
+
+"""
+
+REPORT_PREAMBLE = HISTORICAL_BANNER + """<!-- GENERATED FILE — do not edit by hand.
      Regenerate with:
        cd backend && uv run python ../docs/audit/acceptance_semantic_scan.py \\
            --root .. --write-report docs/audit/acceptance_semantic_traceability.md
@@ -663,17 +742,186 @@ def report(document: dict[str, Any]) -> str:
     for etype in sorted(by_type):
         lines.append(f"| {etype} | {by_type[etype]} |")
 
+    # Open debt by class. The status totals above say HOW MUCH is unproven; this
+    # says how much of it a test could even close (B) versus how much is product
+    # work wearing a coverage label (D).
+    by_class: Counter[str] = Counter(
+        str(r["debt_class"]) for r in criteria if r.get("debt_class")
+    )
+    lines.append("\n## Open debt by class\n")
+    lines.append("| Class | Criteria |")
+    lines.append("|---|---|")
+    for cls in DEBT_CLASSES:
+        lines.append(f"| {cls} | {by_class.get(cls, 0)} |")
+    lines.append(f"| **open total** | **{sum(by_class.values())}** |")
+
     for label, wanted in (("partial", "partial"), ("uncovered", "uncovered")):
         rows = [r for r in criteria if r["status"] == wanted]
         lines.append(f"\n## {label.title()} criteria ({len(rows)})\n")
         if not rows:
             lines.append("_none_")
             continue
-        lines.append("| ID | Summary | Why |")
-        lines.append("|---|---|---|")
+        lines.append("| ID | Class | Summary | Why |")
+        lines.append("|---|---|---|---|")
         for r in rows:
             note = " ".join(str(r.get("notes", "")).split())
-            lines.append(f"| `{r['id']}` | {r['summary']} | {note} |")
+            lines.append(
+                f"| `{r['id']}` | {r.get('debt_class', '?')} | {r['summary']} | {note} |"
+            )
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# Ratchet
+#
+# The validator above proves the map does not LIE. It says nothing about how much
+# of the contract is actually proven, so 131 partial + 8 uncovered criteria passed
+# it green for months. Making those a hard failure would block every PR behind 139
+# items; freezing them as a CEILING is the same trade the a11y ratchet already
+# makes in this repo (frontend/e2e/a11y-baseline.json + specs/13-a11y-scan.spec.ts),
+# so this reuses that shape rather than inventing a second one.
+
+
+def measured_counts(document: dict[str, Any]) -> dict[str, Any]:
+    """Today's debt, in the baseline file's own shape."""
+    criteria = document["criteria"]
+    by_status: Counter[str] = Counter(str(r.get("status")) for r in criteria)
+    by_class: Counter[str] = Counter(
+        str(r["debt_class"]) for r in criteria if r.get("debt_class")
+    )
+    return {
+        "total_criteria": len(criteria),
+        "status": {s: by_status.get(s, 0) for s in STATUSES_REQUIRING_DEBT_CLASS},
+        "debt_class": {c: by_class.get(c, 0) for c in DEBT_CLASSES},
+    }
+
+
+def ratchet(document: dict[str, Any], baseline: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Compare today's debt against the frozen ceiling. Returns (ok, lines)."""
+    measured = measured_counts(document)
+    ceilings = baseline.get("ceilings")
+    if not isinstance(ceilings, dict):
+        return False, ["ratchet: baseline has no `ceilings` mapping"]
+
+    failures: list[str] = []
+    improvements: list[str] = []
+
+    # Rows may be ADDED, never removed. Without this, deleting an inconvenient
+    # `partial` criterion would read as progress and tighten the ceiling for free.
+    floor = int(ceilings.get("total_criteria", 0))
+    if measured["total_criteria"] < floor:
+        failures.append(
+            f"total_criteria {measured['total_criteria']} < frozen {floor} — criteria "
+            "may be added but never dropped; a shrinking corpus is not progress"
+        )
+
+    for group in ("status", "debt_class"):
+        frozen = ceilings.get(group)
+        if not isinstance(frozen, dict):
+            failures.append(f"ratchet: baseline has no `ceilings.{group}` mapping")
+            continue
+        for key, value in measured[group].items():
+            ceiling = int(frozen.get(key, 0))
+            if value > ceiling:
+                failures.append(
+                    f"{group}.{key}: {value} measured, ceiling {ceiling} "
+                    f"(+{value - ceiling})"
+                )
+            elif value < ceiling:
+                improvements.append(f"{group}.{key}: {value} < {ceiling}")
+
+    lines: list[str] = []
+    if failures:
+        lines.append("FAIL: acceptance coverage debt grew past its frozen ceiling\n")
+        lines.extend(f"  {failure}" for failure in failures)
+        lines.append(
+            "\nThe ceiling is a frozen debt figure, not a budget with headroom. Either "
+            "cover the new criterion (cite a test node that asserts it) or argue its "
+            "class in `notes` and adjudicate the raise in "
+            "docs/audit/acceptance_coverage_debt_ledger.md — never widen the ceiling "
+            "to make CI green."
+        )
+        return False, lines
+
+    if improvements:
+        lines.append(
+            f"acceptance ratchet: debt fell below the ceiling on "
+            f"{len(improvements)} counter(s) — re-freeze "
+            "docs/audit/acceptance_coverage_baseline.json with:"
+        )
+        lines.extend(f"  {improvement}" for improvement in improvements)
+        lines.append(json.dumps({"ceilings": measured}, indent=2))
+    lines.append(
+        f"acceptance ratchet OK: {measured['status']['partial']} partial / "
+        f"{measured['status']['uncovered']} uncovered against a frozen ceiling of "
+        f"{ceilings['status']['partial']} / {ceilings['status']['uncovered']}; "
+        f"classes {measured['debt_class']}."
+    )
+    return True, lines
+
+
+# --------------------------------------------------------------------------
+# Debt ledger
+
+
+LEDGER_PREAMBLE = HISTORICAL_BANNER + """<!-- GENERATED FILE — do not edit by hand.
+     Regenerate with:
+       cd backend && uv run python ../docs/audit/acceptance_semantic_scan.py \\
+           --root .. --write-ledger docs/audit/acceptance_coverage_debt_ledger.md
+     The source of truth is docs/audit/acceptance_semantic_map.yaml. -->
+
+# Acceptance coverage debt — the ledger
+
+Every open acceptance criterion, sorted into the class that decides **who owns it
+and what it costs**. Before this file existed the RC readiness report carried one
+number — "131 partial" — and no way to act on it: a criterion whose error code was
+never implemented and a criterion missing one `assert` line were the same word.
+
+| Class | Meaning | Who closes it |
+|---|---|---|
+| **A** | The behaviour ships under a **different name** than the spec row uses. | An adjudication plus a one-line pin. |
+| **B** | The behaviour is implemented; the **assertion is missing**. | A test slice. This is the only class a test slice owns. |
+| **C** | The open clause is **not assertable** — a statement about a document, a deliberately-closed V1 feature, or a scenario Production cannot construct. | Nobody. To be justified, never "closed". |
+| **D** | The code, field, error class or Agent tool the criterion **names does not exist**. | Product work — and several need a **product ruling** first. No test can close these. |
+
+> **Class D is the finding.** Reading the aggregate as test debt budgets product
+> work to a test slice. A class-D row cannot be closed by anyone writing tests, no
+> matter how many are written.
+
+The `Why` column is the criterion's own `notes` field, truncated. Read the full
+argument in `acceptance_semantic_map.yaml` before planning any row.
+
+"""
+
+
+def ledger(document: dict[str, Any]) -> str:
+    criteria = document["criteria"]
+    open_rows = [r for r in criteria if r.get("debt_class")]
+    counts = Counter(str(r["debt_class"]) for r in open_rows)
+    lines = ["## Totals\n", "| Class | Criteria |", "|---|---|"]
+    for cls in DEBT_CLASSES:
+        lines.append(f"| {cls} | {counts.get(cls, 0)} |")
+    lines.append(f"| **open total** | **{len(open_rows)}** |")
+
+    for cls in DEBT_CLASSES:
+        rows = sorted(
+            (r for r in open_rows if r["debt_class"] == cls),
+            key=lambda r: (str(r.get("document", "")), str(r.get("id", ""))),
+        )
+        lines.append(f"\n## Class {cls} ({len(rows)})\n")
+        if not rows:
+            lines.append("_none_")
+            continue
+        lines.append("| ID | Doc | Status | Summary | Why |")
+        lines.append("|---|---|---|---|---|")
+        for r in rows:
+            doc = str(r.get("document", "?")).split("/")[-1][:2]
+            note = " ".join(str(r.get("notes", "")).split())
+            if len(note) > 400:
+                note = note[:397] + "…"
+            lines.append(
+                f"| `{r['id']}` | {doc} | {r['status']} | {r['summary']} | {note} |"
+            )
     return "\n".join(lines)
 
 
@@ -689,6 +937,19 @@ def main(argv: list[str] | None = None) -> int:
         "--write-report",
         metavar="PATH",
         help="regenerate the human-readable traceability report at PATH",
+    )
+    parser.add_argument(
+        "--write-ledger",
+        metavar="PATH",
+        help="regenerate the A/B/C/D debt ledger at PATH",
+    )
+    parser.add_argument(
+        "--ratchet",
+        nargs="?",
+        const=BASELINE_PATH,
+        metavar="PATH",
+        help="fail when open-debt counts exceed the frozen ceiling in PATH "
+        f"(default: {BASELINE_PATH})",
     )
     args = parser.parse_args(argv)
 
@@ -721,9 +982,28 @@ def main(argv: list[str] | None = None) -> int:
             fh.write(report(document))
             fh.write("\n")
         print(f"wrote {args.write_report}")
+    if args.write_ledger:
+        target = os.path.join(args.root, args.write_ledger)
+        with open(target, "w", encoding="utf-8") as fh:
+            fh.write(LEDGER_PREAMBLE)
+            fh.write(ledger(document))
+            fh.write("\n")
+        print(f"wrote {args.write_ledger}")
     if args.report:
         print()
         print(report(document))
+    if args.ratchet:
+        path = os.path.join(args.root, args.ratchet)
+        if not os.path.isfile(path):
+            print(f"FAIL: no coverage baseline at {path}", file=sys.stderr)
+            return 1
+        with open(path, encoding="utf-8") as fh:
+            baseline = json.load(fh)
+        ok, lines = ratchet(document, baseline)
+        print()
+        print("\n".join(lines), file=sys.stderr if not ok else sys.stdout)
+        if not ok:
+            return 1
     return 0
 
 

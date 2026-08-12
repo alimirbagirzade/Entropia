@@ -129,6 +129,14 @@ Before stopping a working session, produce **ALL** of the following:
   `RESEARCH_DATA_FILE_TYPE_NOT_ALLOWED` (doc 12). Kodlar aynı kusuru anlatır; her sayfanın kendi
   §-taksonomisi otoritedir. **Dört komut yüzeyi de** (trade_log, trading_signal, market_data,
   research_data) bu tek kapıyı çağırır — yeni bir upload yüzeyi eklerken kendi kodunla buraya bağla.
+- **Aktif-koşu reddi = TEK ad, sevk edilen kazanır (O-31).** Üç sayfa belgesi **tek** bir
+  reddi üç türlü adlandırıyor: `ACTIVE_RUN_DEPENDENCY` (doc 03 §14, doc 04 §15),
+  `DELETE_BLOCKED_BY_RUNNING_JOB` (doc 20 §15), `OBJECT_IN_ACTIVE_RUN` (doc 01/15). Yalnız
+  sonuncusu sevk edilmiş (`shared/errors.py::ObjectInActiveRunError`, 409). **Adjudicated
+  (O-02 emsali): sevk edilen ad kanoniktir, diğer ikisi tarihseldir** — sevk edilmiş kodu bir
+  belgeye uydurmak için yeniden adlandırmak bir yazım uğruna tüm çağıranları kırardı. Wire
+  kodu + 409 `test_backtest_persistence.py::test_active_run_blocks_work_object_delete`
+  içinde **pinlidir**; exception TİPİNİ assert etmek yetmez, yazım sessizce kayar.
 - **Trash tip kataloğu = yazılmış yol (K-06).** `domain/trash/page.py::TRASH_OBJECT_LOCATIONS`
   içindeki her tipin soft-delete yolu `trash_repo.add_trash_entry` **yazmak zorundadır** — aksi
   halde nesne aktif projeksiyondan çıkar ama Admin Trash'e hiç ulaşmaz (restore/purge'ün dayanacağı
@@ -183,7 +191,17 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **HEAD `66bdeb4`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 41 (RC §6.7 / P8-B2, durable admission status):** on üç admission ucu
+> **Son dalga — ADIM 42 (RC §6.7 / P1-Gate3, kabul kriteri kapsamı):** sayılar **bayat
+> değildi** (229/131/8 birebir yeniden üretildi); kalem "sayı yanlış" diye değil **"sayı
+> anlamsız"** diye açıktı. 139 kaydın tamamı okundu, **üç sınıf veriye uymadı** → A/B/C/**D**;
+> açık borcun **%24'ü sınıf D = uygulama boşluğu, hiçbir test kapatamaz**. Borç
+> `acceptance_coverage_baseline.json` ile **tavan** olarak donduruldu (`--ratchet`, CI'da,
+> **paysız**, negatifi kanıtlı); defter `acceptance_coverage_debt_ledger.md` **üretilmiş**.
+> **Yeni `partial`/`uncovered` kriter eklersen `debt_class` ZORUNLU** — kapı sınıfsızı
+> kırmızıya çevirir; **tavanı yükseltme, kriteri kapat ya da sınıfını gerekçelendir.**
+> 8 clause pinlendi → yeni taban **234/126/8**. `PROJECT_HISTORY.md` §ADIM 42 ·
+> `docs/ADIM42_LANDED_KICKOFF.md` · §6.7.10. **P1-Gate3 KAPANMADI.**
+> Öncesinde ADIM 41 (RC §6.7 / P8-B2, durable admission status): on üç admission ucu
 > **türetilerek** sınıflandırıldı (`enqueue_job` transitive closure; hepsi async, senkron uç
 > YOK). Kanonik **status veren** iki uç hizalandı — `../pre-check` ve `../generate-candidate`
 > artık **202** + tipli gövde; kanonik **sessiz** olan `../validate` ve `../baseline-parse`

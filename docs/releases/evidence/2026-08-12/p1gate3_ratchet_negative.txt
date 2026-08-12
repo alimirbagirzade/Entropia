@@ -1,0 +1,8 @@
+FAIL: acceptance coverage debt grew past its frozen ceiling
+
+  status.partial: 126 measured, ceiling 125 (+1)
+
+The ceiling is a frozen debt figure, not a budget with headroom. Either cover the new criterion (cite a test node that asserts it) or argue its class in `notes` and adjudicate the raise in docs/audit/acceptance_coverage_debt_ledger.md — never widen the ceiling to make CI green.
+OK: 383 criteria / 1175 clauses validate against the live test tree
+
+RATCHET_NEGATIVE_EXIT=1

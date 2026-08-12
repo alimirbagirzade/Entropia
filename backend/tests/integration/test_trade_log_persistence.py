@@ -51,11 +51,13 @@ from entropia.application.queries import mainboard as mb_query
 from entropia.application.queries import trade_log as tl_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.trash.page import TrashEntryStatus
 from entropia.infrastructure.postgres.models import (
     AuditEvent,
     CanonicalTradeRecordBatch,
     OutboxEvent,
     Principal,
+    TrashEntry,
     WorkObjectRevision,
 )
 from entropia.infrastructure.postgres.repositories import trade_log as tl_repo
@@ -439,6 +441,37 @@ async def test_soft_delete_removes_item_from_projection(session, fake_object_sto
     projection = await mb_query.get_default_mainboard(session, USER1)
     roots = [item["work_object_root_id"] for item in projection["items"]]
     assert root_id not in roots
+
+    # ADIM 42 — K-06 pinned on the work-object path (TL-20.c2 / AOS-18.c2). The
+    # projection assertion above only proves the row LEFT the active board; on its
+    # own that is indistinguishable from an object that vanished without ever
+    # reaching Admin Trash. K-06 makes writing the trash entry a standing
+    # invariant, and until now no test on `mb_cmd.soft_delete_work_object`
+    # queried TrashEntry / AuditEvent / OutboxEvent for it — other pages assert
+    # this triple, the Trade Log and Trading Signal delete path did not.
+    entry = (
+        await session.execute(select(TrashEntry).where(TrashEntry.entity_id == root_id))
+    ).scalar_one()
+    assert entry.status == TrashEntryStatus.SOFT_DELETED
+    assert entry.entity_type == "work_object"
+    audits = (
+        await session.execute(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(AuditEvent.event_kind == "entity.soft_deleted")
+            .where(AuditEvent.target_entity_id == root_id)
+        )
+    ).scalar_one()
+    assert audits == 1
+    outbox = (
+        await session.execute(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.event_type == "entity.soft_deleted")
+            .where(OutboxEvent.resource_id == root_id)
+        )
+    ).scalar_one()
+    assert outbox == 1
 
 
 async def test_record_batch_persists_evidence(session, fake_object_store) -> None:

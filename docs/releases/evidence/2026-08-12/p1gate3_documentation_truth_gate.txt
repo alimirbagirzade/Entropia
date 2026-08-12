@@ -1,0 +1,2 @@
+documentation-truth gate OK — artefacts fresh, documents classified, no stale claims.
+FACTS_EXIT=0

@@ -73,7 +73,16 @@ jobs:
         # idempotency, agent parity) rests on a jsdom render. Static and DB-free —
         # it resolves nodes with `ast` and title extraction, never by running them,
         # so it is cheap and its verdict cannot drift with the environment.
-        run: uv run python ../docs/audit/acceptance_semantic_scan.py --root .. --report
+        #
+        # --ratchet adds the second half of the verdict. Validation alone only
+        # proves the map does not LIE; it left 131 partial + 8 uncovered criteria
+        # passing green for months, so the step measured far less than it appeared
+        # to. The ratchet freezes that debt as a ceiling in
+        # docs/audit/acceptance_coverage_baseline.json: growth is red, a shrinking
+        # corpus is red, and a drop below the ceiling prints the tightened block to
+        # paste back. Never widen a ceiling to make this green — raise it only with
+        # an adjudication in docs/audit/acceptance_coverage_debt_ledger.md.
+        run: uv run python ../docs/audit/acceptance_semantic_scan.py --root .. --report --ratchet
 
       - name: OpenAPI schema drift guard
         working-directory: backend

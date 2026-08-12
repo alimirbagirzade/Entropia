@@ -5620,9 +5620,10 @@ birebir tuttu** (run `31626856387`, job `94215349370`, **SUCCESS**): skip link *
 no-`<h1>` **0**, heading outline **22**, `contentinfo` 23, `aria-live` 21, focus indicator 1
 → toplam **67** (90'dan). axe ratchet **45/45, değişmedi**.
 `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
-· **K-5'in 22'si ±1 ÇEKİNCESİNİ KORUR** — CI **tek ve soğuk** bir koşudur; bu kez eksik
-raporlamadı (üç kararsız rota da göründü, örnekleme üst uçtan) ama §6'nın varyansı iptal
-olmadı. Ilık ve ≥2 koşuyla yeniden ölçülmeli.
+· **Kapılar İKİ KEZ koştu** (`31626856387` + `31627736544`) ve **(rota, sınıf) kümesi
+olarak simetrik farkları BOŞ** — kararsız üç rota dahil. **K-5 = 22 iki bağımsız örnekle
+destekli.** Çekince küçüldü, sıfırlanmadı: ikisi de **soğuk** koşu, ortak sistematik sapmayı
+dışlamazlar. 22'yi yüksek güvenle kullan; ±1'i **ılık, ≥2 koşu** emekliye ayırır.
 · **Görsel kapı da ÖLÇÜLDÜ: 23/23 passed, SIFIR baseline diff** (job `94215349503`) —
 markup'ı değişen `visual: user-manual` dahil. Beklenti tutmasaydı kural şuydu ve şudur:
 **baseline güncellenmez, CSS düzeltilir.**

@@ -206,9 +206,10 @@ Before stopping a working session, produce **ALL** of the following:
 > container'da ayağa kalkmadı: Docker Hub `429` + blob CDN `403`, 5× tekrar), sonra CI'da
 > ÖLÇÜLDÜ — altı sınıfın altısı birebir tuttu** (run `31626856387`, job `94215349370`,
 > **SUCCESS**): skip link **0**, no-`<h1>` **0**, heading outline **22**, toplam advisory
-> **67** (90'dan); axe ratchet **45/45 değişmedi**. **AMA CI TEK ve SOĞUK bir koşudur** —
-> K-2/K-4 kararlı sınıflardır ve kapandı; **K-5'in 22'si ±1 çekincesini KORUR** (ılık, ≥2
-> koşu şart). **Görsel kapı da ölçüldü: 23/23 passed, SIFIR baseline diff** — markup'ı
+> **67** (90'dan); axe ratchet **45/45 değişmedi**. **Kapılar İKİ KEZ koştu** (docs commit'i
+> yeniden tetikledi) ve **(rota, sınıf) kümesi olarak simetrik farkları BOŞ** — kararsız üç
+> rota dahil. K-2/K-4 **kapandı**; **K-5 = 22 iki örnekle destekli ama ikisi de SOĞUK
+> koşu** → ±1 notu korunur (ılık, ≥2 koşu emekliye ayırır). **Görsel kapı da ölçüldü: 23/23 passed, SIFIR baseline diff** — markup'ı
 > değişen `visual: user-manual` dahil (`.page-title` sınıf tabanlı olduğu için tek piksel
 > oynamadı). `adim48_ci_a11y_measured.txt` · `adim48_ci_visual_measured.txt`.
 > Frontend **71 dosya / 725 passed**, line **%84.9** (eşik 83). **ecc/claude-mem yine BAĞLI

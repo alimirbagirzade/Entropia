@@ -362,11 +362,20 @@ observations** once the numbers settle. The figure previously recorded here was
 > audit stack could not start in that session's container (Docker Hub 429 on the
 > manifest, 403 Forbidden on the blob CDN through the agent proxy, five attempts).
 >
-> **The cold-run caveat still applies to K-5.** This was one cold run and it
-> happened *not* to under-report — all three known-flaky routes appeared in both
-> unstable classes, i.e. it sampled high. K-2 and K-4 are settled (stable classes,
-> and now pinned by unit gates on every commit); **K-5's 22 keeps its ±1** and
-> should still be re-measured warm, ≥2 runs, next time the stack is up.
+> **It then ran a SECOND time** on the docs-only follow-up commit (`e3d5a2a`,
+> identical frontend bundle; run `31627736544`, job `94218440525`). Both runs were
+> compared as **sets of (route, class) pairs**, not just totals: **67 = 67, and the
+> symmetric difference is empty** — the same routes in every class, including all
+> three that ADIM 44 found flipping between runs. K-2 and K-4 are settled (stable
+> classes, and now pinned by unit gates on every commit), and **K-5 = 22 is backed
+> by two independent samples, not one.**
+>
+> **A residual caveat remains, smaller than before.** Both runs are *cold* — a
+> fresh Compose stack per job, probed at once — so they could share a systematic
+> bias that a warm run would not. Treat 22 as the working figure with high
+> confidence and retire the ±1 only after a warm, ≥2-run measurement. Do not spend
+> a slice on that before the audit answers whether the `h1 → h3` jump matters at
+> all: that is A-3's question, and the count only sizes it.
 
 | # | Observation | Reach | Status | What the audit should settle |
 |---|---|---|---|---|
@@ -420,13 +429,14 @@ never confused; it is derived, and it is the one to replace with a measurement.
 | `aria-live` (K-7) | 10 | 20 | 20 | 21 | 21 | ⚠ **converges to 21** | 21 — untouched |
 | **total advisories** | 76 | 89 | 88 | 90 | 90 | ⚠ **converges to 90** | **67** |
 
-The last column is **measured** (CI run `31626856387`), not projected — and it is
-a **single cold run**, the very thing rule 1 below says to discard. It is trusted
-here for a specific reason and not in general: it agreed with an independently
-published derivation on all six classes, and its two unstable classes came in at
-the *top* of their known range rather than the bottom (all three flaky routes
-present). Read it as confirmation of K-2/K-4, and as a plausible-but-not-settled
-22 for K-5.
+The last column is **measured**, not projected, and it is now **two** cold CI runs
+(`31626856387` and `31627736544`) that agree on the identical set of (route, class)
+pairs — plus an independently published derivation that predicted all six classes
+before either ran. Rule 1 below still says to discard a cold run, and that rule is
+about a *single* one: two cold runs from separate stack bring-ups agreeing exactly,
+including on all three known-flaky routes, is a different piece of evidence. Read
+it as: K-2/K-4 settled, K-5 = 22 with high confidence and a residual warm-run
+caveat.
 
 Runs 1–5: same commit, same stack, same seed, same Admin. Two rules follow, and
 both matter more than the numbers themselves:

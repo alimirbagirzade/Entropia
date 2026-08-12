@@ -72,3 +72,54 @@ CAVEAT THAT STILL STANDS — this was ONE COLD RUN
     * K-5's 22 is CONFIRMED but keeps its +/-1 caveat. The three flaky routes
       can still drop out of a colder sample. Do not treat 22 as immune;
       re-measure warm (>=2 runs) whenever the audit stack is next up.
+
+===================================================================
+SECOND CI RUN — the docs-only follow-up commit re-ran both gates
+===================================================================
+
+Run    : https://github.com/alimirbagirzade/Entropia/actions/runs/31627736544
+Job    : 94218440525 (a11y) — SUCCESS, 6 passed (1.0m)
+Commit : e3d5a2a  ·  docs only, so the FRONTEND BUNDLE IS IDENTICAL to 2b13e41
+
+  a11y prechecks: 23 route(s) inspected, 67 advisory observation(s).
+  Tab order walked on 23/23 route(s); NOT walked on 0.
+
+Both runs' ::warning:: blocks were parsed and compared as SETS of
+(route, class) pairs, not just as totals:
+
+  run 1 (2b13e41)  67 lines   run 2 (e3d5a2a)  67 lines
+    contentinfo landmark   23                    23
+    heading outline        22                    22
+    aria-live inventory    21                    21
+    focus indicator         1                     1
+    skip link               0                     0
+    page has no <h1>        0                     0
+
+  identical (route, class) sets : True
+  symmetric difference          : NONE
+
+Not merely the same counts — the same routes, in both unstable classes. In
+particular the three routes ADIM 44 identified as flipping between runs
+(/analysis-lab, /backtest/history, /backtest/metrics) reported identically in
+both, and the two routes that legitimately lack an aria-live advisory
+(/rationale-families, /user-manual) did so in both.
+
+WHAT THIS CHANGES, AND WHAT IT DOES NOT
+
+  Changes: K-5 = 22 is no longer a single sample. Two independent stack
+  bring-ups, seeded the same way, walked the same 23 routes and agreed
+  exactly. The earlier note in this file — "one favourable sample" — was
+  written before the second run existed and understates the evidence.
+
+  Does NOT change: both runs are COLD (a fresh Compose stack per job, probed
+  immediately). ADIM 44's five-run experiment measured variance BETWEEN runs
+  on one warm stack; two cold runs on the same runner image could still share
+  a systematic bias that a warm run would not. The worksheet's rule — settle
+  the page before probing, or run warm and take the later figure — is still
+  the right way to retire the caveat for good.
+
+  Practical reading: treat 22 as the working figure with high confidence.
+  Keep the +/-1 note until someone runs it warm, twice, on a stack they can
+  see. Do not spend another slice on it before the human audit answers
+  whether the h1 -> h3 jump matters at all — that is A-3's question, and the
+  count only sizes it.

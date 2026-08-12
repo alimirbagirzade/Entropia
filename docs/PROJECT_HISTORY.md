@@ -7541,12 +7541,22 @@ içermeyen tek rota olarak `/` kaldı.
 axe onu yakalayamazdı (odaksızken clip'li, contrast kuralı atlıyor), yani renk **incelemede**
 karara bağlandı, tarayıcı tarafından değil.
 
-**ÇEKİNCE HÂLÂ DURUYOR — bu TEK ve SOĞUK bir koşuydu.** §6'nın kuralı soğuk koşunun
-K-5/K-7'yi eksik raporladığını söyler (ADIM 44'ün 1. koşusu K-5'i **18**, K-7'yi **10**
-göstermişti). Bu koşu eksik raporlamadı: üç kararsız rota da her iki sınıfta göründü, yani
-örnekleme aralığın **üst** ucundan geldi. Bu **bir elverişli örnektir, varyansın iptali
-değil**: K-2/K-4 kapandı (kararlı sınıflar + her commit'te koşan unit kapılar), **K-5'in
-22'si ±1 çekincesini KORUR** ve ılık, ≥2 koşuyla yeniden ölçülmelidir.
+**SONRA İKİNCİ KEZ KOŞTU — ve iki koşu BİREBİR aynı çıktı.** Docs-only follow-up commit'i
+(`e3d5a2a`; frontend bundle'ı 2b13e41 ile **aynı**) kapıları yeniden tetikledi: run
+`31627736544`, job `94218440525`, **SUCCESS**, yine **67**. İki koşu yalnız toplam olarak
+değil, **(rota, sınıf) çiftlerinin KÜMESİ** olarak karşılaştırıldı → **simetrik fark BOŞ**.
+ADIM 44'ün kararsız bulduğu üç rota (`/analysis-lab`, `/backtest/history`,
+`/backtest/metrics`) ikisinde de aynı raporlandı; aria-live advisory'si meşru olarak
+bulunmayan iki rota (`/rationale-families`, `/user-manual`) da öyle.
+
+**Bu neyi değiştirir, neyi değiştirmez.** Değiştirir: **K-5 = 22 artık tek örnek değil** —
+iki bağımsız stack bring-up'ı aynı 23 rotayı yürüdü ve birebir anlaştı. Değiştirmez: **iki
+koşu da SOĞUK** (her job'da taze Compose stack, hemen problanıyor). ADIM 44'ün beş koşuluk
+deneyi **tek ılık stack üzerindeki** varyansı ölçmüştü; aynı runner imajındaki iki soğuk
+koşu, ılık bir koşunun taşımayacağı ortak bir sistematik sapmayı hâlâ paylaşabilir.
+**Pratik okuma:** 22'yi **yüksek güvenle** çalışma değeri say, ±1 notunu ılık ve ≥2 koşuya
+kadar koru — ama bunun için ayrı bir slice harcama: `h1 → h3` atlamasının önemli olup
+olmadığı **A-3'ün sorusudur**, sayı onu yalnız boyutlandırır.
 
 ### Yerelde gerçekten koşan kapılar
 

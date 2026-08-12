@@ -1057,12 +1057,19 @@ K-6 tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmad
 > ADIM 48 oturumunun container'ında audit stack ayağa kalkmadı (Docker Hub manifest
 > `429`, blob CDN `403 Forbidden`, beş deneme).
 >
-> **SOĞUK-KOŞU ÇEKİNCESİ K-5 İÇİN HÂLÂ GEÇERLİ.** Bu tek ve soğuk bir koşuydu ve bu kez
-> **eksik raporlamadı** — üç kararsız rotanın (`/analysis-lab`, `/backtest/history`,
-> `/backtest/metrics`) üçü de her iki kararsız sınıfta göründü, yani örnekleme aralığın
-> **üst** ucundan geldi. K-2/K-4 **kapandı** (kararlı sınıflar + her commit'te koşan unit
-> kapılar); **K-5'in 22'si ±1 çekincesini KORUR** ve stack bir daha ayağa kalktığında
-> **ılık, ≥2 koşu** ile yeniden ölçülmelidir.
+> **SONRA İKİNCİ KEZ KOŞTU.** Docs-only follow-up commit'i (`e3d5a2a`, frontend bundle'ı
+> birebir aynı) kapıları yeniden tetikledi: run `31627736544`, job `94218440525`, **SUCCESS**,
+> yine **67**. İki koşu **(route, sınıf) çiftlerinin KÜMESİ** olarak karşılaştırıldı, yalnız
+> toplam olarak değil: **simetrik fark BOŞ** — her sınıfta aynı rotalar, ADIM 44'ün kararsız
+> bulduğu üç rota (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) dahil.
+>
+> **K-2/K-4 KAPANDI** (kararlı sınıflar + her commit'te koşan unit kapılar) ve **K-5 = 22
+> artık TEK değil İKİ bağımsız örnekle destekleniyor.** Çekince küçüldü ama sıfırlanmadı:
+> **iki koşu da SOĞUK** (her job'da taze Compose stack, hemen problanıyor), yani ılık bir
+> koşunun taşımayacağı ortak bir sistematik sapmayı dışlayamazlar. 22'yi **yüksek güvenle
+> çalışma değeri** say; ±1'i ancak **ılık, ≥2 koşu** emekliye ayırır. Bunun için ayrı bir
+> slice harcama — `h1 → h3` atlamasının önemli olup olmadığı **A-3'ün sorusudur** ve sayı
+> onu yalnız boyutlandırır.
 >
 > **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** K-2/K-4 hiçbir zaman
 > blocker değildi; A-08'in defteri hâlâ boş (0/4) ve hiçbir şey duyulmuş değil.
@@ -2207,7 +2214,7 @@ Tüm ham çıktılar: **`docs/releases/evidence/2026-08-12/`**
 | §6.5 / K-2 | `frontend/src/app/Layout.tsx` · `frontend/src/styles/global.css` | **KAPANDI** — `.skip-link` → `#main-content` shell'in **ilk tabbable** düğümü; `<main id tabIndex={-1}>` odağı alıyor |
 | §6.5 / K-4 | `frontend/src/pages/UserManual.tsx` | **KAPANDI** — `<h2 class="page-title">` → `<h1 class="page-title">`; sınıf değişmedi, hesaplanmış stil değişmedi |
 | — | `frontend/src/test/a11ySkipLink.test.tsx` (YENİ) · `userManual.test.tsx` | **kapı** (advisory değil): 3 + 1 assert, **negatifi kanıtlı** — her iki regresyon da kırmızıya çevirdi |
-| — | `adim48_ci_a11y_measured.txt` | **ÖLÇÜLDÜ (CI run `31626856387`, job `94215349370`, SUCCESS):** skip link **0**, no-`<h1>` **0**, heading outline **22**, `contentinfo` 23, `aria-live` 21, focus indicator 1 → toplam **67** (90'dan). axe ratchet **45/45 — değişmedi** |
+| — | `adim48_ci_a11y_measured.txt` | **İKİ CI koşusunda ÖLÇÜLDÜ, simetrik fark BOŞ** (`31626856387` + `31627736544`): skip link **0**, no-`<h1>` **0**, heading outline **22**, `contentinfo` 23, `aria-live` 21, focus indicator 1 → toplam **67** (90'dan). axe ratchet **45/45 — değişmedi** |
 | — | `adim48_k2_k4_precheck_derivation.txt` | Koşudan ÖNCE yayımlanan türetme; **altı sınıfın altısı da ölçümle birebir tuttu**. Kaynak: ADIM 44 run-5 kayıtları |
 | — | `adim48_local_gate_runs.txt` | `lint` / `typecheck` / `coverage` **exit 0** (+ `e2e` tsc exit 0) — 71 dosya, **725 passed**, line **%84.9** (kapı ≥%83) |
 | — | `adim48_ci_visual_measured.txt` | **görsel kapı ÖLÇÜLDÜ: 23/23 passed, SIFIR baseline diff** (job `94215349503`, step 11). `visual: user-manual` dahil — markup'ı değişen rota da kaymadı. Aynı job'da E2E suite **39 passed / 1 skipped**, hizalanan `17-page-coverage` `/user-manual` satırı gerçek DOM'da yeşil |

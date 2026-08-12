@@ -46,9 +46,10 @@ K-5/K-6 A-08'i bekler. Presentation-only: migration yok, `ENGINE_VERSION` deği�
    audit stack ayağa kalkmadı; sayılar **türetildi**, her yerde öyle etiketlendi, ve CI
    koşunca **altı sınıfın altısı da tuttu**. Türetmenin koşudan ÖNCE yayımlanmış olması
    onu bir tahmin değil bir **öndeyi** yapar; sonradan yazılsaydı hiçbir şey kanıtlamazdı.
-8. **Yeşil bir CI koşusu bir sınıfın varyansını İPTAL ETMEZ.** K-5'in 22'si ölçüldü ama
-   koşu soğuktu; §6 soğuk koşunun eksik raporladığını kayıt altına alıyor. Bu kez üst
-   uçtan örnekledi — bu iyi şans, kural değil.
+8. **Yeşil bir CI koşusu bir sınıfın varyansını İPTAL ETMEZ — ama İKİ koşu kanıt biriktirir.**
+   K-5'in 22'si iki koşuda da aynı çıktı ve karşılaştırma **toplam üzerinden değil, (rota,
+   sınıf) kümesi üzerinden** yapıldı; toplamlar eşitken kümeler farklı olabilirdi, bu yüzden
+   kümeyi karşılaştır. Yine de ikisi de soğuktu: çekinceyi küçült, silme.
 
 ## Açık kalanlar (ADIM 48 bunları KAPATMADI)
 
@@ -57,9 +58,11 @@ K-5/K-6 A-08'i bekler. Presentation-only: migration yok, `ENGINE_VERSION` deği�
 - **K-3 (`contentinfo` yok, 23/23)** — PO **kapsam dışı** dedi.
 - **K-5 (başlık outline, artık 22/23)** ve **K-6 (odak göstergesi)** — A-08'in cevaplaması
   gereken sorular.
-- **`npm run a11y` ve `npm run visual` CI'da koştu; ikisi de YEŞİL.** Görsel: **23/23,
-  sıfır diff**. CI yine de **tek ve soğuk** bir koşudur: K-2/K-4 kapandı, **K-5'in 22'si
-  ±1 çekincesini korur** ve ılık ≥2 koşuyla yeniden ölçülmelidir.
+- **`npm run a11y` ve `npm run visual` CI'da İKİ KEZ koştu; dördü de YEŞİL.** Görsel:
+  **23/23, sıfır diff**. a11y: iki koşunun **(rota, sınıf) kümeleri BİREBİR aynı**
+  (simetrik fark boş). K-2/K-4 **kapandı**; **K-5 = 22 iki örnekle destekli** ama ikisi de
+  **soğuk** koşu → ±1 notu korunur. Ilık ≥2 koşu onu emekliye ayırır — **ama bunun için
+  ayrı slice harcama**, `h1→h3`'ün önemi A-3'ün sorusudur.
 - **Memory checkpoint (ritüel md. 4) EKSİK — ARKA ARKAYA İKİNCİ SLICE.** `ecc` ve
   `claude-mem` MCP sunucuları bu oturumda da bağlı değildi. **ADIM 47 + ADIM 48 için
   birlikte yazılmalı.**

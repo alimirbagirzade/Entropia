@@ -319,10 +319,18 @@ shrink its scope.
 
 ### Already-known observations — read before you start
 
-Five of these were **measured** by the preparation's own precheck run (23 routes,
-0 blocking failures, 85 advisory observations). They are **not** findings —
+Six of these were **measured** by the precheck run. They are **not** findings —
 nobody has heard them yet, and a DOM measurement cannot tell you whether a
 screen-reader user is actually impeded. They are where to look first.
+
+**Re-derived 2026-08-12 (ADIM 44)** against a freshly seeded stack as Admin,
+**five consecutive runs**: 23 routes, **0 blocking failures**, **90 advisory
+observations** once the numbers settle. The figure previously recorded here was
+`85`, from the ADIM 28 preparation run.
+
+> **Read the count caveat below before trusting any reach number in this table.**
+> Two of the six classes are **not reproducible run to run**; four are rock-stable
+> and can be taken at face value. The methodology note under the table says which.
 
 | # | Observation | Reach | Status | What the audit should settle |
 |---|---|---|---|---|
@@ -330,17 +338,56 @@ screen-reader user is actually impeded. They are where to look first.
 | K-2 | **No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1. | 23 / 23 routes | Open — reported, not gated | Whether the rotor makes this a non-issue in practice, or whether it really costs a jump per page. |
 | K-3 | **No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist. | 23 / 23 routes | Open — reported, not gated | Whether the absence is felt during landmark navigation, or is cosmetic. |
 | K-4 | **`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`) — a divergence already recorded in `frontend/e2e/utils/pageTruth.ts:15`. Every other route uses `<h1>`. | 1 route | Open — reported, not gated | A-1: is the page title announced on load? |
-| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | 21 / 23 routes | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 21 pages' outlines. |
+| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **21 / 23 routes** — re-derived 2026-08-12, **unchanged**; ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 21 pages' outlines. |
 | K-6 | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7 / 1.4.11. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. |
+| **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
 
-K-2 through K-6 are **reported rather than gated on purpose.** Each one's fix is
+K-2 through K-7 are **reported rather than gated on purpose.** Each one's fix is
 a product decision — add a footer? promote a heading and re-cut 21 pages'
-outlines? — that an audit-preparation change has no mandate to make, and turning
-any of them into a red CI gate would be making that decision by omission. They
-stay visible in every precheck run's `::warning::` output and in
-`a11y-report/precheck-results.json` until a human resolves them.
+outlines? mount a persistent status region? — that an audit-preparation change has
+no mandate to make, and turning any of them into a red CI gate would be making
+that decision by omission. They stay visible in every precheck run's `::warning::`
+output and in `a11y-report/precheck-results.json` until a human resolves them.
 
-Reach counts come from one run of `specs/20-a11y-prechecks.spec.ts` against a
-seeded stack as Admin. Re-run it before the audit — a stale count is worse than
-none.
+### How these counts were obtained — and why two of them are a range
+
+Reach counts come from `specs/20-a11y-prechecks.spec.ts` run against a seeded
+stack as Admin. The instruction that used to stand here — *"re-run it before the
+audit; a stale count is worse than none"* — was **necessary but not sufficient**,
+and running it five times in a row is what showed why:
+
+| Class | run 1 | run 2 | run 3 | run 4 | run 5 | Verdict |
+|---|---:|---:|---:|---:|---:|---|
+| skip link (K-2) | 23 | 23 | 23 | 23 | 23 | **stable** |
+| `contentinfo` (K-3) | 23 | 23 | 23 | 23 | 23 | **stable** |
+| no `<h1>` (K-4) | 1 | 1 | 1 | 1 | 1 | **stable** |
+| focus indicator (K-6) | 1 | 1 | 1 | 1 | 1 | **stable** |
+| heading outline (K-5) | 18 | 21 | 20 | 21 | 21 | ⚠ **converges to 21** |
+| `aria-live` (K-7) | 10 | 20 | 20 | 21 | 21 | ⚠ **converges to 21** |
+| **total advisories** | 76 | 89 | 88 | 90 | 90 | ⚠ **converges to 90** |
+
+Same commit, same stack, same seed, same Admin. Two rules follow, and both matter
+more than the numbers themselves:
+
+1. **Discard the first run after `scripts/a11y-audit-stack.sh up`.** It is cold and
+   it *under-reports* — run 1 claimed 18 routes for K-5 where the settled answer is
+   21. A single cold re-run would have "refreshed" this table into being **less**
+   accurate than it already was. Run it at least twice and take the later figure.
+2. **A residual flake survives warm-up.** `/analysis-lab`, `/backtest/history` and
+   `/backtest/metrics` flip between runs on both unstable classes, and
+   `/analysis-lab` flips even between two warm runs. Treat "21 / 23" as *"21, ±1,
+   and you know which three routes the ±1 lives on."*
+
+**Why:** the probe reads the *initial* DOM, so it races the pages' first data
+render — a route caught mid-load shows neither its `h3` section headings nor its
+loading status region, and drops out of both counts. That is a defect in the
+*measurement*, not in the product, and it is **recorded here rather than fixed**:
+changing when the probe samples would silently change what K-5 and K-7 mean, and
+those two are the observations the human audit exists to adjudicate. The remedy
+when someone does take it on deliberately is to settle the page before probing
+(await the route's data, not a fixed timeout) — and to re-baseline this table in
+the same commit.
+
+**None of this is a screen-reader result.** A count that varies by cache warmth is
+still a DOM count.
 

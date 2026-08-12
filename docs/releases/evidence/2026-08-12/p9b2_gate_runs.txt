@@ -1,0 +1,24 @@
+# P9-B2 — gate runs on the working tree (2026-08-12, ADIM 44)
+
+$ node scripts/npm-audit-gate.mjs frontend frontend/e2e
+
+frontend: high=0 critical=0 (moderate=0 low=0)
+
+frontend/e2e: high=0 critical=0 (moderate=0 low=0)
+
+OK — no unrecorded high/critical advisories.
+exit=0
+
+$ npm --prefix frontend audit    # second, independent source
+found 0 vulnerabilities
+
+$ node -e "…"  # installed tree
+react-router-dom 7.18.2 -> pins {"react-router":"7.18.2"}
+react-router     7.18.2 dev=false
+
+$ grep -nE "unstable_|RSCHydratedRouter|routeRSCServerRequest|react-router/rsc" frontend/src/
+grep exit=1 (1 = no RSC API anywhere)
+$ grep -hoE "from \"react-router[^\"]*\"" frontend/src/ -r | sort -u
+from "react-router-dom"
+$ sed -n 22p frontend/src/main.tsx
+        <BrowserRouter>

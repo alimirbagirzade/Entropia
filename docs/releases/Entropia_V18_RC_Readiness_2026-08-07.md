@@ -583,6 +583,33 @@ değildir.
 
 ### 6.1 `A-08-HUMAN-GATE-UNMET` — **BLOCKER** (P12)
 
+> **2026-08-12 / ADIM 44 — denetim KOŞULABİLİR hâle geldi. Blocker KAPANMADI.**
+> Aşağıdaki blok **olduğu gibi geçerlidir**: dört çıkış kriteri de ☐, defterin §1/§2/§3'ü
+> boş, #514 hâlâ kanıtsız kapalı. Değişen tek şey, (A) yolunun önündeki **hazırlık**
+> engellerinin kalkması:
+>
+> * **Yığın güncel main'de yeniden doğrulandı — `9 passed / 0 failed`.** Önceki doğrulama
+>   `1f4b88b`'deydi; main o zamandan beri ADIM 30–43 ile dokuz slice ilerledi. Ölçüldü,
+>   varsayılmadı; **hiçbir şeyin onarılması gerekmedi**.
+> * **Precheck sayıları tazelendi — ve biri yerinde durmadı.** Beş ardışık koşu: K-2/K-3
+>   `23/23`, K-4 `1`, K-6 `1` **kararlı**; K-5 ve yeni **K-7** `21/23`'e **yakınsıyor**,
+>   toplam advisory `90`. **İlk koşu soğuktur ve EKSİK raporlar** (K-5'i `18` gösterdi) —
+>   yani defterin kendi *"re-run it before the audit"* talimatı tek koşuyla uygulansaydı
+>   `21/23`'ü `18/23` ile değiştirip tabloyu **daha yanlış** hâle getirirdi. Kalıcı bir
+>   oynaklık üç adlandırılmış rotada sürüyor (`/analysis-lab`, `/backtest/history`,
+>   `/backtest/metrics`). Sebep: prob *ilk* DOM'u okuyor ve sayfanın ilk veri render'ı ile
+>   yarışıyor. **Kaydedildi, DÜZELTİLMEDİ** — probun ne zaman örnekleyeceğini değiştirmek
+>   K-5 ve K-7'nin *anlamını* sessizce değiştirirdi ve ikisi de denetimin karara bağlaması
+>   gereken gözlemlerdir.
+> * **K-7 eklendi:** `aria-live` bölgesi ilk DOM'da yok — **21/23 rota**, WCAG 4.1.3 (AA).
+>   ADIM 28'den beri `precheck-results.json` içinde **ölçülüyordu ama tabloda satırı yoktu**;
+>   B-3 / B-4 / B-6 akışlarının tam olarak sorduğu şey.
+> * **Denetçi runbook'u yazıldı:** `docs/implementation/a11y_screen_reader_audit_runbook.md`.
+>
+> Geriye kalan **randevu ve insan saatidir** — ikisi de repo dışıdır. Kanıt:
+> `docs/releases/evidence/2026-08-12/A08_audit_readiness.md`. **Hazırlık denetim değildir;
+> doğrulanmış bir ortam bir denetim değildir.**
+
 ```
 Eksen   : Erişilebilirlik — insan ekran okuyucu kabul denetimi (A-08)
 Durum   : BLOCKED
@@ -788,28 +815,58 @@ süreli bir kayda dönüştürülmesi istenirse **imzayı agent atayamaz**. Tam 
 `docs/runbooks/alert-notification.md` §5 (5 madde: production serisi · monitörü izleyen yok ·
 delivery proof CI kapısı değil · on-call rotasyonu/ack yok · kuyruk bazında worker liveness yok).
 
-### 6.4 react-router `GHSA-qwww-vcr4-c8h2` — imzasız freeze, **BLOCKER** (P9-B2)
+### 6.4 react-router `GHSA-qwww-vcr4-c8h2` — freeze **DÜŞÜRÜLDÜ**, blocker **KAPANDI** (P9-B2)
 
-| Boyut | Bulgu |
-|---|---|
-| Sevk ediliyor mu? | **EVET** — lockfile `react-router` 7.18.2 `dev=false`; paket bundle'a **girer** |
-| Risk argümanı | **maddeten geçerli** — uygulama `BrowserRouter` kullanıyor (`main.tsx:22`); `frontend/src` içinde hiçbir RSC API'si yok |
-| Lockfile-only çare | **YOK** — `npm audit fix --force` yalnızca `react-router-dom@7.11.0`'a **downgrade** öneriyor (`isSemVerMajor: true`) |
-| **İmza** | ❌ **YOK** — `owner` yok, `expires` yok, ISO tarih yok |
+> **KAPANIŞ BİÇİMİ İMZA DEĞİL, KALDIRMA.** PO kararı kaydın allowlist'e **taşınması**
+> yönündeydi ve imza sahibi de verilmişti (owner `Ali Mirbagirzade`, expires
+> `2026-11-10`). O kayıt **yazılmadı** — çünkü aynı talimatın *"Bunu YENİDEN DOĞRULA —
+> bayatlamış olabilir"* maddesi uygulandığında öncülün kendisi çürüdü. **Bir imza,
+> ortada olmayan bir açığa atılamaz.** Kabul edilen bir risk değil, **var olmayan** bir
+> risk söz konusu; blocker kökünden kapandı.
 
-Repo bu asimetriyi **kendi yazmış** (`security-allowlist-gate.mjs` başlığı): *"their freezes
-expire only when a human happens to notice. Here the calendar notices."*
-`.github/security-allowlist.json` **zorunlu `owner`** ("the human accountable for revisiting
-it, **not a team alias**") ve `expires` istiyor (`MAX_EXCEPTION_DAYS = 90`);
-`FROZEN_ADVISORIES` istemiyor. **Commit author'ı bir imza değildir.**
+**2026-08-12'de yeniden türetilen olgular** (ADIM 44, iki bağımsız kaynak):
 
-P9-B1 iki bayat olguyu düzeltti (yamalı hat `8.2.1+` → **`8.3.0+`**; pin `7.18.1` →
-**`7.18.2`**) ama **freeze'i kapatmadı**. Kaydı allowlist disiplinine taşımak insan işidir —
-uydurulmuş bir `owner` kaydın tüm amacını yok ederdi.
+| Boyut | 2026-08-07 kaydı | 2026-08-12 ölçümü |
+|---|---|---|
+| Advisory kapsamı | `>=7.12.0 <8.3.0` — "her 7.x etkilenir" | **RE-SCOPED**: `>=7.12.0 <7.18.2` (**first_patched 7.18.2**) **+** `>=8.0.0 <8.3.0` |
+| Yamalı hat | yalnız `8.3.0+` (v8 migrasyonu) | **7.18.2 de yamalı** — 7.x hattına backport edildi |
+| Kurulu ağaç | `react-router` 7.18.2, `dev=false` | **değişmedi** — 7.18.2, `react-router-dom@7.18.2` onu **birebir pinliyor** |
+| `npm audit` (frontend) | high advisory raporlanıyor | **`found 0 vulnerabilities`**, high=0 critical=0 |
+| Kapının kendi notu | — | *"GHSA-qwww-vcr4-c8h2 is frozen but no longer reported — drop it from the list."* |
+| Risk argümanı | BrowserRouter, RSC yok | **hâlâ doğru** (`main.tsx:22`; `frontend/src`'de RSC API'si yok, tek router import specifier'ı `react-router-dom`) — ama artık **gereksiz**: savunulacak açık kalmadı |
 
-> **Karşıt kayıt, adalet için:** P9'un **B1** blocker'ı (js-yaml, gerekçesi doğduğunda
-> yanlıştı — yamalı 4.3.1 freeze'den **7 gün önce** yayındaydı) **düzeltildi ve kapandı**
-> (PR #637, merged `2026-08-07T17:56:59Z`). P9'un iki blocker'ından biri kapalıdır.
+Kaynaklar: `gh api /advisories/GHSA-qwww-vcr4-c8h2` (`updated_at 2026-08-07T18:16:54Z`,
+`withdrawn_at: null`) **ve** `npm audit --json` — biri yanılsa öteki yakalardı.
+
+**Zamanlama, kayıt için.** `react-router@8.3.0` 2026-07-22'de, advisory 2026-07-24'te,
+**`react-router@7.18.2` 2026-07-28'de** yayınlandı. Yani repo, düzeltilmiş sürümün
+üzerinde **on bir gündür oturuyordu**. Advisory metadata'sı 2026-08-07T18:16:54Z'de
+yetişti — P9-B1'i (PR #637) merge eden commit'ten **yirmi dakika sonra**. Bu, aynı
+desenin **üçüncü** tekrarı: brace-expansion çifti (2026-08-03) ve js-yaml (2026-08-07,
+yaması freeze'den **yedi gün önce** yayındaydı). Gerekçesi çürümüş bir freeze, freeze
+olmamasından **kötüdür** — kimsenin yeniden bakmadığı bir istisnayı sessizce verir.
+
+**Asimetri de kapandı — silinerek.** Blocker'ın yapısal yarısı ("`FROZEN_ADVISORIES`
+`owner`/`expires` istemiyor") bir belge notuyla değil, **ikinci evin kaldırılmasıyla**
+çözüldü: `FROZEN_ADVISORIES` literal'i **yok**, `scripts/npm-audit-gate.mjs` artık
+`.github/security-allowlist.json`'ı okuyor, iki kapı da ortak
+`scripts/lib/security-allowlist.mjs`'ten geçiyor ve **ikisi de tüm listeyi expire
+ediyor** (npm kapısı `ci.yml`'da her push/PR'da koşar, container kapısı
+`security.yml`'da — her kapı yalnız kendi scope'unu expire etseydi bir istisnanın
+takvimi *hangi workflow'un koştuğuna* bağlı olurdu). **İmzasız bir npm freeze
+yazılabilecek yer kalmadı.** Negatif kanıt koşuldu: `owner`'sız kayıt → exit 1 · süresi
+geçmiş kayıt → exit 1 (**npm kapısında**) · bildirilmemiş scope → exit 1 · kayıtsız
+gerçek high advisory → exit 1 · doğru id + **yanlış paket** → exit 1. Pinleme:
+`backend/tests/contract/test_security_freeze_discipline_contract.py` (7 test).
+
+`entries` **boş** ve boş kalması hedeftir. Hiçbir bağımlılık sürümü değiştirilmedi;
+downgrade yapılmadı.
+
+> **Karşıt kayıt, adalet için:** P9'un **B1** blocker'ı (js-yaml) da aynı desenle
+> kapanmıştı (PR #637, merged `2026-08-07T17:56:59Z`). **P9'un iki blocker'ı da artık
+> kapalıdır** — ikisi de "gerekçe çürüdü" ile, hiçbiri imzayla değil. Bu tesadüf değil:
+> bu repoda bir freeze'in en olası sonu, gerekçesinin bayatlamasıdır. `expires` alanı
+> tam olarak bunun için var.
 
 ### 6.5 K-2..K-6 — ölçüldü, **düzeltilmedi**, bilerek gate DIŞI
 
@@ -1773,24 +1830,36 @@ Ek olarak: `SHARED_ALLOCATION_STATUS` **`future_dev`** (containment KAPALI, §4)
 
 > ## **BLOCKED**
 >
-> V18 Release Candidate `1f4b88b` **sevk edilemez**: **üç** kapatılmamış blocker'ı vardır —
+> V18 Release Candidate `1f4b88b` **sevk edilemez**: **iki** kapatılmamış blocker'ı vardır —
 > **(1)** A-08 insan ekran okuyucu kabul denetimi hiç koşulmadı (0/4 çıkış kriteri, 0/46
 > rota, 0/20 akış, 0 bulgu kaydı) ve yerine geçecek imzalı sapma **yok**, izleme issue'su
 > #514 ise **kanıtsız kapatılmış**; **(2)** kabul akışları — **2026-08-10'da kısmen
 > kapandı** (§6.2): harness kapsamı yazıldı, beş akış da koştu (**60 passed / 0 failed /
 > 2 skipped**, tarayıcı katmanı **5 passed**), ama `flows` hâlâ **bir CI kapısı değildir**,
-> yani regresyon sessizce geri gelebilir; **(4)** sevk edilen bir HIGH advisory
-> (`GHSA-qwww-vcr4-c8h2`) imzasız bir freeze ile geçiriliyor. Tek imzalı sapma **D-10**'dur
-> ve kapsamı **yalnız WCAG 1.4.3**'tür — bu üçün hiçbirini kapsamaz, dolayısıyla
+> yani regresyon sessizce geri gelebilir. Tek imzalı sapma **D-10**'dur ve kapsamı
+> **yalnız WCAG 1.4.3**'tür — bu ikisinden hiçbirini kapsamaz, dolayısıyla
 > "READY WITH SIGNED DEVIATIONS" **açık değildir**.
+>
+> **(1) hakkında, ADIM 44'ün yaptığı ve YAPMADIĞI:** denetim **koşulabilir hâle geldi**
+> (yığın güncel main'de yeniden doğrulandı, precheck sayıları tazelendi, denetçi
+> runbook'u yazıldı). Bu blocker'ı **kapatmaz** — dört çıkış kriteri de hâlâ ☐, defterin
+> §1/§2/§3'ü hâlâ boş, #514 hâlâ kanıtsız kapalı. Hazırlık denetim değildir.
+>
+> **Eski blocker (4) — react-router `GHSA-qwww-vcr4-c8h2` — 2026-08-12'de (ADIM 44)
+> KAPANDI** (§6.4), ve **imzayla değil, kaldırmayla**: advisory 2026-08-07T18:16:54Z'de
+> upstream'de yeniden kapsamlandırıldı (`first_patched` 7.x hattı için **7.18.2**),
+> kurulu ağaç zaten 7.18.2 — `npm audit` artık **0 vulnerability** raporluyor. Sevk
+> edilen imzasız bir istisna kalmadı; ayrıca `FROZEN_ADVISORIES` literal'i **silindi**,
+> böylece imzasız bir npm freeze yazılabilecek ikinci bir ev de yok.
 >
 > **Eski blocker (3) — Alertmanager — 2026-08-10'da (ADIM 31) KAPANDI** (§6.3): bildirim yolu
 > sevk edildi ve **fail-closed**'dur (hedef yoksa Alertmanager **exit 78**, başlamaz),
 > provenance kapısı eklendi (yürürlükteki config'in sha256'sı çalışma ağacınınkiyle özdeş),
 > ve ateşleyen gerçek bir `EntropiaApiDown` **bir alıcıya `entropia-page` / `severity=page`
 > olarak ulaştı** — sentetik seri kullanılmadan. Numaralandırma **bilerek korunmuştur**:
-> kalanlar (1), (2), (4) olarak anılmaya devam eder, çünkü yeniden numaralandırmak bu
-> belgeye atıf yapan kayıtları geçmişten koparırdı. **Kapanmayan artık:** kurallar gerçek
+> kapananlar (3) ve (4) olarak anılmaya devam eder, kalanlar (1) ve (2) olarak, çünkü
+> yeniden numaralandırmak bu belgeye atıf yapan kayıtları geçmişten koparırdı — bir
+> blocker'ın numarası kapandıktan sonra da kimliğidir. **Kapanmayan artık:** kurallar gerçek
 > production serilerine karşı hâlâ değerlendirilmedi (§6.3.3) — bu bir blocker olarak
 > sayılmıyor çünkü repo içinde kapatılabilir değil, ama **imzalı bir sapma da değildir**.
 
@@ -1814,10 +1883,10 @@ visual **8/8** · axe **45/45 tavan, critical 0**.
 
 | # | Blocker | İnsan kararı |
 |---|---|---|
-| 1 | `A-08-HUMAN-GATE-UNMET` | (A) denetimi koştur — **önce #514'ü yeniden aç** — iki SR kombinasyonu, 23 rota + 10 akış, dört kriter ☑; **veya** (B) D-10 biçiminde imzalı kalıcı sapma |
+| 1 | `A-08-HUMAN-GATE-UNMET` | (A) denetimi koştur — **önce #514'ü yeniden aç** — iki SR kombinasyonu, 23 rota + 10 akış, dört kriter ☑; **veya** (B) D-10 biçiminde imzalı kalıcı sapma. **ADIM 44 (A)'nın önündeki hazırlık engellerini kaldırdı** (yığın doğrulandı, precheck sayıları tazelendi, `docs/implementation/a11y_screen_reader_audit_runbook.md` yazıldı) — geriye kalan **randevu ve insan saati**, ki ikisi de repo dışıdır |
 | 2 | Kabul akışları | ~~Harness'a (a)–(e) kapsamını **yaz** … üç auth modu + health + smoke + `worker-restart-smoke.sh` koştur~~ → **2026-08-10'da yapıldı** (§6.2 / §6.2.1). Kalan insan kararı: **`flows`'u bir CI kapısına bağla** (CI'da 12 konteynerlik ikinci yığın + süre maliyeti kabul edilecek mi?) ve §6.2'deki iki SKIP'i kapat |
 | ~~3~~ | ~~Alertmanager~~ | ~~(A) receiver + routing + silence + on-call + Prometheus config provenance kapısı; **veya** (B) imzalı kalıcı sapma~~ → **2026-08-10'da (A) SEVK EDİLDİ, blocker KAPANDI** (§6.3). Kalan insan kararları blocker DEĞİL, §6.7'ye kaydedildi: **P10-B3** delivery proof'u bir CI kapısına bağlamak (maliyet kararı) · **P10-B5** on-call rotasyonu / escalation / ack (repo dışı) |
-| 4 | react-router freeze | Kaydı `.github/security-allowlist.json` disiplinine taşı (**zorunlu `owner` + `expires`**) — **imzalayan verilmediği için agent yazamaz** |
+| ~~4~~ | ~~react-router freeze~~ | ~~Kaydı `.github/security-allowlist.json` disiplinine taşı (**zorunlu `owner` + `expires`**)~~ → **2026-08-12'de (ADIM 44) KAPANDI, ama taşınarak değil DÜŞÜRÜLEREK** (§6.4): imza sahibi verilmişti, kayıt yine de yazılmadı — advisory upstream'de yeniden kapsamlandırıldı ve kurulu ağaç zaten yamalıydı. **Kalan insan kararı YOK** |
 
 Ayrıca **izleme hijyeni**: #558 / #559 / #617 / #618, kodun hâlâ açık olduğu ölçülmüşken
 COMPLETED kapalıdır (§6.6). Yeniden açmak insan işidir.
@@ -1825,6 +1894,20 @@ COMPLETED kapalıdır (§6.6). Yeniden açmak insan işidir.
 ---
 
 ## 9. Kanıt dizini
+
+### 9.0-e 2026-08-12 (ADIM 44) — blocker 4 kapanışı + blocker 1 hazırlığı
+
+Tüm ham çıktılar: **`docs/releases/evidence/2026-08-12/`**
+
+| Adım | Belge / dosya | Verdict |
+|---|---|---|
+| P9-B2 | `P9B2_react_router_freeze_dropped.md` | **BLOCKER (4) KAPANDI** — imzayla değil, **kaldırmayla**; imza verilmişti, kayıt yazılmadı |
+| — | `p9b2_advisory_ghsa_qwww_vcr4_c8h2.json` | ham advisory: `updated_at 2026-08-07T18:16:54Z`, `first_patched` 7.x hattı için **7.18.2** |
+| — | `p9b2_gate_runs.txt` | iki kapı da **exit 0**; `npm audit` **`found 0 vulnerabilities`**; kurulu ağaç 7.18.2; `frontend/src`'de RSC API'si **yok** |
+| — | `p9b2_gate_negative_proofs.txt` | **5 × exit 1** (owner yok · süresi geçmiş · bildirilmemiş scope · kayıtsız gerçek advisory · yanlış paket) + **1 × exit 0** (>90 gün = WARN, duvar değil) |
+| A-08 | `A08_audit_readiness.md` | **BLOCKER (1) AÇIK KALIR** — denetim koşulabilir hâle geldi, koşulmadı; çıkış kriterleri **0/4** |
+| — | `a08_audit_stack_validation.txt` | güncel main'de `scripts/a11y-audit-stack.sh up` → **9 passed / 0 failed**; onarım gerekmedi |
+| — | `a08_precheck_results_run5.json` | yakınsamış koşu: 23 rota, **0 blocking**, **90 advisory**, `screen_reader_verified: false` |
 
 ### 9.0-c 2026-08-10 (ADIM 34) — §6.7 P4-1 + P4-2 dalgası
 

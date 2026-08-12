@@ -5397,6 +5397,50 @@ yarısı, B3–B6) · Lighthouse kapısı P11-1 açık olduğu için *required s
 
 ---
 
+## ADIM 44 — RC blocker 4 KAPANDI, blocker 1 koşulabilir hâle geldi (PR pending)
+
+**Migration YOK** · `ENGINE_VERSION` değişmedi · **bağımlılık sürümü değişmedi.**
+Base `e719af1`. (Seed prompt kendini "ADIM 41" sanıyordu; o numara **#668'de** kullanıldı
+— kayıt **ADIM 44**.)
+
+* **Blocker 4 (P9-B2) KAPANDI — imzayla değil, KALDIRMAYLA.** İmza verilmişti (owner
+  `Ali Mirbagirzade`, expires `2026-11-10`) ama kayıt **yazılmadı**: advisory
+  **2026-08-07T18:16:54Z**'de yeniden kapsamlandı (`first_patched` 7.x için **7.18.2**),
+  kurulu ağaç **zaten 7.18.2** → `npm audit` **0 vulnerability**. **Bir imza, ortada
+  olmayan bir açığa atılamaz.** Repo düzeltilmiş sürümün üzerinde on bir gündür
+  oturuyordu; advisory metadata'sı #637'yi merge eden commit'ten **yirmi dakika sonra**
+  yetişti. **Üçüncü tekrar** (brace-expansion, js-yaml, şimdi bu).
+* **`FROZEN_ADVISORIES` SİLİNDİ.** Yeni bir npm advisory'yi dondurman gerekirse öyle bir
+  liste **yok**: kayıt `.github/security-allowlist.json`'a `scope: npm:<dir>` + **`owner`**
+  + **`expires`** ile girer. İki kapı da ortak `scripts/lib/security-allowlist.mjs`'ten
+  geçer ve **ikisi de TÜM listeyi expire eder** — aksi hâlde bir istisnanın takvimi hangi
+  workflow'un koştuğuna bağlı olurdu. **Yeni bir paket dizini gate'lerken scope'u
+  BİLDİR:** bildirilmemiş scope `exit 1` verir. Pin:
+  `backend/tests/contract/test_security_freeze_discipline_contract.py` (7 test).
+  Negatif kanıt: 5 × exit 1 + 1 × WARN-exit-0.
+* **Blocker 1 (A-08) KAPANMADI.** Çıkış kriterleri **0/4**, defterin §1/§2/§3'ü **boş**,
+  **#514'e dokunulmadı**. Değişen: yığın güncel main'de **9 passed / 0 failed** (dokuz
+  slice sonra, onarım gerekmedi) · precheck sayıları tazelendi · denetçi runbook'u yazıldı
+  (`docs/implementation/a11y_screen_reader_audit_runbook.md`).
+* **PRECHECK TUZAĞI — bunu bilmeden sayıyı tazeleme.** Beş ardışık koşu (aynı commit /
+  yığın / seed): K-2 `23`, K-3 `23`, K-4 `1`, K-6 `1` **kararlı**; K-5 `18→21→20→21→21`,
+  yeni K-7 `10→20→20→21→21`, toplam `76→89→88→90→90`. **`up`'tan sonraki İLK KOŞU
+  SOĞUKTUR VE EKSİK RAPORLAR** — tek koşuyla "tazeleme" K-5'i `21/23`'ten `18/23`'e
+  çekip tabloyu **daha yanlış** yapardı. **En az iki kez koş, sonrakini al.** Kalıcı
+  oynaklık: `/analysis-lab`, `/backtest/history`, `/backtest/metrics`. Sebep: prob *ilk*
+  DOM'u okuyup sayfanın ilk veri render'ıyla yarışıyor. **Kaydedildi, DÜZELTİLMEDİ** —
+  örnekleme zamanını değiştirmek K-5/K-7'nin *anlamını* değiştirirdi.
+* **K-7 eklendi:** ilk DOM'da `aria-live` yok, **21/23**, WCAG 4.1.3 (AA). ADIM 28'den beri
+  ölçülüyordu ama defterde satırı yoktu; B-3 / B-4 / B-6'nın tam sorusu.
+
+**Dürüst sınırlar:** hazırlık denetim değildir · blocker sayısı **4 → 2**, **verdict
+BLOCKED kalır** · `npm audit` yalnız iki workspace'i, Trivy yalnız iki imajı görür ·
+container kapısı hâlâ sadece `security.yml` tetikleyicilerinde koşar. Kanıt:
+`docs/releases/evidence/2026-08-12/P9B2_react_router_freeze_dropped.md` +
+`A08_audit_readiness.md`. Rapor: **§6.1** (açık, güncellendi) + **§6.4** (KAPANDI) + §8 + §9.0-e.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40 ve 41 bunu DEĞİŞTİRMEDİ** — üçü de test/kapı/belge slice'ıydı, motor

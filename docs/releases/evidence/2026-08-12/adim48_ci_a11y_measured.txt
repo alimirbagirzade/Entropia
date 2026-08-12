@@ -1,0 +1,74 @@
+ADIM 48 — a11y precheck: MEASURED in CI (supersedes the derivation)
+===================================================================
+
+Run    : https://github.com/alimirbagirzade/Entropia/actions/runs/31626856387
+Job    : 94215349370 — "A11Y — axe-core scan vs. the seeded stack (R2-14)"
+Commit : 2b13e41  ·  PR #689  ·  conclusion: SUCCESS  ·  6 passed (1.3m)
+
+Job's own summary line, verbatim:
+
+  a11y prechecks: 23 route(s) inspected, 67 advisory observation(s).
+  Tab order walked on 23/23 route(s); NOT walked on 0.
+
+PER-CLASS — derived (from ADIM 44 run 5) vs. MEASURED (this CI run)
+
+  class                    ADIM 44 run5   derived   MEASURED   verdict
+  skip link (K-2)                    23         0          0   FIXED, confirmed
+  page has no <h1> (K-4)              1         0          0   FIXED, confirmed
+  heading outline (K-5)              21        22         22   +1, confirmed
+  contentinfo (K-3)                  23        23         23   untouched
+  aria-live (K-7)                    21        21         21   untouched
+  focus indicator (K-6)               1         1          1   untouched
+  positive tabindex                   0         0          0   untouched
+  tab order vs DOM order              0         0          0   untouched
+  TOTAL advisories                   90        67         67   exact
+
+All six classes landed on the derived figure. The counts above were re-counted
+mechanically from the job's ::warning:: block, not read off by eye, and the
+total agrees with the job's own header (67).
+
+K-2 AND K-4: THE ADVISORIES ARE SIMPLY ABSENT
+
+  Neither "skip link" nor "page has no <h1>" appears once in 67 lines. The
+  advisory blocks were deliberately KEPT in specs/20-a11y-prechecks.spec.ts as
+  regression detectors, so silence here is a measurement, not a deletion.
+
+K-5: THE PREDICTED SIDE EFFECT, MEASURED VERBATIM
+
+  /user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"
+
+  Before ADIM 48 that page read h2 -> h3 and was one of K-5's two exceptions.
+  It is now inside the set, and `/` is the only route left with an unbroken
+  outline — exactly what the derivation predicted:
+
+    routes with a heading-outline skip : 22
+    routes without                     : ['/']
+
+AXE RATCHET — the skip link added nothing
+
+  a11y ratchet: 45 serious node(s) measured against a frozen ceiling of 45.
+
+  user-manual still reports color-contrast(serious x1), unchanged. The link's
+  label uses --text rather than the accent blue precisely so it could not
+  become node 46 on the D-10 axis. (axe would not have caught it either way:
+  the link is clip-hidden while unfocused, so the contrast rule skips it. The
+  colour was decided in review, not by the scanner.)
+
+CAVEAT THAT STILL STANDS — this was ONE COLD RUN
+
+  Section 6 of docs/audit/a11y_screen_reader_audit_results.md records that a
+  cold run UNDER-reports the two unstable classes: ADIM 44's run 1 reported
+  K-5 as 18 where the settled answer was 21, and K-7 as 10 where it was 21.
+
+  This cold run did NOT under-report — it landed on 22 and 21, and all three
+  of the known-flaky routes (/analysis-lab, /backtest/history,
+  /backtest/metrics) appear in BOTH unstable classes here, i.e. it sampled at
+  the top of the range rather than the bottom. That is one favourable sample,
+  not a repeal of the variance:
+
+    * K-2 and K-4 are settled. They are STABLE classes (23/23/23/23/23 and
+      1/1/1/1/1 across ADIM 44's five runs), so a single run is sufficient,
+      and both are additionally pinned by unit gates that run on every commit.
+    * K-5's 22 is CONFIRMED but keeps its +/-1 caveat. The three flaky routes
+      can still drop out of a colder sample. Do not treat 22 as immune;
+      re-measure warm (>=2 runs) whenever the audit stack is next up.

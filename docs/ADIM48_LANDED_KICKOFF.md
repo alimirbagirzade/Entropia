@@ -20,7 +20,9 @@ K-5/K-6 A-08'i bekler. Presentation-only: migration yok, `ENGINE_VERSION` deği�
 | `frontend/src/styles/global.css::.skip-link` / `::.skip-link:focus-visible` | Üç kısıtın kesişimi: akış dışı (baseline'lar) + `absolute` değil `fixed` (probun `offsetParent` filtresi) + clip/1px (tab sırası + a11y ağacı) |
 | `frontend/src/test/a11ySkipLink.test.tsx` | K-2'nin **kapısı** (advisory değil). `TABBABLE` sabiti precheck probundan birebir kopya |
 | `userManual.test.tsx::"names itself with a level-1 heading (K-4)"` | Seviye **ve** `.page-title` sınıfı birlikte assert edilir |
-| `docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt` | Türetme aritmetiği + neden ölçülemediği. Stack ayağa kalktığında **ölçülenle değiştirilecek** |
+| `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt` | **CI'da ÖLÇÜLEN** precheck profili (run `31626856387`): skip link **0**, no-`<h1>` **0**, heading outline **22**, toplam **67**; axe ratchet 45/45 |
+| `docs/releases/evidence/2026-08-12/adim48_ci_visual_measured.txt` | **CI'da ÖLÇÜLEN** görsel kapı: **23/23, sıfır baseline diff**. Skip link'i akışta bırakan bir tasarım burada 23 satırı birden kırardı |
+| `docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt` | Koşudan ÖNCE yayımlanan türetme; altı sınıfın altısı da ölçümle tuttu. Ölçemediğinde bunu yap — **"ölçtüm" yazma** |
 
 ## Tavizsiz kurallar (bu slice'ta kanıtlandı)
 
@@ -40,8 +42,13 @@ K-5/K-6 A-08'i bekler. Presentation-only: migration yok, `ENGINE_VERSION` deği�
 6. **Yan etkiyi ölç ve YAZ, düşürme.** K-4'ün fix'i K-5'i **bir rota genişletti** (21 → 22).
    Tek sayfanın outline'ını yeniden keserek sayıyı kurtarmak, 22 rotanın hepsinde aynı olan
    çareyi denetimin verdicti gelmeden uygulamak olurdu.
-7. **Ölçemiyorsan "ölçtüm" yazma.** Bu oturumda audit stack ayağa kalkmadı; sayılar
-   **türetildi** ve her yerde öyle etiketlendi.
+7. **Ölçemiyorsan "ölçtüm" yazma — ama TÜRET, yayımla ve sonra doğrula.** Bu oturumda
+   audit stack ayağa kalkmadı; sayılar **türetildi**, her yerde öyle etiketlendi, ve CI
+   koşunca **altı sınıfın altısı da tuttu**. Türetmenin koşudan ÖNCE yayımlanmış olması
+   onu bir tahmin değil bir **öndeyi** yapar; sonradan yazılsaydı hiçbir şey kanıtlamazdı.
+8. **Yeşil bir CI koşusu bir sınıfın varyansını İPTAL ETMEZ.** K-5'in 22'si ölçüldü ama
+   koşu soğuktu; §6 soğuk koşunun eksik raporladığını kayıt altına alıyor. Bu kez üst
+   uçtan örnekledi — bu iyi şans, kural değil.
 
 ## Açık kalanlar (ADIM 48 bunları KAPATMADI)
 
@@ -50,8 +57,9 @@ K-5/K-6 A-08'i bekler. Presentation-only: migration yok, `ENGINE_VERSION` deği�
 - **K-3 (`contentinfo` yok, 23/23)** — PO **kapsam dışı** dedi.
 - **K-5 (başlık outline, artık 22/23)** ve **K-6 (odak göstergesi)** — A-08'in cevaplaması
   gereken sorular.
-- **`npm run a11y` / `npm run visual` yerelde koşmadı** — CI otoritedir, **ama CI tek ve
-  soğuk bir koşudur**; K-5'in yeni sayısını kapatmaz.
+- **`npm run a11y` ve `npm run visual` CI'da koştu; ikisi de YEŞİL.** Görsel: **23/23,
+  sıfır diff**. CI yine de **tek ve soğuk** bir koşudur: K-2/K-4 kapandı, **K-5'in 22'si
+  ±1 çekincesini korur** ve ılık ≥2 koşuyla yeniden ölçülmelidir.
 - **Memory checkpoint (ritüel md. 4) EKSİK — ARKA ARKAYA İKİNCİ SLICE.** `ecc` ve
   `claude-mem` MCP sunucuları bu oturumda da bağlı değildi. **ADIM 47 + ADIM 48 için
   birlikte yazılmalı.**

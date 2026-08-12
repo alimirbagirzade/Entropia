@@ -5615,11 +5615,17 @@ kesmek, 22 rotanın hepsinde aynı olan çareyi denetimin verdicti gelmeden uygu
 **Dürüst sınırlar:** **blocker sayısı DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
 · **`npm run a11y` ve `npm run visual` YERELDE KOŞMADI** — bu container'da audit stack ayağa
 kalkmadı (Docker Hub manifest `429`, blob CDN `403 Forbidden`, 5× tekrar). Precheck profili
-run-5 kayıtlarından **türetildi, ölçülmedi**
-(`docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt`); **otorite CI'dır**,
-ama CI **tek ve soğuk** bir koşudur → K-2/K-4'ü kapatır, **K-5'in yeni sayısını kapatmaz**.
-· **Görsel baseline değişmediği bir BEKLENTİdir**, ölçüm değil. CI'da diff çıkarsa **baseline
-güncellenmez, CSS düzeltilir**.
+önce run-5 kayıtlarından **türetildi**, sonra **CI'da ÖLÇÜLDÜ ve altı sınıfın altısı da
+birebir tuttu** (run `31626856387`, job `94215349370`, **SUCCESS**): skip link **0**,
+no-`<h1>` **0**, heading outline **22**, `contentinfo` 23, `aria-live` 21, focus indicator 1
+→ toplam **67** (90'dan). axe ratchet **45/45, değişmedi**.
+`docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
+· **K-5'in 22'si ±1 ÇEKİNCESİNİ KORUR** — CI **tek ve soğuk** bir koşudur; bu kez eksik
+raporlamadı (üç kararsız rota da göründü, örnekleme üst uçtan) ama §6'nın varyansı iptal
+olmadı. Ilık ve ≥2 koşuyla yeniden ölçülmeli.
+· **Görsel kapı da ÖLÇÜLDÜ: 23/23 passed, SIFIR baseline diff** (job `94215349503`) —
+markup'ı değişen `visual: user-manual` dahil. Beklenti tutmasaydı kural şuydu ve şudur:
+**baseline güncellenmez, CSS düzeltilir.**
 · **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` bu oturumda da bağlı değil
 (ritüel md. 4 **iki slice üst üste eksik**).
 · **A-08 kıpırdamadı** — defter boş (0/4), #514 insan kapısı, K-3/K-5/K-6 açık.

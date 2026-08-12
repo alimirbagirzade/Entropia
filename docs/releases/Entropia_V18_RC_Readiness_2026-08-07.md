@@ -1028,10 +1028,10 @@ kırmaz, hiçbiri imzalı sapmaya bağlanmış değildir.
 
 | # | Bulgu | Kapsam | WCAG | Statü |
 |---|---|---|---|---|
-| **K-2** | ~~**Skip link yok** — her route'ta ilk tabbable öğe shell'in `Log out` butonu~~ → **KAPANDI (ADIM 48):** `Layout.tsx::.skip-link` → `#main-content`, shell'in ilk tabbable düğümü; `<main>` `id` + `tabIndex={-1}` taşıyor | 23 / 23 → **0 / 23** (türetilmiş) | 2.4.1 | **Fixed** — `frontend/src/test/a11ySkipLink.test.tsx` ile **gate**; precheck advisory'si regresyon dedektörü olarak KALDI |
+| **K-2** | ~~**Skip link yok** — her route'ta ilk tabbable öğe shell'in `Log out` butonu~~ → **KAPANDI (ADIM 48):** `Layout.tsx::.skip-link` → `#main-content`, shell'in ilk tabbable düğümü; `<main>` `id` + `tabIndex={-1}` taşıyor | 23 / 23 → **0 / 23** (**ÖLÇÜLDÜ**, CI `31626856387`) | 2.4.1 | **Fixed** — `frontend/src/test/a11ySkipLink.test.tsx` ile **gate**; precheck advisory'si regresyon dedektörü olarak KALDI |
 | **K-3** | **`contentinfo` landmark yok** — shell hiç `<footer>` render etmiyor; checklist A-2 dört landmark bekliyor, üç var | **23 / 23 route** | 1.3.1 / 2.4.1 | Open — **kapsam dışı (PO)** |
 | **K-4** | ~~**`/user-manual`'da `<h1>` yok** — kendini `<h2 class="page-title">` ile adlandırıyor~~ → **KAPANDI (ADIM 48):** `<h1 className="page-title">`. `.page-title` **sınıf tabanlı** (margin/font-size/font-weight/color `global.css`'te açıkça yazılı) → hesaplanmış stil DEĞİŞMEDİ | 1 → **0 route** | 1.3.1 / 2.4.6 | **Fixed** — `userManual.test.tsx` seviye-1 assert'i ile gate |
-| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan; setin **en yüksek erişimli** yapısal gözlemi. **K-4'ün fix'i bunu BİR ROUTE genişletti**: `/user-manual` `h2→h3` iken artık `h1→h3` | 21 → **22 / 23 route** (türetilmiş) | 1.3.1 (A-3) | Open — **bir arttı, bilerek** |
+| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan; setin **en yüksek erişimli** yapısal gözlemi. **K-4'ün fix'i bunu BİR ROUTE genişletti**: `/user-manual` `h2→h3` iken artık `h1→h3` | 21 → **22 / 23 route** (**ÖLÇÜLDÜ**, CI `31626856387`) | 1.3.1 (A-3) | Open — **bir arttı, bilerek** |
 | **K-6** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 / 1.4.11 | Open — **insan gözü gerekiyor** |
 
 **K-5 ve K-6 doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
@@ -1045,16 +1045,24 @@ K-6 tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmad
 > K-5'in **22 route'un tamamında aynı olan** çaresini tek sayfada, denetimin verdicti
 > gelmeden uygulamak olurdu. ADIM 48 bunu yapmadı.
 >
-> **Bu sayılar ÖLÇÜLMEDİ, TÜRETİLDİ.** ADIM 48 oturumunun container'ında audit stack
-> ayağa kalkmadı (Docker Hub manifest `429`, blob CDN `403 Forbidden` — agent proxy
-> üzerinden beş kez tekrarlandı), bu yüzden `npm run a11y` ve `npm run visual` **yerelde
-> koşmadı**; otorite PR'ın CI koşusudur. Aritmetik ADIM 44'ün commit edilmiş run-5
-> kayıtlarından üretildi:
-> `docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt`. **CI koşusu
-> TEK ve SOĞUK bir koşudur** — §6'nın kendi kuralı gereği soğuk koşu K-5/K-7'yi **eksik**
-> raporlar; K-2/K-4'ü (kararlı sınıflar) kapatır, K-5'in yeni sayısını **kapatmaz**.
-> Stack bir daha ayağa kalktığında **ılık ve ≥2 kez** ölçülüp türetilmiş sayı ölçülenle
-> değiştirilmelidir.
+> **Bu sayılar CI'da ÖLÇÜLDÜ** (run `31626856387`, job `94215349370`, commit `2b13e41`,
+> **SUCCESS**). Job'ın kendi özet satırı: *"23 route(s) inspected, **67** advisory
+> observation(s)"* — 90'dan düştü. 67 satırın içinde `skip link` ve `page has no <h1>`
+> **bir kez bile geçmiyor**; advisory blokları spec'te **bilerek bırakıldığı** için bu
+> sessizlik bir ölçümdür, silme değil. Ham sayım:
+> `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
+>
+> **Sayılar önce TÜRETİLDİ, sonra ölçüldü — ve altı sınıfın altısı da tuttu.** Türetme
+> koşudan ÖNCE yayımlanmıştı (`adim48_k2_k4_precheck_derivation.txt`); gerekliydi çünkü
+> ADIM 48 oturumunun container'ında audit stack ayağa kalkmadı (Docker Hub manifest
+> `429`, blob CDN `403 Forbidden`, beş deneme).
+>
+> **SOĞUK-KOŞU ÇEKİNCESİ K-5 İÇİN HÂLÂ GEÇERLİ.** Bu tek ve soğuk bir koşuydu ve bu kez
+> **eksik raporlamadı** — üç kararsız rotanın (`/analysis-lab`, `/backtest/history`,
+> `/backtest/metrics`) üçü de her iki kararsız sınıfta göründü, yani örnekleme aralığın
+> **üst** ucundan geldi. K-2/K-4 **kapandı** (kararlı sınıflar + her commit'te koşan unit
+> kapılar); **K-5'in 22'si ±1 çekincesini KORUR** ve stack bir daha ayağa kalktığında
+> **ılık, ≥2 koşu** ile yeniden ölçülmelidir.
 >
 > **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** K-2/K-4 hiçbir zaman
 > blocker değildi; A-08'in defteri hâlâ boş (0/4) ve hiçbir şey duyulmuş değil.
@@ -2199,9 +2207,11 @@ Tüm ham çıktılar: **`docs/releases/evidence/2026-08-12/`**
 | §6.5 / K-2 | `frontend/src/app/Layout.tsx` · `frontend/src/styles/global.css` | **KAPANDI** — `.skip-link` → `#main-content` shell'in **ilk tabbable** düğümü; `<main id tabIndex={-1}>` odağı alıyor |
 | §6.5 / K-4 | `frontend/src/pages/UserManual.tsx` | **KAPANDI** — `<h2 class="page-title">` → `<h1 class="page-title">`; sınıf değişmedi, hesaplanmış stil değişmedi |
 | — | `frontend/src/test/a11ySkipLink.test.tsx` (YENİ) · `userManual.test.tsx` | **kapı** (advisory değil): 3 + 1 assert, **negatifi kanıtlı** — her iki regresyon da kırmızıya çevirdi |
-| — | `adim48_k2_k4_precheck_derivation.txt` | precheck profili **TÜRETİLDİ, ölçülmedi**: skip link `23 → 0`, no-`<h1>` `1 → 0`, heading outline `21 → 22`, toplam advisory `90 → 67`. Kaynak: ADIM 44 run-5 kayıtları |
+| — | `adim48_ci_a11y_measured.txt` | **ÖLÇÜLDÜ (CI run `31626856387`, job `94215349370`, SUCCESS):** skip link **0**, no-`<h1>` **0**, heading outline **22**, `contentinfo` 23, `aria-live` 21, focus indicator 1 → toplam **67** (90'dan). axe ratchet **45/45 — değişmedi** |
+| — | `adim48_k2_k4_precheck_derivation.txt` | Koşudan ÖNCE yayımlanan türetme; **altı sınıfın altısı da ölçümle birebir tuttu**. Kaynak: ADIM 44 run-5 kayıtları |
 | — | `adim48_local_gate_runs.txt` | `lint` / `typecheck` / `coverage` **exit 0** (+ `e2e` tsc exit 0) — 71 dosya, **725 passed**, line **%84.9** (kapı ≥%83) |
-| — | `adim48_stack_unavailable.txt` | `a11y` / `visual` **YERELDE KOŞMADI** — Docker Hub `429` + blob CDN `403 Forbidden`, 5× tekrarlandı. **Otorite PR'ın CI koşusudur** |
+| — | `adim48_ci_visual_measured.txt` | **görsel kapı ÖLÇÜLDÜ: 23/23 passed, SIFIR baseline diff** (job `94215349503`, step 11). `visual: user-manual` dahil — markup'ı değişen rota da kaymadı. Aynı job'da E2E suite **39 passed / 1 skipped**, hizalanan `17-page-coverage` `/user-manual` satırı gerçek DOM'da yeşil |
+| — | `adim48_stack_unavailable.txt` | `a11y` / `visual` **YERELDE KOŞMADI** — Docker Hub `429` + blob CDN `403 Forbidden`, 5× tekrarlandı. **Otorite PR'ın CI koşusu oldu ve ikisi de yeşil geldi** |
 
 ### 9.0-e 2026-08-12 (ADIM 44) — blocker 4 kapanışı + blocker 1 hazırlığı
 

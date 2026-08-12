@@ -1,0 +1,46 @@
+ADIM 48 — visual-regression gate: MEASURED in CI (0 baseline diff)
+==================================================================
+
+Run    : https://github.com/alimirbagirzade/Entropia/actions/runs/31626856387
+Job    : 94215349503 — "E2E — real browser vs. Docker Compose stack (F-23)"
+Step   : 11, "Run the visual-regression gate" (`npm run visual`)
+Commit : 2b13e41  ·  PR #689  ·  job conclusion: SUCCESS
+
+  > playwright test --grep @visual
+  Running 23 tests using 1 worker
+  ...
+  23 passed (4.0m)
+
+**23 / 23 routes, ZERO baseline updates, ZERO diffs.** The expectation this
+slice recorded before it could be measured — that `.skip-link` is out of flow
+in both states and therefore cannot move a single screenshot — held on every
+route, including:
+
+  ✓  22  visual: user-manual (10.1s)
+
+which is the route that ALSO changed markup (h2 -> h1). That is the sharper of
+the two results: `.page-title` carries the whole computed style
+(margin / font-size / font-weight / colour all written out in global.css), so
+promoting the tag moved nothing. Had the heading style come from the element
+selector instead, this row would have failed.
+
+WHY THIS MATTERED ENOUGH TO CALL OUT IN ADVANCE
+
+  A skip link is normally added as a flow element that is pulled off-screen
+  with a negative offset and becomes `position: static` on focus. That design
+  reserves a row in `.app-shell`'s flex column and would have shifted all 23
+  baselines down. The PR body said, before the run: *"If CI reports a diff,
+  the baselines must not be updated — the CSS is wrong."* No diff appeared, so
+  no baseline was touched.
+
+ALSO IN THE SAME JOB — step 10, the E2E suite itself
+
+  39 passed, 1 skipped (2.4m)
+
+  including:
+    ✓  35  specs/17-page-coverage.spec.ts › /user-manual renders its
+            projection from a served query (1.1s)
+
+  That is the realigned contract (`level: 2` removed, so the shared assertion
+  now demands level 1) exercised against the real DOM, not jsdom. The h1 is
+  really there and really carries the accessible name "User Manual".

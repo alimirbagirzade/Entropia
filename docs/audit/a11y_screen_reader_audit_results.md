@@ -348,24 +348,33 @@ observations** once the numbers settle. The figure previously recorded here was
 > and can be taken at face value. The methodology note under the table says which.
 
 > **ADIM 48 (2026-08-12) FIXED two of them — K-2 and K-4 — by PO decision, and in
-> doing so made K-5 WORSE by one route.** The post-fix reach figures below are
-> **DERIVED from run 5's committed records, not measured**: the audit stack could
-> not be brought up in that session's container (Docker Hub 429 on the manifest,
-> 403 Forbidden on the blob CDN through the agent proxy, reproduced five times),
-> so `npm run a11y` did not run locally and the authority is the PR's CI run. The
-> arithmetic is in
-> `docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt`.
-> **Re-measure warm (≥2 runs) and replace the derived figures with measured ones
-> the next time the stack comes up.** Note a CI run is a *single cold* run, so it
-> settles K-2 and K-4 (stable classes) but **cannot** settle K-5's new figure.
+> doing so made K-5 WORSE by one route.** The post-fix figures below are
+> **MEASURED in CI** (run `31626856387`, job `94215349370`, commit `2b13e41`,
+> conclusion SUCCESS): *"23 route(s) inspected, **67** advisory observation(s)"*,
+> down from 90. `skip link` and `page has no <h1>` do not appear once in those 67
+> lines — and their advisory blocks were deliberately **kept** in the spec as
+> regression detectors, so the silence is a measurement, not a deletion. Raw
+> counts: `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
+>
+> They were **derived first** and the derivation was published before the run:
+> all six classes landed on the predicted number, exactly
+> (`adim48_k2_k4_precheck_derivation.txt`). The derivation was needed because the
+> audit stack could not start in that session's container (Docker Hub 429 on the
+> manifest, 403 Forbidden on the blob CDN through the agent proxy, five attempts).
+>
+> **The cold-run caveat still applies to K-5.** This was one cold run and it
+> happened *not* to under-report — all three known-flaky routes appeared in both
+> unstable classes, i.e. it sampled high. K-2 and K-4 are settled (stable classes,
+> and now pinned by unit gates on every commit); **K-5's 22 keeps its ±1** and
+> should still be re-measured warm, ≥2 runs, next time the stack is up.
 
 | # | Observation | Reach | Status | What the audit should settle |
 |---|---|---|---|---|
 | K-1 | **D-10 — 45 accent-blue low-contrast nodes.** PO-signed permanent deviation dated 2026-07-30. WCAG 2.2 AA **1.4.3 is not met**; the product is not compliant for that criterion. | — | Adjudicated — **do not re-file** | Nothing. It is a *low-vision* axis, not a screen-reader one. Record anything **new** you hit. |
-| K-2 | ~~**No skip link.** The first tabbable element on every route was the shell's `Log out` button, not an in-page jump target — so each route began by tabbing the whole menu bar. WCAG 2.4.1.~~ **FIXED, ADIM 48 (PO, 2026-08-12):** `Layout.tsx` renders `<a class="skip-link" href="#main-content">` as the shell's first tabbable node, ahead of the auth control, and `<main id="main-content" tabIndex={-1}>` takes the focus. | was 23 / 23 → **0 / 23** (derived) | **Fixed** — pinned by `frontend/src/test/a11ySkipLink.test.tsx` (a real gate; the precheck advisory below stays advisory and is now the *regression* detector) | Whether the link is **announced and usable** — that it exists in the DOM is all the machine established. Tab once from page load and listen. |
+| K-2 | ~~**No skip link.** The first tabbable element on every route was the shell's `Log out` button, not an in-page jump target — so each route began by tabbing the whole menu bar. WCAG 2.4.1.~~ **FIXED, ADIM 48 (PO, 2026-08-12):** `Layout.tsx` renders `<a class="skip-link" href="#main-content">` as the shell's first tabbable node, ahead of the auth control, and `<main id="main-content" tabIndex={-1}>` takes the focus. | was 23 / 23 → **0 / 23** (measured, CI `31626856387`) | **Fixed** — pinned by `frontend/src/test/a11ySkipLink.test.tsx` (a real gate; the precheck advisory below stays advisory and is now the *regression* detector) | Whether the link is **announced and usable** — that it exists in the DOM is all the machine established. Tab once from page load and listen. |
 | K-3 | **No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist. | 23 / 23 routes | Open — reported, not gated | Whether the absence is felt during landmark navigation, or is cosmetic. |
-| K-4 | ~~**`/user-manual` has no `<h1>`.** It named itself with `<h2 class="page-title">` — a divergence recorded in `frontend/e2e/utils/pageTruth.ts`. Every other route uses `<h1>`.~~ **FIXED, ADIM 48 (PO, 2026-08-12):** promoted to `<h1 class="page-title">`. `.page-title` is class-based (margin / font-size / font-weight / colour all written out in `global.css`), so the computed style did not move. **Side effect, not hidden — see K-5.** | was 1 route → **0 routes** (derived) | **Fixed** — pinned by `userManual.test.tsx::"names itself with a level-1 heading (K-4)"`; `pageTruth.ts`'s `level` escape hatch is now unused by every contract | A-1: is the page title announced on load? Still worth hearing — the tag is right, the announcement is what nobody has checked. |
-| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **22 / 23 routes** — was 21; **ADIM 48's K-4 fix moved `/user-manual` INTO this set** (`h2→h3` became `h1→h3`), leaving `/` as the only route with an unbroken outline. Derived, not measured; ⚠ see caveat | Open — **grew by one, deliberately** | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 22 pages' outlines. ADIM 48 refused to re-cut one page's `h3` sections in isolation: the remedy is identical on all 22 and is the same product decision. |
+| K-4 | ~~**`/user-manual` has no `<h1>`.** It named itself with `<h2 class="page-title">` — a divergence recorded in `frontend/e2e/utils/pageTruth.ts`. Every other route uses `<h1>`.~~ **FIXED, ADIM 48 (PO, 2026-08-12):** promoted to `<h1 class="page-title">`. `.page-title` is class-based (margin / font-size / font-weight / colour all written out in `global.css`), so the computed style did not move. **Side effect, not hidden — see K-5.** | was 1 route → **0 routes** (measured, CI `31626856387`) | **Fixed** — pinned by `userManual.test.tsx::"names itself with a level-1 heading (K-4)"`; `pageTruth.ts`'s `level` escape hatch is now unused by every contract | A-1: is the page title announced on load? Still worth hearing — the tag is right, the announcement is what nobody has checked. |
+| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **22 / 23 routes** — was 21; **ADIM 48's K-4 fix moved `/user-manual` INTO this set**, leaving `/` as the only route with an unbroken outline. **Measured** in CI, verbatim: `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`; ⚠ the ±1 caveat still applies | Open — **grew by one, deliberately** | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 22 pages' outlines. ADIM 48 refused to re-cut one page's `h3` sections in isolation: the remedy is identical on all 22 and is the same product decision. |
 | K-6 | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7 / 1.4.11. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. |
 | **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
 
@@ -410,6 +419,14 @@ never confused; it is derived, and it is the one to replace with a measurement.
 | heading outline (K-5) | 18 | 21 | 20 | 21 | 21 | ⚠ **converges to 21** | **22** — +1, K-4's side effect |
 | `aria-live` (K-7) | 10 | 20 | 20 | 21 | 21 | ⚠ **converges to 21** | 21 — untouched |
 | **total advisories** | 76 | 89 | 88 | 90 | 90 | ⚠ **converges to 90** | **67** |
+
+The last column is **measured** (CI run `31626856387`), not projected — and it is
+a **single cold run**, the very thing rule 1 below says to discard. It is trusted
+here for a specific reason and not in general: it agreed with an independently
+published derivation on all six classes, and its two unstable classes came in at
+the *top* of their known range rather than the bottom (all three flaky routes
+present). Read it as confirmation of K-2/K-4, and as a plausible-but-not-settled
+22 for K-5.
 
 Runs 1–5: same commit, same stack, same seed, same Admin. Two rules follow, and
 both matter more than the numbers themselves:

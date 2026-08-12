@@ -7502,7 +7502,7 @@ aynı olan** çaresini, denetimin verdicti gelmeden, tek sayfada uygulamak olurd
 bunu **yapmadı**. Sayı düşürülmedi; `a11y_screen_reader_audit_results.md` §6'ya ve RC
 §6.5'e **arttığı gibi** yazıldı.
 
-### Ölçüm — TÜRETİLDİ, ölçülmedi (dürüst sınır)
+### Ölçüm — önce TÜRETİLDİ, sonra CI'da ÖLÇÜLDÜ (altı sınıfın altısı tuttu)
 
 **`scripts/a11y-audit-stack.sh up` bu oturumun container'ında ayağa KALKMADI**, dolayısıyla
 `npm run a11y` (≥2 koşu) ve `npm run visual` (23/23 baseline) **koşmadı**. Sebep ölçüldü ve
@@ -7514,20 +7514,39 @@ around".
 Bunun yerine post-fix precheck profili **ADIM 44'ün commit edilmiş run-5 kayıtlarından
 aritmetikle türetildi** (`docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt`):
 
-| sınıf | run 5 | türetilmiş |
-|---|---:|---:|
-| skip link (K-2) | 23 | **0** |
-| no `<h1>` (K-4) | 1 | **0** |
-| heading outline (K-5) | 21 | **22** |
-| `contentinfo` (K-3) | 23 | 23 |
-| `aria-live` (K-7) | 21 | 21 |
-| focus indicator (K-6) | 1 | 1 |
-| **toplam advisory** | **90** | **67** |
+| sınıf | run 5 | türetilmiş | **CI'da ÖLÇÜLEN** |
+|---|---:|---:|---:|
+| skip link (K-2) | 23 | 0 | **0** ✓ |
+| no `<h1>` (K-4) | 1 | 0 | **0** ✓ |
+| heading outline (K-5) | 21 | 22 | **22** ✓ |
+| `contentinfo` (K-3) | 23 | 23 | **23** ✓ |
+| `aria-live` (K-7) | 21 | 21 | **21** ✓ |
+| focus indicator (K-6) | 1 | 1 | **1** ✓ |
+| **toplam advisory** | **90** | **67** | **67** ✓ |
 
-**CI otoritedir** (`e2e.yml` → `a11y` + visual job'ları PR'da koşar) — **ama CI koşusu TEK
-ve SOĞUK bir koşudur**, ve §6'nın kendi kuralı soğuk koşunun K-5/K-7'yi **eksik**
-raporladığını söyler. Yani CI K-2 ve K-4'ü (kararlı sınıflar) kapatır, **K-5'in yeni
-sayısını kapatmaz**. Stack bir daha ayağa kalktığında ılık ve **≥2 kez** ölçülmeli.
+**Sonra CI koştu ve türetme birebir tuttu.** Run `31626856387`, job `94215349370`,
+commit `2b13e41`, conclusion **SUCCESS**, 6 passed. Job'ın kendi özet satırı:
+*"a11y prechecks: 23 route(s) inspected, **67** advisory observation(s). Tab order walked
+on 23/23 route(s); NOT walked on 0."* Sayılar `::warning::` bloğundan **makineyle** yeniden
+sayıldı, gözle okunmadı. Ham kayıt: `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
+
+**K-2 ve K-4'ün advisory'leri 67 satırın içinde bir kez bile geçmiyor** — ve blokları
+spec'te **bilerek bırakıldı**, dolayısıyla bu sessizlik bir **ölçümdür**, silme değil.
+**K-5'in yan etkisi de birebir ölçüldü:**
+`/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`; atlama
+içermeyen tek rota olarak `/` kaldı.
+
+**axe ratchet değişmedi:** *"45 serious node(s) measured against a frozen ceiling of 45"*
+— skip link 46. düğümü **eklemedi**. Zaten bu yüzden etiket rengi `--text` seçilmişti;
+axe onu yakalayamazdı (odaksızken clip'li, contrast kuralı atlıyor), yani renk **incelemede**
+karara bağlandı, tarayıcı tarafından değil.
+
+**ÇEKİNCE HÂLÂ DURUYOR — bu TEK ve SOĞUK bir koşuydu.** §6'nın kuralı soğuk koşunun
+K-5/K-7'yi eksik raporladığını söyler (ADIM 44'ün 1. koşusu K-5'i **18**, K-7'yi **10**
+göstermişti). Bu koşu eksik raporlamadı: üç kararsız rota da her iki sınıfta göründü, yani
+örnekleme aralığın **üst** ucundan geldi. Bu **bir elverişli örnektir, varyansın iptali
+değil**: K-2/K-4 kapandı (kararlı sınıflar + her commit'te koşan unit kapılar), **K-5'in
+22'si ±1 çekincesini KORUR** ve ılık, ≥2 koşuyla yeniden ölçülmelidir.
 
 ### Yerelde gerçekten koşan kapılar
 
@@ -7537,11 +7556,15 @@ Ham çıktı: `docs/releases/evidence/2026-08-12/adim48_local_gate_runs.txt`.
 
 ### Dürüst sınırlar
 
-- **`npm run a11y` ve `npm run visual` YERELDE KOŞMADI** (yukarıdaki registry engeli).
-  Görsel baseline'ların değişmediği **iddia değil, beklentidir**: `.skip-link` iki durumda
-  da akış dışıdır. CI'da diff çıkarsa **baseline güncellenmez, CSS düzeltilir**.
-- **K-5'in 22'si TÜRETİLMİŞ sayıdır** ve run-5'in ±1 kararsızlığını (`/analysis-lab`,
-  `/backtest/history`, `/backtest/metrics`) aynen devralır.
+- **`npm run a11y` ve `npm run visual` YERELDE KOŞMADI** (yukarıdaki registry engeli) —
+  ama **ikisi de CI'da koştu ve YEŞİL geldi**. Görsel kapı: **23/23 passed, SIFIR baseline
+  diff** (job `94215349503`, step 11), markup'ı değişen `visual: user-manual` dahil —
+  `.page-title`'ın sınıf tabanlı olması tam da burada ölçüldü. Aynı job'da E2E suite
+  **39 passed / 1 skipped**; hizalanan `17-page-coverage` `/user-manual` satırı **gerçek
+  DOM'da** yeşil (jsdom'da değil). `adim48_ci_visual_measured.txt`.
+- **K-5'in 22'si ölçüldü ama ±1 çekincesini KORUR** — run-5'in kararsız rotaları
+  (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) daha soğuk bir örneklemede
+  yine düşebilir. 22'yi dokunulmaz sayma.
 - **A-08 KIPIRDAMADI.** İki yapısal önkoşul iyileşti, biri bir tık kötüleşti; **hiçbiri
   duyulmadı**. Defter §1/§2 hâlâ boş, dört çıkış kriteri de ☐, #514 insan kapısı.
 - **K-3 / K-5 / K-6 AÇIK kalır** — PO kararı onları kapsamadı.

@@ -202,10 +202,15 @@ Before stopping a working session, produce **ALL** of the following:
 > `userManual.test.tsx`), **negatifi kanıtlı** — precheck advisory'leri regresyon dedektörü
 > olarak KALDI. **YAN ETKİ GİZLENMEDİ: K-5 21/23 → 22/23** (`/user-manual` artık `h1→h3`
 > atlıyor); tek sayfanın outline'ını yalıtılmış biçimde yeniden kesmek 22 rotanın ortak
-> çaresini denetimin verdicti gelmeden uygulamak olurdu. **Bu sayılar TÜRETİLDİ, ÖLÇÜLMEDİ:**
-> audit stack bu container'da ayağa kalkmadı (Docker Hub `429` + blob CDN `403`, 5× tekrar) →
-> `npm run a11y` / `npm run visual` **koşmadı**; otorite CI'dır ama **CI tek ve SOĞUK bir
-> koşudur** → K-2/K-4'ü kapatır, **K-5'in yeni sayısını kapatmaz** (ılık, ≥2 koşu şart).
+> çaresini denetimin verdicti gelmeden uygulamak olurdu. **Sayılar önce TÜRETİLDİ (stack bu
+> container'da ayağa kalkmadı: Docker Hub `429` + blob CDN `403`, 5× tekrar), sonra CI'da
+> ÖLÇÜLDÜ — altı sınıfın altısı birebir tuttu** (run `31626856387`, job `94215349370`,
+> **SUCCESS**): skip link **0**, no-`<h1>` **0**, heading outline **22**, toplam advisory
+> **67** (90'dan); axe ratchet **45/45 değişmedi**. **AMA CI TEK ve SOĞUK bir koşudur** —
+> K-2/K-4 kararlı sınıflardır ve kapandı; **K-5'in 22'si ±1 çekincesini KORUR** (ılık, ≥2
+> koşu şart). **Görsel kapı da ölçüldü: 23/23 passed, SIFIR baseline diff** — markup'ı
+> değişen `visual: user-manual` dahil (`.page-title` sınıf tabanlı olduğu için tek piksel
+> oynamadı). `adim48_ci_a11y_measured.txt` · `adim48_ci_visual_measured.txt`.
 > Frontend **71 dosya / 725 passed**, line **%84.9** (eşik 83). **ecc/claude-mem yine BAĞLI
 > DEĞİLDİ → memory checkpoint ARKA ARKAYA İKİNCİ KEZ YAZILAMADI (ADIM 47 + 48 borcu).**
 > `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md` · RC §6.5.

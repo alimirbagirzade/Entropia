@@ -189,9 +189,21 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `6da8a95`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `7dd1dfe`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
+> **Son dalga — ADIM 48 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
+> KOD DEĞİŞMEDİ.**
+> #514 `11:08:58Z`'de **insan eliyle yeniden AÇILDI** → ADIM 29'un kaydettiği "kapalı issue
+> ↔ boş defter" ayrışması kapandı; 8 belge uzlaştırıldı (RC raporu **kendi içinde
+> çelişiyordu**: banner yeniden açılmayı yazarken §6.1 + P12 tablosu + `İzleme` bloğu hâlâ
+> `CLOSED` diyordu). **BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED** —
+> defter hâlâ boş, `0/4`, 0/46 rota, 0/20 akış. **Yeniden açma bir SONUÇ DEĞİLDİR**;
+> değişen tek şey izlemenin artık açık olması. **Harf karışıklığı pinlendi:** defterde
+> (A)=imzalı kabul / (B)=geri alma, RC §6.1'de (A)=denetimi koştur / (B)=imzalı sapma —
+> issue'daki *"path (A)"* **RC anlamındadır**; ikisi de yeniden numaralandırılMADI.
+> **#514'e DOKUNULMADI** (`human-only`). `PROJECT_HISTORY.md` §ADIM 48 ·
+> `docs/ADIM48_LANDED_KICKOFF.md`.
+> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
 > BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** (A) `../validate` +
 > `../baseline-parse` **200 → 202** + tipli gövde (`ValidationRunAcceptedResponse`,
 > `BaselineParseAcceptedResponse`); **otorite PO KARARIDIR, kanonik hâlâ sessiz** — "repo
@@ -306,7 +318,8 @@ Before stopping a working session, produce **ALL** of the following:
 > (#626/#627), ADIM 26 (#624), ADIM 25 (#622) — **ADIM 23/24 artık `PROJECT_HISTORY.md`'de
 > KAYITLI** (borç kapandı).
 > **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
-> izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
+> izleme issue'su #514 **AÇIK** (2026-08-12'de insan eliyle yeniden açıldı) — iş açık,
+> izleme de AÇIK; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
 > K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
@@ -384,14 +397,15 @@ Before stopping a working session, produce **ALL** of the following:
   ADIM 28 (#628) **iskeleyi**, ADIM 44 **koşulabilirliği** kurdu — `scripts/a11y-audit-stack.sh`
   (güncel main'de **9/9 doğrulandı**) + `docs/implementation/a11y_screen_reader_audit_runbook.md`
   + `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
-  Takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmış, 2026-08-03'te yeniden açılmış,
-  2026-08-07'de yine kanıtsız kapatılmıştır**; kapatma yetkisi insandadır, agent kapatamaz.
-  Kapalı issue ile boş defter arasındaki ayrışma **sürüyor**; ADIM 29 onu **çözmedi, KAYDETTİ**
-  — kanonik blok `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue
-  state*, diğer tüm belgeler oraya işaret eder. Açık duran iki çözüm yolu da **insan işidir**:
-  (A) imzalı kalıcı sapma (D-10 biçimi: adı verilmiş imzalayan + ISO tarih + kapsam) —
-  **imzalayan verilmediği için böyle bir kayıt YOK**; (B) #514'ün insan eliyle yeniden
-  açılması. Hiçbirini agent yapamaz.
+  Takip **GitHub #514 — iki kez kanıtsız kapatıldı (2026-07-30, 2026-08-07), İKİSİ DE geri
+  alındı (2026-08-03, 2026-08-12); bugün AÇIK** (`stateReason=reopened`); kapatma yetkisi
+  insandadır, agent ne kapatabilir ne açabilir. **Kapalı issue ↔ boş defter ayrışması
+  KAPANDI (ADIM 48):** insan (B) yolunu seçti, defter ve rapor buna göre uzlaştırıldı —
+  kanonik blok `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue
+  state*, diğer tüm belgeler oraya işaret eder. **Ayrışmanın kapanması denetimin yapılması
+  DEĞİLDİR:** defter hâlâ boş, kriterler `0/4`, A-08 BLOCKED. Geriye kalan tek şey denetimin
+  kendisi — issue'nun ifadesiyle *"auditor assignment is the remaining human step"*.
+  Diğer yol (imzalı kalıcı sapma, D-10 biçimi) **seçilmedi ve kaydı YOK**.
   Visual regression ve axe-core ratchet'i CI'da bloklayıcı. Kalan 45 düğüm imza-mavisi
   **D-10 (2026-07-30) imzalı kalıcı sapmasıdır**; WCAG 2.2 AA 1.4.3 karşılanmıyor, ürün bu
   ölçüt için uyumlu sayılamaz.

@@ -4714,6 +4714,10 @@ ve test **davranışı** değişmedi.
 `2026-07-30T19:05:32Z`, 2026-08-03'te geri alınmıştı; **bu geri alınmadı**). Denetim yine
 koşulmadı: defter boş, dört çıkış kriteri de ☐, findings register'da tek kayıt yok.
 
+> **ADIM 48 düzeltmesi (2026-08-12).** Bu paragrafın *"bu geri alınmadı"* parantezi artık
+> **bayattır**: ikinci kapatma da `2026-08-12T11:08:58Z`'de geri alındı. Aşağıdaki ADIM 29
+> kaydı olduğu gibi durur — yazıldığı gün doğruydu; ayrışmanın kapanışı ADIM 48'dedir.
+
 **Sorun.** *"A-08 açık issue #514'te izleniyor"* iddiası **BAYAT** (issue kapalı);
 *"A-08 tamamlandı"* iddiası ise **yanlış** — denetim yapılmadı. İkisi de yazılamazdı.
 
@@ -5595,8 +5599,11 @@ açmaz**. Ayrıntı ve tasarım işaretleri: `docs/ADIM35_LANDED_KICKOFF.md` (pa
 en altta), `docs/ADIM16_STEPPER_LANDED_KICKOFF.md` §4.1 ve `docs/ADIM26_KICKOFF.md`.
 
 **A-08 ayrı bir eksendedir ve PR B'yi bloklamaz.** İnsan denetimi hâlâ yapılmadı; iskele
-hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş, #514 kanıtsız kapatıldı.
-ADIM 29 bu ayrışmayı **çözmedi, kaydetti** — kanonik blok
+hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş. **#514 bugün AÇIK** —
+2026-08-12T11:08:58Z'de insan eliyle yeniden açıldı, yani yukarıdaki iki yoldan **(B)
+gerçekleşti** ve ADIM 29'un kaydettiği ayrışma **ADIM 48'de kapandı**; kanonik blok
 `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue state*. Kalan iş
-**insana** düşer: (A) imzalı kalıcı sapma **veya** (B) #514'ün yeniden açılması. **A-08 için
-hiçbir belgeye `Complete`/`PASS`/`Done` yazma; "açık issue #514'te izleniyor" da yazma.**
+**insana** düşer ve artık tek kalemdir: **denetimin kendisi** (imzalı kalıcı sapma yolu
+seçilmedi). **A-08 için
+hiçbir belgeye `Complete`/`PASS`/`Done` yazma** — ama artık "açık issue #514'te
+izleniyor" **yazılabilir**, çünkü doğrudur.

@@ -155,8 +155,10 @@ An axe-core violation is not a screen-reader finding — file those as ordinary 
    permanent deviation (D-10, 2026-07-30) on the *low-vision* axis. Record anything
    **new** you hit, not that.
 3. **Do not touch GitHub #514.** It carries the `human-only` label. It is currently
-   closed while the worksheet is empty — that divergence is recorded, not resolved,
-   and resolving it is a product-owner decision.
+   **open** — a human re-opened it on `2026-08-12T11:08:58Z` to run this audit, which
+   resolved the earlier closure/evidence divergence. Closing it again is a
+   product-owner decision and belongs after the four exit criteria are `☑`, never
+   before; an agent may neither close nor re-open it.
 4. **Do not fix K-2…K-6 on the way past.** Each one's remedy is a product decision
    (add a footer? re-cut 21 pages' heading outlines?) and K-5/K-6 are precisely what
    your session is meant to answer first.

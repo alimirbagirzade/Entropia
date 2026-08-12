@@ -1,4 +1,10 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 48 (2026-08-12).** Canlı kickoff artık
+> `docs/ADIM48_LANDED_KICKOFF.md`. Aşağısı ADIM 47 kapanışındaki durumu kaydeder;
+> sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Özellikle:** bu belgenin
+> A-08 / #514 hakkındaki *"izleme issue'su kapalı"* ifadesi **bayattır** — #514
+> `2026-08-12T11:08:58Z`'de insan eliyle yeniden AÇILDI (ADIM 48).
+
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 
 > **Bu belge ADIM 47 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →

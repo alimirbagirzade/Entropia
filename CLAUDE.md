@@ -189,9 +189,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `bad8d52`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `2e75c51`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 49 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
+> **Son dalga — ADIM 50 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
 > KOD DEĞİŞMEDİ.**
 > #514 `11:08:58Z`'de **insan eliyle yeniden AÇILDI** → ADIM 29'un kaydettiği "kapalı issue
 > ↔ boş defter" ayrışması kapandı; 8 belge uzlaştırıldı (RC raporu **kendi içinde
@@ -201,11 +201,25 @@ Before stopping a working session, produce **ALL** of the following:
 > değişen tek şey izlemenin artık açık olması. **Harf karışıklığı pinlendi:** defterde
 > (A)=imzalı kabul / (B)=geri alma, RC §6.1'de (A)=denetimi koştur / (B)=imzalı sapma —
 > issue'daki *"path (A)"* **RC anlamındadır**; ikisi de yeniden numaralandırılMADI.
-> **#514'e DOKUNULMADI** (`human-only`). **ADIM 48 numarası #686'ya AİT** — bu slice
-> #686 merge edildikten sonra ADIM 49'a taşındı (merged başlık değiştirilemez, benimki
-> henüz merge edilmemişti). `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
+> **#514'e DOKUNULMADI** (`human-only`). **NUMARA: bu slice İKİ KEZ taşındı** — ADIM 48'i
+> #686+#688, ADIM 49'u #691 aldı; üçü de merge edildiği için başlıkları değişmez, benimki
+> edilmemişti → **ADIM 50**. `PROJECT_HISTORY.md` §ADIM 50 · `docs/ADIM50_LANDED_KICKOFF.md`.
 >
-> **Öncesinde ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
+> **Öncesinde ADIM 49 (P11-1 KAPANDI): main'de required status check ruleset'i
+> `20765617` AKTİF** (PR #683 hazırlığı + ayarı insan uyguladı). **16 zorunlu check**,
+> hepsi `integration_id: 15368`; `pull_request` (0 onay) · `strict: true` ·
+> `bypass_actors: []`. **ÇALIŞMA ŞEKLİ DEĞİŞTİ: main'e doğrudan push YOK, her PR 16 yeşil
+> check + main ile güncellik ister** (`Backend` ~48 dk — bilinçli bedel). **Yeni CI job'ı
+> ya da `name:` değişikliğinde SIRA: önce merge → adın üretildiğini gör →
+> `scripts/required-checks-preflight.sh <pr>` → `PUT …/rulesets/20765617`. TERS SIRA TÜM
+> MERGE'LERİ KİLİTLER.** Lighthouse **insan kararıyla** zorunlu; çırpınırsa **taban
+> indirilmez** (`LH_REPEATS` medyanı) ve **`armed: false` kapının sessiz kapatma
+> düğmesidir**. Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED. **Ruleset repoda
+> DEĞİL — silinirse hiçbir kapı fark etmez (drift kapısı açık iş).** **Memory checkpoint
+> yine YAZILAMADI** (ortam yapısal — remote'ta `ecc`/`claude-mem` kayıtlı değil) → borç
+> **ADIM 47 + 48 + 49 + 50**; sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md`.
+> `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
+> Öncesinde **ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
 > `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli
 > **hiçbir** zeminde 3:1'i geçmiyordu (beyaz 2.68:1, `#f5f5f5` 2.46:1, `.dropdown-blue`
 > **1.00:1**), yenisi **her** zeminde geçiyor (beyaz 15.91:1; en kötü zemin `#0092c8`
@@ -219,9 +233,9 @@ Before stopping a working session, produce **ALL** of the following:
 > **Memory checkpoint YAZILAMAZ, sebebi YAPISAL (ölçüldü 2026-08-12):** remote container'da
 > `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok) → borç bu ortamdan
 > kapatılamaz, **yerel** oturum ister. İçerik **hazır bırakıldı**:
-> **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil). **ADIM 49 da
-> aynı ortamda koştu ve aynı sebeple kaçırdı** → borç artık **üç** slice; o dosyaya ADIM 49
-> için de bir giriş gerekiyor. Sunucuları kaydetmek ya da remote'u md. 4'ten muaf tutmak
+> **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil). **ADIM 49 ve
+> ADIM 50 da aynı ortamda koştu ve aynı sebeple kaçırdı** → borç artık **dört** slice; o
+> dosyaya ADIM 49 ve ADIM 50 için de birer giriş gerekiyor. Sunucuları kaydetmek ya da remote'u md. 4'ten muaf tutmak
 > **insan kararıdır**. `PROJECT_HISTORY.md` §ADIM 48 (K-6b) · `docs/ADIM48_LANDED_KICKOFF.md`.
 >
 > **Öncesinde ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):

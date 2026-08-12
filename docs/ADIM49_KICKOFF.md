@@ -1,4 +1,8 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 50 (2026-08-12).** Canlı kickoff artık
+> `docs/ADIM50_LANDED_KICKOFF.md` (K-6b landed). **Bu belge YİNE DE canlı bir prompt
+> taşıyor:** §P-2 (K-3) hâlâ PO kararı bekliyor ve metni geçerlidir; §P-3 (K-6b)
+> **ADIM 50'de uygulandı**, tarihsel kayıttır.
 # ADIM 49 KICKOFF — RC §6.5 (K-2..K-6): beş a11y gözlemi için ürün kararı promptları
 
 > **NUMARA NOTU — bu slice ADIM 48 olarak yazılmaya başlandı, ADIM 49'a taşındı.**
@@ -25,7 +29,7 @@
 |---|---|---|
 | **P-1** | K-2 + K-4 | ✅ **LANDED** — PO kararı alındı ve uygulandı. Kayıt: `PROJECT_HISTORY.md` §ADIM 49, `STAGE2_HANDOFF.md` §ADIM 49, RC §6.5 |
 | **P-2** | K-3 | ⏳ **PO kararı bekliyor** — prompt aşağıda, değişmedi |
-| **P-3** | K-6b | ⏳ **PO kararı bekliyor** — ADIM 48'de **ölçüldü**: `#00a9e8` ↔ beyaz **2.68 : 1** < 3 : 1 |
+| **P-3** | K-6b | ✅ **LANDED (ADIM 50, #688)** — ADIM 49'da ölçülmüştü (`#00a9e8` ↔ beyaz **2.68 : 1** < 3 : 1); halka `var(--text)`'e taşındı, her zeminde 3:1 geçiliyor. Kayıt: `docs/ADIM50_LANDED_KICKOFF.md` |
 | **P-4** | K-5 + K-6a | ⛔ **A-08 bekliyor** — uygulama promptu yok, olmayacak |
 
 **P-1 sonrası değişen sayılar (CI job `94221023796`, ölçüldü):** toplam advisory
@@ -76,7 +80,7 @@ selector'larında ve görsel baseline'larda.
 | **K-4** `/user-manual` h1 | 1 — stable | **FIX** — 1 token, 2 test satırı, 0 baseline | Hayır | **P-1** |
 | **K-5** h1→h3 | **22 / 23** (ADIM 48 sonrası; was 21) — kararsız sınıf | **A-08 BEKLE** | **Evet** | **yok (P-4)** |
 | **K-6a** halka görünüyor mu | probe: 1 | **A-08 BEKLE** | **Evet** | **yok (P-4)** |
-| **K-6b** halka kontrastı | global | **bugün karar verilebilir** — ölçüldü **2.68 : 1 < 3 : 1** | Hayır | **P-3** |
+| **K-6b** halka kontrastı | global | ~~bugün karar verilebilir~~ → **KAPANDI (ADIM 50)** | Hayır | **P-3 (koşuldu)** |
 
 **Sıra:** P-1 önce (K-4'ün K-5 sayısını 22'ye çıkardığını ölçmüş olursun) → P-2 ve P-3
 bağımsız, herhangi bir sırayla → K-5 / K-6a A-08'e kadar **dokunulmaz**.

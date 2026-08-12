@@ -5570,60 +5570,6 @@ Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
 
 ---
 
-## Stage — ADIM 48: K-6b, odak halkasının kontrastı (WCAG 1.4.11) (PR pending)
-
-**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi. **OpenAPI:**
-değişmedi. **Ürün kodu değişikliği TEK deklarasyondur:**
-`frontend/src/styles/global.css` `:focus-visible` → `outline: 2px solid var(--text)`
-(eski: `var(--accent)`).
-
-**Neden.** `--accent` (`#00a9e8`) odak halkası olarak **hiçbir** uygulama zemininde WCAG
-**1.4.11 Non-text Contrast (AA)**'nın istediği **3:1**'i geçmiyordu: beyazda **2.68:1**,
-`#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1** (görünmez). Sayılar kabul
-edilmedi, sRGB relatif luminans formülüyle **sıfırdan yeniden hesaplandı** ve doğrulandı.
-`var(--text)` (`#222222`) ile ölçülen: beyaz **15.91:1**, `#f5f5f5` **14.59:1**, `#e8e8e8`
-başlık çubuğu **12.98:1**, `#00a9e8` panel **5.94:1**, `#8f8f8f` panel **4.92:1**, ve
-**uygulamadaki en kötü zemin** `#0092c8` (`.menu-blue:hover`) **4.50:1** — hepsi ≥ 3:1.
-
-**Bunu repoda hiçbir şey ölçmüyordu:** axe odak halkası için kontrast kuralı **koşmaz**;
-a11y/Lighthouse/görsel kapıların yeşil olması bu soru için **kanıt değildi**.
-
-**Reuse anchor'ları (tam sembol adlarıyla):**
-
-- `frontend/src/styles/global.css` `:focus-visible` — halkanın **TEK** tanımı. Yorumu artık
-  ölçülmüş oranları ve zemin kümesini taşıyor. Yeni bir odak stili yazma, buradan geçir.
-- `docs/audit/a11y_screen_reader_audit_results.md` §6 — **K-6 İKİYE ayrıldı**: `K-6b`
-  **KAPANDI** (ölçülü), `K-6a` (*"insan görebiliyor mu"*) **AÇIK** ve **yalnız A-08**
-  kapatabilir. Sayım tablosundaki satır da `K-6a` oldu.
-- `pages/RationaleFamilies.tsx:368` — inline `outline: 2px solid var(--accent)` **bilerek
-  bırakıldı**: o bir **seçim** göstergesi, odak halkası değil; ayrı ölçüt, ayrı karar.
-
-**Neden bu bir v18 sapması DEĞİL:** v18 mockup'ı **hiçbir odak durumu tarif etmiyor**
-(`:focus` / `:focus-visible` / halka görseli yok) — tarif edilmeyen bir şeyden sapılamaz.
-`--accent` token'ı, dolgu, kenarlık ve link paleti **hiç dokunulmadı**; onları değiştirmek
-sapma **olurdu**. **Bu D-10 de DEĞİL:** D-10 **1.4.3** (metin) eksenidir, bu **1.4.11**
-(metin-dışı) — ayrı ölçüt, ayrı eşik; metin sapmasına verilmiş imza buraya genişletilemez.
-
-**Test sayıları:** `npm run lint` exit 0 · `npm run typecheck` exit 0 ·
-`npm test -- --no-file-parallelism` → **721 passed / 70 dosya** (ADIM 25 tabanıyla
-**birebir aynı**; hiçbir test yeniden hizalanmadı).
-
-**Dürüst sınırlar:** **blocker sayısı DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
-· **K-6a AÇIK** — bu slice onu kapatmadı, kapattığını da iddia etmiyor.
-· **`npm run visual` ve `npm run a11y` YERELDE KOŞMADI** — docker daemon başlatıldı ama
-ortamın ağ politikası `production.cloudfront.docker.com`'a CONNECT'i **403** reddediyor,
-`registry-1.docker.io` **429** veriyor; imaj çekilemedi (üç deneme). **Otorite CI'dır**
-(`e2e.yml::e2e` görsel kapı + `e2e.yml::a11y` axe ratchet, ikisi de bloklayıcı). Yerelde
-**statik** olarak kanıtlandı ki taban ekran görüntüleri odaklanmış öğe **yokken** alınır
-(`specs/11-visual-regression.spec.ts` içinde `focus`/`blur`/`activeElement` **geçmiyor**;
-tek `autoFocus` `Login.tsx:157` ve o **23 rotanın hiçbirinde değil**) → beklenen **0 diff**.
-**Diff çıkarsa tabanı GÜNCELLEME** — kural odak dışına sızmış demektir, selector'ı daralt.
-· **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` bu oturumda da bağlı değil
-(ritüel md. 4 **eksik**); **ADIM 47 ile üst üste ikinci oturum**, borç birikti.
-
-Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
-
----
 ## Stage — ADIM 48: kabul borcu sınıf B, parti 01 (doc 05 Trade Log backend yüzeyi)
 
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bir blocker kalemi
@@ -5718,6 +5664,64 @@ coverage kapısı geçti (**line %84.90**). Backend'e dokunulmadı.
 promptlar `docs/ADIM49_KICKOFF.md` §P-2 / §P-3. **K-5 + K-6a** → **A-08 bekliyor**.
 **A-08'e dokunulmadı:** defter boş (0/4), `#514` kapalı, **blocker sayısı 1**, verdict
 **BLOCKED**.
+
+## Stage — ADIM 50: K-6b, odak halkasının kontrastı (WCAG 1.4.11) (#688)
+
+> **NUMARA NOTU:** ADIM 48 olarak yazıldı; `#686` main'e o adla merge edildiği için
+> **merge edilmiş ad kazandı** ve bu slice ADIM 50'ye taşındı (K-2/K-4 slice'ı ADIM 49).
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi. **OpenAPI:**
+değişmedi. **Ürün kodu değişikliği TEK deklarasyondur:**
+`frontend/src/styles/global.css` `:focus-visible` → `outline: 2px solid var(--text)`
+(eski: `var(--accent)`).
+
+**Neden.** `--accent` (`#00a9e8`) odak halkası olarak **hiçbir** uygulama zemininde WCAG
+**1.4.11 Non-text Contrast (AA)**'nın istediği **3:1**'i geçmiyordu: beyazda **2.68:1**,
+`#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1** (görünmez). Sayılar kabul
+edilmedi, sRGB relatif luminans formülüyle **sıfırdan yeniden hesaplandı** ve doğrulandı.
+`var(--text)` (`#222222`) ile ölçülen: beyaz **15.91:1**, `#f5f5f5` **14.59:1**, `#e8e8e8`
+başlık çubuğu **12.98:1**, `#00a9e8` panel **5.94:1**, `#8f8f8f` panel **4.92:1**, ve
+**uygulamadaki en kötü zemin** `#0092c8` (`.menu-blue:hover`) **4.50:1** — hepsi ≥ 3:1.
+
+**Bunu repoda hiçbir şey ölçmüyordu:** axe odak halkası için kontrast kuralı **koşmaz**;
+a11y/Lighthouse/görsel kapıların yeşil olması bu soru için **kanıt değildi**.
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+
+- `frontend/src/styles/global.css` `:focus-visible` — halkanın **TEK** tanımı. Yorumu artık
+  ölçülmüş oranları ve zemin kümesini taşıyor. Yeni bir odak stili yazma, buradan geçir.
+- `docs/audit/a11y_screen_reader_audit_results.md` §6 — **K-6 İKİYE ayrıldı**: `K-6b`
+  **KAPANDI** (ölçülü), `K-6a` (*"insan görebiliyor mu"*) **AÇIK** ve **yalnız A-08**
+  kapatabilir. Sayım tablosundaki satır da `K-6a` oldu.
+- `pages/RationaleFamilies.tsx:368` — inline `outline: 2px solid var(--accent)` **bilerek
+  bırakıldı**: o bir **seçim** göstergesi, odak halkası değil; ayrı ölçüt, ayrı karar.
+
+**Neden bu bir v18 sapması DEĞİL:** v18 mockup'ı **hiçbir odak durumu tarif etmiyor**
+(`:focus` / `:focus-visible` / halka görseli yok) — tarif edilmeyen bir şeyden sapılamaz.
+`--accent` token'ı, dolgu, kenarlık ve link paleti **hiç dokunulmadı**; onları değiştirmek
+sapma **olurdu**. **Bu D-10 de DEĞİL:** D-10 **1.4.3** (metin) eksenidir, bu **1.4.11**
+(metin-dışı) — ayrı ölçüt, ayrı eşik; metin sapmasına verilmiş imza buraya genişletilemez.
+
+**Test sayıları:** `npm run lint` exit 0 · `npm run typecheck` exit 0 ·
+`npm test -- --no-file-parallelism` → **721 passed / 70 dosya** (ADIM 25 tabanıyla
+**birebir aynı**; hiçbir test yeniden hizalanmadı).
+
+**Dürüst sınırlar:** **blocker sayısı DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+· **K-6a AÇIK** — bu slice onu kapatmadı, kapattığını da iddia etmiyor.
+· **`npm run visual` ve `npm run a11y` YERELDE KOŞMADI** — docker daemon başlatıldı ama
+ortamın ağ politikası `production.cloudfront.docker.com`'a CONNECT'i **403** reddediyor,
+`registry-1.docker.io` **429** veriyor; imaj çekilemedi (üç deneme). **Otorite CI'dır**
+(`e2e.yml::e2e` görsel kapı + `e2e.yml::a11y` axe ratchet, ikisi de bloklayıcı). Yerelde
+**statik** olarak kanıtlandı ki taban ekran görüntüleri odaklanmış öğe **yokken** alınır
+(`specs/11-visual-regression.spec.ts` içinde `focus`/`blur`/`activeElement` **geçmiyor**;
+tek `autoFocus` `Login.tsx:157` ve o **23 rotanın hiçbirinde değil**) → beklenen **0 diff**.
+**Diff çıkarsa tabanı GÜNCELLEME** — kural odak dışına sızmış demektir, selector'ı daralt.
+· **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` bu oturumda da bağlı değil
+(ritüel md. 4 **eksik**); **ADIM 47 ile üst üste ikinci oturum**, borç birikti.
+
+Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
+
+---
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 

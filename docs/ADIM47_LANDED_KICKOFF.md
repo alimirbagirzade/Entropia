@@ -1,14 +1,11 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — ADIM 48, sonra ADIM 49 (2026-08-12).** Bu belgeden sonra İKİ slice
-> landed: **ADIM 48** (`docs/ADIM48_LANDED_KICKOFF.md`, kabul borcu sınıf B / #686) ve
-> **ADIM 49** (`docs/ADIM49_KICKOFF.md`, RC §6.5 / K-2 + K-4). **Canlı kickoff ADIM 49'dur.**
-> Aşağısı ADIM 47 kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri
-> bayat olabilir. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
-> **SUPERSEDED — ADIM 48 (2026-08-12).** Canlı kickoff artık
-> `docs/ADIM48_LANDED_KICKOFF.md`. Aşağısı ADIM 47 kapanışındaki durumu kaydeder;
-> sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Memory checkpoint borcu ADIM 48'e
-> DEVREDİLDİ ve büyüdü** — ADIM 47 + ADIM 48 ikisi birden yazılmayı bekliyor.
-> sayıları ve "sıradaki iş" maddeleri bayat olabilir.
+> **SUPERSEDED — sonrasında ÜÇ slice landed (2026-08-12):** **ADIM 48** (kabul borcu
+> sınıf B, #686 · `docs/ADIM48_LANDED_KICKOFF.md`), **ADIM 49** (RC §6.5 / K-2 + K-4,
+> #685 · `docs/ADIM49_KICKOFF.md`) ve **ADIM 50** (K-6b odak halkası, #688 ·
+> `docs/ADIM50_LANDED_KICKOFF.md`). **Canlı kickoff ADIM 50'dir.** Aşağısı ADIM 47
+> kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri bayat olabilir.
+> **Memory checkpoint borcu ADIM 47'den DEVREDİYOR ve büyüdü** — 47 + 49 + 50 üçü birden
+> yazılmayı bekliyor. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
 
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 

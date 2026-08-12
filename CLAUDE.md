@@ -189,30 +189,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `6482cde`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `1b1c8bb`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 49 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
-> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Skip link (`Layout.tsx`
-> `.skip-link` + `<main id="main-content" tabIndex={-1}>`) ve `/user-manual` `<h1>`.
-> **K-2 bir UYGUNLUK düzeltmesi DEĞİLDİ** — 2.4.1 landmark'larla (ARIA11) zaten
-> karşılanıyordu, axe `bypass` hep yeşildi; ergonomiydi. **K-4'ün bedeli ÖLÇÜLDÜ:**
-> `/user-manual` K-5'in kümesine girdi → **K-5 21 → 22**, advisory toplamı **90 → 67**
-> (CI job `94221023796`; tek+soğuk koşu → 22 bir **taban**). **Eksik `<h1>`'i precheck'te
-> BLOCKING YAPMA** — sonda ilk DOM'u okur, veri render'ıyla yarışır; pin
-> `17-page-coverage.spec.ts` `level: 1`. **K-6 İKİYE ayrıldı:** K-6a (halka görünüyor mu)
-> A-08 bekler ve **mevcut sonda ona kanıt üretmez** (programatik `el.focus()`
-> `:focus-visible`'ı eşleştirmez); **K-6b ölçüldü ve DÜŞÜYOR** — `#00a9e8` ↔ beyaz
-> **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **PO kararı bekliyor**.
-> **K-3 de PO'da.** Promptlar: `docs/ADIM49_KICKOFF.md` §P-2 / §P-3. Frontend **722 passed /
-> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 49 · RC §6.5.
-> **NUMARA ÇAKIŞMASI (üçüncü kez):** bu slice ADIM 48 olarak yazıldı, `#686` main'e
-> **ADIM 48 adıyla** merge edilince **ADIM 49'a taşındı** — merge edilmiş ad kazanır.
-> Branch commit mesajları `adim-48` yazmaya devam eder. Çakışmayı gözle değil,
-> **`doc-status` kapısı** yakaladı (iki belge birden `current` iddia etti).
->
-> Öncesinde ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi, #686):
-> **8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
-> **Son dalga — ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
+> **Son dalga — ADIM 50 (K-6b: odak halkası kontrastı, WCAG 1.4.11, #688): TEK CSS deklarasyonu.**
 > `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli
 > **hiçbir** zeminde 3:1'i geçmiyordu (beyaz 2.68:1, `#f5f5f5` 2.46:1, `.dropdown-blue`
 > **1.00:1**), yenisi **her** zeminde geçiyor (beyaz 15.91:1; en kötü zemin `#0092c8`
@@ -224,10 +203,29 @@ Before stopping a working session, produce **ALL** of the following:
 > **`npm run visual` / `npm run a11y` YERELDE KOŞMADI** (ortam Docker Hub blob CDN'ine
 > **403**) → **otorite CI**; görsel diff çıkarsa **tabanı güncelleme**, selector'ı daralt.
 > **Memory checkpoint yine YAZILAMADI** (ecc/claude-mem bağlı değil) — borç artık **ADIM 47 +
-> ADIM 48**, üst üste iki oturum. `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
-> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
-> **Son dalga — ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
-> 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
+> ADIM 49 + ADIM 50**, üst üste ÜÇ oturum. `PROJECT_HISTORY.md` §ADIM 50 · `docs/ADIM50_LANDED_KICKOFF.md`.
+>
+> **Öncesinde ADIM 49 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
+> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Skip link (`Layout.tsx`
+> `.skip-link` + `<main id="main-content" tabIndex={-1}>`) ve `/user-manual` `<h1>`.
+> **K-2 bir UYGUNLUK düzeltmesi DEĞİLDİ** — 2.4.1 landmark'larla (ARIA11) zaten
+> karşılanıyordu, axe `bypass` hep yeşildi; ergonomiydi. **K-4'ün bedeli ÖLÇÜLDÜ:**
+> `/user-manual` K-5'in kümesine girdi → **K-5 21 → 22**, advisory toplamı **90 → 67**
+> (CI job `94221023796`; tek+soğuk koşu → 22 bir **taban**). **Eksik `<h1>`'i precheck'te
+> BLOCKING YAPMA** — sonda ilk DOM'u okur, veri render'ıyla yarışır; pin
+> `17-page-coverage.spec.ts` `level: 1`. **K-6 İKİYE ayrıldı:** K-6a (halka görünüyor mu)
+> A-08 bekler ve **mevcut sonda ona kanıt üretmez** (programatik `el.focus()`
+> `:focus-visible`'ı eşleştirmez); **K-6b ölçüldü ve DÜŞÜYOR** — `#00a9e8` ↔ beyaz
+> **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **ADIM 50'de KAPANDI**
+> (halka `var(--text)`). **K-3 hâlâ PO'da** — prompt `docs/ADIM49_KICKOFF.md` §P-2. Frontend **722 passed /
+> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 49 · RC §6.5.
+> **NUMARA ÇAKIŞMASI (üçüncü kez):** bu slice ADIM 48 olarak yazıldı, `#686` main'e
+> **ADIM 48 adıyla** merge edilince **ADIM 49'a taşındı** — merge edilmiş ad kazanır.
+> Branch commit mesajları `adim-48` yazmaya devam eder. Çakışmayı gözle değil,
+> **`doc-status` kapısı** yakaladı (iki belge birden `current` iddia etti).
+>
+> Öncesinde ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi, #686):
+> **8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
 > DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kapananlar: `TL-03` `TL-06` `TL-07`
 > `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. **Ürün kodu DEĞİŞMEDİ** (tek satır bile).
 > **RATCHET YALNIZ AŞAĞI İNER** — `uncovered`/A/C/**D** tavanları el değmedi,
@@ -362,8 +360,9 @@ Before stopping a working session, produce **ALL** of the following:
 > izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
-> **K-2 ve K-4 KAPANDI (ADIM 48)**; **K-3 ve K-6b PO kararı bekliyor** (ikisi de A-08'e
-> bağımlı DEĞİL), **K-5 + K-6a A-08 bekliyor**, K-7 ölçüldü ama düzeltilmedi. K-5/K-7'nin
+> **K-2 + K-4 KAPANDI (ADIM 49)**, **K-6b KAPANDI (ADIM 50)**; **yalnız K-3 PO kararı
+> bekliyor** (A-08'e bağımlı DEĞİL), **K-5 + K-6a A-08 bekliyor**, K-7 ölçüldü ama
+> düzeltilmedi. K-5/K-7'nin
 > sayısı **koşudan koşuya oynuyor** (ilk koşu soğuk, eksik raporlar) ·
 > **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
 > serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·

@@ -599,7 +599,7 @@ kırar).
 | D-10 neyi kapsar | D-10 neyi KAPSAMAZ |
 |---|---|
 | WCAG 2.2 AA **1.4.3 (Contrast — Minimum)**, düşük-görüş ekseni | **A-08** (ekran okuyucu ekseni) — defter §329: *"It is a low-vision axis, not a screen-reader one."* |
-| 45 düğümlük donmuş küme, iki renk çifti | K-2..K-6 (skip link, `contentinfo`, `<h1>`, başlık hiyerarşisi, odak göstergesi) — **özellikle K-6b**: odak halkasının kontrastı **1.4.11** ölçütüdür, D-10'un 1.4.3 imzası onu **kapsamaz** (ADIM 48'de ayrıca kapatıldı) |
+| 45 düğümlük donmuş küme, iki renk çifti | K-2..K-6 (skip link, `contentinfo`, `<h1>`, başlık hiyerarşisi, odak göstergesi) — **özellikle K-6b**: odak halkasının kontrastı **1.4.11** ölçütüdür, D-10'un 1.4.3 imzası onu **kapsamaz** (ADIM 50'de ayrıca kapatıldı) |
 | | Alertmanager boşluğu, P5/P6 kabul akışları, react-router advisory'si |
 
 **Ürün WCAG 2.2 AA 1.4.3 için UYUMLU DEĞİLDİR** ve hiçbir belge/pazarlama metni ürünü
@@ -1018,37 +1018,34 @@ downgrade yapılmadı.
 > bu repoda bir freeze'in en olası sonu, gerekçesinin bayatlamasıdır. `expires` alanı
 > tam olarak bunun için var.
 
-### 6.5 K-2..K-6 — ikisi KAPANDI (ADIM 48), üçü açık
+### 6.5 K-2..K-6 — ÜÇÜ KAPANDI (ADIM 49 + ADIM 50), üçü açık
 
 `docs/audit/a11y_screen_reader_audit_results.md` §6.
-**2026-08-12 güncellemesi (ADIM 48, PR #685):** PO K-2 ve K-4 için **FIX** kararı verdi;
-ikisi de sevk edildi. **Kalan üçün durumu tek tip DEĞİL, karışmasın:**
+**2026-08-12, iki slice:** **ADIM 49** (PR #685) PO'nun K-2 + K-4 kararını sevk etti;
+**ADIM 50** (#688) K-6b'yi kapattı. **Kalan üçün durumu tek tip DEĞİL, karışmasın:**
 **K-3** bir ürün/checklist kararı bekliyor (A-08'e bağımlı **değil**), **K-5 ve K-6a**
-A-08 denetimine **bağımlıdır**, **K-6b** ise ADIM 48'de ölçüldü ve **makine tarafından
-cevaplandı** (aşağıda) — o da A-08'i beklemez.
-**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Bu beş kalemin hiçbiri
+A-08 denetimine **bağımlıdır**.
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Bu kalemlerin hiçbiri
 blocker değildi; kapanmaları A-08'i ilerletmez.
-### 6.5 K-2..K-6 — ölçüldü, **K-6b hariç düzeltilmedi**, bilerek gate DIŞI
 
-`docs/audit/a11y_screen_reader_audit_results.md` §6. Dördü **"Open — reported, not
-gated"** statüsünde; hiçbiri CI'ı kırmaz, hiçbiri imzalı sapmaya bağlanmış değildir.
-**ADIM 48'de K-6 İKİYE ayrıldı** (aşağıdaki tabloda `K-6a` / `K-6b`): ölçülebilir kontrast
-yarısı **kapandı**, insan-gözü yarısı **açık kaldı**.
+**K-6 İKİYE ayrıldı** (`K-6a` / `K-6b`): ölçülebilir kontrast yarısı **kapandı**,
+insan-gözü yarısı **açık kaldı**.
 
 | # | Bulgu | Kapsam | WCAG | Statü |
 |---|---|---|---|---|
-| **K-2** | ~~**Skip link yok**~~ → **2026-08-12 (ADIM 48, PR #685) KAPANDI.** `Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş `Skip to main content` linki render ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. **Fixle birlikte kayda geçen düzeltme:** 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu** — axe `bypass` bu yüzden hep yeşildi — yani bu bir **uygunluk** değil **ergonomi** düzeltmesiydi; §6.5'in ilk yazımı bunu "WCAG 2.4.1" diye etiketleyerek olduğundan ağır göstermişti | was 23 / 23 | 2.4.1 | **FIXED** |
+| **K-2** | ~~**Skip link yok**~~ → **2026-08-12 (ADIM 49, PR #685) KAPANDI.** `Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş `Skip to main content` linki render ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. **Fixle birlikte kayda geçen düzeltme:** 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu** — axe `bypass` bu yüzden hep yeşildi — yani bu bir **uygunluk** değil **ergonomi** düzeltmesiydi; §6.5'in ilk yazımı bunu "WCAG 2.4.1" diye etiketleyerek olduğundan ağır göstermişti | was 23 / 23 | 2.4.1 | **FIXED** |
 | **K-3** | **`contentinfo` landmark yok** — shell hiç `<footer>` render etmiyor; checklist A-2 dört landmark bekliyor, üç var | **23 / 23 route** | 1.3.1 / 2.4.1 | Open — reported, not gated |
-| **K-4** | ~~**`/user-manual`'da `<h1>` yok**~~ → **2026-08-12 (ADIM 48, PR #685) KAPANDI.** Sayfa artık `<h1 class="page-title">` kullanıyor; `.page-title` sınıf tabanlı olduğu için değişiklik **yalnız semantik** — ve bu bir çıkarım değil **ölçüm**: görsel kapı (`@visual`, job `94223919309`) **23/23 passed**, tek bir baseline yeniden üretilmedi. Regresyon pini `specs/17-page-coverage.spec.ts` `level: 1` — eksik `<h1>`'i **BLOCKING** yapmak değerlendirildi ve **bilerek yapılmadı** (sonda ilk DOM'u okur, sayfaların veri render'ıyla yarışır; çırpınan kapı kapısızlıktan kötüdür). **YAN ETKİ:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu → **K-5'in kümesine girdi**, K-5 satırına bak | was 1 route | 1.3.1 / 2.4.6 | **FIXED** |
-| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); K-2 ve K-4 kapandıktan sonra setin **en yüksek erişimli** gözlemi. `/market-data` **iki seviye** atlıyor (`h1 → h4`) | **22 / 23 route** — ADIM 48'de yeniden ölçüldü (CI job `94221023796`); önceki `21 / 23`. **+1 = `/user-manual`**, K-4'ün fix'i onu bu kümeye **soktu** (bilinen ve kabul edilen bedel). Set dışında yalnız `/` kaldı | 1.3.1 (A-3) | Open — reported, not gated |
-| **K-6** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 / 1.4.11 | Open — **insan gözü gerekiyor** |
+| **K-4** | ~~**`/user-manual`'da `<h1>` yok**~~ → **2026-08-12 (ADIM 49, PR #685) KAPANDI.** Sayfa artık `<h1 class="page-title">` kullanıyor; `.page-title` sınıf tabanlı olduğu için değişiklik **yalnız semantik** — ve bu bir çıkarım değil **ölçüm**: görsel kapı (`@visual`, job `94223919309`) **23/23 passed**, tek bir baseline yeniden üretilmedi. Regresyon pini `specs/17-page-coverage.spec.ts` `level: 1` — eksik `<h1>`'i **BLOCKING** yapmak değerlendirildi ve **bilerek yapılmadı** (sonda ilk DOM'u okur, sayfaların veri render'ıyla yarışır; çırpınan kapı kapısızlıktan kötüdür). **YAN ETKİ:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu → **K-5'in kümesine girdi**, K-5 satırına bak | was 1 route | 1.3.1 / 2.4.6 | **FIXED** |
+| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); K-2 ve K-4 kapandıktan sonra setin **en yüksek erişimli** gözlemi. `/market-data` **iki seviye** atlıyor (`h1 → h4`) | **22 / 23 route** — ADIM 49'da yeniden ölçüldü (CI job `94221023796`); önceki `21 / 23`. **+1 = `/user-manual`**, K-4'ün fix'i onu bu kümeye **soktu** (bilinen ve kabul edilen bedel). Set dışında yalnız `/` kaldı | 1.3.1 (A-3) | Open — reported, not gated |
+| **K-6a** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 | Open — **insan gözü gerekiyor** |
+| **K-6b** | **Odak halkasının kontrastı 3:1'in altında** — `:focus-visible` halkası `var(--accent)` (`#00a9e8`) idi: beyazda **2.68:1**, `#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1**; uygulamadaki **15 zeminin hiçbirinde** eşiği geçmiyordu | her odaklanabilir düğüm, **23 / 23 route** | **1.4.11** | **KAPANDI (ADIM 50, 2026-08-12, #688)** — halka `var(--text)`; beyaz **15.91:1**, en kötü zemin `#0092c8` **4.50:1** |
 
 **K-5 ve K-6a doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
 yanıltıyor mu) **sayfaların outline'ını yeniden kesmeyi önermeden ÖNCE** verilmelidir;
 K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
 **cevapsızdır**.
 
-**ADIM 48'in K-5 hakkında ölçtüğü iki şey — ikisi de "düzelt" demiyor:**
+**ADIM 49'un K-5 hakkında ölçtüğü iki şey — ikisi de "düzelt" demiyor:**
 
 1. **Maliyet artık tahmin değil, sayı.** Merdiveni bir basamak kaydırmak
    (`h3→h2, h4→h3, …`) **204 başlık / ~40 dosya** demek (`<h3>` 98/36, `<h4>` 76/23,
@@ -1056,44 +1053,22 @@ K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulma
    selector**'larla yazılmış (`global.css` `.card h3`, `.card h4`, `.ready-report-card h3`,
    `.state h3`, `.manual-drawer-header h3`) → tag değişip selector unutulan her yerde
    başlık UA varsayılanına düşer ve v18 stili bozulur.
-2. **K-4'ün fix'i K-5'i BÜYÜTTÜ — ölçüldü, tahmin edilmedi.** `/user-manual` `h2 → h3`
-   iken atlama taşımıyordu; `h1 → h3` olunca taşıyor. CI job `94221023796` satırı
+2. **K-4'ün fix'i K-5'i BÜYÜTTÜ — ölçüldü, tahmin edilmedi.** CI job `94221023796` satırı
    birebir bastı: `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA
-   USER MANUAL"` → **K-5 21 → 22**. Bu **bilinen ve kabul edilen** bir bedeldi.
-   Toplam advisory **90 → 67** (−23 skip link, −1 `<h1>`, +1 heading); tam döküm
-   `docs/audit/a11y_screen_reader_audit_results.md` §6.
-   **Sınır:** tek **soğuk** koşu, ve soğuk koşu *eksik* raporlar → `22` bir **taban**,
-   yerleşmiş değer değil.
+   USER MANUAL"` → **K-5 21 → 22**. Bilinen ve kabul edilen bedel. Toplam advisory
+   **90 → 67** (−23 skip link, −1 `<h1>`, +1 heading); tam döküm audit §6.
+   **Sınır:** tek **soğuk** koşu → `22` bir **taban**, yerleşmiş değer değil.
 
-**K-6 İKİYE AYRILDI (ADIM 48 ölçümü) — birleşik kalem yanıltıcıydı:**
-
-- **K-6a — halka görünüyor mu (2.4.7):** **A-08 bekliyor.** Ek olarak, sondanın bugünkü
-  çıktısı bu soruya dair **kanıt taşımıyor**: `specs/20-a11y-prechecks.spec.ts` programatik
-  `el.focus()` kullanıyor, tarayıcılar `:focus-visible`'ı programatik odakta eşleştirmez →
-  `before === after` **beklenen bir ölçüm artefaktıdır**. Halka `global.css`'te
-  `:focus-visible { outline: 2px solid var(--accent) }` olarak **yazılıdır**; §6.5'in ilk
-  yazımındaki *"UA varsayılan halkası hâlâ boyanıyor olabilir"* tahmini gereksizdi — proje
-  kendi halkasını tanımlıyor.
-- **K-6b — halkanın kontrastı (1.4.11):** **A-08'i BEKLEMEZ, ölçüldü ve DÜŞÜYOR.**
-  `var(--accent)` = `#00a9e8`; beyaza karşı **2.68 : 1**, `#f5f5f5` üzerinde **2.46 : 1**;
-  WCAG 1.4.11 odak göstergesi için **3 : 1** ister. axe bu kuralı **koşmuyor**, repoda başka
-  hiçbir yerde ölçülü değil. D-10 (45 düğüm, 1.4.3) **ayrı ölçüttür ve bunu kapsamaz**.
-  → **PO kararı bekliyor:** halka rengi 3:1'i geçen bir değere çevrilsin, ya da D-10
-  biçiminde **imzalı** sapmaya bağlansın. Prompt: `docs/ADIM49_KICKOFF.md` §P-3.
-| **K-4** | **`/user-manual`'da `<h1>` yok** — kendini `<h2 class="page-title">` ile adlandırıyor (`UserManual.tsx:181`); diğer her route `<h1>` kullanıyor | 1 route | 1.3.1 / 2.4.6 | Open — reported, not gated |
-| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); setin **en yüksek erişimli** yapısal gözlemi | **21 / 23 route** | 1.3.1 (A-3) | Open — reported, not gated |
-| **K-6a** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 | Open — **insan gözü gerekiyor** |
-| **K-6b** | **Odak halkasının kontrastı 3:1'in altında** — `:focus-visible` halkası `var(--accent)` (`#00a9e8`) idi: beyazda **2.68:1**, `#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1**; uygulamadaki **15 zeminin hiçbirinde** eşiği geçmiyordu | her odaklanabilir düğüm, **23 / 23 route** | **1.4.11** | **KAPANDI (ADIM 48, 2026-08-12)** — halka `var(--text)`; beyaz **15.91:1**, en kötü zemin `#0092c8` **4.50:1** |
-
-**K-5 ve K-6a doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
-yanıltıyor mu) **21 sayfanın outline'ını yeniden kesmeyi önermeden ÖNCE** verilmelidir;
-K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
-**cevapsızdır**.
+**K-6a — halka görünüyor mu (2.4.7): A-08 bekliyor.** Sondanın çıktısı bu soruya dair
+**kanıt taşımıyor**: `specs/20-a11y-prechecks.spec.ts` programatik `el.focus()` kullanıyor,
+tarayıcılar `:focus-visible`'ı programatik odakta eşleştirmez → `before === after`
+**beklenen bir ölçüm artefaktıdır**. Halka `global.css`'te **yazılıdır**; §6.5'in ilk
+yazımındaki *"UA varsayılan halkası boyanıyor olabilir"* tahmini gereksizdi.
 
 **K-6b neden kapatılabildi, diğerleri neden hayır.** 3:1 **sayısal bir AA eşiğidir**, halka
 rengi v18 mockup'ında **hiç tarif edilmemiştir** (kanonda odak durumu yok → sapma değil), ve
 düzeltme hiçbir yerleşimi değiştirmeyen **tek bir deklarasyondur**. Diğerlerinin çaresi
-(footer eklemek, 21 sayfanın başlık ağacını yeniden kesmek) **ürün kararıdır**. **Bu kalem
+(footer eklemek, 22 sayfanın başlık ağacını yeniden kesmek) **ürün kararıdır**. **Bu kalem
 D-10 DEĞİLDİR:** D-10 **1.4.3** (metin) ekseninde imzalı kalıcı sapmadır; K-6b **1.4.11**
 (metin-dışı) ölçütüdür — ayrı ölçüt, ayrı eşik, ve `--accent` token'ına **dokunulmadı**.
 **axe bu kuralı koşmuyordu** — a11y ratchet'inin yeşil olması bu soru için kanıt değildi.

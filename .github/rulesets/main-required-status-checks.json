@@ -67,6 +67,10 @@
             "integration_id": 15368
           },
           {
+            "context": "Lighthouse — score ratchet vs. the seeded stack (RC P11-8)",
+            "integration_id": 15368
+          },
+          {
             "context": "Migration + provisioning acceptance",
             "integration_id": 15368
           },

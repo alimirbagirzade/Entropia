@@ -189,7 +189,7 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `04c6a9c`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `bad8d52`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 49 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
 > KOD DEĞİŞMEDİ.**
@@ -216,9 +216,13 @@ Before stopping a working session, produce **ALL** of the following:
 > yalnız A-08 kapatabilir.** Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED.
 > **`npm run visual` / `npm run a11y` YERELDE KOŞMADI** (ortam Docker Hub blob CDN'ine
 > **403**) → **otorite CI**; görsel diff çıkarsa **tabanı güncelleme**, selector'ı daralt.
-> **Memory checkpoint yine YAZILAMADI** (ecc/claude-mem bağlı değil) — borç artık **ADIM 47
-> + 48 (her iki slice) + 49**, üst üste dört oturum. `PROJECT_HISTORY.md` §ADIM 48 (K-6b) ·
-> `docs/ADIM48_LANDED_KICKOFF.md`.
+> **Memory checkpoint YAZILAMAZ, sebebi YAPISAL (ölçüldü 2026-08-12):** remote container'da
+> `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok) → borç bu ortamdan
+> kapatılamaz, **yerel** oturum ister. İçerik **hazır bırakıldı**:
+> **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil). **ADIM 49 da
+> aynı ortamda koştu ve aynı sebeple kaçırdı** → borç artık **üç** slice; o dosyaya ADIM 49
+> için de bir giriş gerekiyor. Sunucuları kaydetmek ya da remote'u md. 4'ten muaf tutmak
+> **insan kararıdır**. `PROJECT_HISTORY.md` §ADIM 48 (K-6b) · `docs/ADIM48_LANDED_KICKOFF.md`.
 >
 > **Öncesinde ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
 > 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI

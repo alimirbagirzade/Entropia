@@ -6,8 +6,8 @@
 > Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 49.
 
 > **NUMARA NOTU — bu slice ADIM 48 olarak yazıldı, ADIM 49'a taşındı.** İş sürerken
-> **main altımdan İKİ KEZ değişti**: #683 (P11-1 hazırlığı), #686 (kabul borcu sınıf B
-> parti 01) ve #688 (K-6b odak halkası) merge edildi. **#686 VE #688'in İKİSİ DE "ADIM 48"
+> **main altımdan ÜÇ KEZ değişti**: #683 (P11-1 hazırlığı), #686 (kabul borcu sınıf B
+> parti 01), #688 (K-6b odak halkası) ve #690 (memory checkpoint kaydı) merge edildi. **#686 VE #688'in İKİSİ DE "ADIM 48"
 > adını aldı** ve aynı `docs/ADIM48_LANDED_KICKOFF.md` yoluna yazdı. CLAUDE.md'nin *"yeniden numaralandırma YASAK"* kuralı **merged**
 > başlıklar içindir (değiştirilemezler); bu slice henüz merge edilmemişti, o yüzden
 > çakışma **ucuzken** önlendi. **Ders:** kapanış belgelerini yazmadan hemen önce
@@ -16,7 +16,7 @@
 
 ## Nerede duruyoruz
 
-**Base:** `origin/main` @ `04c6a9c` (#688, ADIM 48 — K-6b). **Kod değişmedi** — ADIM 49 yalnız
+**Base:** `origin/main` @ `bad8d52` (#690). **Kod değişmedi** — ADIM 49 yalnız
 belge uzlaştırmasıdır. Migration yok, `ENGINE_VERSION` değişmedi, alembic head
 `0043_i08_registry_strategy_fks`.
 
@@ -102,16 +102,19 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
 
 ## Açık borç (ADIM 49'un kapatmadığı)
 
-- **Memory checkpoint YAZILAMADI** — `ecc` ve `claude-mem` MCP sunucuları bu oturumda da
-  bağlı değildi (ADIM 47'de de öyleydi). Kapanış ritüelinin 4. maddesi **üst üste
-  eksiktir**; bağlı bir oturumda **ADIM 47, 48 (her iki #686/#688 slice'ı) ve 49** için
-  birden yazılmalı.
+- **Memory checkpoint YAZILAMADI — ve sebebi YAPISAL, #690'da ölçüldü.** Remote
+  container'da `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok),
+  yani borç **bu ortamdan kapatılamaz**; yerel bir oturum ister. #690 içeriği hazır
+  bıraktı → **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil).
+  **ADIM 49 aynı ortamda koştu ve aynı sebeple kaçırdı** → o dosyaya **ADIM 49 girişi de
+  gerekiyor**; borç artık üç slice. Sunucuları kaydetmek ya da remote oturumları
+  ritüelin 4. maddesinden muaf tutmak **insan kararıdır**.
 - **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde).
 - `/library/{id}/validation-runs` **201'de kaldı** (ADIM 47) — ayrışma açık, PO kararı ister.
 
 ### AÇIK KUSUR — main'de İKİ slice "ADIM 48" adını taşıyor (DÜZELTİLMEDİ, bilerek)
 
-`origin/main` @ `04c6a9c` şu anda **çakışmalı**:
+`origin/main` @ `bad8d52` şu anda **çakışmalı**:
 - `docs/PROJECT_HISTORY.md`'de **iki `## ADIM 48` bölümü** — `:7428` (#688, K-6b odak
   halkası) ve `:7547` (#686, kabul borcu B/01).
 - `docs/ADIM48_LANDED_KICKOFF.md`'de **iki `# ADIM 48 LANDED` başlığı** ard arda.

@@ -12,6 +12,7 @@ from typing import Any
 from entropia.domain.trade_log.compiler import (
     CODE_EVENT_MODEL_CONFLICT,
     CODE_PRICE_CONTEXT_CONFLICT,
+    CODE_STRUCTURAL,
     compute_config_hash,
     validate_trade_log_config,
 )
@@ -58,6 +59,17 @@ def test_blank_provider_is_a_structural_error() -> None:
     config, issues = validate_trade_log_config(payload)
     assert config is None
     assert any(str(i["field"]).startswith("source.provider_name") for i in issues)
+
+
+def test_blank_display_name_is_a_structural_error() -> None:
+    # TL-03 names "blank name OR provider"; only the provider half was asserted.
+    # Whitespace, not "" — an empty string is caught by a bare required-field check,
+    # while "   " is only rejected by the validator that strips before measuring.
+    payload = _valid_payload(identity={"display_name": "   "})
+    config, issues = validate_trade_log_config(payload)
+    assert config is None
+    assert any(str(i["field"]).startswith("identity.display_name") for i in issues)
+    assert {i["code"] for i in issues} == {CODE_STRUCTURAL}
 
 
 def test_ready_save_without_a_source_file_is_an_import_binding_issue() -> None:

@@ -77,6 +77,9 @@ pytestmark = pytest.mark.integration
 ADMIN = Actor(principal_id="user_admin", principal_type=PrincipalType.HUMAN, role=Role.ADMIN)
 USER = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
 AGENT = Actor(principal_id="agent_alpha", principal_type=PrincipalType.AGENT, role=None)
+SUPERVISOR = Actor(
+    principal_id="user_supervisor", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR
+)
 
 ADMIN_PASSWORD = "correct-horse-battery-admin"
 
@@ -181,7 +184,12 @@ async def test_repeat_soft_delete_is_idempotent_no_duplicate_entry(session) -> N
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("actor", [USER, AGENT], ids=["user", "agent"])
+# ADIM 48 / TL-21.c2 (= TS-19, AOS-19, PC-20): the SUPERVISOR row of this criterion
+# was argued from the role matrix and from the MANUAL page's restore surface, never
+# from the Trash surfaces themselves. Supervisor is the role most likely to be
+# widened by accident — it outranks USER everywhere else — so the denial it does NOT
+# get is worth one parameter here rather than an inference two documents away.
+@pytest.mark.parametrize("actor", [USER, SUPERVISOR, AGENT], ids=["user", "supervisor", "agent"])
 async def test_trash_surfaces_reject_non_admin(session, actor: Actor) -> None:
     entity_id = await _delete_one(session)
     entry = await _entry_for(session, entity_id)

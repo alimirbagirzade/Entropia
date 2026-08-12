@@ -83,17 +83,34 @@ screen readers, and a single-combination run cannot satisfy A-08.
 
 | Field | Value |
 |---|---|
-| Auditor (name / role) | — |
-| Screen-reader user? (regular user / certified auditor / neither) | — |
-| Date (ISO 8601) | — |
-| Operating system + version | — |
-| Screen reader + version | VoiceOver — version: — |
-| Browser + version | Safari — version: — |
-| Stack commit (`git rev-parse HEAD`) | — |
+| Auditor (name / role) | Ali Mirbagirzade (product owner) |
+| Screen-reader user? (regular user / certified auditor / neither) | **`neither`** — see the scope limit below |
+| Date (ISO 8601) | 2026-08-12 |
+| Operating system + version | macOS 15.3 |
+| Screen reader + version | VoiceOver (macOS 15.3) |
+| Browser + version | Safari 18.3 |
+| Stack commit (`git rev-parse HEAD`) | `7dd1dfe` |
 | Seed flags | `SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1` |
-| Stack URL | — |
-| Session recording / audio evidence path | — |
+| Stack URL | `http://127.0.0.1:18280` |
+| Session recording / audio evidence path | — (none captured) |
 | Elapsed time | — |
+
+> **Scope limit — the auditor is not a screen-reader user.** `neither` is the
+> honest answer to the third row and it is recorded rather than smoothed over.
+> It does **not** invalidate this session: what an auditor *hears* is the
+> evidence A-08 asks for, and a first-time VoiceOver user hears it as well as
+> anyone. What it does limit is the *negative* half — an experienced user knows
+> which announcements should have come and did not, and notices friction a
+> newcomer reads as normal. So a `PASS` in this session means "the expected
+> announcement was heard", not "an expert found nothing wrong", and the absence
+> of findings on a route is weaker evidence here than a finding is.
+>
+> **Provenance.** The stack was brought up on the auditor's own Mac, not in an
+> agent container: the container this session ran in cannot pull the stack's
+> base images (the environment's network policy answers `403` to
+> `production.cloudfront.docker.com:443`), so `scripts/a11y-audit-stack.sh up`
+> failed there three times and was run by the auditor instead. It reported
+> `0 failed`.
 
 ---
 

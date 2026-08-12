@@ -282,24 +282,52 @@ af_flow_c_esp_lifecycle_export() {
   local tokA="$AF_ADMIN_TOK"
   local key="af.probe.rc.v1"
   local sig='{"params":[{"name":"arg0","type":"series"}],"return":"series"}'
+  # WELL-FORMED, EXECUTABLE-SHAPED test vectors (ADIM 45). The first run of this
+  # flow sent `"test_vectors":"rc-harness"` — a STRING, which
+  # domain/esp/validation.py::_extract_vectors drops, so the run measured
+  # vectors_run=0 and the SKIP in [c5] could be misread as "the harness was too
+  # lazy to supply vectors". It now supplies real ones, in the exact shape
+  # ``_run_one_vector`` executes (length / close / expected, null = warm-up), so
+  # vectors_run is non-zero and the refusal in [c5] can only be about
+  # EXECUTABILITY of the key, never about absence of evidence.
+  # A CONSTANT close series is deliberate: every MA variant (sma/ema/rma/wma)
+  # returns the constant after its `length`-bar warm-up, so this expectation is
+  # implementation-independent and cannot silently encode one variant's math.
+  local vectors='[{"name":"constant-window-3","length":3,"close":[100,100,100,100,100],"expected":[null,null,100,100,100]},{"name":"constant-window-2","length":2,"close":[7,7,7],"expected":[null,7,7]}]'
 
   step "[c1] create an Embedded System Package (resolver contract)"
   req POST /embedded-system-packages -H "Authorization: Bearer $tokA" \
     -H 'Content-Type: application/json' -H "Idempotency-Key: $(af_key esp)" \
-    -d "{\"canonical_key\":\"$key\",\"runtime_adapter\":\"python\",\"signature\":$sig,\"input_contract\":{\"resolver_key\":\"$key\",\"signature\":$sig},\"output_contract\":{\"return\":\"series\"},\"timing_semantics\":\"closed_bar_only\",\"repaint\":false,\"evidence\":{\"test_vectors\":\"rc-harness\",\"review\":\"passed\"},\"change_note\":\"RC acceptance harness probe resolver.\"}"
+    -d "{\"canonical_key\":\"$key\",\"runtime_adapter\":\"python\",\"signature\":$sig,\"input_contract\":{\"resolver_key\":\"$key\",\"signature\":$sig},\"output_contract\":{\"return\":\"series\"},\"timing_semantics\":\"closed_bar_only\",\"repaint\":false,\"evidence\":{\"test_vectors\":$vectors,\"review\":\"passed\"},\"change_note\":\"RC acceptance harness probe resolver.\"}"
   local esp_id esp_rev
   esp_id="$(jfield "$LAST_BODY" entity_id)"; esp_rev="$(jfield "$LAST_BODY" revision_id)"
   { [ "$LAST_STATUS" = 201 ] && [ -n "$esp_id" ] && [ -n "$esp_rev" ]; } \
     && ok "[c1] POST /embedded-system-packages -> 201 ($esp_id / $esp_rev, trust=$(jfield "$LAST_BODY" trust_state))" \
     || { bad "[c1] ESP create -> $LAST_STATUS $(af_peek "$LAST_BODY")"; return; }
 
-  step "[c2] resolver validation runs the declared test vectors"
+  step "[c2] resolver validation runs the declared test vectors — and FAILS CLOSED on an unknown key"
   req POST "/embedded-system-packages/$esp_id/validate" -H "Authorization: Bearer $tokA" \
     -H 'Content-Type: application/json' -H "Idempotency-Key: $(af_key espval)" \
     -d "{\"revision_id\":\"$esp_rev\"}"
+  local vstate vran; vstate="$(jfield "$LAST_BODY" validation_state)"; vran="$(af_int "$LAST_BODY" vectors_run)"
   [ "$LAST_STATUS" = 200 ] \
-    && ok "[c2] validate -> 200 (state=$(jfield "$LAST_BODY" validation_state), vectors=$(af_int "$LAST_BODY" vectors_run))" \
+    && ok "[c2] validate -> 200 (state=$vstate, vectors_run=$vran)" \
     || bad "[c2] validate -> $LAST_STATUS $(af_peek "$LAST_BODY")"
+  # The vectors ARE present and well-formed now, so a zero here would mean the
+  # payload regressed back to the string form — not a product fact.
+  [ "${vran:-0}" -gt 0 ] \
+    && ok "[c2] the declared vectors were parsed as executable vectors (vectors_run=$vran, not the dropped-string 0)" \
+    || bad "[c2] vectors_run=$vran — the harness's own evidence payload is malformed, nothing about the product was measured"
+  # PINNED, and pinned deliberately (ADIM 45). `af.probe.rc.v1` is not in
+  # domain/backtest/indicators.py::VALIDATABLE_RESOLVER_KEYS, so doc 09 §7's
+  # fail-closed rule must refuse it EVEN THOUGH its evidence is now complete:
+  # "No executable compute for '<key>'". If this ever reads `passed`, an
+  # arbitrary caller-named key became certifiable — that is a product change
+  # that must go red here and force the [c5] adjudication to be reopened, not
+  # slide through as a quietly-improved harness.
+  [ "$vstate" = "failed" ] \
+    && ok "[c2] fail-closed holds: complete evidence + an unlisted canonical key -> validation_state=failed (doc 09 §7)" \
+    || bad "[c2] validation_state='$vstate' for an unlisted key (want 'failed') — the fail-closed rule moved; reopen the [c5] adjudication"
 
   step "[c3] NON-NEGOTIABLE 3 — activation is Admin-only ON THE SERVER"
   req POST "/embedded-system-packages/$esp_id/activate" -H "Authorization: Bearer $AF_USER_TOK" \
@@ -318,11 +346,11 @@ af_flow_c_esp_lifecycle_export() {
     || bad "[c4] a stale registry version ACTIVATED a resolver -> $LAST_STATUS"
 
   step "[c5] a resolver whose validation FAILED cannot be promoted to trusted-active"
-  # The probe resolver ships no runnable test vectors, so [c2] measured
-  # validation_state=failed / vectors_run=0. That is the interesting case: the
-  # registry gate must refuse it for a TRUST reason, not merely bounce it on the
-  # version token. So walk the token until the answer stops being a version
-  # conflict, and read what the server says at the CORRECT version.
+  # [c2] measured validation_state=failed with COMPLETE evidence (vectors_run>0).
+  # That is the interesting case: the registry gate must refuse it for a TRUST
+  # reason, not merely bounce it on the version token. So walk the token until the
+  # answer stops being a version conflict, and read what the server says at the
+  # CORRECT version.
   local v verdict="" vstatus="" vcode=""
   for v in 0 1 2 3; do
     req POST "/embedded-system-packages/$esp_id/activate" -H "Authorization: Bearer $tokA" \
@@ -343,7 +371,35 @@ af_flow_c_esp_lifecycle_export() {
       || bad "[c5] deprecate -> $LAST_STATUS $(af_peek "$LAST_BODY")"
   elif [ -n "$verdict" ]; then
     ok "[c5] at the current registry version the promotion is refused $vstatus $vcode — an UNVALIDATED resolver cannot become trusted-active"
-    af_skip "[c5] positive activate->deprecate not driven here: it needs a resolver with runnable test vectors, which this harness does not synthesise (in-process coverage: backend/tests/integration/test_esp_persistence.py)"
+    # PINNED: the refusal must be the VALIDATION gate, not the evidence-presence
+    # gate that runs before it (commands/esp.py::_ensure_validation_passed calls
+    # _ensure_activation_evidence FIRST). Before ADIM 45 the evidence payload was
+    # a string, so this could just as well have been RESOLVER_EVIDENCE_REQUIRED
+    # and nobody would have noticed the difference — asserting only "not 200"
+    # could not tell the two gates apart.
+    { [ "$vstatus" = 409 ] && [ "$vcode" = "RESOLVER_VALIDATION_REQUIRED" ]; } \
+      && ok "[c5] the refusal is the VALIDATION gate (409 RESOLVER_VALIDATION_REQUIRED), not the evidence-presence gate" \
+      || bad "[c5] refusal was $vstatus $vcode — want 409 RESOLVER_VALIDATION_REQUIRED (evidence is complete, so RESOLVER_EVIDENCE_REQUIRED here would mean the gate order changed)"
+    # ADJUDICATED (ADIM 45) — this SKIP is STRUCTURAL, not laziness. The recorded
+    # reason used to be "the harness does not synthesise test vectors"; that was
+    # only half true and is now fixed (vectors are supplied, [c2] proves they
+    # parse). The real reason the positive activate->deprecate leg cannot run in
+    # THIS stack is a three-way lock between shipped invariants:
+    #   1. validation can only PASS for the six canonical keys in
+    #      indicators.py::VALIDATABLE_RESOLVER_KEYS (ta.sma/ema/rma/wma/rsi/vwap)
+    #      — everything else fails closed by design (doc 09 §7);
+    #   2. apps/seed.py::_ESP_TA_RESOLVERS seeds ALL SIX as trusted_active,
+    #      because the browser layer's Pre-Check needs them resolvable;
+    #   3. esp/state_machine.py::_ALLOWED permits activation ONLY from
+    #      `candidate` (and `deprecated` is terminal apart from `unavailable`),
+    #      so a key that is already trusted_active can never be re-activated.
+    # So on a SEED_ESP_TA stack there is NO key that is both validatable and
+    # activatable, and no ordering of harness calls creates one. Closing it would
+    # need either a second Compose stack seeded without SEED_ESP_TA (a whole new
+    # 12-container CI job for one assertion) or a change to seed.py — product
+    # code, out of scope for a CI-wiring slice. The positive leg keeps its
+    # in-process coverage: backend/tests/integration/test_esp_persistence.py.
+    af_skip "[c5] positive activate->deprecate NOT driven here — structural: no canonical key is both validatable (VALIDATABLE_RESOLVER_KEYS) and activatable (seeded trusted_active + activation legal only from candidate). See the block above; in-process coverage: backend/tests/integration/test_esp_persistence.py"
   else
     bad "[c5] every registry version 0..3 answered RESOLVER_REGISTRY_CONFLICT -> $(af_peek "$LAST_BODY")"
   fi
@@ -416,20 +472,15 @@ af_flow_d_agent_signal_tools() {
     || bad "[d2] a blank filename was accepted -> $LAST_STATUS (gate is fail-OPEN)"
   rm -rf "$tmpd"
 
-  step "[d3] the Agent workspace and Tool Gateway read surfaces answer"
+  step "[d3] the Agent workspace read surfaces answer"
   req GET /agent-workspace/overview -H "Authorization: Bearer $tokA"
   [ "$LAST_STATUS" = 200 ] && ok "[d3] GET /agent-workspace/overview -> 200" || bad "[d3] overview -> $LAST_STATUS"
+  # A freshly migrated database HAS the singleton runtime row (alembic 0016
+  # bulk-inserts it ACTIVE) but NO tasks — so the queue is legitimately empty
+  # here. The Tool Gateway call log is exercised in [d5], against the task the
+  # Coordinator materialises from [d4]'s directive.
   req GET /agent-tasks -H "Authorization: Bearer $tokA"
-  local task_id; task_id="$(jfield "$LAST_BODY" task_id)"
-  [ "$LAST_STATUS" = 200 ] && ok "[d3] GET /agent-tasks -> 200" || bad "[d3] agent-tasks -> $LAST_STATUS"
-  if [ -n "$task_id" ]; then
-    req GET "/agent-tasks/$task_id/tool-calls" -H "Authorization: Bearer $tokA"
-    [ "$LAST_STATUS" = 200 ] \
-      && ok "[d3] Tool Gateway call log served for task $task_id (typed envelope)" \
-      || bad "[d3] tool-calls -> $LAST_STATUS"
-  else
-    af_skip "[d3] no agent task exists on a freshly seeded stack — tool-call log not exercised"
-  fi
+  [ "$LAST_STATUS" = 200 ] && ok "[d3] GET /agent-tasks -> 200 (queue empty on a fresh stack)" || bad "[d3] agent-tasks -> $LAST_STATUS"
 
   step "[d4] NON-NEGOTIABLE 4 — a directive is a DURABLE admission, not a synchronous call"
   req POST /agent-directives -H "Authorization: Bearer $tokA" \
@@ -439,11 +490,68 @@ af_flow_d_agent_signal_tools() {
     && ok "[d4] POST /agent-directives -> 202 (queued for the coordinator, not executed inline)" \
     || bad "[d4] directive -> $LAST_STATUS $(af_peek "$LAST_BODY")"
 
-  step "[d5] NON-NEGOTIABLE 3 — agent runtime controls are role-gated ON THE SERVER"
+  step "[d5] the Coordinator CONSUMES the directive and the Tool Gateway log is served for the task it spawns"
+  # ADIM 45 — this closes the second SKIP the RC report §6.2 recorded ("Tool
+  # Gateway call log not exercised — no agent task on a freshly seeded stack").
+  # The fix was not to seed a task: a seeded row would have proved only that the
+  # read endpoint can project a fixture. The task is now the REAL one
+  # commands/agent_loop.py::_spawn_followup_task materialises when the
+  # agent-coordinator plane consumes [d4]'s directive, so the same wait that
+  # earns the tool-call assertion also upgrades non-negotiable 4 from "the
+  # admission was ACCEPTED" to "the admission was CONSUMED by the durable
+  # plane". A 202 that nothing ever picks up is exactly the silent failure that
+  # rule exists to catch, and until now nothing here would have noticed it.
+  # Budget: apps/agent_coordinator/__main__.py::CYCLE_SLEEP_SECONDS is 10, so
+  # 90s is nine cycles — generous, and still bounded.
+  local task_id="" i
+  for i in $(seq 1 18); do
+    req GET /agent-tasks -H "Authorization: Bearer $tokA"
+    task_id="$(jfield "$LAST_BODY" task_id)"
+    [ -n "$task_id" ] && break
+    sleep 5
+  done
+  # NOT `bad ...; return` (the idiom used in [b1]/[e1]/[e3]): a stalled
+  # Coordinator says nothing about whether the runtime controls in [d6] are
+  # role-gated, and returning here would silently drop that assertion on the
+  # very run where the agent plane is already misbehaving. One failure, one
+  # FAIL line, and the rest of the flow still gets measured.
+  if [ -z "$task_id" ]; then
+    bad "[d5] no agent task appeared within 90s — the directive was accepted (202) but the Coordinator never consumed it (durable plane stalled)"
+  else
+    ok "[d5] the Coordinator materialised task $task_id from the directive — the 202 was consumed, not merely accepted"
+    has "$LAST_BODY" '"source":"directive"' \
+      && ok "[d5] the task's provenance is source=directive (queries/agent_workspace.py::_task_card)" \
+      || bad "[d5] task $task_id does not carry source=directive -> $(af_peek "$LAST_BODY")"
+    req GET "/agent-tasks/$task_id/tool-calls" -H "Authorization: Bearer $tokA"
+    # The envelope is `{"tool_calls": [...]}` with NO count field — schemas/
+    # agent_tool_gateway.py::AgentToolCallListResponse deliberately advertises no
+    # `meta`/cursor it never advances — so the log depth is counted the same way
+    # flow (a) counts results, off the card id.
+    local calls; calls="$(printf '%s' "$LAST_BODY" | grep -o '"tool_call_id"' | wc -l | tr -d '[:space:]')"
+    { [ "$LAST_STATUS" = 200 ] && has "$LAST_BODY" '"tool_calls"'; } \
+      && ok "[d5] Tool Gateway call log served for the REAL task $task_id (typed envelope, ${calls:-0} call(s) logged)" \
+      || bad "[d5] tool-calls -> $LAST_STATUS $(af_peek "$LAST_BODY")"
+    # The log is asserted as SERVED, not as non-empty: whether the executor has
+    # dispatched a governed tool call by this point is a timing fact about the
+    # executor plane, and claiming a count would make this assertion flaky rather
+    # than stronger. The count is printed above so a regression to zero is visible.
+    req GET "/agent-tasks/$task_id/tool-calls" -H "Authorization: Bearer $AF_USER_TOK"
+    { [ "$LAST_STATUS" = 403 ] || [ "$LAST_STATUS" = 404 ]; } \
+      && ok "[d5] NON-NEGOTIABLE 3 — USER -> GET the tool-call log = $LAST_STATUS" \
+      || bad "[d5] USER read the Tool Gateway call log -> $LAST_STATUS"
+  fi
+
+  step "[d6] NON-NEGOTIABLE 3 — agent runtime controls are role-gated ON THE SERVER"
+  # Renumbered from [d5] in ADIM 45 (the Coordinator/tool-call step took that
+  # slot). Deliberately LAST in this flow: a successful pause would stop the
+  # Coordinator, and [d5] above depends on it still cycling. The attempt is
+  # expected to be refused, but ordering the flow so that a REGRESSION here
+  # (a USER who really can pause) cannot also silently break [d5] keeps the two
+  # failures readable as two failures.
   req POST /agent-runtime/pause -H "Authorization: Bearer $AF_USER_TOK" -H 'If-Match: 0'
   { [ "$LAST_STATUS" = 403 ] || [ "$LAST_STATUS" = 404 ]; } \
-    && ok "[d5] USER -> POST /agent-runtime/pause = $LAST_STATUS" \
-    || bad "[d5] USER reached the agent runtime control -> $LAST_STATUS $(af_peek "$LAST_BODY")"
+    && ok "[d6] USER -> POST /agent-runtime/pause = $LAST_STATUS" \
+    || bad "[d6] USER reached the agent runtime control -> $LAST_STATUS $(af_peek "$LAST_BODY")"
 }
 
 # =============================================================================

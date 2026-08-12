@@ -36,7 +36,9 @@
 # CONTRACT those UI behaviors depend on is asserted here and cross-referenced.
 #
 # Exit code: 0 = every asserted step passed for every requested flow, 1 = a
-# step failed (details on the FAIL lines) or the stack never became healthy,
+# step failed (details on the FAIL lines), the stack never became healthy, or
+# more steps were SKIPPED than E2E_MAX_SKIPS allows (unset = no ceiling; CI
+# pins it — see the skip-ceiling block at the bottom of this file),
 # 2 = the harness could not run at all — Compose missing, the daemon
 # unreachable, or (ADIM 36) the daemon HUNG. Those states are distinct on
 # purpose: a hang is never reported as a step failure and never as a pass.
@@ -528,5 +530,26 @@ printf '  %s%d passed%s, %s%d failed%s, %s%d skipped%s\n' \
 # A SKIP is work that did not happen. It never counts as green, but it must not
 # be silently swallowed either — it is printed above and named on its own line.
 [ "${AF_SKIP_N:-0}" -gt 0 ] && echo "  (${AF_SKIP_N} step(s) SKIPPED — see the SKIP lines; they are NOT passes)"
+
+# ---- skip ceiling (ADIM 45) --------------------------------------------------
+# Wiring `flows` into CI created a hole this script did not have as a local
+# command: a SKIP does not fail the run, so a step that QUIETLY STOPS RUNNING —
+# a browser toolchain that vanished, a fixture that stopped being seeded, a new
+# `af_skip` added in passing — would keep the gate green while measuring less
+# than it did yesterday. That is the exact "a regression can come back silently"
+# failure this gate was wired to prevent, reintroduced one level up.
+#
+# So CI pins the number: E2E_MAX_SKIPS is the ADJUDICATED skip count, and one
+# more than that fails. It is NOT a way to bless skips — the ceiling only freezes
+# the ones already written down with a reason, and a new one must be argued for
+# in the same place the old ones were (RC readiness §6.2) before this number may
+# move. Unset = no ceiling, so a developer's local run is unchanged, and so is
+# .github/workflows/install-acceptance.yml, which runs `legacy` (zero skips).
+if [ -n "${E2E_MAX_SKIPS:-}" ] && [ "${AF_SKIP_N:-0}" -gt "$E2E_MAX_SKIPS" ]; then
+  echo "E2E ACCEPTANCE FAILED — ${AF_SKIP_N} step(s) skipped, ceiling is ${E2E_MAX_SKIPS}."
+  echo "  A NEW skip appeared. Either restore the step, or adjudicate it in"
+  echo "  docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md §6.2 and raise the ceiling THERE."
+  exit 1
+fi
 [ "$FAIL_N" -eq 0 ] && { echo "E2E ACCEPTANCE OK — every asserted step passed."; exit 0; }
 echo "E2E ACCEPTANCE FAILED — see the FAIL lines above."; exit 1

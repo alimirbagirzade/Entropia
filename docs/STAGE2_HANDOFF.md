@@ -5623,15 +5623,54 @@ Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
 
 ---
 
+## Stage — ADIM 48: kabul borcu sınıf B, parti 01 (doc 05 Trade Log backend yüzeyi)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bir blocker kalemi
+değil: ADIM 42'nin ürettiği borç defterini **işlemeye başlayan** ilk parti. **Ürün kodu
+DEĞİŞMEDİ** (tek satır bile) · migration yok · `ENGINE_VERSION` sabit · OpenAPI sabit ·
+OCC / Idempotency / route yolları / react-query key'leri sabit.
+
+**Kapanan sekiz sınıf-B kriteri** (hepsi doc 05 §16, hepsi backend server-truth):
+`TL-03` (boş `display_name` → 422 **ve** hiçbir revision/pin yazılmaz) · `TL-06`
+(tırnaklı alan içindeki ayraç) · `TL-07` (rapor **satır numarasını** adlandırır) ·
+`TL-08` (non-finite fiyat) · `TL-15` (Pin replay'i çift satır yazmaz) · `TL-17`
+(**Admin yabancı Trade Log'u değiştirebilir**; Supervisor **edemez**) · `TL-21`
+(Supervisor Trash yüzeylerinde reddedilir) · `TL-23` (Trade Log save/import/export
+hiçbir Result üretmez).
+
+**Ratchet — yalnız AŞAĞI:** `partial` **126 → 118**, `debt_class.B` **95 → 87**.
+`uncovered` (8) · A (1) · C (6) · **D (32)** tavanları **el değmeden** kaldı;
+`total_criteria` **383'te sabit** (taban). Defter `--write-ledger` ile yeniden üretildi.
+
+**"İşaretlemek ≠ kapsamak":** vakumda geçebilecek her assertion **negatif kontrolden**
+geçirildi — `TL-15`'te `Idempotency-Key` çıkarılınca çağrı `ROW_VERSION_CONFLICT` veriyor,
+`TL-17`'de `ADMIN` yerine akran `USER2` konulunca test `AccessDenied` ile düşüyor.
+Kanıt: `PROJECT_HISTORY.md` §ADIM 48.
+
+**İki BULGU açık bırakıldı (insan/PO kararı, agent kapatamaz):** `TL-16`'nın sınıfı
+**şüpheli** — `c4`'ün istediği "409 kanonik durum" alanı **yok**
+(`WorkObjectRevisionConflictError` `details` taşımıyor), yani B değil **D** görünüyor;
+yeniden sınıflandırılmadı çünkü **D tavanını yükseltirdi**. `TL-01.c4` bir **yol
+sapması**: kriter `GET /packages` diyor, sevk edilen katalog `GET /library`.
+
+**Sıradaki parti (gerekçesi kickoff'ta):** `TL-11.c3` + `TL-12.c3` + `TL-20.c3` —
+üçü de *Trade Log içeren kompozisyon üzerinde tamamlanmış Backtest Run* harness'ını
+ister; harness bir kez kurulunca üçü birden kapanır ve doc 04'ün `TS-11`/`TS-21`
+ikizlerini de açar.
+
+**P1-Gate3 KAPANMADI** — kalan borç A=1 · B=87 · C=6 · D=32 (açık toplam **126**).
+Tam kayıt: `PROJECT_HISTORY.md` §ADIM 48 · kickoff: `docs/ADIM48_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38, 39, 40, 41, 45, 46 ve 47 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
+> **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
 > slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
 > ayrışma **açık**. RC §6.7'de kalanlar: **P11-1** (branch protection — repo ayarı,
 > **insan kararı**, agent işi değil), **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**,
 > **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
-> Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
+> **P1-Gate3 ADIM 48'de İŞLENMEYE BAŞLANDI ama KAPANMADI** (8 kriter kapandı, 126 açık).
+> Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

@@ -165,3 +165,63 @@ def test_capitalized_headers_are_accepted() -> None:
     assert outcome.status == RecordBatchStatus.SUCCEEDED
     assert outcome.accepted_count == 1
     assert outcome.accepted[0].direction == "long"
+
+
+def test_quoted_field_may_contain_the_active_delimiter() -> None:
+    # TL-06: the parser is quoting-aware, so a comma living INSIDE a quoted field
+    # must not shift the columns to its right. A naive `line.split(",")` would read
+    # exit_price out of the note column and skip the row; asserting the accepted
+    # prices is what distinguishes the two implementations.
+    data = "\n".join(
+        [
+            "direction,entry_time,entry_price,exit_time,exit_price,note",
+            'Long,2024-01-01 10:00,100,2024-01-01 12:00,110,"scaled in, then out"',
+        ]
+    )
+    outcome = _run(data.encode())
+    assert outcome.status == RecordBatchStatus.SUCCEEDED
+    assert outcome.skipped_count == 0
+    assert outcome.accepted[0].entry_price == "100"
+    assert outcome.accepted[0].exit_price == "110"
+
+
+def test_skipped_row_names_its_source_row_number() -> None:
+    # TL-07: the import report must name WHICH row was rejected, not merely that a
+    # rejection happened. Two good rows precede the bad one so the index is
+    # discriminating — a hard-coded 0 would pass a single-row fixture.
+    data = "\n".join(
+        [
+            "direction,entry_time,entry_price,exit_time,exit_price",
+            "Long,2024-01-01 10:00,100,2024-01-01 12:00,110",
+            "Long,2024-01-02 10:00,100,2024-01-02 12:00,110",
+            "Short,2024-01-03 15:00,100,2024-01-03 10:00,110",
+        ]
+    )
+    outcome = _run(data.encode())
+    assert outcome.status == RecordBatchStatus.SUCCEEDED
+    assert outcome.accepted_count == 2
+    assert outcome.skipped_count == 1
+    skipped = outcome.skipped[0]
+    assert skipped.reason_code == REASON_EXIT_BEFORE_ENTRY
+    # zero-based index into the DATA rows (the header is not a row) -> the third one
+    assert skipped.row_index == 2
+
+
+def test_non_finite_prices_skip_rows() -> None:
+    # TL-08: `Decimal("NaN")` and `Decimal("inf")` PARSE — only the explicit
+    # is_finite() guard rejects them, so a fixture of 0/-5 alone cannot prove this.
+    for literal in ("NaN", "inf", "-inf", "Infinity"):
+        data = "\n".join(
+            [
+                "direction,entry_time,entry_price,exit_time,exit_price",
+                f"Long,2024-01-01 10:00,{literal},2024-01-01 12:00,110",
+                f"Short,2024-01-02 10:00,100,2024-01-02 12:00,{literal}",
+            ]
+        )
+        outcome = _run(data.encode())
+        assert outcome.status == RecordBatchStatus.FAILED, literal
+        assert outcome.blocker_code == BLOCKER_NO_ACCEPTED_TRADE_RECORDS, literal
+        assert [(r.row_index, r.reason_code) for r in outcome.skipped] == [
+            (0, REASON_ENTRY_PRICE_INVALID),
+            (1, REASON_EXIT_PRICE_INVALID),
+        ], literal

@@ -448,7 +448,11 @@ Before stopping a working session, produce **ALL** of the following:
 Bu repo **488 dosya / ~114k satır**. Kör grep + tam dosya okuma hem pahalı hem yavaş.
 **Önce graph'a sor, sonra dosya oku.**
 
-`codebase-memory-mcp` bu repoyu **indekslemiş durumda** (~13k node / ~59k edge).
+`codebase-memory-mcp` repo kökündeki **`.mcp.json`** ile kayıtlı
+(`npx -y codebase-memory-mcp@0.10.2`). **İNDEKS MAKİNEYE ÖZELDİR, REPOYLA GELMEZ:** yerelde
+bu repo indekslenmişti (~13k node / ~59k edge), ama taze bir remote container'da
+`list_projects` **boş** döner (2026-08-12'de ölçüldü) — orada graph araçlarını kullanmadan
+önce `index_repository` çağır, yoksa boş sonucu "sembol yok" sanırsın.
 ToolSearch ile yükle ve ilk başvuru noktası yap:
 
 | Araç | Ne için |

@@ -15,10 +15,20 @@
 #
 #   * nightly / manual -> `load-full`: the full matrix against the Docker Compose
 #     stack, writing the baseline JSON that docs/performance/ is calibrated from.
-#     Also gates on errors; the latency RATIO gate is implemented and unit-tested
-#     (`_ratio_gate` in scripts/loadgen.py) but is deliberately NOT wired in yet — see
-#     "Activating the ratio gate" in docs/performance/README.md. Turning it on
-#     needs a measured run-to-run spread from this job, not a guessed band.
+#     Gates on errors AND — since RC §6.7 / P10-7 — on the latency RATIO
+#     (`_ratio_gate` in scripts/loadgen.py) against the committed
+#     docs/performance/baseline_ci.json. The band was not guessable in advance,
+#     which is why this job shipped first and the gate second: it took six
+#     nightly artifacts (2026-08-07..08-12) to measure the run-to-run spread the
+#     band is derived from. See "Activating the ratio gate" in
+#     docs/performance/README.md for the numbers and for how to revisit them.
+#
+#     Note what makes the clock tick: each night's artifact only has to survive
+#     long enough to be READ, because the band, once measured, is committed to
+#     the repository. `loadgen-baseline` has 30-day retention and the baseline
+#     itself is a tracked file — so the gate does not depend on artifact
+#     retention at all, and a nightly that fails to produce one is announced by
+#     `nightly-failure-notice` below rather than quietly not counting.
 # =============================================================================
 name: Performance
 
@@ -229,6 +239,26 @@ jobs:
         env:
           LOADGEN_USERNAME: perf_admin
           LOADGEN_RUNNER_CLASS: github-ubuntu-latest
+        # RC §6.7 / P10-7 — the ratio gate is ARMED here, on the nightly only.
+        #
+        # The band is measured, not chosen. Six consecutive green nightlies
+        # (2026-08-07..08-12, all `github-ubuntu-latest`, all 16/40, zero errors)
+        # were replayed against the committed baseline — itself the median of
+        # those six — and the worst control-normalised p95 ratio any of them
+        # produced was 1.62x. docs/performance/README.md section 6 step 3 asks
+        # for roughly 1.5x the observed spread: 1.5 x 1.62 = 2.43 -> 2.5.
+        #
+        # That the band would have passed all six observed nights is the point,
+        # and it is deliberately NOT tightened to "just above" the worst one: six
+        # samples cannot bound a tail, and a gate that fails on the seventh
+        # ordinary night is the switched-off gate section 1 keeps warning about.
+        # What it does catch is application work growing 2.5x or more against a
+        # steady control — the class of regression nobody should land unnoticed.
+        # Tightening it is a later decision with more nights behind it, recorded
+        # in README section 6; never an edit made to silence a red nightly.
+        #
+        # --compare is on the NIGHTLY, never on `load-smoke`: a per-PR gate on
+        # milliseconds is exactly what section 1 refuses to build.
         run: |
           uv run python ../scripts/loadgen.py \
             --base-url http://localhost:8000 \
@@ -236,6 +266,8 @@ jobs:
             --concurrency "${{ inputs.concurrency || '16' }}" \
             --repeats "${{ inputs.repeats || '40' }}" \
             --sse-seconds 15 \
+            --compare ../docs/performance/baseline_ci.json \
+            --max-ratio 2.5 \
             --out "${RUNNER_TEMP}/loadgen-full.json"
 
       - name: Container resource snapshot (after)

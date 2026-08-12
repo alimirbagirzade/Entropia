@@ -19,7 +19,8 @@ blocks a merge, and — as loudly — what is **not** measured.
 | **Load-driver logic** | `backend/tests/unit/test_loadgen.py`, inside `ci.yml`'s pytest step | **yes** | the driver's own pass/fail decisions, plus that every scenario still exists in `docs/openapi.json` |
 | **Load smoke** | `performance.yml` -> `load-smoke` | **yes** | every scenario answers 2xx against a real API process under light concurrency |
 | **Load full** | `performance.yml` -> `load-full` (nightly 04:23 UTC + manual) | no (nightly) | latency percentiles, throughput, SSE, server gauges; writes the baseline artifact |
-| Latency ratio | `scripts/loadgen.py --compare` | **not wired yet** | see §6 |
+| **Latency ratio** | `performance.yml` -> `load-full`, `--compare docs/performance/baseline_ci.json --max-ratio 2.5` | no (nightly) | each scenario's p95 in units of the within-run control, against the frozen baseline. **Armed 2026-08-12** — see §6 |
+| Browser rendering | `e2e.yml` -> `lighthouse` | **yes** | Lighthouse category scores per route, ratcheted. Not this directory's subject — see §8 |
 
 The division is deliberate. **Round-trip counts are deterministic** — identical on a
 laptop and on a shared runner — so they can block a merge. **Milliseconds are not.** A
@@ -141,38 +142,79 @@ from measurements rather than from nothing.
 |---|---|---|
 | Errors in a load run | **0** | the only hard, non-noisy latency-adjacent gate; already enforced |
 | SSE reconnects in a 15 s window | 0 | a healthy stream survives its own window |
-| Interactive read p95, `github-ubuntu-latest` | to be filled from the first nightly artifacts | deliberately blank rather than guessed |
+| Interactive read p95, `github-ubuntu-latest` | **still unset — a product decision, not this directory's** | six nightlies now exist and the observed range is recorded below, but an *observation* is not a *target*. `backend/tests/contract/test_alert_rules_contract.py` holds the alerting side to the same line: no rule may invent an absolute latency bound |
 | Queue depth after a read-only run | 0 | read scenarios enqueue nothing; anything else means a leak |
 
-The p95 row is **empty on purpose**. Writing a number before the nightly job has ever run
-would be exactly the arbitrary target this slice was told not to invent.
+The p95 row is **still empty on purpose**, and the reason has changed — so it is restated
+rather than left to read as the old one. It was blank because nothing had been measured;
+that is no longer true. On the frozen baseline (`baseline_ci.json`, 2026-08-11, warm
+phase, 16 comparable read scenarios) the observed p95 runs **307.5 ms to 477.9 ms, median
+404.7 ms**, against a control of 193.5 ms. Those are **observations**, recorded here so a
+future SLO discussion starts from numbers. Promoting one of them to a target is a product
+decision nobody has taken, and taking it inside a CI slice would be inventing canon —
+`docs/spec/01..22` still set no latency target at all.
+
+What *is* now enforced from these runs is the **ratio** gate in §6, which needs no
+absolute target: it asks whether the application's own cost moved, not whether it is fast.
 
 ---
 
-## 6. Activating the ratio gate
+## 6. The ratio gate — ACTIVATED 2026-08-12 (RC §6.7 / P10-7)
 
 `scripts/loadgen.py --compare <baseline.json> --max-ratio <r>` is implemented and unit
 tested (`backend/tests/unit/test_loadgen.py`). It compares each scenario's p95 **in units
 of the within-run control** (`meta`: unauthenticated, no DB read), so a machine that got
 uniformly slower passes and application work that grew against a steady control fails.
 
-It is **not wired into CI yet**, and that is a measurement decision, not an oversight.
-Two back-to-back full runs against an unchanged stack on the development laptop moved the
-control by 4.4x and several scenarios by 3-5x even after normalization. Choosing a band
-from that would be picking a number out of the air.
+It shipped **unwired**, and that was a measurement decision, not an oversight: two
+back-to-back full runs against an unchanged stack on the development laptop moved the
+control by 4.4x and several scenarios by 3-5x even after normalization. A band chosen
+from that would have been a number out of the air. The five-step procedure below was
+written to replace the guess with data. All five steps have now been executed.
 
-Procedure to turn it on:
+### What the procedure asked for, and what it produced
 
-1. Let `load-full` run nightly and collect **at least five** `loadgen-baseline` artifacts
-   from the same runner class.
-2. For each scenario compute the control-normalized p95 across those runs and take the
-   observed max/min spread.
-3. Commit the median run as `docs/performance/baseline_ci.json` and set `--max-ratio` to
-   roughly **1.5x the observed spread** — derived from data, recorded here with the data.
-4. Add `--compare docs/performance/baseline_ci.json --max-ratio <r>` to the `load-full`
-   step. Keep it on the nightly job, not on PRs.
-5. If step 2 shows the spread is wide enough that no useful band exists, say so here and
-   leave the gate off. An honest "we cannot gate this on shared runners" is a result.
+| Step | Asked for | Result |
+|---|---|---|
+| 1 | at least five `loadgen-baseline` artifacts from one runner class | **six**, 2026-08-07..08-12, all `github-ubuntu-latest`, all 16/40, all zero errors |
+| 2 | control-normalized p95 spread across those runs | worst max/min spread **1.92x** (`hypotheses`); worst ratio against the frozen baseline **1.62x** (`admin_logs`) |
+| 3 | commit the median run, set `--max-ratio` to ~1.5x the spread | `baseline_ci.json` = run 31461912952 (2026-08-11, `4e9512d2`); `1.5 x 1.62 = 2.43` -> **`--max-ratio 2.5`** |
+| 4 | add `--compare` to `load-full`, nightly only | done — `performance.yml`, `load-full` -> "Full load run". `load-smoke` deliberately untouched |
+| 5 | if no useful band exists, say so and leave it off | **not taken.** The band clears every observed night with 1.54x headroom and still fails a 3.0x regression |
+
+Raw measurements and the full replay:
+`docs/releases/evidence/2026-08-12/p10_7_nightly_baselines.md`,
+`p10_7_control_normalised_spread.txt`, `p10_7_ratio_gate_replay.txt`.
+
+### Where the baseline lives (and why the clock cannot reset)
+
+Two lifetimes, and only one of them needs to be long:
+
+* the nightly **artifact** (`loadgen-baseline`, 30-day retention) is the *input* — it
+  only has to survive long enough to be read once;
+* the gate's **baseline is a tracked file** in this directory. Once committed, the gate
+  no longer depends on artifact retention at all.
+
+A nightly that produces no artifact is announced by `performance.yml`'s
+`nightly-failure-notice` rather than quietly not counting. And a scheduled run cannot be
+cancelled by the next one: `cancel-in-progress` is
+`${{ github.ref != 'refs/heads/main' }}`, and on a `schedule` event `github.ref` **is**
+`refs/heads/main`. That was checked against six consecutive run logs, not assumed.
+
+### What this gate does NOT catch (stated, not hidden)
+
+* **Anything under 2.5x.** A regression between the observed 1.62x weather and the 2.5x
+  band merges and stays. The band is wide because six samples cannot bound a tail;
+  narrowing it is a later decision with more nights behind it, made here with the new
+  numbers — never an edit made to silence a red nightly.
+* **Anything on a PR.** The gate is nightly. A latency regression merges green and is
+  caught the next morning. That is §1's trade, made deliberately.
+* **Any other runner class.** §2 already forbids the comparison.
+
+The band is pinned in three places that must agree — `performance.yml`'s `--max-ratio`,
+`_OBSERVED_WORST_RATIO`/`_BAND` in `backend/tests/unit/test_loadgen.py`, and this section.
+`test_the_nightly_actually_passes_the_band_this_file_pins` fails if they drift apart, so
+widening the band in the workflow alone is not possible.
 
 ---
 
@@ -209,7 +251,16 @@ coverage than the run had.
   run says nothing about them.
 * **Unified portfolio performance.** `SHARED_ALLOCATION_STATUS` is `future_dev` and
   containment is closed, so there is no production entry point to drive (GitHub #582).
-* **Frontend rendering.** Bundle size and interaction latency are the browser's story;
+* **Frontend rendering — still not measured HERE, but no longer unmeasured anywhere.**
+  Since RC §6.7 / P11-8 there is a Lighthouse ratchet (`e2e.yml` -> `lighthouse`,
+  `frontend/e2e/lighthouse-baseline.json`) scoring every audited route in a real
+  browser. **The two are not rivals and must never be cited for each other:** this
+  directory answers *"did the server's own work get more expensive?"* — per-endpoint HTTP
+  p95, control-normalised, nightly. Lighthouse answers *"did the page get slower to
+  paint and become interactive?"* — FCP/LCP/TBT/CLS rolled into a category score, per
+  route, per PR. A green nightly says nothing about a bundle regression, and a green
+  Lighthouse score says nothing about a query that doubled. The sentence below is the
+  original boundary and still holds for what this driver measures.
   this directory is the server's.
 
 ---
@@ -220,4 +271,4 @@ coverage than the run had.
 |---|---|
 | `query_budgets.json` | the ratchet the PR gate reads |
 | `baseline_local_2026-08-06.json` | a `full` run on the development laptop, base `02608a3`. Reference for shape, **not** a CI baseline |
-| `baseline_ci.json` | not present yet — produced per §6 |
+| `baseline_ci.json` | **the armed ratio gate's frozen baseline.** The median of six nightlies, run 31461912952 / 2026-08-11 / `4e9512d2`, `github-ubuntu-latest`, 16 in flight x 40 passes, zero errors. Replacing it re-bases every future comparison, so it is changed only with a new §6 measurement behind it |

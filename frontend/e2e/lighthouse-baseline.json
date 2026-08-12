@@ -1,0 +1,33 @@
+{
+  "_README": [
+    "FROZEN Lighthouse baseline — the score FLOOR enforced by",
+    "frontend/e2e/specs/21-lighthouse.spec.ts (npm run lighthouse, CI job 'Lighthouse').",
+    "",
+    "Semantics: floors.<slug>.<category> = the MINIMUM score (0-100) that route may",
+    "report for that category. The reported score is the MEDIAN of LH_REPEATS passes.",
+    "Measured < floor => CI FAILS. A route present in",
+    "screenshotMatrix.ts::TARGET_PAGES but absent from `floors` FAILS too — an",
+    "unbaselined route is a hole, not a pass.",
+    "",
+    "This is a RATCHET: the floor may only ever RISE. It is today's measured score",
+    "with no margin subtracted. Lowering a floor is a deliberate, written trade-off,",
+    "never a way to make CI green — the same rule as a11y-baseline.json.",
+    "",
+    "`accessibility` is NOT a category here and never will be. axe-core owns that",
+    "question (a11y-baseline.json, per-page per-rule node ceilings, adjudicated in",
+    "docs/implementation/a11y_ci_ratchet_and_adjudication.md). Nothing in this file",
+    "is evidence for the A-08 screen-reader audit."
+  ],
+  "armed": false,
+  "provenance": {
+    "measured_by": "not measured yet — bootstrap commit",
+    "note": "The gate ships UNARMED on purpose. A floor invented before the job has ever run would be the arbitrary threshold this slice was told not to invent, so the first CI run measures, uploads lighthouse-report/lighthouse-baseline.measured.json, and a follow-up commit freezes it with `armed: true`. Until then the job reports and gates nothing, and says so loudly in its own log."
+  },
+  "policy": {
+    "categories": "performance, best-practices, seo",
+    "accessibility": "NOT REQUESTED — axe-core is the shipped a11y authority (frontend/e2e/a11y-baseline.json). Two competing a11y numbers would be two authorities. No Lighthouse output is A-08 evidence.",
+    "performance_vs_loadgen": "Lighthouse measures the BROWSER (paint, interactivity, layout stability of a route). scripts/loadgen.py measures the SERVER (per-endpoint HTTP p95, control-normalised, nightly ratio gate). docs/performance/README.md section 8 names frontend rendering as out of the load driver's scope; this file covers exactly that declared gap. Neither number may be cited for the other's question.",
+    "margin": "none — the floor is the measured median, not the median minus a cushion. Noise is answered by repeats + median, never by widening the band."
+  },
+  "floors": {}
+}

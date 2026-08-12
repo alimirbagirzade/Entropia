@@ -1,0 +1,54 @@
+run           recorded_at            sha       runner_class            conc/rep  err
+31152127539  2026-08-07T05:56:11Z  610ed200  github-ubuntu-latest    16/40   0
+31241156717  2026-08-08T05:13:56Z  2cf7283d  github-ubuntu-latest    16/40   0
+31296683657  2026-08-09T05:28:43Z  2cf7283d  github-ubuntu-latest    16/40   0
+31359834251  2026-08-10T05:51:43Z  e35cf61f  github-ubuntu-latest    16/40   0
+31461912952  2026-08-11T05:33:04Z  4e9512d2  github-ubuntu-latest    16/40   0
+31567849357  2026-08-12T05:51:44Z  c697fad9  github-ubuntu-latest    16/40   0
+
+scenario                      27539    56717    83657    34251    12952    49357      min     max   spread
+admin_logs                    2.574    1.614    1.747    1.952    1.589    2.182    1.589   2.574     1.62x
+agent_overview                3.428    1.991    2.048    2.818    2.270    2.524    1.991   3.428     1.72x
+agent_tasks                   2.803    1.649    1.812    2.174    2.190    2.193    1.649   2.803     1.70x
+audit_events                  2.418    1.774    1.683    2.256    2.171    2.669    1.683   2.669     1.59x
+capabilities                  2.104    1.591    1.747    2.223    2.292    2.393    1.591   2.393     1.50x
+hypotheses                    2.972    1.550    1.704    2.283    1.994    2.261    1.550   2.972     1.92x
+instruments                   2.264    1.609    1.649    2.223    1.704    2.140    1.609   2.264     1.41x
+lab_messages                  2.739    1.557    1.853    2.127    2.469    2.244    1.557   2.739     1.76x
+library                       2.489    1.569    1.539    1.943    1.931    2.114    1.539   2.489     1.62x
+library_shared                1.894    1.482    1.355    1.687    1.991    1.861    1.355   1.991     1.47x
+mainboard                     2.377    1.755    1.866    2.197    2.440    3.143    1.755   3.143     1.79x
+market_datasets               2.496    1.636    1.688    2.157    2.030    2.315    1.636   2.496     1.53x
+research_datasets             2.196    1.503    1.540    1.871    2.108    2.321    1.503   2.321     1.54x
+results_history               2.431    1.510    1.800    2.241    2.394    2.469    1.510   2.469     1.64x
+strategy_drafts               2.368    1.502    1.465    2.160    2.042    1.761    1.465   2.368     1.62x
+trash_entries                 2.206    1.581    1.652    2.188    2.074    2.158    1.581   2.206     1.40x
+
+scenarios compared : 16
+observed max spread: 1.92x  (hypotheses)
+median spread      : 1.62x
+1.5x observed max  : 2.88x
+raw control p95    : [210.435, 268.782, 159.987, 157.335, 193.51, 199.486]  -> drift 1.71x
+
+=============== median-run selection ===============
+per-run median normalized p95 (control units):
+  31241156717  2026-08-08  1.586
+  31296683657  2026-08-09  1.696
+  31461912952  2026-08-11  2.091
+  31359834251  2026-08-10  2.181
+  31567849357  2026-08-12  2.252
+  31152127539  2026-08-07  2.424
+
+chosen median run (lower-middle of 6): 31461912952  2026-08-11T05:33:04Z  sha=4e9512d2
+
+realized ratio of every night AGAINST that baseline:
+  31241156717 2026-08-08  min 0.63x (lab_messages)   max 1.02x (admin_logs)
+  31296683657 2026-08-09  min 0.68x (library_shared)   max 1.10x (admin_logs)
+  31461912952 2026-08-11  min 1.00x (admin_logs)   max 1.00x (admin_logs)
+  31359834251 2026-08-10  min 0.85x (library_shared)   max 1.31x (instruments)
+  31567849357 2026-08-12  min 0.86x (strategy_drafts)   max 1.37x (admin_logs)
+  31152127539 2026-08-07  min 0.92x (capabilities)   max 1.62x (admin_logs)
+
+WORST realized ratio vs chosen baseline: 1.62x  (31152127539 / admin_logs)
+  band = 1.3 x worst = 2.11x
+  band = 1.5 x worst = 2.43x

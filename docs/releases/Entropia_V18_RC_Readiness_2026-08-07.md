@@ -599,7 +599,7 @@ kırar).
 | D-10 neyi kapsar | D-10 neyi KAPSAMAZ |
 |---|---|
 | WCAG 2.2 AA **1.4.3 (Contrast — Minimum)**, düşük-görüş ekseni | **A-08** (ekran okuyucu ekseni) — defter §329: *"It is a low-vision axis, not a screen-reader one."* |
-| 45 düğümlük donmuş küme, iki renk çifti | K-2..K-6 (skip link, `contentinfo`, `<h1>`, başlık hiyerarşisi, odak göstergesi) |
+| 45 düğümlük donmuş küme, iki renk çifti | K-2..K-6 (skip link, `contentinfo`, `<h1>`, başlık hiyerarşisi, odak göstergesi) — **özellikle K-6b**: odak halkasının kontrastı **1.4.11** ölçütüdür, D-10'un 1.4.3 imzası onu **kapsamaz** (ADIM 48'de ayrıca kapatıldı) |
 | | Alertmanager boşluğu, P5/P6 kabul akışları, react-router advisory'si |
 
 **Ürün WCAG 2.2 AA 1.4.3 için UYUMLU DEĞİLDİR** ve hiçbir belge/pazarlama metni ürünü
@@ -1018,10 +1018,12 @@ downgrade yapılmadı.
 > bu repoda bir freeze'in en olası sonu, gerekçesinin bayatlamasıdır. `expires` alanı
 > tam olarak bunun için var.
 
-### 6.5 K-2..K-6 — ölçüldü, **düzeltilmedi**, bilerek gate DIŞI
+### 6.5 K-2..K-6 — ölçüldü, **K-6b hariç düzeltilmedi**, bilerek gate DIŞI
 
-`docs/audit/a11y_screen_reader_audit_results.md:330-334`. Beşi de **"Open — reported, not
+`docs/audit/a11y_screen_reader_audit_results.md` §6. Dördü **"Open — reported, not
 gated"** statüsünde; hiçbiri CI'ı kırmaz, hiçbiri imzalı sapmaya bağlanmış değildir.
+**ADIM 48'de K-6 İKİYE ayrıldı** (aşağıdaki tabloda `K-6a` / `K-6b`): ölçülebilir kontrast
+yarısı **kapandı**, insan-gözü yarısı **açık kaldı**.
 
 | # | Bulgu | Kapsam | WCAG | Statü |
 |---|---|---|---|---|
@@ -1029,12 +1031,21 @@ gated"** statüsünde; hiçbiri CI'ı kırmaz, hiçbiri imzalı sapmaya bağlanm
 | **K-3** | **`contentinfo` landmark yok** — shell hiç `<footer>` render etmiyor; checklist A-2 dört landmark bekliyor, üç var | **23 / 23 route** | 1.3.1 / 2.4.1 | Open — reported, not gated |
 | **K-4** | **`/user-manual`'da `<h1>` yok** — kendini `<h2 class="page-title">` ile adlandırıyor (`UserManual.tsx:181`); diğer her route `<h1>` kullanıyor | 1 route | 1.3.1 / 2.4.6 | Open — reported, not gated |
 | **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); setin **en yüksek erişimli** yapısal gözlemi | **21 / 23 route** | 1.3.1 (A-3) | Open — reported, not gated |
-| **K-6** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 / 1.4.11 | Open — **insan gözü gerekiyor** |
+| **K-6a** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 | Open — **insan gözü gerekiyor** |
+| **K-6b** | **Odak halkasının kontrastı 3:1'in altında** — `:focus-visible` halkası `var(--accent)` (`#00a9e8`) idi: beyazda **2.68:1**, `#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1**; uygulamadaki **15 zeminin hiçbirinde** eşiği geçmiyordu | her odaklanabilir düğüm, **23 / 23 route** | **1.4.11** | **KAPANDI (ADIM 48, 2026-08-12)** — halka `var(--text)`; beyaz **15.91:1**, en kötü zemin `#0092c8` **4.50:1** |
 
-**K-5 ve K-6 doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
+**K-5 ve K-6a doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
 yanıltıyor mu) **21 sayfanın outline'ını yeniden kesmeyi önermeden ÖNCE** verilmelidir;
-K-6 tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
+K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
 **cevapsızdır**.
+
+**K-6b neden kapatılabildi, diğerleri neden hayır.** 3:1 **sayısal bir AA eşiğidir**, halka
+rengi v18 mockup'ında **hiç tarif edilmemiştir** (kanonda odak durumu yok → sapma değil), ve
+düzeltme hiçbir yerleşimi değiştirmeyen **tek bir deklarasyondur**. Diğerlerinin çaresi
+(footer eklemek, 21 sayfanın başlık ağacını yeniden kesmek) **ürün kararıdır**. **Bu kalem
+D-10 DEĞİLDİR:** D-10 **1.4.3** (metin) ekseninde imzalı kalıcı sapmadır; K-6b **1.4.11**
+(metin-dışı) ölçütüdür — ayrı ölçüt, ayrı eşik, ve `--accent` token'ına **dokunulmadı**.
+**axe bu kuralı koşmuyordu** — a11y ratchet'inin yeşil olması bu soru için kanıt değildi.
 
 ### 6.6 İzleme kaydı ↔ kod ayrışması — tekrarlayan desen (P8 §4.3, P10 §3.3)
 
@@ -1906,6 +1917,24 @@ tablosu hâlâ kapsam dışı.
 
 **P1-Gate3 KAPANMADI** — ele alınabilir hale geldi. **Blocker sayısı DEĞİŞMEDİ (üç).
 §8 verdict BLOCKED kalır.**
+
+**GÜNCELLEME — ADIM 48 (2026-08-12): defter işlenmeye BAŞLANDI, kalem hâlâ AÇIK.**
+Sınıf-B parti 01, doc 05 (Trade Log) **backend** yüzeyinden **sekiz** kriter kapattı:
+`TL-03` `TL-06` `TL-07` `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. Yeni ölçüm →
+**`partial` 126 → 118**, **`debt_class.B` 95 → 87**; `uncovered` (8), **A** (1),
+**C** (6) ve **D** (32) tavanları **el değmeden** kaldı ve `total_criteria` **383'te
+sabit** — bir sınıf-B slice'ı bunları hareket ettiremez. **Ürün kodu değişmedi.**
+Parti **tek belge + tek yüzey** ile sınırlı tutuldu; gerekçe
+`acceptance_coverage_baseline.json` §`adjudication.class_B_batches_are_deliberately_small`.
+Vakumda geçebilecek assertion'lar **negatif kontrolden** geçirildi (`PROJECT_HISTORY.md`
+§ADIM 48). **İki bulgu AÇIK bırakıldı, ikisi de insan/PO kararı:** (1) `TL-16`'nın sınıfı
+**şüpheli** — `c4`'ün istediği *"409 zarfı sunucunun kanonik durumunu taşır"* alanı
+üretimde **yok** (`WorkObjectRevisionConflictError` `details` taşımıyor, raise argümansız),
+yani **B değil D** görünüyor; yeniden sınıflandırma **yapılmadı** çünkü **D tavanını
+yükseltirdi** ve tavan yalnız aşağı iner. (2) `TL-01.c4` bir **yol sapması**: kriter
+`GET /packages` diyor, sevk edilen katalog `GET /library`. **P1-Gate3 KAPANMADI** —
+**126** kalem açık (A=1 · B=87 · C=6 · D=32), bu parti borcun **%6'sını** kapattı.
+**Blocker sayısı DEĞİŞMEDİ (bir — yalnız A-08). §8 verdict BLOCKED kalır.**
 
 ---
 

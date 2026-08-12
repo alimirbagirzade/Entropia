@@ -5570,15 +5570,109 @@ Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
 
 ---
 
+## Stage — ADIM 48: K-6b, odak halkasının kontrastı (WCAG 1.4.11) (PR pending)
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi. **OpenAPI:**
+değişmedi. **Ürün kodu değişikliği TEK deklarasyondur:**
+`frontend/src/styles/global.css` `:focus-visible` → `outline: 2px solid var(--text)`
+(eski: `var(--accent)`).
+
+**Neden.** `--accent` (`#00a9e8`) odak halkası olarak **hiçbir** uygulama zemininde WCAG
+**1.4.11 Non-text Contrast (AA)**'nın istediği **3:1**'i geçmiyordu: beyazda **2.68:1**,
+`#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1** (görünmez). Sayılar kabul
+edilmedi, sRGB relatif luminans formülüyle **sıfırdan yeniden hesaplandı** ve doğrulandı.
+`var(--text)` (`#222222`) ile ölçülen: beyaz **15.91:1**, `#f5f5f5` **14.59:1**, `#e8e8e8`
+başlık çubuğu **12.98:1**, `#00a9e8` panel **5.94:1**, `#8f8f8f` panel **4.92:1**, ve
+**uygulamadaki en kötü zemin** `#0092c8` (`.menu-blue:hover`) **4.50:1** — hepsi ≥ 3:1.
+
+**Bunu repoda hiçbir şey ölçmüyordu:** axe odak halkası için kontrast kuralı **koşmaz**;
+a11y/Lighthouse/görsel kapıların yeşil olması bu soru için **kanıt değildi**.
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+
+- `frontend/src/styles/global.css` `:focus-visible` — halkanın **TEK** tanımı. Yorumu artık
+  ölçülmüş oranları ve zemin kümesini taşıyor. Yeni bir odak stili yazma, buradan geçir.
+- `docs/audit/a11y_screen_reader_audit_results.md` §6 — **K-6 İKİYE ayrıldı**: `K-6b`
+  **KAPANDI** (ölçülü), `K-6a` (*"insan görebiliyor mu"*) **AÇIK** ve **yalnız A-08**
+  kapatabilir. Sayım tablosundaki satır da `K-6a` oldu.
+- `pages/RationaleFamilies.tsx:368` — inline `outline: 2px solid var(--accent)` **bilerek
+  bırakıldı**: o bir **seçim** göstergesi, odak halkası değil; ayrı ölçüt, ayrı karar.
+
+**Neden bu bir v18 sapması DEĞİL:** v18 mockup'ı **hiçbir odak durumu tarif etmiyor**
+(`:focus` / `:focus-visible` / halka görseli yok) — tarif edilmeyen bir şeyden sapılamaz.
+`--accent` token'ı, dolgu, kenarlık ve link paleti **hiç dokunulmadı**; onları değiştirmek
+sapma **olurdu**. **Bu D-10 de DEĞİL:** D-10 **1.4.3** (metin) eksenidir, bu **1.4.11**
+(metin-dışı) — ayrı ölçüt, ayrı eşik; metin sapmasına verilmiş imza buraya genişletilemez.
+
+**Test sayıları:** `npm run lint` exit 0 · `npm run typecheck` exit 0 ·
+`npm test -- --no-file-parallelism` → **721 passed / 70 dosya** (ADIM 25 tabanıyla
+**birebir aynı**; hiçbir test yeniden hizalanmadı).
+
+**Dürüst sınırlar:** **blocker sayısı DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+· **K-6a AÇIK** — bu slice onu kapatmadı, kapattığını da iddia etmiyor.
+· **`npm run visual` ve `npm run a11y` YERELDE KOŞMADI** — docker daemon başlatıldı ama
+ortamın ağ politikası `production.cloudfront.docker.com`'a CONNECT'i **403** reddediyor,
+`registry-1.docker.io` **429** veriyor; imaj çekilemedi (üç deneme). **Otorite CI'dır**
+(`e2e.yml::e2e` görsel kapı + `e2e.yml::a11y` axe ratchet, ikisi de bloklayıcı). Yerelde
+**statik** olarak kanıtlandı ki taban ekran görüntüleri odaklanmış öğe **yokken** alınır
+(`specs/11-visual-regression.spec.ts` içinde `focus`/`blur`/`activeElement` **geçmiyor**;
+tek `autoFocus` `Login.tsx:157` ve o **23 rotanın hiçbirinde değil**) → beklenen **0 diff**.
+**Diff çıkarsa tabanı GÜNCELLEME** — kural odak dışına sızmış demektir, selector'ı daralt.
+· **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` bu oturumda da bağlı değil
+(ritüel md. 4 **eksik**); **ADIM 47 ile üst üste ikinci oturum**, borç birikti.
+
+Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
+
+---
+## Stage — ADIM 48: kabul borcu sınıf B, parti 01 (doc 05 Trade Log backend yüzeyi)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bir blocker kalemi
+değil: ADIM 42'nin ürettiği borç defterini **işlemeye başlayan** ilk parti. **Ürün kodu
+DEĞİŞMEDİ** (tek satır bile) · migration yok · `ENGINE_VERSION` sabit · OpenAPI sabit ·
+OCC / Idempotency / route yolları / react-query key'leri sabit.
+
+**Kapanan sekiz sınıf-B kriteri** (hepsi doc 05 §16, hepsi backend server-truth):
+`TL-03` (boş `display_name` → 422 **ve** hiçbir revision/pin yazılmaz) · `TL-06`
+(tırnaklı alan içindeki ayraç) · `TL-07` (rapor **satır numarasını** adlandırır) ·
+`TL-08` (non-finite fiyat) · `TL-15` (Pin replay'i çift satır yazmaz) · `TL-17`
+(**Admin yabancı Trade Log'u değiştirebilir**; Supervisor **edemez**) · `TL-21`
+(Supervisor Trash yüzeylerinde reddedilir) · `TL-23` (Trade Log save/import/export
+hiçbir Result üretmez).
+
+**Ratchet — yalnız AŞAĞI:** `partial` **126 → 118**, `debt_class.B` **95 → 87**.
+`uncovered` (8) · A (1) · C (6) · **D (32)** tavanları **el değmeden** kaldı;
+`total_criteria` **383'te sabit** (taban). Defter `--write-ledger` ile yeniden üretildi.
+
+**"İşaretlemek ≠ kapsamak":** vakumda geçebilecek her assertion **negatif kontrolden**
+geçirildi — `TL-15`'te `Idempotency-Key` çıkarılınca çağrı `ROW_VERSION_CONFLICT` veriyor,
+`TL-17`'de `ADMIN` yerine akran `USER2` konulunca test `AccessDenied` ile düşüyor.
+Kanıt: `PROJECT_HISTORY.md` §ADIM 48.
+
+**İki BULGU açık bırakıldı (insan/PO kararı, agent kapatamaz):** `TL-16`'nın sınıfı
+**şüpheli** — `c4`'ün istediği "409 kanonik durum" alanı **yok**
+(`WorkObjectRevisionConflictError` `details` taşımıyor), yani B değil **D** görünüyor;
+yeniden sınıflandırılmadı çünkü **D tavanını yükseltirdi**. `TL-01.c4` bir **yol
+sapması**: kriter `GET /packages` diyor, sevk edilen katalog `GET /library`.
+
+**Sıradaki parti (gerekçesi kickoff'ta):** `TL-11.c3` + `TL-12.c3` + `TL-20.c3` —
+üçü de *Trade Log içeren kompozisyon üzerinde tamamlanmış Backtest Run* harness'ını
+ister; harness bir kez kurulunca üçü birden kapanır ve doc 04'ün `TS-11`/`TS-21`
+ikizlerini de açar.
+
+**P1-Gate3 KAPANMADI** — kalan borç A=1 · B=87 · C=6 · D=32 (açık toplam **126**).
+Tam kayıt: `PROJECT_HISTORY.md` §ADIM 48 · kickoff: `docs/ADIM48_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38, 39, 40, 41, 45, 46 ve 47 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
+> **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
+> ya da sunum slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
 > ayrışma **açık**. RC §6.7'de kalanlar: **P11-1** (branch protection — repo ayarı,
 > **insan kararı**, agent işi değil), **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**,
 > **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
-> Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
+> **P1-Gate3 ADIM 48'de İŞLENMEYE BAŞLANDI ama KAPANMADI** (8 kriter kapandı, 126 açık).
+> Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

@@ -54,7 +54,10 @@ from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.domain.trash.page import TrashEntryStatus
 from entropia.infrastructure.postgres.models import (
     AuditEvent,
+    BacktestResult,
+    BacktestRun,
     CanonicalTradeRecordBatch,
+    MainboardWorkingItem,
     OutboxEvent,
     Principal,
     TrashEntry,
@@ -65,6 +68,7 @@ from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
     AccessDeniedError,
     RequiredColumnMissingError,
+    TradeLogValidationFailedError,
     UnsupportedSourceFileTypeError,
     WorkObjectRevisionConflictError,
 )
@@ -73,6 +77,10 @@ pytestmark = pytest.mark.integration
 
 USER1 = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
 USER2 = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
+ADMIN = Actor(principal_id="user_admin", principal_type=PrincipalType.HUMAN, role=Role.ADMIN)
+SUPERVISOR = Actor(
+    principal_id="user_supervisor", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR
+)
 
 _HEADER = "direction,entry_time,entry_price,exit_time,exit_price,symbol"
 _GOOD_CSV = "\n".join(
@@ -104,7 +112,7 @@ def fake_object_store(monkeypatch) -> dict[str, bytes]:
 
 
 async def _seed_principals(session) -> None:
-    for pid in ("user_1", "user_2"):
+    for pid in ("user_1", "user_2", "user_admin", "user_supervisor"):
         if await session.get(Principal, pid) is None:
             session.add(Principal(principal_id=pid, principal_type=PrincipalType.HUMAN))
     await session.flush()
@@ -126,6 +134,22 @@ async def _run_import_pipeline(
     await session.commit()
     report = await tl_query.get_import_report(session, actor, job_id=requested["job_id"])
     return {"source_asset_id": upload["source_asset_id"], "report": report}
+
+
+async def _count_rows(session, model: Any) -> int:
+    return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
+
+
+async def _count_audits(session, event_kind: str) -> int:
+    return int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.event_kind == event_kind)
+            )
+        ).scalar_one()
+    )
 
 
 def _payload(
@@ -572,3 +596,188 @@ async def test_export_idempotent_replay(session, fake_object_store) -> None:
         )
     ).scalar_one()
     assert audit_count == 1
+
+
+# --------------------------------------------------------------------------- #
+# ADIM 48 — class-B acceptance debt (doc 05 §16)                               #
+# --------------------------------------------------------------------------- #
+
+
+async def test_blank_display_name_persists_no_revision_or_item(session, fake_object_store) -> None:
+    """TL-03.c3: the rejection is not merely typed — it writes nothing.
+
+    ``test_blank_display_name_rejected_before_db`` proves the 422 on the wire against a
+    dummy session; only a real database can prove the negative it implies. The import
+    runs first so the batch/source asset the payload binds genuinely exist: the reason
+    nothing is written must be the blank name, not an unresolvable binding.
+    """
+    await _seed_principals(session)
+    pipeline = await _run_import_pipeline(session, USER1, _GOOD_CSV)
+    payload = _payload(
+        pipeline["source_asset_id"],
+        pipeline["report"]["record_batch_revision_id"],
+        identity={"display_name": "   "},
+    )
+
+    revisions_before = await _count_rows(session, WorkObjectRevision)
+    items_before = await _count_rows(session, MainboardWorkingItem)
+
+    with pytest.raises(TradeLogValidationFailedError) as exc:
+        await tl_cmd.create_trade_log_and_attach(session, USER1, payload=payload)
+    await session.rollback()
+
+    assert any(
+        str(issue.get("field", "")).startswith("identity.display_name")
+        for issue in (exc.value.details or [])
+    )
+    assert await _count_rows(session, WorkObjectRevision) == revisions_before
+    assert await _count_rows(session, MainboardWorkingItem) == items_before
+
+
+async def test_admin_may_create_a_revision_on_a_foreign_trade_log(
+    session, fake_object_store
+) -> None:
+    """TL-17.c4: the affirmative half of the ownership row.
+
+    ``test_foreign_owner_cannot_create_revision`` proves a peer USER is refused; on its
+    own that is equally consistent with "nobody but the owner may write", which would
+    break the Admin override doc 05 §16 requires. The Supervisor case the row names
+    alongside it is asserted here too — a Supervisor is a peer, not an override.
+    """
+    await _seed_principals(session)
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+    owner_revision_id = saved["save"]["revision_id"]
+
+    other_csv = "\n".join(
+        [_HEADER, "Long,2024-03-01 10:00,50000,2024-03-01 12:00,51000,BTCUSDT"]
+    ).encode("utf-8")
+    pipeline2 = await _run_import_pipeline(session, ADMIN, other_csv)
+    payload2 = _payload(
+        pipeline2["source_asset_id"],
+        pipeline2["report"]["record_batch_revision_id"],
+        identity={"display_name": "admin correction"},
+    )
+
+    # A Supervisor is NOT an override — same denial as the peer USER.
+    with pytest.raises(AccessDeniedError):
+        await tl_cmd.create_trade_log_revision(
+            session, SUPERVISOR, root_id=root_id, payload=payload2
+        )
+    await session.rollback()
+
+    revision = await tl_cmd.create_trade_log_revision(
+        session, ADMIN, root_id=root_id, payload=payload2
+    )
+    await session.commit()
+
+    assert revision["revision_id"] != owner_revision_id
+    written = await session.get(WorkObjectRevision, revision["revision_id"])
+    assert written is not None
+    assert written.entity_id == root_id
+    # The override writes a revision on the OWNER's root; it does not fork a new one,
+    # and the Admin is recorded as its author rather than the owner.
+    assert written.created_by_principal_id == ADMIN.principal_id
+    assert written.payload["identity"]["display_name"] == "admin correction"
+    # An override still never auto-repins (TL-13): the owner's board pin is untouched.
+    projection = await mb_query.get_default_mainboard(session, USER1)
+    item = next(i for i in projection["items"] if i["work_object_root_id"] == root_id)
+    assert item["pinned_revision_id"] == owner_revision_id
+
+
+async def test_replayed_pin_creates_no_duplicate_item_or_pin_event(
+    session, fake_object_store
+) -> None:
+    """TL-15.c5: the fifth named operation of the idempotency row.
+
+    Upload / import / Save / Export are each proven by a row count; Pin was not. The
+    replay carries the ALREADY-CONSUMED ``expected_row_version`` on purpose: without
+    the Idempotency-Key envelope that second call is a stale token and would raise
+    ROW_VERSION_CONFLICT, so returning the original projection is the property.
+    """
+    await _seed_principals(session)
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+
+    other_csv = "\n".join(
+        [_HEADER, "Short,2024-04-01 10:00,50000,2024-04-01 12:00,49000,BTCUSDT"]
+    ).encode("utf-8")
+    pipeline2 = await _run_import_pipeline(session, USER1, other_csv)
+    rev2 = await tl_cmd.create_trade_log_revision(
+        session,
+        USER1,
+        root_id=root_id,
+        payload=_payload(
+            pipeline2["source_asset_id"],
+            pipeline2["report"]["record_batch_revision_id"],
+            identity={"display_name": "v2"},
+        ),
+    )
+    await session.commit()
+
+    projection = await mb_query.get_default_mainboard(session, USER1)
+    item = next(i for i in projection["items"] if i["work_object_root_id"] == root_id)
+    items_before = await _count_rows(session, MainboardWorkingItem)
+    # The attach at Save time already wrote one composition_changed row; the pin adds
+    # exactly one more, and the replay adds none.
+    pins_changed_before = await _count_audits(session, "mainboard.composition_changed")
+
+    pin_kwargs: dict[str, Any] = {
+        "item_id": item["item_id"],
+        "intent": "pin_revision",
+        "expected_row_version": item["row_version"],
+        "revision_id": rev2["revision_id"],
+        "idempotency_key": "tl-pin-key-1",
+    }
+    first = await mb_cmd.patch_mainboard_item(session, USER1, **pin_kwargs)
+    await session.commit()
+    replay = await mb_cmd.patch_mainboard_item(session, USER1, **pin_kwargs)
+    await session.commit()
+
+    assert replay["item_id"] == first["item_id"]
+    assert replay["pinned_revision_id"] == rev2["revision_id"]
+    assert replay["row_version"] == first["row_version"]
+    assert replay["composition_hash"] == first["composition_hash"]
+    assert await _count_rows(session, MainboardWorkingItem) == items_before
+    assert await _count_audits(session, "mainboard.item_revision_pinned") == 1
+    assert await _count_audits(session, "mainboard.composition_changed") == pins_changed_before + 1
+
+
+async def test_trade_log_pipeline_creates_no_backtest_result(session, fake_object_store) -> None:
+    """TL-23.c3: no Trade Log operation fabricates a Backtest Result.
+
+    The Run side of the boundary is proven from both directions in
+    test_backtest_persistence.py; this is the other side. Upload, import, Save & Add,
+    revision N+1 and Export all run here — a Result may only come from a SUCCEEDED
+    asynchronous Run, and none of these is one.
+    """
+    await _seed_principals(session)
+    assert await _count_rows(session, BacktestResult) == 0
+
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+    assert await _count_rows(session, BacktestResult) == 0
+
+    other_csv = "\n".join(
+        [_HEADER, "Long,2024-05-01 10:00,50000,2024-05-01 12:00,51000,BTCUSDT"]
+    ).encode("utf-8")
+    pipeline2 = await _run_import_pipeline(session, USER1, other_csv)
+    await tl_cmd.create_trade_log_revision(
+        session,
+        USER1,
+        root_id=root_id,
+        payload=_payload(
+            pipeline2["source_asset_id"],
+            pipeline2["report"]["record_batch_revision_id"],
+            identity={"display_name": "v2"},
+        ),
+    )
+    await session.commit()
+    assert await _count_rows(session, BacktestResult) == 0
+
+    await tl_cmd.export_trade_log(session, USER1, root_id=root_id)
+    await session.commit()
+    assert await _count_rows(session, BacktestResult) == 0
+    # The run table is empty too: nothing on this page even ADMITS a run, so the
+    # zero above cannot be read as "a run happened and wrote no Result".
+    assert await _count_rows(session, BacktestRun) == 0

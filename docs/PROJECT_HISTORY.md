@@ -7422,3 +7422,239 @@ Migration **yok**, `ENGINE_VERSION` **değişmedi**, OCC/Idempotency davranış�
 - **A-08 / #514'e DOKUNULMADI** — defter hâlâ boş (0/4), blocker sayısı **1**, izleme
   issue'su kapalı. Hiçbir belge A-08'i `Complete`/`PASS` göstermez.
 - **P10-B6, P11-1, P8-B3b, P4-3, P1-Gate3, P10-B3/B4/B5 açık** — bu slice'ın kapsamı dışı.
+
+---
+
+## ADIM 48 — K-6b: odak halkasının kontrastı (WCAG 1.4.11), tek CSS deklarasyonu
+
+**Dalganın tipi:** presentation-only erişilebilirlik düzeltmesi. **Tek ürün kodu değişikliği
+bir deklarasyondur** — `frontend/src/styles/global.css` `:focus-visible` kuralında
+`outline: 2px solid var(--accent)` → `var(--text)`. Migration yok, `ENGINE_VERSION`
+değişmedi, OpenAPI değişmedi. Route path, react-query key, OCC token, Idempotency-Key,
+hook, SSE taksonomisi, `lib/*.ts`, `app/nav.ts` **hiç dokunulmadı**. Base `7dd1dfe` (#682).
+
+### Neden — ve iddia sıfırdan yeniden ölçüldü
+
+Kickoff'un verdiği sayılar kabul edilmedi, WCAG 2.x relatif luminans formülüyle
+(`(L1+0.05)/(L2+0.05)`, sRGB linearizasyonu) **bağımsız olarak yeniden hesaplandı** ve
+**birebir doğrulandı**:
+
+| Halka | Zemin | Oran | 1.4.11 (3:1) |
+|---|---|---:|---|
+| `#00a9e8` (`--accent`) | `#ffffff` | **2.68 : 1** | **FAIL** |
+| `#00a9e8` | `#f5f5f5` | **2.46 : 1** | **FAIL** |
+
+Ölçüm zemin kümesine genişletildi ve **accent halkası uygulamadaki 15 zeminin HİÇBİRİNDE
+3:1'i geçmiyordu** — en iyi hâli beyaz üzerinde 2.68:1, en kötüsü kendi üzerinde 1.00:1
+(`.dropdown-blue .item`, `background: #00a9e8` — halka görünmez).
+
+**Bunu repoda hiçbir şey ölçmüyordu.** axe-core'un `color-contrast` kuralı **metin** içindir
+ve odak göstergesi için bir kontrast kuralı **koşmuyor**; a11y ratchet'i, Lighthouse ratchet'i
+ve görsel kapı yeşildi ve **yeşil olmaları kanıt değildi** — hiçbiri bu soruyu sormuyordu.
+
+### Neden bu D-10 DEĞİL — ve neden v18 sapması DEĞİL
+
+İki ayrı gerekçe, ikisi de kapatılmadan bu slice yazılamazdı:
+
+1. **Ölçüt farklı.** D-10 (2026-07-30 imzalı kalıcı sapma, 45 accent-blue düğüm) **1.4.3
+   Contrast (Minimum)** eksenidir — *metin* rengi. Bu kalem **1.4.11 Non-text Contrast**'tır
+   — bir UI bileşeninin görsel göstergesi. Ayrı başarı ölçütü, ayrı eşik (4.5:1 vs 3:1),
+   ayrı imza gerekirdi. D-10'un imzası bu ekseni **kapsamıyor**; bir metin sapmasına verilmiş
+   imzayı bir gösterge sapmasına genişletmek imzayı sahiplenmek olurdu.
+2. **Mockup bu durumu tarif etmiyor.** `docs/spec/index_guncellenmis_duzeltilmis_v18.html`
+   içinde **hiçbir odak durumu yok** — ne `:focus`, ne `:focus-visible`, ne bir odak halkası
+   görseli. Bir sapma ancak kanonun söylediği bir şeyden sapabilir. Halka rengi **v18
+   sapması değildir**; `--accent` token'ını, dolguları, kenarlıkları veya link paletini
+   değiştirmek **olurdu** — bu yüzden hiçbirine dokunulmadı.
+
+### Sevk edilen — ve neden `var(--text)`
+
+`--text` (`#222222`) seçildi çünkü palette **zaten var** (yeni token icat edilmedi) ve
+uygulamadaki **her** zeminde 3:1'i geniş bir payla geçiyor. Değişiklikten sonra ölçülen:
+
+| Zemin | Nerede | Oran |
+|---|---|---:|
+| `#ffffff` | gövde, kartlar | **15.91 : 1** |
+| `#f5f5f5` | | **14.59 : 1** |
+| `#e8e8e8` | başlık çubuğu | **12.98 : 1** |
+| `#00a9e8` | `.dropdown-blue` paneli | **5.94 : 1** |
+| `#8f8f8f` | `.dropdown` paneli | **4.92 : 1** |
+| `#8b8b8b` | `.run-button:disabled` | **4.67 : 1** |
+| `#0092c8` | `.menu-blue:hover` — **uygulamadaki EN KÖTÜ zemin** | **4.50 : 1** |
+
+En kötü hâli bile eşiğin **%50 üstünde**. `#b60000` / `#00a651` / `#d98c00` zeminleri
+(`.ready-status`) tabloda **yok** çünkü o şerit odaklanabilir değildir — `<div>`'dir ve içinde
+odak hedefi yoktur; `outline-offset: 2px` halkayı **ebeveynin** zeminine bastığı için ölçülmesi
+gereken yüzey ebeveynin yüzeyidir.
+
+**Kapsam dışı bırakılan bir benzer:** `pages/RationaleFamilies.tsx:368` inline
+`outline: "2px solid var(--accent)"` — bu bir **seçim** göstergesidir, odak halkası değil;
+ayrı bir ölçüt ve ayrı bir karar, bu slice'ın kapsamı dışı.
+
+### Doğrulama — ve neyin koşulamadığı
+
+Koştu: `npm run lint` **exit 0** · `npm run typecheck` **exit 0** ·
+`npm test -- --no-file-parallelism` → **721 passed / 70 dosya, exit 0** (taban ADIM 25 ile
+**birebir aynı**, hiçbir test yeniden hizalanmadı — kural görünür etiket veya kapsayıcı
+değiştirmiyor).
+
+**`npm run visual` ve `npm run a11y` bu ortamda KOŞTURULAMADI.** Docker daemon elle
+başlatıldı ve çalıştı, ama imaj çekilemedi: ortamın ağ politikası
+`production.cloudfront.docker.com`'a CONNECT'i **403 ile reddediyor** (agent proxy
+`recentRelayFailures` ile doğrulandı) ve `registry-1.docker.io` **429** veriyor. Üç deneme
+aynı biçimde düştü. **Otorite CI'dır** — `e2e.yml::e2e` (görsel kapı) ve `e2e.yml::a11y`
+(axe ratchet) ikisi de PR'da bloklayıcı koşar.
+
+Yerelde bunun yerine **statik olarak** kanıtlandı: görsel taban ekran görüntüleri odaklanmış
+öğe **yokken** alınır. `specs/11-visual-regression.spec.ts` yalnız `ensureAdmin` → `goto` →
+`settle` → `toHaveScreenshot` yapar; dosyada `focus`/`blur`/`activeElement` **geçmiyor**, ve
+`goto` her hâlükârda odağı belgeye sıfırlar. Uygulamadaki tek `autoFocus`
+(`pages/Login.tsx:157`) **çekilen 23 rotanın hiçbirinde değil**; diğer tüm `.focus()`
+çağrıları modal / drawer / dropdown içinde ve görsel spec bunların hiçbirini **açmıyor**.
+Dolayısıyla beklenen **0 diff**. **Beklenti kanıt değildir** — CI'ın söylediği geçerlidir; ve
+diff çıkarsa doğru tepki tabanı güncellemek değil, kuralın kapsamını daraltmaktır.
+
+### Defter
+
+`docs/audit/a11y_screen_reader_audit_results.md` §6'da **K-6 İKİYE ayrıldı**:
+
+- **K-6a** — *"odak göstergesi computed style ile saptanamıyor"* → **AÇIK**, insan gözü ister,
+  **A-08 dışında hiçbir şey kapatamaz**. Sayım tablosundaki satır da `K-6a` olarak yeniden
+  adlandırıldı (ölçen prob odur).
+- **K-6b** — *"odak halkasının kontrastı 1.4.11'in altında"* → **KAPANDI 2026-08-12**,
+  ölçülmüş oranlarla birlikte.
+
+*"K-2 … K-7 bilerek raporlanır, kapı değildir"* paragrafı da düzeltildi: K-6b **tek
+istisnadır** ve istisnanın nerede olduğunu tarif eder — 3:1 sayısal bir AA eşiğidir, halka
+rengi kanonda tarif edilmemiştir ve düzeltme hiçbir yerleşimi değiştirmez; diğerleri
+(footer eklemek, 21 sayfanın başlık ağacını yeniden kesmek, kalıcı status bölgesi mount
+etmek) **ürün kararıdır** ve bir hazırlık slice'ının onları verme yetkisi yoktur.
+
+### Dürüst sınırlar
+
+- **K-6a AÇIK.** Bu slice onu kapatmadı ve kapattığını iddia etmiyor. Bir halkanın
+  **ölçülebilir** kontrastı ile bir insanın onu **görebilmesi** aynı soru değildir.
+- **A-08 KAPANMADI.** Defter hâlâ **0/4**, dört çıkış kriteri de ☐, #514 kanıtsız kapalı.
+  Hiçbir belge A-08'i `Complete`/`PASS`/`Done` göstermez.
+- **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08). Verdict BLOCKED.**
+- **Görsel + axe kapıları yerelde koşmadı** (yukarıdaki ağ politikası). CI otoritedir.
+- **Backend'e dokunulmadı** → backend suite yeniden koşulmadı; gerek yoktu.
+- **Memory checkpoint YAZILAMADI** — `ecc` ve `claude-mem` MCP sunucuları bu oturumda da
+  **bağlı değil** (araç listesinde yoklar). Kapanış ritüelinin **4. maddesi EKSİKTİR**;
+  atlanmadı, yapılamadı. **ADIM 47 ile üst üste ikinci oturum** — biriken borç: ADIM 47 +
+  ADIM 48. Bir sonraki bağlı oturumda **ikisi birden** yazılmalı.
+- **Codemap tazelenmedi** çünkü gerekmedi: yeni endpoint / tablo / sayfa / job **yok**.
+## ADIM 48 — kabul kriteri borç defteri, sınıf B parti 01 (doc 05 Trade Log backend yüzeyi)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice bir blocker
+kalemi değildir; ADIM 42'nin (RC §6.7.10 / P1-Gate3) ürettiği borç defterini **işlemeye
+başlar**. Ürün kodu **DEĞİŞMEDİ** — tek satır bile. Migration yok, `ENGINE_VERSION`
+değişmedi, OCC/Idempotency/route yolları/react-query key'leri değişmedi.
+
+### Parti seçimi ve gerekçesi
+
+Defterdeki **95** açık sınıf-B kriterinin **18'i doc 05 (Trade Log)** altındaydı —
+tek belgedeki en büyük tutarlı küme. Parti bu kümeden **sekiz** kriter aldı; hepsi
+**backend server-truth** ekseninde ve hepsi aynı tanıma uyuyor: *davranış `backend/src`'te
+sevk edilmiş, hiçbir assertion onu adlandırmıyor.*
+
+| ID | Kapanan clause | Kapatan test |
+|---|---|---|
+| `TL-03` | c2 + c3 (boş `display_name` 422; hiçbir revision/pin yazılmaz) | `test_trade_log_config.py::test_blank_display_name_is_a_structural_error` · `test_trade_log_contract.py::test_blank_display_name_rejected_before_db` · `test_trade_log_persistence.py::test_blank_display_name_persists_no_revision_or_item` |
+| `TL-06` | c3 (tırnaklı alan içindeki ayraç) | `test_trade_log_records.py::test_quoted_field_may_contain_the_active_delimiter` |
+| `TL-07` | c4 (rapor SATIR NUMARASINI adlandırır) | `test_trade_log_records.py::test_skipped_row_names_its_source_row_number` |
+| `TL-08` | c3 (non-finite fiyat reddi) | `test_trade_log_records.py::test_non_finite_prices_skip_rows` |
+| `TL-15` | c5 (Pin replay'i çift satır yazmaz) | `test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event` |
+| `TL-17` | c4 (Admin YABANCI Trade Log'u değiştirebilir) | `test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log` |
+| `TL-21` | c2 (Supervisor Trash yüzeylerinde reddedilir) | `test_trash_page.py::test_trash_surfaces_reject_non_admin` (**yeni `supervisor` parametresi**) |
+| `TL-23` | c3 (Trade Log save/import/export Result üretmez) | `test_trade_log_persistence.py::test_trade_log_pipeline_creates_no_backtest_result` |
+
+### Ölçüm — tavanlar DÜŞTÜ, hiçbir şey yükselmedi
+
+`acceptance_semantic_scan.py --ratchet` **383 kriter / 1175 clause** üzerinde:
+**partial 126 → 118**, **sınıf B 95 → 87**. `uncovered` (8), **A** (1), **C** (6) ve
+**D** (32) tavanları **el değmeden** kaldı — bir sınıf-B slice'ı onları hareket
+ettiremez, ettirmemeli. `total_criteria` **383'te sabit** (taban, tavan değil): hiçbir
+kayıt silinmedi, hiçbir kriter yeniden sınıflandırılmadı. Defter (`--write-ledger`)
+yeniden üretildi; diff **tam olarak** bu sekiz satırı düşürüyor.
+
+Kapının hâlâ ısırdığı doğrulandı: tavan elle 86'ya çekildiğinde
+`debt_class.B: 87 measured, ceiling 86 (+1)` ile **exit 1**.
+
+### "İşaretlemek ≠ kapsamak" — negatif kontroller
+
+Bu dalganın kovaladığı hata, kriteri kapsamayan bir teste `covered` demektir. Vakumda
+geçebilecek her assertion **elle negatif kontrolden geçirildi**:
+
+* `TL-15.c5` — replay'den `Idempotency-Key` **çıkarılınca** çağrı
+  `ROW_VERSION_CONFLICT` ile patlıyor. Yani replay'in orijinal sonucu döndürmesini
+  sağlayan şey gerçekten idempotency zarfıdır; test tüketilmiş `expected_row_version`'ı
+  **bilerek** yeniden gönderir.
+* `TL-17.c4` — `ADMIN` yerine akran `USER2` konulunca test `AccessDenied` ile düşüyor.
+  Yani "Admin YAPABİLİR" bir hibe iddiasıdır, "herkes yapabilir" değil. Aynı testte
+  `SUPERVISOR` **reddedilir** (akran, override değil) — kriterin adlandırdığı ama
+  kimsenin assert etmediği rol.
+* `TL-03.c3` — `display_name` geçerliye çevrilince reddin kendisi kayboluyor; yani
+  sayaçları donduran şey boş isimdir, çözülemeyen bir binding değil.
+* `TL-03.c2` (wire) — `details` alan yolu bozulunca 422 gövdesi assertion'ı düşüyor.
+
+`TL-06.c3` ve `TL-08.c3` yapıları gereği ayırt edicidir: ilki tırnaklı alanın
+**sağındaki** sütunları okur (naif `split(",")` burada kayar), ikincisi `Decimal("NaN")`
+ve `Decimal("inf")`'in **hatasız parse ettiği**, yalnız açık `is_finite()` kapısının
+reddettiği literalleri sürer.
+
+### DOKUNULMAYANLAR — ve neden (bu, raporun asıl çıktısı)
+
+* **Sınıf D'ye dokunulmadı.** Kriterin adlandırdığı kod/alan/hata sınıfı yok; test
+  yazmak boşluğu **gizlemek** olurdu. Ürün işi, PO'da kalır.
+* **Sınıf C'ye dokunulmadı** (doğası gereği iddia edilemez, gerekçeli).
+* **Sınıf A (1 kalem, `MB-25`) alınmadı** — bir adjudication ister, test slice'ı değil.
+* **`TL-11.c3` · `TL-12.c3` · `TL-20.c3` bilerek dışarıda bırakıldı.** Üçü de
+  *Trade Log içeren bir kompozisyon üzerinde TAMAMLANMIŞ bir Backtest Run* ister.
+  Manifest bu pini gerçekten taşıyor (`backtest_run_context.py::_external_entry`,
+  `MainboardItemKind.TRADE_LOG` dalı) — yani sınıf B doğru — ama repoda **hiçbir test**
+  bir trade_log'u run kompozisyonuna sokmuyor; o makineyi kurmak partiyi ikiye katlardı.
+  Bir sonraki parti için **en yüksek değerli** üçlü budur (üçü tek harness'ı paylaşır).
+* **`TL-16` alınmadı ve sınıfı ŞÜPHELİ.** `c4` *"409 zarfı sunucunun kanonik güncel
+  durumunu taşır"* diyor; `shared/errors.py::WorkObjectRevisionConflictError` **hiç
+  `details` taşımıyor** ve `commands/trade_log.py` onu **argümansız** raise ediyor. Bu,
+  hiçbir testin kapatamayacağı bir boşluktur — yani **B değil D** görünüyor. Yeniden
+  sınıflandırma **yapılmadı**: B→D geçişi **D tavanını YÜKSELTİRDİ** ve tavan yalnız
+  aşağı iner. Bu bir **bulgudur, karar değil** — PO/insan kapısına bırakıldı.
+* **`TL-01.c4` alınmadı.** Kriter `GET /packages` diyor; sevk edilen katalog
+  `GET /library` (`library_query.list_packages`). Bu bir **ad/yol sapması** (sınıf A
+  ekseni) ve bir test slice'ının tek başına karara bağlayacağı şey değil.
+* **`TL-18`** (expand/collapse yan etkisizliği) saf istemci ifşasıdır; frontend
+  yüzeyi bu partinin dışındaydı.
+
+### Dürüst sınırlar
+
+- **Ürün kusuru bulunmadı.** Sekiz kriterin sekizi de **ilk koşuda geçti**: bunlar
+  davranışın kilitlenmesidir, kusur keşfi değil. Bu yüzden yeni issue açılmadı.
+- **`TL-16`'nın olası yanlış sınıflandırması AÇIK bırakıldı** (yukarıya bakınız) —
+  defter hâlâ onu B sayıyor, bu bilinçlidir.
+- **Kalan borç sınıf bazında: A=1 · B=87 · C=6 · D=32 (açık toplam 126).** Sınıf B'nin
+  doc 05 kalıntısı **10 kriter** (`TL-01 · TL-02 · TL-11 · TL-12 · TL-13 · TL-14 ·
+  TL-16 · TL-20 · TL-22` + `TL-18` uncovered).
+- **A-08 / #514'e DOKUNULMADI** — defter boş (0/4), izleme issue'su kapalı, blocker 1.
+- **`P1-Gate3` KAPANMADI.** 126 kalem açık; bu parti borcun **%6'sını** kapattı.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4) — ve sebebi merge sonrası ÖLÇÜLDÜ.**
+  ADIM 47 ile aynı boşluk, iki oturumdur birikiyordu. İlk iki kayıt *"bir sonraki
+  oturumda yazılmalı"* dedi; ikincisi geldiğinde koşul değişmemişti, çünkü sorun
+  **oturuma özel değil ortama yapısaldır:** bu iş Claude Code on the web (remote
+  container) üzerinde yürüyor ve o ortamda `ecc` / `claude-mem` / `codebase-memory-mcp`
+  **hiç kayıtlı değil** — `/root/.claude.json`'da bu projenin `mcpServers` listesi
+  **boş (`[]`)**, repoda `.mcp.json` **yok**, araç aramasında `ecc` **sıfır eşleşme**
+  veriyor. Bağlı olanlar `github` / `Figma` / `Google_Drive` / `Claude_Code_Remote`;
+  hiçbiri knowledge graph değil. **Yani borç bu ortamdan kapatılamaz** ve aynı ortamda
+  açılan bir sonraki slice de aynı şekilde kaçırır — *"bir dahaki sefere"* demek onu
+  kapatmıyordu.
+  **Yapılan:** checkpoint içeriği **tam metin** hâlde
+  `docs/memory/PENDING_CHECKPOINTS.md`'ye yazıldı (iki ecc entity'si + iki claude-mem
+  observation'ı, ilişkileriyle). Bağlı bir **yerel** oturum onu yeniden türetmeden
+  yapıştırır ve dosyayı siler — belge kendini tüketir. **Kalıcı çözüm insan kararıdır:**
+  ya sunucular remote ortama kaydedilir (`.mcp.json`), ya remote oturumlar ritüelin
+  4. maddesinden resmen muaf tutulur. Üçüncü seçenek yok.
+- **Codemap tazelemesi gerekmedi (ritüel madde 5)** — slice yeni endpoint / tablo /
+  sayfa / job / dramatiq aktörü eklemedi; `backend/src`, `alembic` ve `frontend/src`
+  ağaçlarına **hiç dokunulmadı**, o yüzden `repository_facts.md` girdileri de değişmedi.

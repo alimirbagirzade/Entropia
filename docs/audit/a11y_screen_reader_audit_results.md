@@ -425,14 +425,20 @@ observations** once the numbers settle. The figure previously recorded here was
 | K-3 | **No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist. | 23 / 23 routes | Open — reported, not gated | Whether the absence is felt during landmark navigation, or is cosmetic. |
 | K-4 | **`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`) — a divergence already recorded in `frontend/e2e/utils/pageTruth.ts:15`. Every other route uses `<h1>`. | 1 route | Open — reported, not gated | A-1: is the page title announced on load? |
 | K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **21 / 23 routes** — re-derived 2026-08-12, **unchanged**; ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 21 pages' outlines. |
-| K-6 | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7 / 1.4.11. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. |
+| K-6a | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. **A-08 settles this one; nothing else does.** |
+| K-6b | **Focus-ring contrast below WCAG 1.4.11 Non-text Contrast (AA).** `global.css :focus-visible` painted `2px solid var(--accent)`, and **#00a9e8 measures 2.68:1 on white / 2.46:1 on #f5f5f5** — a focus indicator is a non-text UI component and owes **3:1**. Nothing in the repo measured this: axe does not run a focus-ring contrast rule, and the green ratchet was never evidence. **Separate criterion from K-1/D-10**, which is the 1.4.3 *text* axis. | every focusable node, 23 / 23 routes | **CLOSED 2026-08-12** — ring re-pointed to `var(--text)` (`#222222`) | Nothing. **Measured after the change:** 15.91:1 on white, 14.59:1 on #f5f5f5, 12.98:1 on the #e8e8e8 title bar, 5.94:1 on the #00a9e8 `dropdown-blue` panel, 4.92:1 on the #8f8f8f dropdown panel, and **4.50:1 on the #0092c8 menu-blue hover — the worst surface in the app**. All ≥ 3:1. `--accent` itself was not touched. |
 | **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
 
-K-2 through K-7 are **reported rather than gated on purpose.** Each one's fix is
-a product decision — add a footer? promote a heading and re-cut 21 pages'
-outlines? mount a persistent status region? — that an audit-preparation change has
-no mandate to make, and turning any of them into a red CI gate would be making
-that decision by omission. They stay visible in every precheck run's `::warning::`
+K-2 through K-7 are **reported rather than gated on purpose** — with **K-6b as the
+one exception**, and the exception is instructive about where the line is. Each of
+the others' fixes is a product decision — add a footer? promote a heading and
+re-cut 21 pages' outlines? mount a persistent status region? — that an
+audit-preparation change has no mandate to make, and turning any of them into a
+red CI gate would be making that decision by omission. K-6b was not a product
+decision: 3:1 is a numeric AA threshold, the ring colour is not described by the
+v18 mockup (which has no focus state at all), and the fix is one declaration that
+changes no layout. That is why it could be closed here while K-6a — *can a person
+see it?* — stays open for A-08. They stay visible in every precheck run's `::warning::`
 output and in `a11y-report/precheck-results.json` until a human resolves them.
 
 ### How these counts were obtained — and why two of them are a range
@@ -447,7 +453,7 @@ and running it five times in a row is what showed why:
 | skip link (K-2) | 23 | 23 | 23 | 23 | 23 | **stable** |
 | `contentinfo` (K-3) | 23 | 23 | 23 | 23 | 23 | **stable** |
 | no `<h1>` (K-4) | 1 | 1 | 1 | 1 | 1 | **stable** |
-| focus indicator (K-6) | 1 | 1 | 1 | 1 | 1 | **stable** |
+| focus indicator (K-6a) | 1 | 1 | 1 | 1 | 1 | **stable** |
 | heading outline (K-5) | 18 | 21 | 20 | 21 | 21 | ⚠ **converges to 21** |
 | `aria-live` (K-7) | 10 | 20 | 20 | 21 | 21 | ⚠ **converges to 21** |
 | **total advisories** | 76 | 89 | 88 | 90 | 90 | ⚠ **converges to 90** |

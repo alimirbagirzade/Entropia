@@ -12,13 +12,22 @@
 
 > ## STATUS: `A-08 HUMAN-BLOCKED`
 >
-> **This file is an EMPTY WORKSHEET. An empty template is not evidence.** Every
-> result cell below reads `—` because no human has run this audit. Nothing in
-> this repository — not the axe-core ratchet, not the keyboard spec, not the
-> automated prechecks added alongside this file — may be transcribed into these
-> tables as a screen-reader result.
+> **The audit has STARTED and is nowhere near done.** This file stopped being an
+> empty worksheet on **2026-08-12**, when the **SR-2 (VoiceOver / Safari /
+> macOS)** session was opened and the first cells were recorded from a human.
+> What it holds is **2 of Section A's 184 cells** (23 routes × 8 checks) on the
+> **SR-2 half only**, and **0 of 10 flows**. **SR-1 (NVDA / Firefox / Windows)
+> has not been started at all**, so §5's criteria 1 and 2 cannot close no matter
+> how far SR-2 goes.
 >
-> **The tracking issue is CLOSED while this worksheet is still empty.** Read the
+> Nothing in this repository — not the axe-core ratchet, not the keyboard spec,
+> not the automated prechecks added alongside this file — may be transcribed
+> into these tables as a screen-reader result. **A partly filled worksheet is
+> evidence for exactly the cells a person filled and for nothing else**; a `—`
+> is not a quiet `PASS`, and the completion counters below are deliberately not
+> rounded up.
+>
+> **The tracking issue is CLOSED while this worksheet is 2/184 filled.** Read the
 > divergence block below before citing **GitHub #514** as tracking anything.
 > `#514` carries the `human-only` label; an agent or automated scan must not
 > close it — nor re-open it.
@@ -35,7 +44,7 @@ points here instead of restating it.
 |---|---|---|
 | GitHub **#514** state | **CLOSED** — `2026-08-07T03:52:03Z`, `state_reason: completed` | `gh issue view 514 --json state,closedAt,stateReason` |
 | Issue label | `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"* | `gh issue view 514 --json labels` |
-| Audit performed? | **NO** — every result cell is `—` | §1, §2 below |
+| Audit performed? | **STARTED, NOT DONE** — SR-2 opened 2026-08-12; **2 / 184** Section A cells, **0 / 10** flows; SR-1 never started | §1, §2 below |
 | Exit criteria met? | **0 / 4** — all four still `☐` | §5 below |
 | Findings committed? | **NO** — the register holds only its placeholder row | §3 below |
 
@@ -93,7 +102,14 @@ screen readers, and a single-combination run cannot satisfy A-08.
 | Seed flags | `SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1` |
 | Stack URL | `http://127.0.0.1:18280` |
 | Session recording / audio evidence path | — (none captured) |
-| Elapsed time | — |
+| Elapsed time | **~42 min of recorded session** (`17:46Z` → `18:28Z`, 2026-08-12) — see the caveat |
+
+> **What the elapsed figure is, and is not.** It is the wall-clock span of the
+> *recorded* session — first header commit to the auditor stopping — and it is
+> the only span anyone measured. The auditor's own time at the machine is **not
+> included and was not clocked**: the stack was brought up on their Mac before
+> the recording began. Do not use this number to estimate what a full 23-route
+> Section A costs; two of 184 cells were filled in it.
 
 > **Scope limit — the auditor is not a screen-reader user.** `neither` is the
 > honest answer to the third row and it is recorded rather than smoothed over.
@@ -320,10 +336,32 @@ Copied from the checklist so this file can be read alone:
 
 | # | Criterion | Met |
 |---:|---|---|
-| 1 | Both SR-1 and SR-2 were run | ☐ (0 / 2) |
-| 2 | Section A complete on all 23 routes; Section B on all 10 flows, for both combinations | ☐ (0 / 46 routes, 0 / 20 flows) |
-| 3 | Every finding carries `FIX` or `PO-APPROVE` | ☐ |
-| 4 | Every `FIX` has landed **or** become a PO-signed deviation | ☐ |
+| 1 | Both SR-1 and SR-2 were run | ☐ (**0 / 2** — SR-2 *started*, not run to completion; SR-1 not started) |
+| 2 | Section A complete on all 23 routes; Section B on all 10 flows, for both combinations | ☐ (**0 / 46** routes, **0 / 20** flows — route 1 of SR-2 is partial, and partial ≠ complete) |
+| 3 | Every finding carries `FIX` or `PO-APPROVE` | ☐ (no findings recorded yet — vacuous, not satisfied) |
+| 4 | Every `FIX` has landed **or** become a PO-signed deviation | ☐ (nothing to land yet — vacuous, not satisfied) |
+
+**No SR-2 session can ever tick criteria 1 or 2 on its own.** Both name *both*
+combinations explicitly, and **SR-1 (NVDA / Firefox / Windows) has not been
+started**. Even a flawless, complete SR-2 run — 23/23 routes and 10/10 flows —
+would leave criterion 1 at `1 / 2` and criterion 2 at `23 / 46` routes. This is
+stated here so nobody reads a future "SR-2 complete" line as A-08 nearing done:
+**the remaining half is a whole second audit on a different operating system.**
+
+Criteria 3 and 4 are `☐` for a reason worth naming: they are *empty*, not *met*.
+Zero findings after 2 of 184 cells is not a clean bill — it is a sample too
+small to have produced one.
+
+### Session log
+
+| Session | Combination | Date | Auditor | What was covered | Outcome |
+|---|---|---|---|---|---|
+| 1 | **SR-2** — VoiceOver / Safari / macOS 15.3 | 2026-08-12 | Ali Mirbagirzade (product owner, `neither`) | Route 1 `/` — A-1, A-2 only | 2 / 184 Section A cells; 0 findings; **K-5 not settled** (A-3 left `—`) |
+
+**Where the next session picks up:** route 1's **A-3** (the `h1 → h3` heading
+question, K-5 — read the note under §1's SR-2 table for exactly what was asked
+and why the answer did not count), then A-4…A-8, then routes 2–23, then §2's ten
+flows. After that, the entire SR-1 combination.
 
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.

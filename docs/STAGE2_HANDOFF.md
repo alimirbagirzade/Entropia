@@ -5698,7 +5698,8 @@ sıra dâhil birebir · `/rules/branches/main` = 4 kural · `strict: true` ·
 **Dürüst sınırlar:** `bypass_actors` salt-okuma token'ına görünmüyor (kanıt POST
 yanıtı) · **ruleset repoda değil** — silinirse hiçbir CI kapısı fark etmez, drift
 kapısı **yazılmadı (açık iş)** · **A-08 DEĞİŞMEDİ** (blocker 1, verdict BLOCKED) ·
-**memory checkpoint yine yazılamadı** → borç **ADIM 47 + 48 + 49**, üç oturum.
+**memory checkpoint yine yazılamadı** → borç **ADIM 47 + 48 + 49**, üç oturum;
+sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md` (bu slice Entity C'yi ekledi).
 
 **Artık geçerli:** main'e doğrudan push kapalı; her PR 16 yeşil check + main ile
 güncellik ister (`Backend` ~48 dk — bilinçli bedel, runbook §3'te tek alanı çeviren

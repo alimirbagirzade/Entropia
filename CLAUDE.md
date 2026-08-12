@@ -202,7 +202,8 @@ Before stopping a working session, produce **ALL** of the following:
 > indirilmez** (`LH_REPEATS` medyanı) ve **`armed: false` kapının sessiz kapatma
 > düğmesidir**. Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED. **Ruleset repoda
 > DEĞİL — silinirse hiçbir kapı fark etmez (drift kapısı açık iş).** **Memory checkpoint
-> yine YAZILAMADI** → borç **ADIM 47 + 48 + 49**, üç oturum.
+> yine YAZILAMADI** (ortam yapısal — remote'ta `ecc`/`claude-mem` kayıtlı değil) → borç
+> **ADIM 47 + 48 + 49**; sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md`.
 > `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
 > Öncesinde **ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
 > `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli

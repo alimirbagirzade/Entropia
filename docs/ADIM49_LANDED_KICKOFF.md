@@ -63,8 +63,11 @@ tablo kalemiydi, blocker değil. Bu slice A-08'e **dokunmadı**.
   triage semantiği. Deterministik kapı isteniyorsa ayrı bir karar gerekir.
 - **RC §6.7'de kalanlar:** P11-6b · P11-3b · P8-B3b · P4-3 · P10-B6 · P1-Gate3 ·
   P10-B3/B4/B5. **P11 hâlâ KAPANMADI** — P11-1 kapandı, P11-6b ve P11-3b açık.
-- **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` bağlı değil. Borç **ADIM 47 +
-  48 + 49**, üç oturum. Bir sonraki bağlı oturumda **üçü birden** yazılmalı.
+- **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` remote ortamda **kayıtlı değil**
+  (#690 ölçtü; sorun oturum değil **ortam**). Borç **ADIM 47 + 48 + 49**, üç oturum.
+  **İçerik hazır bekliyor:** `docs/memory/PENDING_CHECKPOINTS.md` — üç entity + üç
+  observation, yapıştırmak yeterli, yeniden türetme. O dosya **kendini tüketir**:
+  yazıldığında silinir. Kalıcı çözüm **insan kararı** (bkz. o dosyanın son maddesi).
 - **`ADIM 48` numarası iki slice tarafından kullanıldı** (K-6b odak halkası **ve** kabul
   borcu sınıf B parti 01). `ADIM48_LANDED_KICKOFF.md` içinde iki H1 yan yana; CLAUDE.md'de
   iki "Son dalga — ADIM 48" bloğu; `STAGE2_HANDOFF.md` Next bloğunda tekrarlanmış bir satır.

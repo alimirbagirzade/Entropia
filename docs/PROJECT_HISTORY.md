@@ -7778,8 +7778,13 @@ GitHub iki varsayılan ekledi — `required_reviewers: []`, `allowed_merge_metho
 - **A-08 DEĞİŞMEDİ.** Defter boş (0/4), #514 kapalı, blocker sayısı **1**, verdict
   **BLOCKED**. Buradaki hiçbir check A-08 kanıtı değildir.
 - **Memory checkpoint YAZILAMADI (ritüel madde 4).** `ecc` ve `claude-mem` MCP
-  sunucuları bu oturumda da bağlı değil (ToolSearch'te yoklar). Borç artık **ADIM 47 +
-  ADIM 48 + ADIM 49** — **üç oturum**. Atlanmadı, **yapılamadı**.
+  sunucuları bu oturumda da bağlı değil. **Sebep oturuma özel değil, ortama yapısaldır**
+  (#690 ölçtü: remote container'da bu sunucular kayıtlı değil) — o PR bunu önceden
+  görüp *"aynı ortamda açılan ADIM 49 da aynı şekilde başarısız olur"* demişti ve
+  **öyle oldu**. Borç **ADIM 47 + 48 + 49**, üç oturum. Atlanmadı, **yapılamadı**.
+  İçerik türetilmeyi beklemiyor: **hazır** — `docs/memory/PENDING_CHECKPOINTS.md`
+  (bu slice Entity C + üçüncü observation'ı ekledi). Kalıcı çözüm (remote'a `.mcp.json`
+  ya da ritüel 4'ün remote muafiyeti) **insan kararıdır**.
 - **Codemap tazelemesi gerekmedi (ritüel madde 5)** — yeni endpoint / tablo / sayfa /
   job / dramatiq aktörü yok; ürün ağaçlarına dokunulmadı.
 - **ADIM 48 numarası İKİ slice tarafından kullanılmış** (K-6b odak halkası **ve**

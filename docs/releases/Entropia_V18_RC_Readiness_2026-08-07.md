@@ -1945,6 +1945,24 @@ tablosu hâlâ kapsam dışı.
 **P1-Gate3 KAPANMADI** — ele alınabilir hale geldi. **Blocker sayısı DEĞİŞMEDİ (üç).
 §8 verdict BLOCKED kalır.**
 
+**GÜNCELLEME — ADIM 48 (2026-08-12): defter işlenmeye BAŞLANDI, kalem hâlâ AÇIK.**
+Sınıf-B parti 01, doc 05 (Trade Log) **backend** yüzeyinden **sekiz** kriter kapattı:
+`TL-03` `TL-06` `TL-07` `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. Yeni ölçüm →
+**`partial` 126 → 118**, **`debt_class.B` 95 → 87**; `uncovered` (8), **A** (1),
+**C** (6) ve **D** (32) tavanları **el değmeden** kaldı ve `total_criteria` **383'te
+sabit** — bir sınıf-B slice'ı bunları hareket ettiremez. **Ürün kodu değişmedi.**
+Parti **tek belge + tek yüzey** ile sınırlı tutuldu; gerekçe
+`acceptance_coverage_baseline.json` §`adjudication.class_B_batches_are_deliberately_small`.
+Vakumda geçebilecek assertion'lar **negatif kontrolden** geçirildi (`PROJECT_HISTORY.md`
+§ADIM 48). **İki bulgu AÇIK bırakıldı, ikisi de insan/PO kararı:** (1) `TL-16`'nın sınıfı
+**şüpheli** — `c4`'ün istediği *"409 zarfı sunucunun kanonik durumunu taşır"* alanı
+üretimde **yok** (`WorkObjectRevisionConflictError` `details` taşımıyor, raise argümansız),
+yani **B değil D** görünüyor; yeniden sınıflandırma **yapılmadı** çünkü **D tavanını
+yükseltirdi** ve tavan yalnız aşağı iner. (2) `TL-01.c4` bir **yol sapması**: kriter
+`GET /packages` diyor, sevk edilen katalog `GET /library`. **P1-Gate3 KAPANMADI** —
+**126** kalem açık (A=1 · B=87 · C=6 · D=32), bu parti borcun **%6'sını** kapattı.
+**Blocker sayısı DEĞİŞMEDİ (bir — yalnız A-08). §8 verdict BLOCKED kalır.**
+
 ---
 
 #### 6.7.11 P10-7 KAPANDI — saat zaten dolmuştu (ADIM 43, 2026-08-12)

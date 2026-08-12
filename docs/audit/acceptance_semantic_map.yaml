@@ -5741,36 +5741,50 @@ criteria:
     - backend/tests/contract/test_trade_log_contract.py::test_blank_provider_rejected_before_db
   - id: TL-03.c2
     text: A blank identity.display_name is rejected the same way.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/unit/test_trade_log_config.py::test_blank_display_name_is_a_structural_error
+    - backend/tests/contract/test_trade_log_contract.py::test_blank_display_name_rejected_before_db
   - id: TL-03.c3
     text: The rejection creates no Ready revision and no Mainboard item pin.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trade_log_persistence.py::test_blank_display_name_persists_no_revision_or_item
   production_paths:
   - backend/src/entropia/domain/trade_log/compiler.py
   - backend/src/entropia/apps/api/routes/trade_log.py
   test_evidence:
   - backend/tests/unit/test_trade_log_config.py::test_blank_provider_is_a_structural_error
   - backend/tests/contract/test_trade_log_contract.py::test_blank_provider_rejected_before_db
+  - backend/tests/unit/test_trade_log_config.py::test_blank_display_name_is_a_structural_error
+  - backend/tests/contract/test_trade_log_contract.py::test_blank_display_name_rejected_before_db
+  - backend/tests/integration/test_trade_log_persistence.py::test_blank_display_name_persists_no_revision_or_item
   evidence_type:
   - backend_unit
   - backend_contract
+  - backend_integration
   positive: []
   negative:
   - backend/tests/unit/test_trade_log_config.py::test_blank_provider_is_a_structural_error
   - backend/tests/contract/test_trade_log_contract.py::test_blank_provider_rejected_before_db
+  - backend/tests/unit/test_trade_log_config.py::test_blank_display_name_is_a_structural_error
+  - backend/tests/contract/test_trade_log_contract.py::test_blank_display_name_rejected_before_db
+  - backend/tests/integration/test_trade_log_persistence.py::test_blank_display_name_persists_no_revision_or_item
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: Only the provider half of "blank name or provider" is asserted. No test in backend/tests/
-    submits a blank or whitespace identity.display_name — the config fixture always carries a real
-    display name. The "no Ready revision or item pin is created" clause is implied by the contract
-    test's name (rejected_before_db, run against a _DummySession) but no test counts WorkObjectRevision
-    or Mainboard item rows after the rejection.
+  status: covered
+  notes: 'ADIM 48 closed both halves. c2: the display_name validator strips before measuring, so the
+    fixture feeds "   " rather than "" — an empty string would also be caught by a bare required-field
+    check and would not distinguish the two. c3 is the negative the wire test only implies: the contract
+    test runs against a _DummySession, so it cannot show that nothing was written; the integration
+    test runs a REAL import first (the bound batch and source asset genuinely resolve) and asserts
+    WorkObjectRevision and MainboardWorkingItem row counts are unmoved, so the reason nothing persists
+    is the blank name and not an unresolvable binding. Verified to bite: substituting a valid display_name
+    makes the rejection stop firing.'
 - id: TL-04
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -5875,19 +5889,23 @@ criteria:
     - backend/tests/integration/test_trade_log_persistence.py::test_full_pipeline_upload_import_save_and_attach
   - id: TL-06.c3
     text: A quoting-aware parser handles a delimiter embedded inside a quoted field.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/unit/test_trade_log_records.py::test_quoted_field_may_contain_the_active_delimiter
   production_paths:
   - backend/src/entropia/domain/trade_log/records.py
   - backend/src/entropia/application/jobs/trade_log.py
   test_evidence:
   - backend/tests/unit/test_trade_log_records.py::test_delimiters_produce_equivalent_records
   - backend/tests/integration/test_trade_log_persistence.py::test_full_pipeline_upload_import_save_and_attach
+  - backend/tests/unit/test_trade_log_records.py::test_quoted_field_may_contain_the_active_delimiter
   evidence_type:
   - backend_unit
   - backend_integration
   positive:
   - backend/tests/unit/test_trade_log_records.py::test_delimiters_produce_equivalent_records
   - backend/tests/integration/test_trade_log_persistence.py::test_full_pipeline_upload_import_save_and_attach
+  - backend/tests/unit/test_trade_log_records.py::test_quoted_field_may_contain_the_active_delimiter
   negative: []
   auth: []
   occ: []
@@ -5895,11 +5913,11 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Delimiter equivalence and worker-side production are both asserted. The embedded-delimiter
-    clause is not: no fixture in test_trade_log_records.py contains a quoted field carrying the active
-    separator, and grep finds no quote/csv.reader handling referenced by any test of domain/trade_log/records.py.'
+  status: covered
+  notes: ADIM 48 closed c3. parse_delimited builds a csv.DictReader, which is quoting-aware; the test
+    puts a comma inside a quoted field of a comma-delimited file and asserts the ACCEPTED entry_price/exit_price
+    rather than merely that the row survived — a naive line.split(",") would shift every column to
+    the right of the quoted field, which is the failure this distinguishes.
 - id: TL-07
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -5929,7 +5947,9 @@ criteria:
     - backend/tests/unit/test_trade_log_records.py::test_exit_before_entry_skips_row
   - id: TL-07.c4
     text: The import report names the offending ROW NUMBER for that record.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/unit/test_trade_log_records.py::test_skipped_row_names_its_source_row_number
   production_paths:
   - backend/src/entropia/domain/trade_log/records.py
   - backend/src/entropia/domain/importing/timezone.py
@@ -5941,6 +5961,7 @@ criteria:
   - backend/tests/integration/test_tl_timezone_crosscheck_attach.py::test_trade_log_attach_is_refused_when_the_import_ran_under_another_zone
   - backend/tests/integration/test_tl_timezone_crosscheck_attach.py::test_trade_log_attach_succeeds_when_the_zones_match
   - backend/tests/unit/test_trade_log_records.py::test_exit_before_entry_skips_row
+  - backend/tests/unit/test_trade_log_records.py::test_skipped_row_names_its_source_row_number
   evidence_type:
   - backend_unit
   - backend_integration
@@ -5952,18 +5973,18 @@ criteria:
   - backend/tests/integration/test_tl_timezone_crosscheck_attach.py::test_trade_log_import_request_rejects_a_non_iana_zone
   - backend/tests/integration/test_tl_timezone_crosscheck_attach.py::test_trade_log_attach_is_refused_when_the_import_ran_under_another_zone
   - backend/tests/unit/test_trade_log_records.py::test_exit_before_entry_skips_row
+  - backend/tests/unit/test_trade_log_records.py::test_skipped_row_names_its_source_row_number
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The timezone half is strongly covered, including the O-28 cross-check that the DECLARED
-    zone must agree with the zone the import actually ran under. The chronology half asserts the reason
-    code (REASON_EXIT_BEFORE_ENTRY) and the FAILED batch status, but not the row number: SkippedRow
-    carries a row_index field (domain/trade_log/records.py:143) and no test asserts its value.'
+  status: covered
+  notes: ADIM 48 closed c4. SkippedRow.row_index is the zero-based index into the DATA rows (the header
+    is not a row). The fixture puts two accepted rows ahead of the offending one and asserts row_index
+    == 2, so a hard-coded 0 — which a single-row fixture would have accepted — fails. The timezone
+    half was already strong, including the O-28 cross-check.
 - id: TL-08
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -5981,28 +6002,34 @@ criteria:
     - backend/tests/unit/test_trade_log_records.py::test_pnl_mismatch_is_a_non_destructive_warning
   - id: TL-08.c3
     text: A non-finite price (NaN / inf) is rejected.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/unit/test_trade_log_records.py::test_non_finite_prices_skip_rows
   production_paths:
   - backend/src/entropia/domain/trade_log/records.py
   test_evidence:
   - backend/tests/unit/test_trade_log_records.py::test_non_positive_prices_skip_rows
   - backend/tests/unit/test_trade_log_records.py::test_pnl_mismatch_is_a_non_destructive_warning
+  - backend/tests/unit/test_trade_log_records.py::test_non_finite_prices_skip_rows
   evidence_type:
   - backend_unit
   positive:
   - backend/tests/unit/test_trade_log_records.py::test_pnl_mismatch_is_a_non_destructive_warning
   negative:
   - backend/tests/unit/test_trade_log_records.py::test_non_positive_prices_skip_rows
+  - backend/tests/unit/test_trade_log_records.py::test_non_finite_prices_skip_rows
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: Zero and negative are parametrised in the price test; "non-finite" is not — no fixture feeds
-    NaN, inf or -inf as a price and asserts the skip reason.
+  status: covered
+  notes: 'ADIM 48 closed c3. Decimal("NaN") and Decimal("inf") PARSE without raising, so the zero/negative
+    fixture could never have reached the guard that rejects them: only the explicit _parse_positive_price
+    is_finite() check does. The test drives NaN, inf, -inf and Infinity through both the entry and
+    the exit price and asserts the exact (row_index, reason_code) pairs plus the NO_ACCEPTED_TRADE_RECORDS
+    whole-file blocker.'
 - id: TL-09
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6325,7 +6352,9 @@ criteria:
     - backend/tests/integration/test_trade_log_persistence.py::test_export_idempotent_replay
   - id: TL-15.c5
     text: A replayed Pin call creates no duplicate Mainboard item / pin event.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event
   production_paths:
   - backend/src/entropia/application/commands/trade_log.py
   - backend/src/entropia/application/idempotency.py
@@ -6334,6 +6363,7 @@ criteria:
   - backend/tests/integration/test_gateway_parity_s4.py::test_a_replayed_trade_log_import_never_re_dispatches
   - backend/tests/integration/test_trade_log_persistence.py::test_idempotent_save_replay
   - backend/tests/integration/test_trade_log_persistence.py::test_export_idempotent_replay
+  - backend/tests/integration/test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event
   evidence_type:
   - backend_integration
   positive:
@@ -6341,6 +6371,7 @@ criteria:
   - backend/tests/integration/test_gateway_parity_s4.py::test_a_replayed_trade_log_import_never_re_dispatches
   - backend/tests/integration/test_trade_log_persistence.py::test_idempotent_save_replay
   - backend/tests/integration/test_trade_log_persistence.py::test_export_idempotent_replay
+  - backend/tests/integration/test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event
   negative: []
   auth: []
   occ: []
@@ -6348,15 +6379,18 @@ criteria:
   - backend/tests/integration/test_gateway_parity_s4.py::test_a_replayed_trade_log_import_never_re_dispatches
   - backend/tests/integration/test_trade_log_persistence.py::test_idempotent_save_replay
   - backend/tests/integration/test_trade_log_persistence.py::test_export_idempotent_replay
+  - backend/tests/integration/test_trade_log_persistence.py::test_replayed_pin_creates_no_duplicate_item_or_pin_event
   async_recovery:
   - backend/tests/integration/test_gateway_parity_s4.py::test_a_replayed_trade_log_import_never_re_dispatches
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Four of the five named operations are proven with row counts, not just equal return values.
-    The Pin operation is not: no test replays patch_mainboard_item with the same Idempotency-Key against
-    a Trade Log item and asserts no duplicate.'
+  status: covered
+  notes: 'ADIM 48 closed c5; all five named operations are now proven with row counts rather than
+    equal return values. The Pin replay deliberately re-sends the ALREADY-CONSUMED expected_row_version:
+    without the Idempotency-Key envelope that second call is a stale token, and the negative control
+    confirms it — dropping the key makes the replay raise ROW_VERSION_CONFLICT. The test asserts the
+    MainboardWorkingItem count is unmoved and that exactly one mainboard.item_revision_pinned and
+    one additional mainboard.composition_changed audit row exist.'
 - id: TL-16
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6434,7 +6468,9 @@ criteria:
     - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_read_trade_log
   - id: TL-17.c4
     text: An Admin CAN mutate another owner's normal Trade Log.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log
   production_paths:
   - backend/src/entropia/application/commands/trade_log.py
   - backend/src/entropia/apps/api/routes/trade_log.py
@@ -6445,10 +6481,12 @@ criteria:
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_read_trade_log
+  - backend/tests/integration/test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log
   evidence_type:
   - backend_integration
   - backend_contract
-  positive: []
+  positive:
+  - backend/tests/integration/test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log
   negative:
   - backend/tests/integration/test_trade_log_persistence.py::test_foreign_owner_cannot_create_revision
   - backend/tests/integration/test_trade_log_persistence.py::test_export_foreign_owner_forbidden
@@ -6463,18 +6501,20 @@ criteria:
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_read_trade_log
+  - backend/tests/integration/test_trade_log_persistence.py::test_admin_may_create_a_revision_on_a_foreign_trade_log
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity:
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_foreign_owner_revision_denial_parity
-  status: partial
-  debt_class: B
-  notes: 'Denial is proven on the human line, the Agent line (same code, recorded REJECTED tool call,
-    revision count unchanged) and the unauthenticated wire. The affirmative "Admin can" clause has
-    no test: no Trade Log test drives a Role.ADMIN actor against another owner''s root. The row also
-    names Supervisor explicitly; only USER-role foreign owners are exercised.'
+  status: covered
+  notes: 'ADIM 48 closed c4, the affirmative half. Denial alone was equally consistent with "nobody
+    but the owner may write", which would break the Admin override the row requires; the negative
+    control confirms the distinction — swapping ADMIN for a peer USER makes the test fail with AccessDenied.
+    The SUPERVISOR the row names alongside it is asserted in the same test and is REFUSED: supervisor
+    is a peer, not an override. The test also pins that an Admin override writes on the owner''s root
+    (not a fork), records the Admin as author, and still does not auto-repin the owner''s board item.'
 - id: TL-18
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6602,8 +6642,9 @@ criteria:
     - backend/tests/integration/test_trash_page.py::test_trash_surfaces_reject_non_admin
   - id: TL-21.c2
     text: A Supervisor is refused on the same Trash surfaces.
-    status: partial
+    status: covered
     test_evidence:
+    - backend/tests/integration/test_trash_page.py::test_trash_surfaces_reject_non_admin
     - backend/tests/unit/test_role_matrix_contract.py::test_every_role_capability_cell_matches_the_canonical_policy
     - backend/tests/contract/test_manual_contract.py::test_manual_restore_is_trash_admin_only
   - id: TL-21.c3
@@ -6639,13 +6680,14 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'test_trash_surfaces_reject_non_admin is parametrised over [user] and [agent] only — the
-    SUPERVISOR row named by this criterion is not among its params. The Supervisor case is covered
-    indirectly: the role matrix pins supervisor-trash-none as the canonical policy cell, and test_manual_restore_is_trash_admin_only
-    does include a supervisor param, but that is the Manual page''s restore surface, not the Trash
-    routes. Both restore proofs run over a demo_entity, not a Trade Log root.'
+  status: covered
+  notes: 'ADIM 48 closed c2 by adding the missing SUPERVISOR parameter to test_trash_surfaces_reject_non_admin,
+    which now runs [user, supervisor, agent] against Trash list, detail, restore and purge directly.
+    The role matrix and the Manual page''s restore surface remain cited as the corroborating cells,
+    but the criterion no longer rests on an inference drawn two documents away — Supervisor is the
+    role most likely to be widened by accident, since it outranks USER nearly everywhere else. Honest
+    residue: both restore proofs still run over a demo_entity rather than a Trade Log root; the guard
+    is generic and type-blind, so the criterion is scored covered on the surface it actually gates.'
 - id: TL-22
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6721,7 +6763,9 @@ criteria:
     - backend/tests/integration/test_backtest_persistence.py::test_worker_fails_closed_when_range_excludes_every_bar
   - id: TL-23.c3
     text: Saving, importing or exporting a Trade Log creates no Backtest Result.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trade_log_persistence.py::test_trade_log_pipeline_creates_no_backtest_result
   production_paths:
   - backend/src/entropia/application/commands/backtest_run.py
   - backend/src/entropia/application/jobs/backtest_engine.py
@@ -6729,12 +6773,14 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_backtest_persistence.py::test_admission_queues_run_and_worker_materializes_result
   - backend/tests/integration/test_backtest_persistence.py::test_worker_fails_closed_when_range_excludes_every_bar
+  - backend/tests/integration/test_trade_log_persistence.py::test_trade_log_pipeline_creates_no_backtest_result
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_backtest_persistence.py::test_admission_queues_run_and_worker_materializes_result
   negative:
   - backend/tests/integration/test_backtest_persistence.py::test_worker_fails_closed_when_range_excludes_every_bar
+  - backend/tests/integration/test_trade_log_persistence.py::test_trade_log_pipeline_creates_no_backtest_result
   auth: []
   occ: []
   idempotency: []
@@ -6742,13 +6788,13 @@ criteria:
   - backend/tests/integration/test_backtest_persistence.py::test_admission_queues_run_and_worker_materializes_result
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The Run-side boundary is proven in both directions, including the explicit `_count(BacktestResult)
-    == 0` on the failed run. The Trade-Log-side clause is not: none of the save / import / export
-    tests in test_trade_log_persistence.py counts BacktestResult rows, so "a Trade Log operation never
-    fabricates a Result" is asserted nowhere. A cancelled run is likewise never exercised for this
-    row.'
+  status: covered
+  notes: 'ADIM 48 closed c3, the Trade-Log side of the boundary. Upload, import, Save & Add, revision
+    N+1 and Export all run against a real database and BacktestResult is counted after each; the test
+    also asserts BacktestRun is empty, so the zero cannot be read as "a run happened and wrote no
+    Result". The zero-assertion earns its meaning from the paired positive on the Run side (test_admission_queues_run_and_worker_materializes_result),
+    which uses the same model. Honest residue, unchanged by this slice: a CANCELLED run is still not
+    exercised for this row — that is the Run surface''s own coverage, not the Trade Log page''s.'
 - id: CP-01
   document: docs/spec/06_Entropia_V18_Add_Package_Create_Package_Page_Documentation_v1_1.md
   section: '15'

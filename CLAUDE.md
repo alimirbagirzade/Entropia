@@ -216,6 +216,25 @@ Before stopping a working session, produce **ALL** of the following:
 > DEĞİLDİ → memory checkpoint ARKA ARKAYA İKİNCİ KEZ YAZILAMADI (ADIM 47 + 48 borcu).**
 > `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md` · RC §6.5.
 > Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
+> **Son dalga — ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
+> 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
+> DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kapananlar: `TL-03` `TL-06` `TL-07`
+> `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. **Ürün kodu DEĞİŞMEDİ** (tek satır bile).
+> **RATCHET YALNIZ AŞAĞI İNER** — `uncovered`/A/C/**D** tavanları el değmedi,
+> `total_criteria` **383 sabit (TABAN)**: rahatsız edici bir `partial`ı silerek tavan
+> düşürmek yasak, kapı yakalar. **Sınıflar AYRI ratchet'lenir** → bir kriteri B'den D'ye
+> taşımak **D tavanını YÜKSELTİR**, o yüzden bir adjudication'dır, test slice'ının kararı
+> değil. **"İşaretlemek ≠ kapsamak":** her assertion negatif kontrolden geçirildi
+> (`TL-15`'te key düşünce `ROW_VERSION_CONFLICT`, `TL-17`'de akran `USER2` ile
+> `AccessDenied`). **İKİ BULGU AÇIK (insan/PO):** `TL-16`'nın sınıfı **şüpheli** —
+> `c4`'ün istediği "409 kanonik durum" alanı **yok**, B değil **D** görünüyor;
+> `TL-01.c4` **yol sapması** (kriter `GET /packages`, sevk edilen `GET /library`).
+> **Sıradaki parti:** `TL-11.c3`+`TL-12.c3`+`TL-20.c3` — üçü de *Trade Log içeren
+> kompozisyonda TAMAMLANMIŞ Backtest Run* harness'ını paylaşır. **P1-Gate3 KAPANMADI**
+> (A=1 · B=87 · C=6 · D=32, açık toplam **126**).
+> `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
+>
+> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): **§6.7.9 + §6.7.5 KAPANDI.
 > BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** (A) `../validate` +
 > `../baseline-parse` **200 → 202** + tipli gövde (`ValidationRunAcceptedResponse`,
 > `BaselineParseAcceptedResponse`); **otorite PO KARARIDIR, kanonik hâlâ sessiz** — "repo

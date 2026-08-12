@@ -1,4 +1,9 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 50 (2026-08-12).** Canlı kickoff artık `docs/ADIM50_KICKOFF.md`
+> (RC §6.5 / K-2..K-6 karar promptları; K-2 + K-4 landed, K-3 hâlâ PO'da). Aşağısı
+> ADIM 49 kapanışındaki durumu kaydeder. **Değişmeyen:** blocker sayısı 1 (yalnız A-08),
+> verdict BLOCKED.
+
 > **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 

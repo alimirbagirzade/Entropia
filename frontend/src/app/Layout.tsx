@@ -388,6 +388,15 @@ export function Layout() {
 
   return (
     <div className="app-shell">
+      {/* K-2 (a11y precheck, 23/23 routes): the first tab stop used to be the
+          shell's Log out button, so every route began by tabbing the whole menu
+          bar. WCAG 2.4.1 is already met via the banner/navigation/main landmarks
+          (technique ARIA11) — this is an ergonomics fix for keyboard users, not
+          a conformance one. Off-screen until focused, so it adds no pixels to
+          any visual baseline. */}
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <header className="top-title">
         <AuthControl mode={authMode} />
         <span className="brand-title">entropia</span>
@@ -453,7 +462,7 @@ export function Layout() {
         </div>
       ) : null}
 
-      <main className="workspace">
+      <main className="workspace" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
 

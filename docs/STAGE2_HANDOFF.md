@@ -5441,9 +5441,51 @@ container kapısı hâlâ sadece `security.yml` tetikleyicilerinde koşar. Kanı
 
 ---
 
+## ADIM 45 — RC blocker 2 KAPANDI: `flows` bir CI kapısı oldu (PR #680)
+
+**Migration YOK** · `ENGINE_VERSION` değişmedi · **ürün kodu değişmedi** (harness +
+workflow + belgeler). Base `853a358`.
+
+* **Blocker 2 KAPANDI. Blocker sayısı 2 → 1 — geriye YALNIZ A-08 kaldı; verdict `BLOCKED`.**
+  RC §6.2'nin açık kalan tek ekseni belgenin kendi cümlesiydi: *"`flows` bir CI KAPISI
+  DEĞİLDİR."* Kapsam ADIM 30'da yazılmıştı; **eksik olan kapıydı.**
+* **Yeni harness icat EDİLMEDİ** — `e2e.yml`'e tek job: **`acceptance-flows`**, var olan
+  `scripts/e2e-acceptance.sh flows` alt-komutunu koşar.
+* **Rozet değil, job LOG'u** (job **94097720164**, success): **`67 passed / 0 failed /
+  1 skipped`**, `duration_seconds=137`, job **2m56s**, 12 konteyner + yedi düzlem
+  `restarts=0`, tarayıcı katmanı **5 passed**. Ham:
+  `docs/releases/evidence/2026-08-12/P6B2_flows_ci_gate.md` (+ 3 ham dosya).
+* **Maliyet ölçüldü ve kabul edildi.** §6.2 "kabul edilemezse nightly'ye al ya da
+  paralelleştir" demişti; **ikisi de gerekmedi** — kardeş job olduğu için workflow
+  wall-clock'una **~0** ekler. **Kapsam KISILMADI, kapı advisory DEĞİL.**
+* **Üç tuzak kapatıldı:** (1) `tee`'nin exit code'u — `set -o pipefail` olmasa düşen bir
+  kabul koşusu **yeşil** raporlardı; (2) sessiz SKIP kayması — **`E2E_MAX_SKIPS`** (CI: 1)
+  karara bağlanmış sayıyı pinler, tanımsız = tavan yok; (3) chromium sistem bağımlılıkları
+  — job onu **önceden** `--with-deps` ile kurar, yoksa tarayıcı katmanı sessizce SKIP'e düşer.
+* **SKIP (ii) Tool Gateway günlüğü KAPANDI** — seed'e task eklenmedi; `[d5]` artık
+  Coordinator'ın directive'den ürettiği **gerçek** task'ı bekliyor (`source=directive`,
+  USER 403). Aynı bekleyiş **4. tavizsiz kuralı** "KABUL EDİLDİ"den "**TÜKETİLDİ**"e
+  yükseltir. Günlük **sunuluyor** diye iddia edilir, **boş değil** diye değil.
+* **SKIP (i) pozitif ESP `activate`→`deprecate` KALIYOR — gerekçesi düzeltildi.** Vektörler
+  artık gerçek (`vectors_run` **0 → 2**); asıl engel **yapısal**: doğrulanabilir altı
+  kanonik anahtarın **hepsi** `SEED_ESP_TA` ile `trusted_active` tohumlanır ve aktivasyon
+  **yalnız `candidate`'ten** yasaldır → **kesişim boş**. `[c2]` `validation_state=failed`'i,
+  `[c5]` `409 RESOLVER_VALIDATION_REQUIRED`'ı **pinler**.
+* **Concurrency premisi bayattı** — `ci.yml` de `e2e.yml` de ADIM 34'ten beri onarılı; job
+  `e2e.yml`'e kondu ki **zaten doğru** bloğu miras alsın (yeni workflow = kusurun geri
+  gelmesi için ikinci şans). `e8d1d48`/`bc59dae`: `cancelled`, **`total_jobs=0`** — ama
+  iptal edilen **`CI`**'dır, `e2e.yml` hiç kurban olmadı.
+* **KAPATMADIĞI:** **P11-1 branch protection** (required status check olmadan bu kapı
+  merge'i **durduramaz** — depo ayarı + insan kararı) · **A-08** dokunulmadı (#514
+  2026-08-12'de bir **insan** tarafından yeniden **AÇILDI**; defter hâlâ boş).
+
+Paste-ready resume prompt: `docs/ADIM45_LANDED_KICKOFF.md` en altta.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38, 39, 40 ve 41 bunu DEĞİŞTİRMEDİ** — üçü de test/kapı/belge slice'ıydı, motor
+> **ADIM 38, 39, 40, 41 ve 45 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge slice'ıydı, motor
 > eksenine dokunmadı. Test ekseninde kalan RC §6.7 kalemleri: **P11-1** (branch
 > protection — repo ayarı, **insan kararı**, agent işi değil), **P11-6b**, **P11-8**
 > (Lighthouse). Belge ekseninde kalan: **P8-B2'nin PO yarısı** (`../validate` +

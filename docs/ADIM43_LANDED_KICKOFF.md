@@ -1,4 +1,8 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED by `docs/ADIM45_LANDED_KICKOFF.md` (ADIM 45, 2026-08-12).** Bu belge ADIM
+> 43'ün kaydıdır ve o günkü durumu anlatır; canlı kickoff artık ADIM 45'inkidir.
+> (ADIM 44 kendi kapanışında bu işareti düşürmeyi atlamıştı — `--check` onu ADIM 45'te
+> yakaladı: aynı anda iki kickoff `current` olamaz.)
 # ADIM 43 landed — kickoff / devam tohumu
 
 > **ADIM 43 = RC §6.7 / P11-8 + P10-7.** İki kapı bağlandı. **P11-8 KAPANDI** (Lighthouse

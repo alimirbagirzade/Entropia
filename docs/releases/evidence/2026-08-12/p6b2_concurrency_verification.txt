@@ -1,0 +1,68 @@
+==============================================================================
+ADIM 45 / RC §6.2 item 3 — CONCURRENCY. Measured on the branch, not assumed.
+==============================================================================
+
+--- The brief's premise, re-checked FIRST (stale-by-default) ---------------
+The brief called the ci.yml concurrency defect 'ÖLÜMCÜL' for this gate. It
+was already repaired (ADIM 34) and is still repaired today. Verbatim:
+
+### .github/workflows/ci.yml lines 9-14
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel superseded runs on PRs/feature branches to save minutes, but never on
+  # main: every push to main must run to completion so each merged commit lands
+  # with a full, green CI check instead of a cancelled (incomplete) one.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+### .github/workflows/e2e.yml lines 10-12  (the block the NEW job inherits)
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+On refs/heads/main:  github.ref != 'refs/heads/main'  ==  FALSE
+  => cancel-in-progress is FALSE on main in BOTH workflows.
+  => a queued run on main can never cancel its predecessor.
+
+--- Why the new job went into e2e.yml, not a new workflow ------------------
+A new workflow needs its own concurrency block — a second chance to
+reintroduce the exact defect below. Workflow-level concurrency applies to
+EVERY job in the workflow, so the new job inherits a block that is already
+correct and nothing job-specific had to be authored.
+
+--- The historical damage, confirmed from the API (NOT hypothetical) -------
+
+commit e8d1d48 (e8d1d48397aadddf13bed3265a56ce365b34ca4c)
+  subject: docs(adim-29): record the P3 frontend verification evidence (#633)
+    run 31189395869 | E2E | status=completed | conclusion=success
+    run 31189395272 | Security | status=completed | conclusion=success
+    run 31189394881 | Performance | status=completed | conclusion=success
+    run 31189394828 | Install acceptance | status=completed | conclusion=success
+    run 31189395028 | CI | status=completed | conclusion=cancelled
+
+commit bc59dae (bc59daed12c9d891cea159a0cf665ea2b73911ba)
+  subject: docs(v18-rc): adjudicate the A-08 human gate as BLOCKED (#634)
+    run 31189634665 | CI | status=completed | conclusion=cancelled
+    run 31189635280 | E2E | status=completed | conclusion=success
+    run 31189635146 | Install acceptance | status=completed | conclusion=success
+    run 31189634421 | Security | status=completed | conclusion=success
+    run 31189634425 | Performance | status=completed | conclusion=success
+
+--- PRECISION: which workflow was actually cancelled, and did it run? ------
+The cancelled runs on both SHAs are the CI workflow. E2E/Security/
+Performance/Install-acceptance all SUCCEEDED on those same SHAs — so
+e2e.yml (this job's home) was never the victim. Recording that plainly
+rather than letting 'their CI never ran' read as 'nothing ran'.
+
+cancelled CI run 31189395028:
+    total_jobs=0
+cancelled CI run 31189634665:
+    total_jobs=0
+
+  total_jobs=0 confirms it: the run was cancelled before a single job was
+  dispatched. A badge existed; no work happened behind it. That is the
+  failure mode this gate must not be able to inherit.
+
+--- THE NEW JOB ACTUALLY RAN (badge is not evidence; the job log is) -------
+See p6b2_acceptance_flows_ci_job.log in this directory — the full runner
+log for the 'Acceptance flows (a)-(e)' job, including every PASS/FAIL/SKIP
+line the harness printed and the measured duration_seconds.

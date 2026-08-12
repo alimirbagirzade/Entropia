@@ -376,6 +376,126 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  # ===========================================================================
+  # RC §6.2 / blocker 2 — the FIVE acceptance flows, wired as a BLOCKING gate.
+  #
+  # Until ADIM 45 `scripts/e2e-acceptance.sh flows` was a local command only. The
+  # RC report's own words: "`flows` bir CI KAPISI DEĞİLDİR — yerel bir komuttur,
+  # hiçbir workflow onu koşmaz, dolayısıyla bir regresyon sessizce geri
+  # gelebilir." Coverage without a gate is a measurement somebody took once.
+  #
+  # WHY A JOB IN THIS WORKFLOW, NOT A NEW WORKFLOW. Two reasons, the second
+  # load-bearing:
+  #   * it is the same shape as its siblings — boot a Compose stack, seed the
+  #     same three fixtures, drive it — so it belongs beside them;
+  #   * CONCURRENCY. A new workflow needs its own `concurrency:` block, and
+  #     getting that wrong is not hypothetical here: `e8d1d48` (#633) and
+  #     `bc59dae` (#634) were both cancelled on main with ZERO jobs run, so
+  #     their CI never executed at all while the badge looked settled. This
+  #     workflow's block (top of file) is already `group: e2e-${{ github.ref }}`
+  #     with `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` — on
+  #     main that evaluates FALSE, so a push can never cancel its predecessor.
+  #     Inheriting a block that is already right beats authoring a second one
+  #     that has to be kept right. Verified from the job LOG, not the badge:
+  #     docs/releases/evidence/2026-08-12/.
+  #
+  # BLOCKING, NOT ADVISORY: no `continue-on-error`, no `|| true` around the
+  # harness. It exits 1 on any FAIL and 2 when Docker is missing or hung, and
+  # both fail this job.
+  # OUT OF SCOPE (P11-1), and stated so it is not mistaken for done: a
+  # required-status-check rule in branch protection is what makes a red check
+  # actually STOP a merge. That is a repository setting and a human decision.
+  # Until it is set, this gate reports honestly but does not hold the button.
+  #
+  # COST, to be measured rather than guessed: a SECOND full stack (12
+  # containers) on its own runner. As a sibling job it runs in PARALLEL with
+  # e2e/a11y/lighthouse/e2e-dev, so it adds ~0 to the workflow's wall-clock and
+  # only to the minutes bill. The measured runtime is recorded in
+  # docs/releases/evidence/2026-08-12/.
+  acceptance-flows:
+    name: Acceptance flows (a)-(e) — five flows vs. an isolated stack (RC §6.2)
+    runs-on: ubuntu-latest
+    # The harness builds its own stack, waits for health (up to 360s), seeds,
+    # drives five server-layer flows, waits up to 90s for the Coordinator to
+    # consume a directive, then runs four browser journeys.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      # NOTE: no `cp .env.example .env` here, unlike every sibling job. The
+      # harness owns its stack — it writes its OWN hermetic `.env.e2e.flows` and
+      # passes it via ENTROPIA_ENV_FILE. Writing a `.env` here would be a second
+      # source of truth for a stack that already has one.
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/e2e/package-lock.json
+
+      # Pre-install the browser WITH system deps. The harness's own
+      # `npx playwright install chromium` (acceptance-flows.sh::af_browser_layer)
+      # cannot pass `--with-deps`, which needs root — so on a bare runner the
+      # download would succeed and chromium would then fail to LAUNCH on missing
+      # shared libraries. The harness would record that as a SKIP, which is not a
+      # false green, but it would quietly buy four fewer journeys than this job
+      # claims to run. E2E_MAX_SKIPS below now turns exactly that into a failure;
+      # installing here (where sudo exists) makes the harness's own install a
+      # no-op and keeps the browser layer real.
+      - name: Install E2E dependencies + Chromium with system deps
+        working-directory: frontend/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run the five acceptance flows
+        env:
+          # The ADJUDICATED skip count (RC §6.2). Exactly ONE skip is expected:
+          # [c5]'s positive ESP activate->deprecate, structurally unreachable on
+          # a SEED_ESP_TA stack because no canonical key is both validatable and
+          # activatable. The other skip this gate inherited ([d3]'s tool-call
+          # log) was CLOSED in ADIM 45 — the log is now exercised against the
+          # real task the Coordinator spawns from a directive. Raising this
+          # number is a §6.2 decision, never a CI convenience.
+          E2E_MAX_SKIPS: "1"
+        # `set -o pipefail` is load-bearing: the harness is piped through `tee`,
+        # so without it the step would take TEE's exit status and a failing
+        # acceptance run would report green. That is the precise shape of the
+        # bug this gate exists to catch, so it must not be reintroduced by the
+        # gate's own plumbing.
+        run: |
+          set -o pipefail
+          start=$(date +%s)
+          rc=0
+          # `|| rc=$?` rather than a bare call: the default runner shell is
+          # `bash -e`, which would abort the step the instant the harness exits
+          # non-zero — losing the duration line this gate has to report, on
+          # exactly the runs where the number matters most. Inside a `||` list
+          # `-e` does not fire, pipefail still hands us the HARNESS's status
+          # (not tee's), and the explicit `exit $rc` below still fails the job.
+          bash scripts/e2e-acceptance.sh flows 2>&1 | tee acceptance-flows.log || rc=$?
+          echo "duration_seconds=$(( $(date +%s) - start ))" | tee -a acceptance-flows.log
+          exit $rc
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        # The project name is fixed by the harness's isolation contract
+        # (`entropia-e2e-<flow>`). Its EXIT trap normally tears the stack down
+        # before this runs, so this is best-effort and must never turn a real
+        # failure into a confusing second one.
+        run: docker compose -p entropia-e2e-flows logs --tail 500 || true
+
+      - name: Upload the acceptance-flows log (PASS/FAIL/SKIP lines + duration)
+        # Always: on a pass this is the §6.2 evidence artifact; on a failure it
+        # carries the FAIL lines and the response bodies behind them.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-flows-log
+          path: acceptance-flows.log
+          retention-days: 14
+          if-no-files-found: warn
+
   # audit TEST-09 / §9.6 — a SEPARATE, explicit dev-auth stack (its own runner, so
   # its own Compose project + volumes, never the session job's). The session job
   # above proves the normal session profile; this one proves the dev profile

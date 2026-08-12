@@ -61,9 +61,17 @@ Bu slice **presentation-only** idi ve **tek bir CSS deklarasyonu** sevk etti.
 
 ## Bir sonraki oturumun ilk işi (borç)
 
-1. **Memory checkpoint borcu — İKİ slice birden.** `ecc` ve `claude-mem` MCP sunucuları
-   ADIM 47'de de ADIM 48'de de **bağlı değildi** → kapanış ritüelinin 4. maddesi **üst üste
-   iki oturumdur eksik**. Bağlı bir oturumda **ADIM 47 + ADIM 48** için birden yaz.
+1. **Memory checkpoint borcu — İKİ slice birden, İÇERİK HAZIR.**
+   → **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 48 kapanışında yazıldı).
+   İki ecc entity'si ve iki claude-mem observation'ı **tam metin** hâlde orada; yeniden
+   türetme, yapıştır. Yazdıktan sonra o dosyayı **SİL** — kendini tüketen bir belgedir.
+   **Neden iki oturumdur eksik olduğu ölçüldü ve sebep yapısal:** bu iş remote
+   container'da yürüyor ve orada `ecc`/`claude-mem`/`codebase-memory-mcp` **kayıtlı
+   değil** — `/root/.claude.json`'da bu projenin `mcpServers` listesi **boş**, repoda
+   `.mcp.json` **yok**. Yani borç **bu ortamdan kapatılamaz**; yapılandırmanın bulunduğu
+   bir **yerel** oturum ister. Aynı ortamda açılan ADIM 49 da aynı şekilde kaçırır —
+   kalıcı çözüm (sunucuları kaydetmek **veya** remote oturumları ritüelin 4. maddesinden
+   resmen muaf tutmak) **insan kararıdır**.
 2. **CI'ın söylediğini oku.** `npm run visual` ve `npm run a11y` bu oturumda
    koşturulamadı (ortam ağ politikası Docker Hub blob CDN'ini **403** ile reddediyor).
    PR'ın `e2e.yml::e2e` ve `e2e.yml::a11y` job'ları **otoritedir** — job log'undan

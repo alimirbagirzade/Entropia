@@ -221,8 +221,12 @@ Before stopping a working session, produce **ALL** of the following:
 > yalnız A-08 kapatabilir.** Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED.
 > **`npm run visual` / `npm run a11y` YERELDE KOŞMADI** (ortam Docker Hub blob CDN'ine
 > **403**) → **otorite CI**; görsel diff çıkarsa **tabanı güncelleme**, selector'ı daralt.
-> **Memory checkpoint yine YAZILAMADI** (ecc/claude-mem bağlı değil) — borç artık **ADIM 47 +
-> ADIM 48**, üst üste iki oturum. `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
+> **Memory checkpoint YAZILAMAZ, sebebi YAPISAL (ölçüldü 2026-08-12):** remote container'da
+> `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok) → borç bu ortamdan
+> kapatılamaz, **yerel** oturum ister. İçerik **hazır bırakıldı**:
+> **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil).
+> Sunucuları kaydetmek ya da remote'u md. 4'ten muaf tutmak **insan kararıdır**.
+> `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
 > Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
 > Öncesinde ADIM 48 (kabul borcu B-01 — doc 05 Trade Log backend yüzeyi): **8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
 > DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kapananlar: `TL-03` `TL-06` `TL-07`

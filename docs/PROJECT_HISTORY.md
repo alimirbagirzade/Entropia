@@ -7638,10 +7638,23 @@ reddettiği literalleri sürer.
   TL-16 · TL-20 · TL-22` + `TL-18` uncovered).
 - **A-08 / #514'e DOKUNULMADI** — defter boş (0/4), izleme issue'su kapalı, blocker 1.
 - **`P1-Gate3` KAPANMADI.** 126 kalem açık; bu parti borcun **%6'sını** kapattı.
-- **Memory checkpoint YAZILAMADI (ritüel madde 4).** Bu oturumda da `ecc` ve
-  `claude-mem` MCP sunucuları **bağlı değil** (ToolSearch'te yoklar) — ADIM 47 ile aynı
-  boşluk, **iki oturumdur birikiyor**. Atlanmadı, **yapılamadı**; bir sonraki oturumda
-  ADIM 47 **ve** ADIM 48 için yazılmalı.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4) — ve sebebi merge sonrası ÖLÇÜLDÜ.**
+  ADIM 47 ile aynı boşluk, iki oturumdur birikiyordu. İlk iki kayıt *"bir sonraki
+  oturumda yazılmalı"* dedi; ikincisi geldiğinde koşul değişmemişti, çünkü sorun
+  **oturuma özel değil ortama yapısaldır:** bu iş Claude Code on the web (remote
+  container) üzerinde yürüyor ve o ortamda `ecc` / `claude-mem` / `codebase-memory-mcp`
+  **hiç kayıtlı değil** — `/root/.claude.json`'da bu projenin `mcpServers` listesi
+  **boş (`[]`)**, repoda `.mcp.json` **yok**, araç aramasında `ecc` **sıfır eşleşme**
+  veriyor. Bağlı olanlar `github` / `Figma` / `Google_Drive` / `Claude_Code_Remote`;
+  hiçbiri knowledge graph değil. **Yani borç bu ortamdan kapatılamaz** ve aynı ortamda
+  açılan bir sonraki slice de aynı şekilde kaçırır — *"bir dahaki sefere"* demek onu
+  kapatmıyordu.
+  **Yapılan:** checkpoint içeriği **tam metin** hâlde
+  `docs/memory/PENDING_CHECKPOINTS.md`'ye yazıldı (iki ecc entity'si + iki claude-mem
+  observation'ı, ilişkileriyle). Bağlı bir **yerel** oturum onu yeniden türetmeden
+  yapıştırır ve dosyayı siler — belge kendini tüketir. **Kalıcı çözüm insan kararıdır:**
+  ya sunucular remote ortama kaydedilir (`.mcp.json`), ya remote oturumlar ritüelin
+  4. maddesinden resmen muaf tutulur. Üçüncü seçenek yok.
 - **Codemap tazelemesi gerekmedi (ritüel madde 5)** — slice yeni endpoint / tablo /
   sayfa / job / dramatiq aktörü eklemedi; `backend/src`, `alembic` ve `frontend/src`
   ağaçlarına **hiç dokunulmadı**, o yüzden `repository_facts.md` girdileri de değişmedi.

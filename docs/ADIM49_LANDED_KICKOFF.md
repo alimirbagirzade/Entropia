@@ -6,9 +6,9 @@
 > Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 49.
 
 > **NUMARA NOTU — bu slice ADIM 48 olarak yazıldı, ADIM 49'a taşındı.** İş sürerken
-> **main altımdan değişti**: #683 (P11-1 hazırlığı) ve #686 (kabul borcu sınıf B parti 01)
-> merge edildi ve **#686 "ADIM 48" adını aldı** — aynı `docs/ADIM48_LANDED_KICKOFF.md`
-> yolunu da dahil. CLAUDE.md'nin *"yeniden numaralandırma YASAK"* kuralı **merged**
+> **main altımdan İKİ KEZ değişti**: #683 (P11-1 hazırlığı), #686 (kabul borcu sınıf B
+> parti 01) ve #688 (K-6b odak halkası) merge edildi. **#686 VE #688'in İKİSİ DE "ADIM 48"
+> adını aldı** ve aynı `docs/ADIM48_LANDED_KICKOFF.md` yoluna yazdı. CLAUDE.md'nin *"yeniden numaralandırma YASAK"* kuralı **merged**
 > başlıklar içindir (değiştirilemezler); bu slice henüz merge edilmemişti, o yüzden
 > çakışma **ucuzken** önlendi. **Ders:** kapanış belgelerini yazmadan hemen önce
 > `git fetch && git log --oneline origin/main -3` **tekrar** koş — ADIM numarası main'de
@@ -16,7 +16,7 @@
 
 ## Nerede duruyoruz
 
-**Base:** `origin/main` @ `d6fa02f` (#686, ADIM 48). **Kod değişmedi** — ADIM 49 yalnız
+**Base:** `origin/main` @ `04c6a9c` (#688, ADIM 48 — K-6b). **Kod değişmedi** — ADIM 49 yalnız
 belge uzlaştırmasıdır. Migration yok, `ENGINE_VERSION` değişmedi, alembic head
 `0043_i08_registry_strategy_fks`.
 
@@ -67,7 +67,7 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
 |---|---|---|
 | **A-08 denetimi** | **insan** | tek blocker; SR-2 (VoiceOver/Safari/macOS) **kullanıcının kendi makinesinde** koşulabilir |
 | **P11-1** | **insan** | hazırlığı **#683 ile MERGE EDİLDİ** (`.github/rulesets/…json` + `required-checks-preflight.sh` + runbook). Kalan iş **ayarı uygulamak** — depo ayarı, agent yapamaz |
-| K-2..K-7 | insan | beşi de ürün kararı; **K-5/K-6/K-7 A-08'den ÖNCE cevaplanamaz** |
+| K-2..K-7 | insan | **K-6b #688 ile KAPANDI** (odak halkası `var(--text)`, ölçülen en kötü zemin 4.50:1 ≥ 3:1). Kalanlar ürün kararı; **K-5/K-6a/K-7 A-08'den ÖNCE cevaplanamaz** |
 | #558 / #559 | insan | kod açıkken COMPLETED kapalı; yeniden açmak insan işi |
 | Kriter borç defteri (sınıf B) | agent | **parti 01 #686 ile landed** (8 kriter, `partial` 126 → 118). Sıradaki parti: `TL-11.c3`+`TL-12.c3`+`TL-20.c3`. **Sınıf D'ye test yazma — boşluğu gizler** |
 | PR B2a → B2b | agent | post-V1; `SHARED_ALLOCATION_STATUS=future_dev` |
@@ -81,10 +81,11 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
   (VoiceOver/Safari/macOS). Tek kombinasyon A-08'i karşılamaz.
 - Denetçinin sertifikalı olması **şart değil** — defterin §0 alanı `neither` yazmayı
   kaldırır ve sınırı dürüstçe kayda geçirir.
-- **Beklenen gözlemler, yeni bulgu sayma:** K-2 (skip link yok, 23/23) · K-3 (contentinfo
+- **Beklenen gözlemler, yeni bulgu sayma** (**K-6b ARTIK DEĞİL — #688 kapattı**): K-2 (skip link yok, 23/23) · K-3 (contentinfo
   landmark yok, 23/23) · K-4 (`/user-manual`'da `<h1>` yok) · K-5 (h1→h3 atlaması, 21/23) ·
-  K-7 (ilk DOM'da `aria-live` yok, 21/23) · D-10 (kontrast, **ayrı eksen**).
-- **ORTAM TUZAĞI (ADIM 49'de ölçüldü):** uzak konteyner oturumları **Linux**'tadır;
+  K-7 (ilk DOM'da `aria-live` yok, 21/23) · **K-6a** (odak GÖRÜLEBİLİR mi — yalnız A-08
+  kapatır; ölçülebilir kontrast ≠ görülebilirlik) · D-10 (kontrast, **ayrı eksen**).
+- **ORTAM TUZAĞI (ADIM 49'da ölçüldü):** uzak konteyner oturumları **Linux**'tadır;
   `a11y-audit-stack.sh` orada ayağa kalksa bile kullanıcının **macOS Safari**'sinden
   erişilemez. Kâtiplik oturumu, yığının **kullanıcının kendi makinesinde** kaldırılmasını
   gerektirir.
@@ -99,13 +100,52 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
   karıştırma — ikisi AYRI, biri diğerini kapatmaz.
 - Verdict'e `READY` yazma; A-08 kapanmadan **BLOCKED** kalır.
 
-## Açık borç (ADIM 49'in kapatmadığı)
+## Açık borç (ADIM 49'un kapatmadığı)
 
 - **Memory checkpoint YAZILAMADI** — `ecc` ve `claude-mem` MCP sunucuları bu oturumda da
-  bağlı değildi (ADIM 47'de de öyleydi). Kapanış ritüelinin 4. maddesi **iki slice'tır
-  eksiktir**; bağlı bir oturumda ADIM 47 **ve** 48 için yazılmalı.
+  bağlı değildi (ADIM 47'de de öyleydi). Kapanış ritüelinin 4. maddesi **üst üste
+  eksiktir**; bağlı bir oturumda **ADIM 47, 48 (her iki #686/#688 slice'ı) ve 49** için
+  birden yazılmalı.
 - **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde).
 - `/library/{id}/validation-runs` **201'de kaldı** (ADIM 47) — ayrışma açık, PO kararı ister.
+
+### AÇIK KUSUR — main'de İKİ slice "ADIM 48" adını taşıyor (DÜZELTİLMEDİ, bilerek)
+
+`origin/main` @ `04c6a9c` şu anda **çakışmalı**:
+- `docs/PROJECT_HISTORY.md`'de **iki `## ADIM 48` bölümü** — `:7428` (#688, K-6b odak
+  halkası) ve `:7547` (#686, kabul borcu B/01).
+- `docs/ADIM48_LANDED_KICKOFF.md`'de **iki `# ADIM 48 LANDED` başlığı** ard arda.
+
+**ADIM 49 bunu DÜZELTMEDİ ve düzeltmemelidir.** İki sebep:
+1. **İkisi de merge edilmiş.** CLAUDE.md kuralı: merged başlıklar ve commit mesajları
+   değiştirilemez → yeniden numaralandırma yasak. Belgelenmiş çare **başlık ekidir**
+   (`ADIM 16 (sevk edilen)` / `ADIM 16 (ADR §12)` emsali).
+2. **Başlığı yeniden yazmak docs-regresyon kapısını KIRAR.** Kapı `^-## ` arar; bir
+   `## ADIM 48` başlığını değiştirmek onu *silinmiş* gösterir. Kapı burada **doğru**
+   davranıyor: birleştirilmiş kayıtların tek taraflı yeniden yazılmasını engelliyor.
+
+⇒ Çare **insan kararıdır**: ya başlık eki verilir (`ADIM 48 (K-6b)` / `ADIM 48 (borç B/01)`)
+ve kapı bilerek bir kez aşılır, ya da çakışma emsallerdeki gibi **kayda geçip kalır**.
+ADIM 49 yalnızca **kaydetti**. Ayrıca `docs/ADIM48_LANDED_KICKOFF.md`'nin banner'ı artık
+iki başlığın neden ard arda durduğunu söylüyor (okuyan "bozuk" sanmasın).
+
+### YENİ BULGU (ADIM 49) — docs-regresyon kapısının İKİ kör noktası · ÖLÇÜLDÜ
+
+Bu oturumda main iki kez altımdan değişti ve **merge iki kez içerik SİLDİ**:
+
+| Kayıp | Kapı yakaladı mı? | Neden |
+|---|---|---|
+| #688'in `## ADIM 48 — K-6b` **PROJECT_HISTORY bölümü** (119 satır) | ✅ **EVET** | `git diff origin/main -- docs/ \| grep '^-## '` ateşledi → geri yüklendi |
+| #688'in **`CLAUDE.md` §Current position bloğu** (14 satır) | ❌ **HAYIR** | kapı yalnız `docs/` altına bakar; `CLAUDE.md` **kapsam dışı**. Elle fark edildi, geri yüklendi |
+
+**İki kör nokta:** (a) kapı `CLAUDE.md`'yi hiç okumuyor, oysa §Current position tam olarak
+slice özetlerinin biriktiği yer; (b) kapı yalnız `^-## ` başlıklarını görüyor — **başlıksız**
+bir paragrafın silinmesi sessizce geçer (#688'in CLAUDE.md bloğu `>` blockquote'tur, `##`
+değil). **Öneri (uygulanmadı):** guard'ı `git diff origin/main -- docs/ CLAUDE.md` yapmak
+ucuz bir kazanç; başlıksız silmeleri yakalamak için satır-sayısı deltası eşiği gerekir ve
+o bir ürün kararıdır. **Kural, bugünkü hâliyle:** bir merge sonrası **elle** doğrula —
+`git log origin/main -1 --stat` ile dokunulan her dosyanın içeriğinin hâlâ orada olduğunu
+gör. Yeşil kapı "hiçbir şey kaybolmadı" demek DEĞİLDİR.
 
 ### YENİ BULGU (ADIM 49) — `A08_COMPLETE` kapısının kapsamı dar · ÖLÇÜLDÜ, DÜZELTİLMEDİ
 
@@ -120,7 +160,7 @@ defterin harflemesiyle **(B)** yolunu seçti. 8 belge uzlaştırıldı; kanonik 
 (`docs/ADIM<n>_LANDED_KICKOFF.md`). Yani *"A-08 Complete yazılmasını"* engellemek için var
 olan kapı, bu ifadenin en çok önem taşıdığı belgeleri **okumuyor**.
 
-**Negatif kanıt (ADIM 49'de ölçüldü):** canlı kickoff'a `A-08 denetimi tamamlandı ve PASS.`
+**Negatif kanıt (ADIM 49'da ölçüldü):** canlı kickoff'a `A-08 denetimi tamamlandı ve PASS.`
 satırı eklendi → kapı **exit 0** verdi (yakalamadı). Satır geri alındı.
 
 **Neden tek satırlık bir düzeltme DEĞİL.** Glob'ları genişletmek bugün **7 sahte kırmızı**
@@ -144,7 +184,7 @@ budur), **sonra** `INVARIANT_GLOBS` genişletilir. Ters sırada yapılırsa 7 sa
 gelir ve düzeltme "glob'u geri al" diye geri alınır.
 
 **Ayrıca (küçük ama tuzak):** kural **satır tabanlıdır** ve `[^\n]{0,80}` newline geçmez —
-`A-08` ile `Complete` farklı satırlara denk gelirse kural **hiç ateşlenmez**. ADIM 49'de
+`A-08` ile `Complete` farklı satırlara denk gelirse kural **hiç ateşlenmez**. ADIM 49'da
 bir yeniden sarma tam da bunu tersine çevirdi (yakalanmayan satır yakalanır oldu). Bir
 satırı yeniden sararken kapının davranışını değiştirdiğini bil.
 
@@ -201,10 +241,10 @@ DENETİM OTURUMUNDA SEN KÂTİPSİN, DENETÇİ DEĞİLSİN:
   Akış: docs/implementation/a11y_screen_reader_audit_runbook.md + defter §0–§5.
 
 BEKLENEN GÖZLEMLER — yeni bulgu sayma:
-  K-2 skip link yok (23/23) · K-3 contentinfo yok (23/23) ·
+  K-2 skip link yok (23/23) · K-3 contentinfo yok (23/23) · K-6a odak GÖRÜNÜRLÜĞÜ ·
   K-4 /user-manual'da <h1> yok · K-5 h1→h3 atlaması (21/23) ·
   K-7 ilk DOM'da aria-live yok (21/23) · D-10 kontrast (AYRI EKSEN).
-  ⇒ K-5/K-6/K-7'nin ASIL sorusu denetimde cevaplanır.
+  ⇒ K-5/K-6a/K-7'nin ASIL sorusu denetimde cevaplanır. K-6b KAPANDI (#688), yeniden açma.
 
 ASLA: #514'ü kapatma ya da açma (human-only) · hiçbir belgeye A-08 için
 Complete/PASS/Done yazma · D-10'u ekran-okuyucu ekseniyle karıştırma.
@@ -212,7 +252,8 @@ Complete/PASS/Done yazma · D-10'u ekran-okuyucu ekseniyle karıştırma.
 ════════════════ ÖNCELİK 2 — P11-1 BRANCH PROTECTION ════════════════
 main'de branch protection ve ruleset YOK → on slice'ta kurulan kapıların
 HİÇBİRİ kırmızıyken merge'i durduramıyor.
-HAZIRLIĞI PR #683 (taslak) YAPIYOR — ÖNCE ONU OKU, ÇOĞALTMA.
+HAZIRLIĞI #683 İLE MERGE EDİLDİ (ruleset json + preflight + runbook).
+Kalan iş AYARI UYGULAMAK — depo ayarı, agent yapamaz.
 Bu bir REPO AYARI: agent UYGULAMAZ, HAZIRLAR.
 UYARI: var olmayan bir job adını required yapmak TÜM merge'leri kilitler.
 
@@ -220,8 +261,8 @@ UYARI: var olmayan bir job adını required yapmak TÜM merge'leri kilitler.
 | Kalem | Kim |
 |---|---|
 | A-08 denetimi | insan — tek blocker |
-| P11-1 (#683 taslak) | insan |
-| K-2..K-7 | insan — K-5/K-6/K-7 A-08'den ÖNCE cevaplanamaz |
+| P11-1 (#683 landed, ayar uygulanmadı) | insan |
+| K-2..K-7 | insan — K-6b #688'de KAPANDI; K-5/K-6a/K-7 A-08'den ÖNCE cevaplanamaz |
 | #558 / #559 | insan |
 | Kriter borç defteri | agent — YALNIZ sınıf B; sınıf D'ye test yazmak boşluğu GİZLER |
 | PR B2a → B2b | agent — post-V1 |

@@ -7423,6 +7423,127 @@ Migration **yok**, `ENGINE_VERSION` **değişmedi**, OCC/Idempotency davranış�
   issue'su kapalı. Hiçbir belge A-08'i `Complete`/`PASS` göstermez.
 - **P10-B6, P11-1, P8-B3b, P4-3, P1-Gate3, P10-B3/B4/B5 açık** — bu slice'ın kapsamı dışı.
 
+---
+
+## ADIM 48 — K-6b: odak halkasının kontrastı (WCAG 1.4.11), tek CSS deklarasyonu
+
+**Dalganın tipi:** presentation-only erişilebilirlik düzeltmesi. **Tek ürün kodu değişikliği
+bir deklarasyondur** — `frontend/src/styles/global.css` `:focus-visible` kuralında
+`outline: 2px solid var(--accent)` → `var(--text)`. Migration yok, `ENGINE_VERSION`
+değişmedi, OpenAPI değişmedi. Route path, react-query key, OCC token, Idempotency-Key,
+hook, SSE taksonomisi, `lib/*.ts`, `app/nav.ts` **hiç dokunulmadı**. Base `7dd1dfe` (#682).
+
+### Neden — ve iddia sıfırdan yeniden ölçüldü
+
+Kickoff'un verdiği sayılar kabul edilmedi, WCAG 2.x relatif luminans formülüyle
+(`(L1+0.05)/(L2+0.05)`, sRGB linearizasyonu) **bağımsız olarak yeniden hesaplandı** ve
+**birebir doğrulandı**:
+
+| Halka | Zemin | Oran | 1.4.11 (3:1) |
+|---|---|---:|---|
+| `#00a9e8` (`--accent`) | `#ffffff` | **2.68 : 1** | **FAIL** |
+| `#00a9e8` | `#f5f5f5` | **2.46 : 1** | **FAIL** |
+
+Ölçüm zemin kümesine genişletildi ve **accent halkası uygulamadaki 15 zeminin HİÇBİRİNDE
+3:1'i geçmiyordu** — en iyi hâli beyaz üzerinde 2.68:1, en kötüsü kendi üzerinde 1.00:1
+(`.dropdown-blue .item`, `background: #00a9e8` — halka görünmez).
+
+**Bunu repoda hiçbir şey ölçmüyordu.** axe-core'un `color-contrast` kuralı **metin** içindir
+ve odak göstergesi için bir kontrast kuralı **koşmuyor**; a11y ratchet'i, Lighthouse ratchet'i
+ve görsel kapı yeşildi ve **yeşil olmaları kanıt değildi** — hiçbiri bu soruyu sormuyordu.
+
+### Neden bu D-10 DEĞİL — ve neden v18 sapması DEĞİL
+
+İki ayrı gerekçe, ikisi de kapatılmadan bu slice yazılamazdı:
+
+1. **Ölçüt farklı.** D-10 (2026-07-30 imzalı kalıcı sapma, 45 accent-blue düğüm) **1.4.3
+   Contrast (Minimum)** eksenidir — *metin* rengi. Bu kalem **1.4.11 Non-text Contrast**'tır
+   — bir UI bileşeninin görsel göstergesi. Ayrı başarı ölçütü, ayrı eşik (4.5:1 vs 3:1),
+   ayrı imza gerekirdi. D-10'un imzası bu ekseni **kapsamıyor**; bir metin sapmasına verilmiş
+   imzayı bir gösterge sapmasına genişletmek imzayı sahiplenmek olurdu.
+2. **Mockup bu durumu tarif etmiyor.** `docs/spec/index_guncellenmis_duzeltilmis_v18.html`
+   içinde **hiçbir odak durumu yok** — ne `:focus`, ne `:focus-visible`, ne bir odak halkası
+   görseli. Bir sapma ancak kanonun söylediği bir şeyden sapabilir. Halka rengi **v18
+   sapması değildir**; `--accent` token'ını, dolguları, kenarlıkları veya link paletini
+   değiştirmek **olurdu** — bu yüzden hiçbirine dokunulmadı.
+
+### Sevk edilen — ve neden `var(--text)`
+
+`--text` (`#222222`) seçildi çünkü palette **zaten var** (yeni token icat edilmedi) ve
+uygulamadaki **her** zeminde 3:1'i geniş bir payla geçiyor. Değişiklikten sonra ölçülen:
+
+| Zemin | Nerede | Oran |
+|---|---|---:|
+| `#ffffff` | gövde, kartlar | **15.91 : 1** |
+| `#f5f5f5` | | **14.59 : 1** |
+| `#e8e8e8` | başlık çubuğu | **12.98 : 1** |
+| `#00a9e8` | `.dropdown-blue` paneli | **5.94 : 1** |
+| `#8f8f8f` | `.dropdown` paneli | **4.92 : 1** |
+| `#8b8b8b` | `.run-button:disabled` | **4.67 : 1** |
+| `#0092c8` | `.menu-blue:hover` — **uygulamadaki EN KÖTÜ zemin** | **4.50 : 1** |
+
+En kötü hâli bile eşiğin **%50 üstünde**. `#b60000` / `#00a651` / `#d98c00` zeminleri
+(`.ready-status`) tabloda **yok** çünkü o şerit odaklanabilir değildir — `<div>`'dir ve içinde
+odak hedefi yoktur; `outline-offset: 2px` halkayı **ebeveynin** zeminine bastığı için ölçülmesi
+gereken yüzey ebeveynin yüzeyidir.
+
+**Kapsam dışı bırakılan bir benzer:** `pages/RationaleFamilies.tsx:368` inline
+`outline: "2px solid var(--accent)"` — bu bir **seçim** göstergesidir, odak halkası değil;
+ayrı bir ölçüt ve ayrı bir karar, bu slice'ın kapsamı dışı.
+
+### Doğrulama — ve neyin koşulamadığı
+
+Koştu: `npm run lint` **exit 0** · `npm run typecheck` **exit 0** ·
+`npm test -- --no-file-parallelism` → **721 passed / 70 dosya, exit 0** (taban ADIM 25 ile
+**birebir aynı**, hiçbir test yeniden hizalanmadı — kural görünür etiket veya kapsayıcı
+değiştirmiyor).
+
+**`npm run visual` ve `npm run a11y` bu ortamda KOŞTURULAMADI.** Docker daemon elle
+başlatıldı ve çalıştı, ama imaj çekilemedi: ortamın ağ politikası
+`production.cloudfront.docker.com`'a CONNECT'i **403 ile reddediyor** (agent proxy
+`recentRelayFailures` ile doğrulandı) ve `registry-1.docker.io` **429** veriyor. Üç deneme
+aynı biçimde düştü. **Otorite CI'dır** — `e2e.yml::e2e` (görsel kapı) ve `e2e.yml::a11y`
+(axe ratchet) ikisi de PR'da bloklayıcı koşar.
+
+Yerelde bunun yerine **statik olarak** kanıtlandı: görsel taban ekran görüntüleri odaklanmış
+öğe **yokken** alınır. `specs/11-visual-regression.spec.ts` yalnız `ensureAdmin` → `goto` →
+`settle` → `toHaveScreenshot` yapar; dosyada `focus`/`blur`/`activeElement` **geçmiyor**, ve
+`goto` her hâlükârda odağı belgeye sıfırlar. Uygulamadaki tek `autoFocus`
+(`pages/Login.tsx:157`) **çekilen 23 rotanın hiçbirinde değil**; diğer tüm `.focus()`
+çağrıları modal / drawer / dropdown içinde ve görsel spec bunların hiçbirini **açmıyor**.
+Dolayısıyla beklenen **0 diff**. **Beklenti kanıt değildir** — CI'ın söylediği geçerlidir; ve
+diff çıkarsa doğru tepki tabanı güncellemek değil, kuralın kapsamını daraltmaktır.
+
+### Defter
+
+`docs/audit/a11y_screen_reader_audit_results.md` §6'da **K-6 İKİYE ayrıldı**:
+
+- **K-6a** — *"odak göstergesi computed style ile saptanamıyor"* → **AÇIK**, insan gözü ister,
+  **A-08 dışında hiçbir şey kapatamaz**. Sayım tablosundaki satır da `K-6a` olarak yeniden
+  adlandırıldı (ölçen prob odur).
+- **K-6b** — *"odak halkasının kontrastı 1.4.11'in altında"* → **KAPANDI 2026-08-12**,
+  ölçülmüş oranlarla birlikte.
+
+*"K-2 … K-7 bilerek raporlanır, kapı değildir"* paragrafı da düzeltildi: K-6b **tek
+istisnadır** ve istisnanın nerede olduğunu tarif eder — 3:1 sayısal bir AA eşiğidir, halka
+rengi kanonda tarif edilmemiştir ve düzeltme hiçbir yerleşimi değiştirmez; diğerleri
+(footer eklemek, 21 sayfanın başlık ağacını yeniden kesmek, kalıcı status bölgesi mount
+etmek) **ürün kararıdır** ve bir hazırlık slice'ının onları verme yetkisi yoktur.
+
+### Dürüst sınırlar
+
+- **K-6a AÇIK.** Bu slice onu kapatmadı ve kapattığını iddia etmiyor. Bir halkanın
+  **ölçülebilir** kontrastı ile bir insanın onu **görebilmesi** aynı soru değildir.
+- **A-08 KAPANMADI.** Defter hâlâ **0/4**, dört çıkış kriteri de ☐, #514 kanıtsız kapalı.
+  Hiçbir belge A-08'i `Complete`/`PASS`/`Done` göstermez.
+- **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08). Verdict BLOCKED.**
+- **Görsel + axe kapıları yerelde koşmadı** (yukarıdaki ağ politikası). CI otoritedir.
+- **Backend'e dokunulmadı** → backend suite yeniden koşulmadı; gerek yoktu.
+- **Memory checkpoint YAZILAMADI** — `ecc` ve `claude-mem` MCP sunucuları bu oturumda da
+  **bağlı değil** (araç listesinde yoklar). Kapanış ritüelinin **4. maddesi EKSİKTİR**;
+  atlanmadı, yapılamadı. **ADIM 47 ile üst üste ikinci oturum** — biriken borç: ADIM 47 +
+  ADIM 48. Bir sonraki bağlı oturumda **ikisi birden** yazılmalı.
+- **Codemap tazelenmedi** çünkü gerekmedi: yeni endpoint / tablo / sayfa / job **yok**.
 ## ADIM 48 — kabul kriteri borç defteri, sınıf B parti 01 (doc 05 Trade Log backend yüzeyi)
 
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice bir blocker

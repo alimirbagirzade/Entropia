@@ -1,10 +1,18 @@
 <!-- doc-status: historical -->
 > **SUPERSEDED — ADIM 49 (2026-08-12).** Canlı kickoff artık
 > `docs/ADIM49_LANDED_KICKOFF.md`. Aşağısı ADIM 48 kapanışındaki durumu kaydeder;
-> sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Bu belgenin kabul-borcu
-> sayıları (`partial` 118, `debt_class.B` 87) ADIM 49'da DEĞİŞMEDİ** — ADIM 49 yalnız
-> belge uzlaştırmasıdır, tek satır kod ya da test eklemedi.
+> sayıları ve "sıradaki iş" maddeleri bayat olabilir. ADIM 49 **yalnız belge
+> uzlaştırmasıdır** — ne bu belgenin kabul-borcu sayılarını (`partial` 118,
+> `debt_class.B` 87) ne de K-6b kontrast ölçümlerini değiştirdi.
+>
+> **DİKKAT — bu dosya İKİ ayrı slice'ın kickoff'unu taşıyor.** İkisi de "ADIM 48"
+> adını aldı ve aynı yola yazdı: **#688** (K-6b odak halkası) ve **#686** (kabul borcu
+> sınıf B parti 01). İkisi de merge edilmiştir, o yüzden **yeniden numaralandırılamazlar**
+> (CLAUDE.md: merged başlıklar değişmez). Aşağıda iki `# ADIM 48 LANDED` başlığı
+> ard arda görürsen sebep budur — bozuk değil, çakışma. Ayrıntı:
+> `docs/ADIM49_LANDED_KICKOFF.md` §NUMARA NOTU.
 
+# ADIM 48 LANDED — K-6b: odak halkasının kontrastı (WCAG 1.4.11) · sıradaki slice için kickoff
 # ADIM 48 LANDED — kabul borcu sınıf B, parti 01 · sıradaki slice için kickoff
 
 > **Bu belge ADIM 48 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →

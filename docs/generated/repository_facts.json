@@ -974,13 +974,13 @@
   },
   "schema_version": 1,
   "tests": {
-    "backend_collected_test_functions": 3497,
+    "backend_collected_test_functions": 3503,
     "backend_test_files": 334,
     "backend_xfail_markers": 1,
     "backend_xfail_strict_markers": 1,
     "collection_method": "static ast/regex walk of the test tree — no suite is executed, so these are COLLECTED counts and never pass counts. They are also LOWER than a runner's count, because one parametrized site expands into many cases at run time: `npx vitest list` reports 721 cases over the same 70 files this walk sees as 711 call sites, and pytest expands `@pytest.mark.parametrize` the same way. Compare file counts across the two, never case counts.",
-    "e2e_spec_files": 21,
-    "e2e_test_call_sites": 80,
+    "e2e_spec_files": 22,
+    "e2e_test_call_sites": 84,
     "frontend_unit_test_call_sites": 711,
     "frontend_unit_test_files": 70
   },

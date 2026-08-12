@@ -122,6 +122,14 @@ interface RouteScores {
   max: Record<Category, number>;
   /** median of the headline metrics, milliseconds (cls is unitless) */
   metrics: Record<string, number | null>;
+  /**
+   * Which audits actually cost the route its missing points, from the last pass.
+   * Without this a red gate says "seo dropped to 78" and the author has to
+   * re-run Lighthouse by hand to find out why — and a *green* run says nothing
+   * about the deductions already frozen into the floor, which is how a known
+   * defect turns into an invisible one.
+   */
+  deductions: Record<Category, Array<{ id: string; title: string; weight: number }>>;
 }
 
 const median = (xs: number[]): number => {
@@ -202,7 +210,22 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
       for (const id of METRIC_IDS) {
         metrics[id] = lhr.audits[id]?.numericValue ?? null;
       }
-      return { scores, metrics };
+      // A binary-failed audit that carries weight is what actually moved the
+      // score. `score === null` means "not applicable / informative" and is not
+      // a deduction; filtering it out keeps the list to things somebody could
+      // act on.
+      const deductions = {} as RouteScores["deductions"];
+      for (const c of CATEGORIES) {
+        deductions[c] = (lhr.categories[c]?.auditRefs ?? [])
+          .map((ref) => ({ ref, audit: lhr.audits[ref.id] }))
+          .filter(({ ref, audit }) => (ref.weight ?? 0) > 0 && audit && audit.score !== null && audit.score < 1)
+          .map(({ ref, audit }) => ({
+            id: ref.id,
+            title: audit?.title ?? ref.id,
+            weight: ref.weight ?? 0,
+          }));
+      }
+      return { scores, metrics, deductions };
     };
 
     const results: RouteScores[] = [];
@@ -237,7 +260,18 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
             .filter((v): v is number => typeof v === "number");
           metrics[key] = xs.length ? Math.round(median(xs) * 1000) / 1000 : null;
         }
-        results.push({ slug: target.slug, path: target.path, median: med, min: lo, max: hi, metrics });
+        results.push({
+          slug: target.slug,
+          path: target.path,
+          median: med,
+          min: lo,
+          max: hi,
+          metrics,
+          // From the last pass: the deductions are identical across repeats
+          // whenever the score is (measured spread was 0 points on 2026-08-12),
+          // and a per-pass union would only add noise to the artefact.
+          deductions: passes[passes.length - 1].deductions,
+        });
         console.log(
           `${target.slug.padEnd(20)} ` +
             CATEGORIES.map((c) => `${c}=${med[c]} (${lo[c]}-${hi[c]})`).join("  "),

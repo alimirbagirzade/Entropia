@@ -1,33 +1,163 @@
 {
   "_README": [
-    "FROZEN Lighthouse baseline — the score FLOOR enforced by",
+    "FROZEN Lighthouse baseline \u2014 the score FLOOR enforced by",
     "frontend/e2e/specs/21-lighthouse.spec.ts (npm run lighthouse, CI job 'Lighthouse').",
     "",
     "Semantics: floors.<slug>.<category> = the MINIMUM score (0-100) that route may",
     "report for that category. The reported score is the MEDIAN of LH_REPEATS passes.",
     "Measured < floor => CI FAILS. A route present in",
-    "screenshotMatrix.ts::TARGET_PAGES but absent from `floors` FAILS too — an",
+    "screenshotMatrix.ts::TARGET_PAGES but absent from `floors` FAILS too \u2014 an",
     "unbaselined route is a hole, not a pass.",
     "",
     "This is a RATCHET: the floor may only ever RISE. It is today's measured score",
     "with no margin subtracted. Lowering a floor is a deliberate, written trade-off,",
-    "never a way to make CI green — the same rule as a11y-baseline.json.",
+    "never a way to make CI green \u2014 the same rule as a11y-baseline.json.",
     "",
     "`accessibility` is NOT a category here and never will be. axe-core owns that",
     "question (a11y-baseline.json, per-page per-rule node ceilings, adjudicated in",
     "docs/implementation/a11y_ci_ratchet_and_adjudication.md). Nothing in this file",
     "is evidence for the A-08 screen-reader audit."
   ],
-  "armed": false,
+  "armed": true,
   "provenance": {
-    "measured_by": "not measured yet — bootstrap commit",
-    "note": "The gate ships UNARMED on purpose. A floor invented before the job has ever run would be the arbitrary threshold this slice was told not to invent, so the first CI run measures, uploads lighthouse-report/lighthouse-baseline.measured.json, and a follow-up commit freezes it with `armed: true`. Until then the job reports and gates nothing, and says so loudly in its own log."
+    "measured_by": "GitHub Actions \u2014 E2E workflow, job 'Lighthouse \u2014 score ratchet vs. the seeded stack (RC P11-8)'",
+    "run_id": 31571413853,
+    "job_id": 94034026749,
+    "run_branch": "ci/rc-p11p8-lighthouse-and-latency-baseline",
+    "commit": "d169912c4ae7dc238122e3209efdd5d658931d86",
+    "measured_at": "2026-08-12T06:58:12Z",
+    "conditions": "seeded Compose stack (SEED_E2E_GOLDEN + SEED_ESP_TA + SEED_RATIONALE), Admin session, 1440x900 desktop form factor, simulated throttling at Lighthouse's own desktop preset (rttMs 40, throughputKbps 10240, cpuSlowdownMultiplier 1), maxWaitForLoad 20000 ms, median of 3 passes per route after a discarded warm-up",
+    "routes_scored": 23,
+    "repeat_spread_points": {
+      "performance": 0,
+      "best-practices": 0,
+      "seo": 0
+    },
+    "measured_pre_merge": "Measured on the P11-8 branch, not on main: the whole point of the run was to record the tree WITH the gate in it. The next main run must reproduce these numbers exactly \u2014 if it does not, this file is wrong, not the run.",
+    "stability": "Worst repeat spread was 0 points in every category on all 23 routes. That is why the floor is the measured score with NO margin subtracted: there is no noise here to leave room for. If a future run starts flapping, the answer is more repeats or a warm-up change \u2014 never a lower floor.",
+    "sensitivity_boundary": "performance sits at 100 on 22 of 23 routes. That is a real measurement, not a rounding artefact, and it is also this gate's weakest axis: against a localhost stack on the desktop preset the score is saturated, so only a substantial regression will move it. A floor of 100 means 'may not get worse at all' \u2014 the strictest ratchet available \u2014 but it is not evidence that the app is fast on a real user's machine. The per-route FCP/LCP/TBT/CLS/SI in lighthouse-report/lighthouse-results.json do differentiate the routes and are reported, never gated."
   },
   "policy": {
     "categories": "performance, best-practices, seo",
-    "accessibility": "NOT REQUESTED — axe-core is the shipped a11y authority (frontend/e2e/a11y-baseline.json). Two competing a11y numbers would be two authorities. No Lighthouse output is A-08 evidence.",
+    "accessibility": "NOT REQUESTED \u2014 axe-core is the shipped a11y authority (frontend/e2e/a11y-baseline.json). Two competing a11y numbers would be two authorities. No Lighthouse output is A-08 evidence.",
     "performance_vs_loadgen": "Lighthouse measures the BROWSER (paint, interactivity, layout stability of a route). scripts/loadgen.py measures the SERVER (per-endpoint HTTP p95, control-normalised, nightly ratio gate). docs/performance/README.md section 8 names frontend rendering as out of the load driver's scope; this file covers exactly that declared gap. Neither number may be cited for the other's question.",
-    "margin": "none — the floor is the measured median, not the median minus a cushion. Noise is answered by repeats + median, never by widening the band."
+    "margin": "none \u2014 the floor is the measured median, not the median minus a cushion. Noise is answered by repeats + median, never by widening the band."
   },
-  "floors": {}
+  "floors": {
+    "mainboard": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "strategy-details": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "outsource-signal": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "trading-signal": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "trade-log": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "create-package": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "pre-check": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "package-library": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "embedded-packages": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "rationale-families": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "market-data": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "research-data": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "portfolio": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "ready-check": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "run-results": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "results-history": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "arrange-metrics": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "analysis-lab": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "panel-management": {
+      "performance": 98,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "panel-logs": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "trash": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "user-manual": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    },
+    "future-dev": {
+      "performance": 100,
+      "best-practices": 96,
+      "seo": 82
+    }
+  }
 }

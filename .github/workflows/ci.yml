@@ -194,15 +194,25 @@ jobs:
         working-directory: frontend
         run: npm run build
       - name: Dependency audit (npm, high + critical)
-        # Not a bare `npm audit --audit-level=high`: the frontend carries three
-        # high advisories whose only published fix is a MAJOR upgrade (eslint 10,
-        # or the react-router v8 migration that removes react-router-dom), and
-        # .github/dependabot.yml deliberately suppresses frontend majors as
-        # "cannot be merged piecemeal". A bare audit would therefore be red on
-        # every PR, and `continue-on-error` would make it a step that can never
-        # fail. The gate freezes those three advisory ids with a written reason and
-        # fails on anything else — the same idiom as ACCEPTED_SERIOUS_RULES in the
-        # a11y scan. Runs from the lockfiles, so no npm install is needed for e2e.
+        # Not a bare `npm audit --audit-level=high`: an advisory whose only published
+        # fix is a MAJOR upgrade would make this red on every PR (and
+        # .github/dependabot.yml deliberately suppresses frontend majors as "cannot
+        # be merged piecemeal"), while `continue-on-error` would make it a step that
+        # can never fail. So the gate fails on anything at or above the threshold
+        # that is not a RECORDED exception.
+        #
+        # ADIM 44 changed where an exception may be recorded. This gate used to carry
+        # its own FROZEN_ADVISORIES literal, which required neither an owner nor an
+        # expiry; that literal is gone and the one home is now
+        # .github/security-allowlist.json — `owner` + `expires` mandatory, build fails
+        # once the date passes. The list is currently EMPTY: nothing is waived.
+        #
+        # This step also expires the WHOLE allowlist, container scopes included,
+        # because it runs on every push and PR while the container gate lives in
+        # security.yml. Otherwise an exception's calendar would depend on which
+        # workflow happened to run.
+        #
+        # Runs from the lockfiles, so no npm install is needed for e2e.
         run: node scripts/npm-audit-gate.mjs frontend frontend/e2e
 
   alerts:

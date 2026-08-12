@@ -80,7 +80,7 @@ This repository is built **stage by stage** from a canonical specification (see
 | `ENGINE_VERSION` | `backtest-engine-v18-gap-adjusted-stop-fill` |
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3503 in 334 files |
+| Backend tests **collected** (static, not a pass count) | 3510 in 335 files |
 | Backend `xfail` markers | 1 (1 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 711 in 70 files |
 | E2E test **call sites** (static) | 84 in 22 specs |
@@ -731,9 +731,18 @@ backend suite enforces `--cov-fail-under=90` (measured: 92.06% — see
 `docs/audit/coverage_baseline.md`), `npm run coverage`
 enforces the thresholds in `frontend/vite.config.ts`, and dependency advisories
 are checked by `pip-audit` (backend) and `scripts/npm-audit-gate.mjs` (npm). The
-npm gate freezes the advisory ids that only a major upgrade would clear —
-`.github/dependabot.yml` deliberately suppresses frontend majors — and fails on
-any id not on that list. The E2E workflow adds an **A11Y** job that runs the
+npm gate fails on any high/critical advisory that is not a **recorded exception**
+— `.github/dependabot.yml` deliberately suppresses frontend majors, so an
+advisory only a major upgrade would clear cannot simply be merged away.
+
+There is exactly **one** place such an exception may be recorded:
+`.github/security-allowlist.json`. Every entry requires an `owner` (a named human,
+not a team alias) and an `expires` date, and **the build fails once that date
+passes** — whether or not the finding still appears, because an exception nobody
+re-examines is not an exception. Both gates read it through
+`scripts/lib/security-allowlist.mjs` and both expire the whole list, so an
+exception's calendar never depends on which workflow ran. The list is currently
+empty: nothing is waived. The E2E workflow adds an **A11Y** job that runs the
 axe-core scan against the seeded stack.
 
 **Backend** (from `backend/`):

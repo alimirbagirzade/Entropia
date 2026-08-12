@@ -1,0 +1,187 @@
+========== A-08 AUDIT STACK — UP ==========
+  project=entropia-a11y-audit  env=.env.a11y-audit  web=http://127.0.0.1:18280  api=http://127.0.0.1:18200/api/v1
+
+— build + start
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-web:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-web:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+  waiting for the API and web app (first build + migrate can take minutes)
+  PASS  stack is up
+
+— seed the audit fixture (idempotent: SEED_E2E_GOLDEN + SEED_ESP_TA + SEED_RATIONALE)
+{"event": "seed.done", "level": "info", "timestamp": "2026-08-12T08:34:41.537107Z"}
+  PASS  seed exit 0
+
+========== A-08 AUDIT STACK — FIXTURE VALIDATION ==========
+
+— [1] stack reachable
+  PASS  API ready at http://127.0.0.1:18200/api/v1
+  PASS  web app served at http://127.0.0.1:18280
+
+— [2] session profile (the profile a real user logs into)
+  PASS  /meta.auth_mode=session
+
+— [3] Admin session
+  PASS  Admin session obtained for e2e_admin (token withheld)
+  PASS  /me reports is_admin=true (Admin-only pages will render)
+
+— [4] seeded fixtures — the three the checklist names
+  PASS  SEED_E2E_GOLDEN — market datasets present (1 row marker(s))
+  PASS  SEED_E2E_GOLDEN/SEED_ESP_TA — Package Library populated (13 row marker(s))
+  PASS  SEED_RATIONALE — rationale families present (6 row marker(s))
+
+— [5] every audit route is served (no 404 mid-session)
+  PASS  23/23 routes served by http://127.0.0.1:18280 (shell only — per-page reads are spec 17's job)
+
+========== RESULT ==========
+  9 passed, 0 failed
+
+Audit stack is ready.
+
+  Web (auditor navigates here) : http://127.0.0.1:18280
+  API                          : http://127.0.0.1:18200/api/v1
+  Admin username               : e2e_admin
+  Admin password               : <redacted>
+  Compose project              : entropia-a11y-audit
+
+  Worksheet  : docs/audit/a11y_screen_reader_audit_results.md
+  Checklist  : docs/implementation/a11y_screen_reader_audit_checklist.md
+  Tracking   : GitHub #514  (human-only — an agent must not close it)
+
+A-08 is HUMAN-BLOCKED. This script prepared an environment. It did not
+audit anything, and no output of it may be recorded as a screen-reader PASS.

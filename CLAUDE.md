@@ -189,9 +189,22 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `c8bba97`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `e719af1`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 43 (RC §6.7 / P11-8 + P10-7, iki kapı):** **P10-7 KAPANDI — saat zaten
+> **Son dalga — ADIM 44 (RC blocker 4 KAPANDI + blocker 1 koşulabilir):** **blocker sayısı
+> 4 → 2, verdict BLOCKED KALIR.** react-router `GHSA-qwww-vcr4-c8h2` freeze'i **imzayla
+> değil KALDIRMAYLA** kapandı: imza verilmişti, ama advisory 2026-08-07T18:16:54Z'de
+> upstream'de yeniden kapsamlandı (`first_patched` 7.x için **7.18.2**) ve kurulu ağaç
+> **zaten 7.18.2** → `npm audit` **0 vulnerability**. **Var olmayan bir açığa imza
+> atılmaz.** **`FROZEN_ADVISORIES` SİLİNDİ** — yeni npm freeze'i
+> `.github/security-allowlist.json`'a `scope: npm:<dir>` + `owner` + `expires` ile yaz;
+> iki kapı da `scripts/lib/security-allowlist.mjs`'ten geçer ve **ikisi de TÜM listeyi
+> expire eder**; bildirilmemiş scope `exit 1`. **A-08 KAPANMADI** (0/4, defter boş,
+> #514'e dokunulmadı) — yığın güncel main'de **9/9**, denetçi runbook'u yazıldı, **K-7
+> eklendi** (ilk DOM'da `aria-live` yok, 21/23). **Precheck sayısını TEK KOŞUYLA
+> TAZELEME:** ilk koşu soğuktur ve eksik raporlar (K-5'i 18 gösterdi, doğrusu 21) — en az
+> iki kez koş. `PROJECT_HISTORY.md` §ADIM 44 · `docs/ADIM44_LANDED_KICKOFF.md` · §6.1 + §6.4.
+> Öncesinde ADIM 43 (RC §6.7 / P11-8 + P10-7, iki kapı): **P10-7 KAPANDI — saat zaten
 > dolmuştu** (toplayıcı ADIM 24'ten beri koşuyordu, **altı** yeşil gece birikmişti). Bant
 > ölçümden türedi (`1.5 × 1.62` → **`--max-ratio 2.5`**); baseline artık **takipli dosya**
 > (`docs/performance/baseline_ci.json`), artefakt saklamasına bağlı değil. **Bandı yalnız
@@ -263,8 +276,10 @@ Before stopping a working session, produce **ALL** of the following:
 > KAYITLI** (borç kapandı).
 > **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
 > izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
-> `Complete`/`PASS`/`Done` gösteremez · **P9-B2 imzasız** (react-router freeze'inde owner
-> yok — insan işi) · K-2..K-6 ölçüldü ama **düzeltilmedi** ·
+> `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
+> runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
+> K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
+> (ilk koşu soğuk, eksik raporlar) ·
 > **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
 > serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·
 > delivery proof'u **CI kapısı değil** · **monitörü izleyen yok** ·
@@ -333,8 +348,9 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 - **Açık iş (dürüst sınır):** ekran okuyucu (NVDA/VoiceOver) denetimi **hâlâ yapılmadı**.
-  ADIM 28 (#628) yalnız **iskeleyi** kurdu — `scripts/a11y-audit-stack.sh` +
-  `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
+  ADIM 28 (#628) **iskeleyi**, ADIM 44 **koşulabilirliği** kurdu — `scripts/a11y-audit-stack.sh`
+  (güncel main'de **9/9 doğrulandı**) + `docs/implementation/a11y_screen_reader_audit_runbook.md`
+  + `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
   Takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmış, 2026-08-03'te yeniden açılmış,
   2026-08-07'de yine kanıtsız kapatılmıştır**; kapatma yetkisi insandadır, agent kapatamaz.
   Kapalı issue ile boş defter arasındaki ayrışma **sürüyor**; ADIM 29 onu **çözmedi, KAYDETTİ**

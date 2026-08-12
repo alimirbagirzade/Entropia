@@ -1,0 +1,47 @@
+# P9-B2 — negative proofs: an unsigned npm freeze is now unwritable (2026-08-12, ADIM 44)
+# Each block temporarily rewrites .github/security-allowlist.json, runs the REAL gate,
+# and restores the file. Final state is byte-identical to the committed one.
+
+== NEG-1  entry without `owner` ==
+security-allowlist.json is malformed:
+  entries[0]: missing or empty required field "owner"
+exit=1
+
+== NEG-2  entry past its `expires` — the calendar now reaches the npm gate ==
+FAIL — expired security exceptions. Re-examine each one: fix it, or renew the
+entry with a fresh justification and a new expiry. Do not bump the date alone.
+  EXPIRED 2026-08-11  GHSA-qwww-vcr4-c8h2 (react-router, npm:frontend) — owner Ali Mirbagirzade
+exit=1
+
+== NEG-3  gating a surface whose scope was never declared ==
+scope "npm:frontend" is not declared in .github/security-allowlist.json.
+Declared scopes: container:backend, container:frontend, npm:frontend/e2e
+Add it to `scopes` before gating a new surface.
+exit=1
+
+== NEG-4  window longer than MAX_EXCEPTION_DAYS=90 -> WARN, must NOT fail ==
+WARN — exception windows longer than 90 days:
+  GHSA-qwww-vcr4-c8h2: expires 2027-01-01, more than 90 days out
+
+frontend: high=0 critical=0 (moderate=0 low=0)
+  note     GHSA-qwww-vcr4-c8h2 (react-router) is allowlisted but no longer reported — delete the entry.
+exit=0
+
+== NEG-5  a real unrecorded high advisory (lodash@4.17.20 fixture) ==
+
+FAIL — 5 unrecorded high/critical advisory(ies). Fix them, or add a reviewed entry to .github/security-allowlist.json with a scope of npm:<dir>, an owner, a justification and an expiry:
+  <fixture>: GHSA-35jh-r3h4-6jhm high lodash
+  <fixture>: GHSA-29mw-wpgm-hmr9 high lodash
+  <fixture>: GHSA-r5fr-rjxr-66jc high lodash
+  <fixture>: GHSA-f23m-r3pf-42rh high lodash
+  <fixture>: GHSA-xxjr-mmjv-4gpg high lodash
+exit=1
+
+== NEG-6  correct advisory id, WRONG package -> still fails (pkg is part of the key) ==
+FAIL — 5 unrecorded high/critical advisory(ies). Fix them, or add a reviewed entry to .github/security-allowlist.json with a scope of npm:<dir>, an owner, a justification and an expiry:
+  <fixture>: GHSA-35jh-r3h4-6jhm high lodash
+  <fixture>: GHSA-29mw-wpgm-hmr9 high lodash
+  <fixture>: GHSA-r5fr-rjxr-66jc high lodash
+  <fixture>: GHSA-f23m-r3pf-42rh high lodash
+  <fixture>: GHSA-xxjr-mmjv-4gpg high lodash
+exit=1

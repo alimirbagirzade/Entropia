@@ -1,56 +1,49 @@
 #!/usr/bin/env node
 // Dependency-audit gate for the npm workspaces (frontend/ and frontend/e2e/).
 //
-// `npm audit --audit-level=high` on its own cannot be a CI gate here: the
-// frontend carries three high advisories whose only published fix is a MAJOR
-// upgrade (eslint 10, or the react-router v8 migration that removes
-// react-router-dom entirely). Silencing them with `continue-on-error` would
-// leave a step that can never fail — not a gate at all.
+// `npm audit --audit-level=high` on its own cannot be a CI gate here: a frontend
+// advisory whose only published fix is a MAJOR upgrade would make the step red on
+// every PR, and silencing that with `continue-on-error` would leave a step that can
+// never fail — not a gate at all.
 //
-// So this mirrors the idiom the a11y scan already uses (ACCEPTED_SERIOUS_RULES
-// in frontend/e2e/specs/13-a11y-scan.spec.ts): a FROZEN allow-list of advisory
-// ids. Anything at or above the threshold severity that is NOT on the list
-// fails the build. Adding an id is a deliberate, reviewed act — the boundary is
-// recorded, not waived.
+// So anything at or above the threshold severity that is NOT recorded as an
+// exception fails the build. What changed in ADIM 44 is WHERE an exception may be
+// recorded. This file used to carry its own FROZEN_ADVISORIES literal, which
+// required neither an owner nor an expiry — an npm freeze was therefore a waiver
+// nobody was accountable for and no calendar could ever expire, which the RC
+// readiness report recorded as blocker P9-B2. That literal is gone. The one home
+// for an exception is now .github/security-allowlist.json, which REQUIRES `owner`
+// and `expires` and fails the build once the date passes. There is no second place
+// left to write an unsigned freeze.
+//
+// Three freezes have lived here and all three were eventually DROPPED because the
+// stated reason stopped being true — the brace-expansion pair (2026-08-03), js-yaml
+// (2026-08-07, where the patch had shipped seven days BEFORE the freeze merged), and
+// react-router GHSA-qwww-vcr4-c8h2 (2026-08-12). That is the pattern the `expires`
+// field exists for: a freeze whose reason has expired is worse than no freeze,
+// because it silently grants an exception nobody re-examined.
+//
+// react-router GHSA-qwww-vcr4-c8h2 was dropped, NOT carried over to the allowlist.
+// Its reason said "every 7.x is affected and the only patched line is 8.3.0+, i.e.
+// the v8 migration". The advisory was RE-SCOPED upstream on 2026-08-07T18:16:54Z —
+// twenty minutes after PR #637 merged the corrected facts — into `>=7.12.0 <7.18.2`
+// (first_patched 7.18.2) plus `>=8.0.0 <8.3.0`. The installed tree is react-router
+// 7.18.2 exactly, the patched 7.x release, so npm audit reports it no more. An
+// allowlist entry for it would have been an exception with no finding behind it.
 //
 // Usage: node scripts/npm-audit-gate.mjs <package-dir> [...more dirs]
 
 import { execFileSync } from "node:child_process";
 import * as path from "node:path";
 
+import { assertScopeDeclared, enforceExpiry, loadAllowlist } from "./lib/security-allowlist.mjs";
+
 const BLOCKING_SEVERITIES = ["high", "critical"];
 
-// Frozen boundary, keyed by package dir (repo-relative). Every entry states the
-// advisory, the package, and why it is not simply fixed. Revisit when the
-// upstream fix stops being a major upgrade.
-const FROZEN_ADVISORIES = {
-  frontend: [
-    // The two brace-expansion freezes that lived here were DROPPED 2026-08-03. Both
-    // stated "npm's fix path is eslint@10, a major upgrade" — and that stopped being
-    // true: brace-expansion 5.0.9 / 1.1.18 patch the same chain, so `npm audit fix`
-    // now clears them in the lockfile with no major upgrade and no package.json
-    // change. The gate's own "frozen but no longer reported" note is what surfaced
-    // it. A freeze whose reason has expired is worse than no freeze — it silently
-    // grants an exception nobody re-examined.
-    {
-      id: "GHSA-qwww-vcr4-c8h2",
-      pkg: "react-router",
-      reason:
-        "RSC-mode CSRF bypass. This app is a Vite SPA on react-router-dom's BrowserRouter and never enables RSC mode. react-router-dom@7.18.2 pins react-router@7.18.2 exactly (an exact pin, not a range), and the advisory covers >=7.12.0 <8.3.0 — so every 7.x is affected and the only patched line is react-router@8.3.0+, i.e. the v8 migration that drops react-router-dom. No lockfile-only remedy exists: `npm audit fix` can only reach it via --force, which downgrades to react-router-dom@7.11.0, a breaking change. VERIFIED 2026-08-07 against the installed tree and the live advisory range; the two version numbers previously recorded here (7.18.1 / 8.2.1+) were wrong. UNSIGNED — this entry carries no owner and no expiry, so nothing forces anyone to revisit it. That is the gap .github/security-allowlist.json exists to close (it requires `owner` + `expires` and fails the build once the date passes). Moving this record there needs a named accountable human, which is a human decision and is NOT recorded as taken.",
-    },
-    // The js-yaml freeze (GHSA-5p4m-2wfm-xmqj) was DROPPED 2026-08-07 — same pattern
-    // and same reason-expiry as the brace-expansion pair above. Its stated reason was
-    // "`npm audit fix` offers no lockfile-only remedy; the published fix path is
-    // eslint@10, a major upgrade". That was already false when the freeze merged:
-    // js-yaml 4.3.1 shipped 2026-07-31 and patches the advisory in place, seven days
-    // before #629 landed the freeze on 2026-08-07. `npm audit fix --package-lock-only`
-    // resolves it in a 3-line lockfile diff, package.json byte-identical, no eslint
-    // major. A freeze is a recorded boundary, not a standing waiver — once a remedy
-    // exists the entry has to go, or the gate keeps granting an exception that no
-    // longer has a reason behind it.
-  ],
-  "frontend/e2e": [],
-};
+// A package dir maps to exactly one allowlist scope. Requiring the scope to be
+// DECLARED is what keeps "nothing is waived here" distinguishable from "this
+// surface was never declared" — the two read identically otherwise.
+const scopeFor = (relDir) => `npm:${relDir}`;
 
 function runAudit(dir) {
   try {
@@ -81,10 +74,13 @@ function collectFindings(report) {
   return [...findings.values()];
 }
 
-function gateDir(relDir) {
-  const frozen = FROZEN_ADVISORIES[relDir];
-  if (!frozen) throw new Error(`No frozen-advisory list declared for "${relDir}".`);
-  const allowed = new Set(frozen.map((f) => f.id));
+function gateDir(relDir, scopes, entries) {
+  const scope = scopeFor(relDir);
+  assertScopeDeclared(scopes, scope);
+  const frozen = entries.filter((e) => e.scope === scope);
+  // Keyed by id AND package: an entry must not drift onto a different package that
+  // happens to carry the same advisory id through a different dependency path.
+  const allowed = new Set(frozen.map((f) => `${f.id}|${f.package}`));
 
   const report = JSON.parse(runAudit(path.resolve(relDir)));
   const findings = collectFindings(report);
@@ -94,14 +90,20 @@ function gateDir(relDir) {
       `(moderate=${counts.moderate ?? 0} low=${counts.low ?? 0})`,
   );
 
-  const unrecorded = findings.filter((f) => !allowed.has(f.id));
+  const key = (f) => `${f.id}|${f.pkg}`;
+  const unrecorded = findings.filter((f) => !allowed.has(key(f)));
   for (const f of findings) {
-    const mark = allowed.has(f.id) ? "frozen  " : "UNKNOWN ";
-    console.log(`  ${mark} ${f.id} ${f.severity} ${f.pkg} — ${f.title.slice(0, 90)}`);
+    const mark = allowed.has(key(f)) ? "allowed " : "UNKNOWN ";
+    const hit = frozen.find((e) => e.id === f.id && e.package === f.pkg);
+    const tail = hit ? ` [expires ${hit.expires}, owner ${hit.owner}]` : "";
+    console.log(`  ${mark} ${f.id} ${f.severity} ${f.pkg} — ${f.title.slice(0, 90)}${tail}`);
   }
-  for (const f of frozen) {
-    if (!findings.some((x) => x.id === f.id)) {
-      console.log(`  note     ${f.id} is frozen but no longer reported — drop it from the list.`);
+  // Same reasoning as security-allowlist-gate.mjs: an exception whose finding has
+  // stopped existing is an exception nobody re-examined, so surface it — but do not
+  // fail on a vulnerability that went away.
+  for (const e of frozen) {
+    if (!findings.some((f) => key(f) === `${e.id}|${e.package}`)) {
+      console.log(`  note     ${e.id} (${e.package}) is allowlisted but no longer reported — delete the entry.`);
     }
   }
   return unrecorded;
@@ -113,11 +115,19 @@ if (dirs.length === 0) {
   process.exit(2);
 }
 
-const unrecorded = dirs.flatMap((dir) => gateDir(dir).map((f) => ({ dir, ...f })));
+// The WHOLE allowlist expires here, not just the npm scopes: this gate runs in
+// ci.yml on every push and PR, while the container gate lives in security.yml. If
+// each gate only expired its own scopes, an exception's calendar would depend on
+// which workflow happened to run.
+const { scopes, entries } = loadAllowlist();
+enforceExpiry(entries);
+
+const unrecorded = dirs.flatMap((dir) => gateDir(dir, scopes, entries).map((f) => ({ dir, ...f })));
 if (unrecorded.length > 0) {
   console.error(
     `\nFAIL — ${unrecorded.length} unrecorded high/critical advisory(ies). Fix them, or ` +
-      `record each one in FROZEN_ADVISORIES with a reason (scripts/npm-audit-gate.mjs):`,
+      `add a reviewed entry to .github/security-allowlist.json with a scope of ` +
+      `npm:<dir>, an owner, a justification and an expiry:`,
   );
   for (const f of unrecorded) console.error(`  ${f.dir}: ${f.id} ${f.severity} ${f.pkg}`);
   process.exit(1);

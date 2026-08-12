@@ -6976,3 +6976,119 @@ kontrol varlığı, kimlik-yeşil, 3× negatif, bant türetimi, üç-sahip drift
 > **Numara notu:** bu slice oturum promptunda `ADIM 40` diye adlandırılmıştı; main'de
 > ADIM 40/41/42 zaten merge olmuştu (#666–#669), bu yüzden kayıt **ADIM 43** olarak açıldı.
 > Repo kuralı gereği merge edilmiş numaralar yeniden atanmaz.
+
+---
+
+## ADIM 44 — RC blocker 4 KAPANDI + blocker 1 koşulabilir hâle geldi (PR pending)
+
+**Base:** `e719af1` (origin/main; ADIM 43 / #676 merged) · **Branch:**
+`release/rc-blocker4-and-a08-readiness` · **Tarih:** 2026-08-12 · **Migration YOK** ·
+`ENGINE_VERSION` değişmedi · **Bağımlılık sürümü değişmedi, downgrade yok.**
+
+> **Slice numarası uyarısı.** Bu slice'ın seed prompt'u kendini "ADIM 41" diye
+> adlandırıyordu; o numara **#668'de zaten kullanılmıştı** (P8-B2 admission status).
+> Prompt bayattı — ADIM 40'ın merge'ünü doğrulamamı istiyordu, oysa 41/42/43 de
+> merge olmuştu. Kayıt **ADIM 44** olarak açılmıştır.
+
+### 1. Blocker 4 (P9-B2) — react-router freeze: TAŞINMADI, DÜŞÜRÜLDÜ
+
+PO kararı kaydın `.github/security-allowlist.json`'a **taşınması** yönündeydi ve imza
+da verildi: **owner `Ali Mirbagirzade`, expires `2026-11-10`**. **O kayıt yazılmadı.**
+Aynı talimatın *"Bunu YENİDEN DOĞRULA — bayatlamış olabilir"* maddesi uygulandığında
+öncül çürüktü:
+
+* Advisory **2026-08-07T18:16:54Z**'de upstream'de yeniden kapsamlandırıldı:
+  `>=7.12.0 <7.18.2` (**first_patched `7.18.2`**) **+** `>=8.0.0 <8.3.0`.
+  Yani 7.x hattı **backport aldı**; "tek yamalı hat 8.3.0+" iddiası öldü.
+* Kurulu ağaç zaten **`react-router` 7.18.2** (`react-router-dom@7.18.2` onu **birebir**
+  pinliyor) → `npm audit` **`found 0 vulnerabilities`**.
+* İki bağımsız kaynak (`gh api /advisories/…` + `npm audit --json`) aynı şeyi söylüyor.
+
+**Bir imza, ortada olmayan bir açığa atılamaz.** Allowlist kaydı *kabul edilmiş bir
+risk* demektir; risk yoksa kayıt, arkasında bulgusu olmayan bir istisna olurdu — ve kapı
+bunu her koşuda `WARN — allowlisted but not reported` diye söylerdi.
+
+**Zamanlama (kayıt için):** `8.3.0` 2026-07-22, advisory 2026-07-24, **`7.18.2`
+2026-07-28** yayınlandı; repo düzeltilmiş sürümün üzerinde **on bir gündür** oturuyordu.
+Advisory metadata'sı P9-B1'i (#637) merge eden commit'ten **yirmi dakika sonra** yetişti
+ve beş gün kimse bakmadı. Bu, aynı desenin **üçüncü** tekrarı (brace-expansion çifti
+2026-08-03; js-yaml 2026-08-07, yaması freeze'den **yedi gün önce** yayındaydı).
+**Bu repoda yazılmış her freeze, gerekçesi çürüdüğü için ölmüştür.**
+
+**Yapısal yarı da kapandı — belgeyle değil, silmeyle:**
+
+| Dosya | Değişiklik |
+|---|---|
+| `scripts/npm-audit-gate.mjs` | `FROZEN_ADVISORIES` literal'i **SİLİNDİ**; kapı artık allowlist okuyor |
+| `scripts/lib/security-allowlist.mjs` | **YENİ** — iki kapının paylaştığı loader / doğrulayıcı / `enforceExpiry` / `assertScopeDeclared` |
+| `scripts/security-allowlist-gate.mjs` | ortak modüle geçti; "allowlisted but not reported" uyarısı artık **yalnız o koşunun okuduğu scope'lara** bakıyor |
+| `.github/security-allowlist.json` | `npm:frontend`, `npm:frontend/e2e` scope'ları bildirildi; **`entries` BOŞ ve boş kalması hedef** |
+| `backend/tests/contract/test_security_freeze_discipline_contract.py` | **YENİ**, 7 test |
+
+**Yeni kural — imzasız npm freeze yazılabilecek yer YOK.** Yeni bir advisory'yi
+dondurman gerekirse `FROZEN_ADVISORIES` diye bir şey **yoktur**; kayıt
+`.github/security-allowlist.json`'a `scope: npm:<dir>` + `owner` + `expires` ile girer.
+**İki kapı da TÜM listeyi expire eder** (npm kapısı `ci.yml`'da her push/PR'da, container
+kapısı `security.yml`'da) — her kapı yalnız kendi scope'unu expire etseydi bir istisnanın
+takvimi *hangi workflow'un koştuğuna* bağlı olurdu. Yeni bir paket dizinini gate'lerken
+scope'u **bildirmek zorundasın**: bildirilmemiş scope `exit 1` verir, çünkü "burada hiçbir
+şey muaf değil" ile "bu yüzey hiç bildirilmedi" aksi hâlde aynı okunur.
+
+**Negatif kanıt koşuldu** (`p9b2_gate_negative_proofs.txt`): `owner`'sız → exit 1 ·
+süresi geçmiş → exit 1 (**npm kapısında**) · bildirilmemiş scope → exit 1 · kayıtsız
+gerçek high advisory (lodash@4.17.20 fixture) → exit 1 · doğru id + **yanlış paket** →
+exit 1 · >90 gün → **WARN, exit 0** (tavan, duvar değil).
+
+### 2. Blocker 1 (A-08) — KOŞULABİLİR hâle geldi, KAPANMADI
+
+Çıkış kriterleri **0/4**, defterin §1/§2/§3'ü **boş**, #514 **dokunulmadı**.
+
+* **Yığın güncel main'de yeniden doğrulandı: `9 passed / 0 failed`.** Önceki doğrulama
+  `1f4b88b`'deydi; main o zamandan beri **dokuz slice** (ADIM 30–43) ilerledi.
+  **Hiçbir şeyin onarılması gerekmedi.**
+* **Precheck sayıları tazelendi — ve tazelemenin kendisi bir tuzak çıktı.** Beş ardışık
+  koşu, aynı commit / aynı yığın / aynı seed:
+
+  | Sınıf | 1 | 2 | 3 | 4 | 5 | |
+  |---|--:|--:|--:|--:|--:|---|
+  | skip link (K-2) | 23 | 23 | 23 | 23 | 23 | kararlı |
+  | `contentinfo` (K-3) | 23 | 23 | 23 | 23 | 23 | kararlı |
+  | `<h1>` yok (K-4) | 1 | 1 | 1 | 1 | 1 | kararlı |
+  | focus indicator (K-6) | 1 | 1 | 1 | 1 | 1 | kararlı |
+  | heading outline (K-5) | **18** | 21 | 20 | 21 | 21 | **21**'e yakınsıyor |
+  | `aria-live` (K-7) | **10** | 20 | 20 | 21 | 21 | **21**'e yakınsıyor |
+  | toplam advisory | 76 | 89 | 88 | 90 | 90 | **90**'a yakınsıyor |
+
+  **İLK KOŞU SOĞUKTUR VE EKSİK RAPORLAR.** Defterin kendi talimatı (*"re-run it before
+  the audit — a stale count is worse than none"*) tek koşuyla uygulansaydı K-5 `21/23`'ten
+  `18/23`'e çekilir, tablo **daha yanlış** hâle gelirdi. **Kural: `up`'tan sonraki ilk
+  koşuyu at, en az iki kez koş, sonrakini al.** Kalıcı bir oynaklık üç adlandırılmış
+  rotada sürüyor: `/analysis-lab`, `/backtest/history`, `/backtest/metrics` (ilki iki
+  sıcak koşu arasında bile oynuyor) → doğru biçim *"21, ±1, ve ±1'in hangi üç rotada
+  olduğunu biliyorsun."* **Sebep:** prob *ilk* DOM'u okuyor ve sayfanın ilk veri
+  render'ıyla yarışıyor. **KAYDEDİLDİ, DÜZELTİLMEDİ** — probun ne zaman örnekleyeceğini
+  değiştirmek K-5 ve K-7'nin *anlamını* sessizce değiştirirdi, ki ikisi de denetimin
+  karara bağlaması gereken gözlemler (RC §6.5: K-2..K-7 bilerek gate dışı).
+* **K-7 eklendi:** *ilk DOM'da `aria-live` bölgesi yok*, **21/23 rota**, WCAG 4.1.3 (AA).
+  ADIM 28'den beri `precheck-results.json` içinde **ölçülüyordu ama defterde satırı yoktu**
+  — setin ikinci en yüksek erişimli gözlemi ve B-3 / B-4 / B-6 akışlarının tam olarak
+  sorduğu şey. Bu bir *bulgu değil*, nereye bakılacağıdır.
+* **Denetçi runbook'u:** `docs/implementation/a11y_screen_reader_audit_runbook.md` —
+  tek sayfa, **İngilizce** (denetçi dışarıdan olabilir; dolduracağı defter de İngilizce).
+  Yığın (uzak SR için `A11Y_HOST=<LAN IP>`), Admin girişi, 23 rota + 10 akış sırası,
+  `SR-BULGU-nn` + issue template, oturum başlığı alanları, "yapma" listesi.
+
+### 3. Dokunulmayanlar (bilerek)
+
+Denetimin kendisi · **#514'ün durumu** (`human-only`; agent açamaz da kapatamaz da) ·
+K-2..K-7 düzeltmeleri · D-10 (ayrı eksen, yalnız WCAG 1.4.3) · blocker 2 · P11-1 ·
+precheck probunun örnekleme zamanı.
+
+### 4. Honest boundary
+
+**Hazırlık denetim değildir; doğrulanmış bir ortam bir denetim değildir.** A-08'in dört
+çıkış kriteri de ☐ ve hiçbir belge onu `Complete`/`PASS`/`Done` göstermiyor. Blocker
+sayısı **4 → 2** (blocker 3 ADIM 31'de, blocker 4 burada kapandı); **verdict BLOCKED
+kalır**. Tedarik zinciri tarafında kapanan şey **bu advisory ve bu asimetridir** — `npm
+audit` yalnız iki npm workspace'ini, Trivy yalnız iki imajı görür; container kapısı hâlâ
+sadece `security.yml`'ın tetikleyicilerinde (main'e push, PR, haftalık cron) koşar.

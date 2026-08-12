@@ -56,6 +56,7 @@ from entropia.infrastructure.postgres.models import (
     PackageRevision,
     Principal,
     ResultSummary,
+    TrashEntry,
 )
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
@@ -701,8 +702,28 @@ async def test_active_run_blocks_work_object_delete(session) -> None:
     await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
     await session.commit()
 
-    with pytest.raises(ObjectInActiveRunError):
+    with pytest.raises(ObjectInActiveRunError) as excinfo:
         await mb_cmd.soft_delete_work_object(session, USER1, root_id=root_id)
+
+    # ADIM 42 / O-31 — pin the WIRE SPELLING, not just the exception type. Three
+    # page documents name this refusal three different ways: doc 03 §14 and doc 04
+    # §15 call it ACTIVE_RUN_DEPENDENCY, doc 20 §15 calls it
+    # DELETE_BLOCKED_BY_RUNNING_JOB, and doc 01/15 call it OBJECT_IN_ACTIVE_RUN.
+    # Only the last one ships. Adjudicated the O-02 way — the shipped name wins,
+    # the spec names are historical — and pinned here so the two cannot drift
+    # apart silently. Asserting the class alone (what this test used to do) left
+    # every spelling free to move.
+    assert excinfo.value.code == "OBJECT_IN_ACTIVE_RUN"
+    assert excinfo.value.http_status == 409
+    # The guard fires BEFORE the delete, so no Trash Entry may exist for the root:
+    # a blocked delete that still filed a trash row would offer restore/purge over
+    # an object that was never deleted.
+    blocked_entries = (
+        await session.execute(
+            select(func.count()).select_from(TrashEntry).where(TrashEntry.entity_id == root_id)
+        )
+    ).scalar_one()
+    assert blocked_entries == 0
 
 
 async def test_worker_is_redelivery_idempotent(session) -> None:

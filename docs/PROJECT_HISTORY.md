@@ -6716,3 +6716,147 @@ işaretlendi (iki operation `200 → 202`, path/operation **sayısı** aynı).
 > **Numara notu:** bu slice oturum promptunda `ADIM 38b` diye adlandırılmıştı; main'de
 > ADIM 38/39/40 zaten merge olmuştu, bu yüzden kayıt **ADIM 41** olarak açıldı. Repo kuralı
 > gereği merge edilmiş numaralar yeniden atanmaz.
+
+---
+
+## ADIM 42 — RC §6.7 / P1-Gate3: kabul kriteri kapsamı ölçüldü, sınıflandırıldı, ratchet'lendi (PR pending)
+
+**Ne yapıldı:** raporun P1-Gate3 kalemi (*"8 uncovered + 131 partial kriter, kapı yeşil
+sayıyor"*) **ele alınabilir** hale getirildi. 139 kalem **kapatılmadı** — kapatmak PR
+disiplinini yok ederdi. Dört iş yapıldı, beşincisi bilerek yapılmadı.
+
+### 1. Ölçüm — sayılar bayat değildi
+
+`docs/audit/acceptance_semantic_scan.py --root .. --report` (2026-08-12) 2026-08-07'nin
+dağılımını **birebir** yeniden üretti: **383 kriter / 1175 clause**, covered 229 · partial
+**131** · uncovered **8** · deliberate_future_dev 8 · not_applicable 7. Kalem "sayı yanlış"
+diye değil, **"sayı anlamsız"** diye açıktı.
+
+**Kapı "partial"ı geçer sayıyor mu?** Kaynağından doğrulandı: **evet, kastederek.**
+`validate()` haritanın kendisi hakkında yalan söylemediğini kanıtlar; statü **dağılımına**
+hiç bakmaz. Kusur değil, **eksik yarı** — sözleşmenin ne kadarının kanıtlandığı hiç
+sınırlanmıyordu.
+
+### 2. Sınıflandırma — ve üç sınıfın veriye uymaması
+
+139 kaydın **tamamının** `notes` gerekçesi okundu. Brief üç sınıf öngörüyordu (eşleme /
+gerçek kısmi / yapısal). Baskın dördüncü bir durum vardı: kriterin **adlandırdığı kod,
+alan, hata sınıfı veya Agent tool'u üretimde hiç yok**. Ne eşleme hatası, ne gerçek kısmi
+kapsam, ne yapısal olarak kapatılamaz — **kod yazarak** kapatılabilir. Üçe sıkıştırmak ürün
+işini yanlış etiketlerdi. Taksonomi **A/B/C/D** oldu; her açık kayıt `debt_class` taşıyor ve
+kapı sınıfsız açık kriteri **kırmızıya çevirir** (`DEBT_CLASS_REQUIRED`), settled bir kayda
+sınıf iliştirileni de (`DEBT_CLASS_NOT_ALLOWED`).
+
+**Dağılım (bu slice'ın pinlerinden SONRA, 134 açık kalem):** **A = 1** · **B = 95** ·
+**C = 6** · **D = 32**.
+
+**Asıl bulgu:** açık borcun **%24'ü (32/134) sınıf D'dir ve HİÇBİR test kapatamaz.**
+`AT-06` (uyumluluk kuralı yok) · `AT-13` (ifade DSL'i/AST yok) · `AT-17` (sunucu tarafı
+blackout doğrulayıcı yok) · `CP-16`/`PC-15`/`PL-20`/`ESP-14`/`RF-13` (Tool Gateway'de ilgili
+tool **hiç yok**) · `AM-15` (`metric_profile` `TRASH_OBJECT_LOCATIONS`'ta değil) · `FD-09`
+(split/seed kolonu yok)… Aggregate'i test borcu diye okumak bu 32 kalemi **yanlış slice'a
+bütçelemekti**. Ayrıca **sınıf A yalnız 1** — "ucuz eşleme düzeltmesi" umudu neredeyse boş:
+haritayı yazan komşu testleri ödünç almayı zaten reddetmişti.
+
+### 3. Ratchet — mevcut desen, yeni desen değil
+
+Şablon `frontend/e2e/a11y-baseline.json` + `specs/13-a11y-scan.spec.ts`. Karşılığı
+**`docs/audit/acceptance_coverage_baseline.json`**:
+
+* `ceilings.status` ve `ceilings.debt_class` → **tavan**; ölçülen > tavan ⇒ **kırmızı**.
+* `ceilings.total_criteria` → **taban**; rahatsız edici bir kriteri **silmek ilerleme
+  sayılamaz**.
+* Tavanın altına düşülürse kapı **sıkılaştırılmış bloğu basar** (yapıştırılıp yeniden
+  dondurulur).
+* **Pay YOK** ve bu testle kilitli (`test_the_frozen_ceiling_leaves_no_headroom`) —
+  ölçümün üstünde bir tavan bir sonraki kanıtsız kriteri sessizce **lisanslar**.
+* Sınıflar **ayrı** ratchet'lenir: yoksa aynı PR'da sekiz B kapatıp sekiz D eklemek net
+  yeşil verirdi.
+
+CI'a bağlandı (`ci.yml`: `--report --ratchet`) ve **negatifi kanıtlı** — tavan bir
+düşürülünce CLI `exit 1` + `status.partial: 126 measured, ceiling 125 (+1)`; altı unit test
+dört kırmızı yolu provoke ediyor.
+
+### 4. Pinlenen üç grup — ve raporun İKİ hatası
+
+**`AOS-17` / `TS-17` — rapor HAKLIYDI.** `ACTIVE_RUN_DEPENDENCY` `backend/src`+`backend/tests`
+genelinde **sıfır** hit; `OBJECT_IN_ACTIVE_RUN` testlerde yalnız bir **docstring**'de. Test
+**exception tipini** assert ediyordu, wire kodunu asla.
+
+> **ADJUDICATION O-31 (O-02 emsali).** Üç belge **tek** bir reddi üç türlü adlandırıyor:
+> `ACTIVE_RUN_DEPENDENCY` (doc 03 §14, doc 04 §15) · `DELETE_BLOCKED_BY_RUNNING_JOB`
+> (doc 20 §15) · `OBJECT_IN_ACTIVE_RUN` (doc 01/15). Yalnız sonuncusu sevk edilmiş.
+> **Sevk edilen ad kanoniktir; diğer ikisi tarihseldir.** Sevk edilmiş kodu bir belgeye
+> uydurmak için yeniden adlandırmak, bir yazım uğruna tüm çağıranları kırardı.
+
+Pin: `test_active_run_blocks_work_object_delete` artık `code == "OBJECT_IN_ACTIVE_RUN"` +
+`http_status == 409` + engellenen delete'ten sonra **sıfır** `TrashEntry`. Kapanan:
+`AOS-17`, `TS-17`, **`TR-06`** (aynı adjudication), **`TL-19`**.
+
+**`AT-04` — rapor bunu YANLIŞ gruplamıştı.** Pinlenecek şey yok:
+`MARKET_DATA_INSTRUMENT_MISMATCH` **hiç yok**, Save-zamanlı çapraz kontrol **uygulanmamış**
+→ **sınıf D**. Sevk edilen davranış RUN-zamanlıdır (`RUN_FAILED_INSTRUMENT_MISMATCH`) ve
+**zaten pinlidir** (`test_backtest_persistence.py:490`). Kalem "pinsiz" değil,
+**uygulanmamış**tı.
+
+**`TL-20` / `AOS-18` — brief K-06'yı YANLIŞ tarif etmişti.** Brief K-06'yı *upload
+dosya-tipi kapısı* sanıyor; `CLAUDE.md`'de o **K-07**, **K-06** ise *Trash tip kataloğu* —
+`TL-20`'nin kendi notu da K-06'yı trash-entry invariant'ı olarak anıyor. İkisi de ele
+alındı: (a) gerçek tehlike — `mb_cmd.soft_delete_work_object` yolunda hiçbir test
+`TrashEntry`/`AuditEvent`/`OutboxEvent` sorgulamıyordu; artık sorguluyor
+(`entity_type == "work_object"`, birer `entity.soft_deleted` satırı) ve **ilk koşuda GEÇTİ**
+→ invariant tutuyor, kusur keşfi değil. `AOS-18` kapandı, `TL-20` `c3` yüzünden **partial**
+kaldı. (b) Brief'in kastettiği **K-07 fail-closed upload kapısı ölçüldü: zaten pinli** —
+beş sayfa taksonomisinin beşi de assert ediliyor, `filename=None` vakası dahil
+(`test_gateway_parity_trading_signal.py:425`). Yeni test gerekmedi.
+
+**Yeni taban:** covered **229 → 234** · partial **131 → 126** · uncovered **8** (değişmedi) ·
+clause covered **971 → 979**.
+
+### 5. Backlog — bu PR'ın ana çıktısı
+
+**`docs/audit/acceptance_coverage_debt_ledger.md`** haritadan **üretilir** (elle sayı
+yazılmaz; bayatlığı `test_the_debt_ledger_is_not_stale` kırmızıya çevirir). 134 kalem
+sınıf → belge → id sırasıyla, her birinin kendi gerekçesiyle. Planlama sırası:
+**A (1) → B (95) → D (32, ürün) ; C (6) hiç kapatılmaz.**
+
+### Dokunulmayanlar (dürüst sınır)
+
+* **134 açık kriterin hiçbiri kapatılmadı** — kapsam dışıydı.
+* Sınıf D'nin **ürün kararı isteyen** alt kümesi (`RD-02`, `RD-03`, `AM-11`, `AOS-02` —
+  spec ile sevk edilen davranış **çelişiyor**) **PO'ya sorulmadı**, deftere kaydedildi.
+* Sınıflandırma her kaydın **kendi `notes` gerekçesinden** okundu; 134 kaydın test gövdeleri
+  **tek tek yeniden okunmadı** — bu 139 kalemi kapatmak olurdu. Bir yanlış sınıflandırma
+  mümkündür; `notes` otoritedir.
+* `acceptance_id_scan.py` (zayıf kardeş tarayıcı) ve Master doc'un 21 modül-düzeyi kabul
+  tablosu hâlâ kapsam dışı.
+* **Ürün kodu DEĞİŞMEDİ.** Migration yok, `ENGINE_VERSION` sabit, OpenAPI sabit.
+
+**P1-Gate3 KAPANMADI** — ele alınabilir hale geldi. **Blocker sayısı DEĞİŞMEDİ (üç).
+§8 verdict BLOCKED kalır.**
+
+Rapor: §6 tablosu (P1-Gate3 satırı) + **§6.7.10**. Kanıt:
+`docs/releases/evidence/2026-08-12/`.
+
+### Kapanışta bulunan iki tuzak (ikisi de düzeltildi)
+
+**1. Üretilmiş dosyanın elle eklenmiş başlığı.** `acceptance_semantic_traceability.md`
+**üretilmiş** bir dosya, ama `origin/main`'de üstüne **elle** bir `doc-status: historical`
+banner'ı konmuştu — üreticinin kendi başlığı *"do not edit by hand"* dediği hâlde. Onu
+yeniden üretmek banner'ı **sessizce siliyor** ve documentation-truth kapısını kırmızıya
+çeviriyordu (tam suite'in tek başarısızlığı buydu). Kalıcı düzeltme: banner artık
+`acceptance_semantic_scan.py::HISTORICAL_BANNER`'dan **üretiliyor**; yeni defter de onu
+taşıyor. Aynı koşu iki kickoff'un birden `current` iddia ettiğini yakaladı →
+`ADIM41_LANDED_KICKOFF.md` **superseded** olarak `historical`'a düşürüldü.
+
+**2. pytest özet satırı YİNE kaybedildi.** `CLAUDE.md` bu tuzağı adıyla uyarıyor. Exit code
+bu kez doğru alındı (`PYTEST_EXIT=1`, ayrı satır) ama **`N passed` satırı log'da hiç yok**
+(`grep -c passed` → **0**). Bu yüzden **bu kayıt bir passed sayısı iddia etmiyor**; yakalanan
+üç olgu: **exit 1** · coverage **%93.61** (kapı ≥90 karşılandı) · **tek** adı verilmiş FAILED,
+o da düzeltildi. Düzeltmeden sonra kırmızı test ve komşuları ayrıca koşuldu (**95 passed**,
+exit 0) ve documentation-truth kapısı **exit 0** verdi. **Tam suite bu doc-only düzeltmeden
+sonra yeniden koşulmadı — otorite CI'dır.** Sonraki koşuda `-q` yerine `-rN --tb=short` kullan.
+
+> **Numara notu:** bu slice oturum promptunda `ADIM 39` diye adlandırılmıştı; main'de
+> ADIM 39/40/41 zaten merge olmuştu (#665–#668), bu yüzden kayıt **ADIM 42** olarak açıldı.
+> Repo kuralı gereği merge edilmiş numaralar yeniden atanmaz.

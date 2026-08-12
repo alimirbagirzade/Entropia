@@ -873,7 +873,7 @@ açılmadı/kapatılmadı.
 | **P8-B3b** | **YENİ (ADIM 40 ölçümü, rapor bunu bildirmemişti).** `JOBS_AND_EVENTS.md`'in **gövdesinde** ~30 adet `dosya.py:NN` / `:NN` referansı daha var (`sse.py:270`, `_wait_for_tick:166`, `actors.py:334`, …) — aktör tablosuyla **aynı** yapısal kusur: her düzenleme onları kaydırır. B3 ölçümü yalnız aktör tablosunu kapsıyordu, bu yüzden yalnız o kapatıldı; gerisini sembol adına çevirmek her referansın **tek tek doğrulanmasını** ister → **ayrı PR**. Sınır dosyanın kendisine yazıldı. **Ölçüldü, düzeltilmedi** | ADIM 40 |
 | ~~**P6-6**~~ | ~~`dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir~~ → **2026-08-10 (ADIM 36) KAPANDI** — yanlış-negatif **yeniden üretildi** (sağlam yedek, `exit 1`), harici çağrılar sınırlandı, **yeni `exit 3` = "doğrulanamadı"** eklendi; "yedek bozuk" (1) ile karışmıyor, "sağlam" (0) ile **asla**. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
 | ~~**P6-ek**~~ | ~~`e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma~~ → **2026-08-10 (ADIM 36) KAPANDI** — asılı kalma **yeniden üretildi** (25s'de hâlâ koşuyordu), preflight sınırlandı; takılı daemon'a karşı **sınırlı sürede `exit 2`** ölçüldü, "daemon yok" teşhisi ayrı mesajda korundu. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
-| **P1-Gate3** | **8 uncovered kriter** + **131 partial kriter** (kapı yeşil sayıyor, ama RC kabul kararında okunmalıdır) — aralarında `AT-04`, `AOS-17`/`TS-17` (spec adı `ACTIVE_RUN_DEPENDENCY` ↔ sevk edilen `OBJECT_IN_ACTIVE_RUN`, **hiçbiri pinli değil**), `TL-20`/`AOS-18` (K-06 tehlikesi) | P1 |
+| **P1-Gate3 ELE ALINABİLİR HALE GELDİ — KAPANMADI** | ~~8 uncovered + 131 partial (kapı yeşil sayıyor)~~ → **2026-08-12 (ADIM 42) yeniden ölçüldü, sınıflandırıldı, ratchet'lendi, üç grup pinlendi.** Sayılar **bayat değildi** — koşu 229/131/8'i birebir yeniden üretti. Bu slice **8 clause / 5 kriter** kapattı (`AOS-17`, `TS-17`, `TR-06`, `TL-19`, `AOS-18`), yeni taban **234 covered / 126 partial / 8 uncovered**. Kalan **134 açık kriter** artık A/B/C/**D** sınıflı: **A=1** (ad sapması), **B=95** (gerçek test borcu), **C=6** (doğası gereği iddia edilemez), **D=32** (**uygulama boşluğu — hiçbir test kapatamaz**). Açık borcun **%24'ü test borcu değil, ürün işiydi**; üç sınıflı taksonomi veriye uymadı, dördüncü sınıf eklendi. Borç `acceptance_coverage_baseline.json` ile **tavan olarak donduruldu** (paysız), CI `--ratchet` ile bağlandı, negatifi CLI'da ve 6 unit testte kanıtlı; defter `acceptance_coverage_debt_ledger.md` (**üretilmiş**). `AT-04` ölçüldü → **sınıf D** (`MARKET_DATA_INSTRUMENT_MISMATCH` hiç yok; sevk edilen RUN-zamanlı `RUN_FAILED_INSTRUMENT_MISMATCH` **zaten pinli**). **Rapor bu satırda iki kez yanılmıştı** — ayrıntı §6.7.10. **P1-Gate3 KAPANMADI:** 134 kalem açık, 32'si ürün kararı/işi | P1 |
 | **P10-B3** | **Bildirim yolunun DELIVERY kanıtı bir CI kapısı DEĞİL** (ADIM 31). Config yarısı kapılı (`scripts/alert-notification-gate.sh` + 21 contract testi); teslimat yarısı yalnız `scripts/alert-notification-proof.sh` ile ölçülür ve o üç konteyner + dakikalarca wall-clock ister. Kapıya bağlamak **insan kararıdır** (maliyet). Regresyon sessizce dönebilir | ADIM 31 |
 | **P10-B4** | **Monitörü izleyen yok.** Alertmanager erişilemezse Prometheus yeniden dener ve `prometheus_notifications_errors_total` sayacını artırır — **kendi** `/metrics`'inde, ki onu hiçbir şey scrape etmiyor. Sessizce teslim etmeyi bırakmış bir bildirim yolu, sessiz bir sistemden ayırt edilemez. Döngüsel olmayan bir çözüm ikinci bir Prometheus ister; denenmedi | ADIM 31 |
 | **P10-B5** | **On-call rotasyonu / escalation policy / acknowledgement YOK.** Alertmanager'ın ack kavramı yoktur; `repeat_interval` mekanizmanın tamamıdır. Kimin uyandırılacağı `ALERTMANAGER_NOTIFY_URL`'in ucundaki sistemde yaşar — **repo dışı, organizasyonel karar** | ADIM 31 |
@@ -1485,6 +1485,106 @@ sözleşmeyi sessizce yeniden kesemez.
 kaydırmasını taşımamak için **silindi**, diğer tablolar ölçülmedi.
 
 **P8 KAPANMADI.** **Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
+
+---
+
+#### 6.7.10 P1-Gate3 ELE ALINABİLİR HALE GELDİ — ölç, sınıflandır, ratchet'le, pinle (ADIM 42, 2026-08-12)
+
+**Kalemin iddiası:** *"8 uncovered kriter + 131 partial kriter (kapı yeşil sayıyor)"*.
+
+**1) ÖLÇÜM — sayılar bayat değildi.** Kapı `docs/audit/acceptance_semantic_scan.py`;
+`ci.yml`'daki adım `--report` ile koşuyor. 2026-08-12 koşusu **383 kriter / 1175 clause**
+üzerinde 2026-08-07 dağılımını **birebir** yeniden üretti: covered 229 · partial 131 ·
+uncovered 8 · deliberate_future_dev 8 · not_applicable 7. Yani rapor doğru sayıyordu.
+
+**Kapı "partial"ı gerçekten geçer sayıyor mu?** Kaynağından doğrulandı: **evet, ve
+kastederek.** `validate()` haritanın **kendisi hakkında yalan söylemediğini** kanıtlar
+(çözülmeyen node, kanıtsız `covered`, jsdom'a dayanan sunucu ekseni…). Statü **dağılımına**
+hiç bakmaz. Bu bir kusur değil, eksik bir yarıydı: kapı sözleşmenin ne kadarının
+kanıtlandığını **hiç sınırlamıyordu**, o yüzden 139 açık kalem aylarca yeşil geçti.
+
+**2) SINIFLANDIRMA — ve neden üç sınıf yetmedi.** 139 kalemin **tamamının** `notes`
+gerekçesi okundu. Brief üç sınıf öngörüyordu (eşleme / gerçek kısmi / yapısal). **Veri
+üçe uymadı.** Dördüncü bir durum baskındı: kriterin **adlandırdığı kod, alan, hata sınıfı
+ya da Agent tool'u üretimde hiç yok**. Bunlar ne eşleme hatası (kapsanan bir test yok), ne
+gerçek kısmi kapsam (uygulanmış bir davranış yok), ne de yapısal olarak kapatılamaz (pekâlâ
+kapatılabilir — **kod yazarak**). Üçüne sıkıştırmak, ürün işini "test borcu" ya da
+"gerekçelendirilecek" diye yanlış etiketlerdi — bu dalganın tam olarak kovaladığı hata.
+Sonuç taksonomi:
+
+| Sınıf | Ne demek | Kim kapatır | Sayı |
+|---|---|---|---:|
+| **A** | Davranış sevk edilmiş, **spec'in kullandığı addan farklı bir adla** | Adjudication + tek satır pin | **1** |
+| **B** | Davranış uygulanmış, **iddia eksik** | Test slice'ı (tek sahibi budur) | **95** |
+| **C** | Açık clause **doğası gereği iddia edilemez** — bir *belge* hakkında cümle, V1'de bilerek kapalı özellik, ya da Production'ın kuramayacağı senaryo | Kimse. Gerekçelendirilir, "kapatılmaz" | **6** |
+| **D** | Kriterin **adlandırdığı şey üretimde yok** | Ürün işi; birkaçı önce **ürün kararı** ister | **32** |
+
+**BULGU — "131 partial" kelimesi ürün işini gizliyordu.** Açık borcun **%24'ü (32/134)
+sınıf D'dir ve hiçbir test onu kapatamaz.** `AT-06` (uyumluluk kuralı yok), `AT-13`
+(ifade DSL'i / AST yok), `AT-17` (sunucu tarafı blackout doğrulayıcı yok), `CP-16` ·
+`PC-15` · `PL-20` · `ESP-14` · `RF-13` (Tool Gateway'de ilgili tool **hiç yok**),
+`AM-15` (`metric_profile` `TRASH_OBJECT_LOCATIONS`'ta değil), `FD-09` (split/seed kolonu
+yok)… Aggregate'i test borcu diye okumak, bu 32 kalemi **yanlış slice'a bütçelemekti.**
+Ayrıca **sınıf A yalnız 1** — "ucuz eşleme düzeltmesi" umudu neredeyse boş çıktı, çünkü
+haritayı yazan kişi komşu testleri ödünç almayı zaten reddetmişti.
+
+**3) RATCHET — mevcut desen, yeni desen değil.** Şablon `frontend/e2e/a11y-baseline.json`
++ `specs/13-a11y-scan.spec.ts`. Karşılığı `docs/audit/acceptance_coverage_baseline.json`:
+`ceilings.status` ve `ceilings.debt_class` **tavan** (ölçülen > tavan → **kırmızı**),
+`ceilings.total_criteria` ise **taban** — rahatsız edici bir `partial` kriteri **silmek
+ilerleme sayılamaz**. Tavanın **altına** düşülürse kapı sıkılaştırılmış bloğu basar.
+**Pay bırakılmadı** ve bu bir testle kilitli (`test_the_frozen_ceiling_leaves_no_headroom`):
+ölçümün üstünde bir tavan, bir sonraki kanıtsız kriteri sessizce **lisanslar**.
+Sınıflar **ayrı** ratchet'lenir — yoksa aynı PR'da sekiz B kapatıp sekiz D eklemek net
+yeşil verirdi. Kapı `ci.yml`'a bağlandı (`--report --ratchet`) ve **negatifi kanıtlı**:
+tavan bir düşürülünce CLI `exit 1` + `status.partial: 126 measured, ceiling 125 (+1)`
+verdi; altı unit test dört kırmızı yolu da provoke ediyor.
+
+**4) PİNLENEN ÜÇ GRUP — ve raporun bu satırdaki İKİ HATASI.**
+
+* **`AOS-17` / `TS-17` — rapor HAKLIYDI, doğrulandı.** `ACTIVE_RUN_DEPENDENCY` `backend/src`
+  ve `backend/tests` genelinde **sıfır** hit; `OBJECT_IN_ACTIVE_RUN` testlerde yalnız bir
+  **docstring**'de geçiyordu. Test **exception tipini** assert ediyordu, wire kodunu asla →
+  her iki yazım da serbestçe kayabilirdi. **Adjudication O-31** (O-02 emsali): üç belge tek
+  bir reddi üç türlü adlandırıyor — `ACTIVE_RUN_DEPENDENCY` (doc 03 §14, doc 04 §15),
+  `DELETE_BLOCKED_BY_RUNNING_JOB` (doc 20 §15), `OBJECT_IN_ACTIVE_RUN` (doc 01/15). **Sevk
+  edilen ad kanoniktir, diğer ikisi tarihseldir.** Pin: `test_active_run_blocks_work_object_delete`
+  artık `code == "OBJECT_IN_ACTIVE_RUN"` + `http_status == 409` + engellenen delete'ten sonra
+  **sıfır** `TrashEntry` assert ediyor. Kapanan: `AOS-17`, `TS-17`, **`TR-06`** (aynı
+  adjudication) ve **`TL-19`**.
+* **`AT-04` — rapor bunu YANLIŞ gruplamıştı.** Pinlenecek bir şey yok: `MARKET_DATA_INSTRUMENT_MISMATCH`
+  **hiç yok** ve Save-zamanlı çapraz kontrol **uygulanmamış** → **sınıf D**. Sevk edilen
+  davranış RUN-zamanlıdır (`RunFailureCode.INSTRUMENT_MISMATCH` → `RUN_FAILED_INSTRUMENT_MISMATCH`)
+  ve **zaten pinlidir** (`test_backtest_persistence.py:490`), haritada da `c1: covered`
+  olarak duruyordu. Yani bu kalem "pinsiz" değil, **uygulanmamış**tı.
+* **`TL-20` / `AOS-18` — brief K-06'yı YANLIŞ tarif etmişti.** Brief K-06'yı *upload
+  dosya-tipi kapısı* diye tanımlıyor; `CLAUDE.md`'de o **K-07**'dir, **K-06** ise *Trash tip
+  kataloğu*'dur — ve `TL-20`'nin kendi notu da K-06'yı trash-entry invariant'ı olarak
+  anıyor. **İkisi de ele alındı.** (a) Gerçek tehlike: `mb_cmd.soft_delete_work_object`
+  yolunda **hiçbir test** `TrashEntry`/`AuditEvent`/`OutboxEvent` sorgulamıyordu — artık
+  sorguluyor (`entity_type == "work_object"`, birer `entity.soft_deleted` satırı).
+  **İlk koşuda GEÇTİ**: invariant tutuyor, bu bir kusur keşfi değil, gerçek davranışın
+  kilitlenmesidir. `AOS-18` kapandı, `TL-20` **`c3` yüzünden partial kaldı** (sınıf B).
+  (b) Brief'in kastettiği K-07 fail-closed upload kapısı **ölçüldü: zaten pinli** — beş
+  sayfa taksonomisinin beşi de assert ediliyor, `filename=None` fail-closed vakası dahil
+  (`test_gateway_parity_trading_signal.py:425`). Yeni test gerekmedi.
+
+**5) BACKLOG — bu PR'ın ana çıktısı.** `docs/audit/acceptance_coverage_debt_ledger.md`,
+haritadan **üretilir** (elle sayı yazılmaz; bayatlığı `test_the_debt_ledger_is_not_stale`
+kırmızıya çevirir). 134 kalem sınıf → belge → id sırasıyla, her birinin kendi gerekçesiyle
+listeli. Planlama sırası: **A (1) → B (95) → D (32, ürün) ; C (6) hiç kapatılmaz.**
+
+**Bu dalganın DOKUNMADIKLARI (dürüst sınır):** kalan **134 kalemin hiçbiri kapatılmadı**
+(kapsam dışıydı) · sınıf D'nin **ürün kararı isteyen** alt kümesi (`RD-02`, `RD-03`,
+`AM-11`, `AOS-02` — spec ile sevk edilen davranış **çelişiyor**) **PO'ya sorulmadı**, yalnız
+deftere kaydedildi · sınıflandırma her kaydın **kendi `notes` gerekçesinden** okundu, 134
+kaydın test gövdeleri **tek tek yeniden okunmadı** — bu, 139 kalemi kapatmak demek olurdu
+ve slice'ın dışındaydı; bir yanlış sınıflandırma bu yüzden mümkündür ve `notes` otoritedir ·
+`acceptance_id_scan.py` (zayıf kardeş tarayıcı) ve Master doc'un 21 modül-düzeyi kabul
+tablosu hâlâ kapsam dışı.
+
+**P1-Gate3 KAPANMADI** — ele alınabilir hale geldi. **Blocker sayısı DEĞİŞMEDİ (üç).
+§8 verdict BLOCKED kalır.**
 
 ---
 

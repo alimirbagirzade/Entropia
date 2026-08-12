@@ -13,6 +13,7 @@ some criterion cites turns red here as well as in the standalone CI step.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -512,3 +513,150 @@ def test_an_unquoted_node_id_containing_a_colon_is_reported_not_crashed(
     found = codes(fake_root, record)
     assert "UNRESOLVED_NODE" in found
     assert "EVIDENCE_TYPE_MISMATCH" in found
+
+
+# ---------------------------------------------------------------------------
+# ADIM 42 — debt classification and the coverage ratchet (RC §6.7 P1-Gate3)
+
+
+def _open_record(**overrides: Any) -> dict[str, Any]:
+    """A `partial` record: covered clause + uncovered clause, so it is real debt."""
+    base = make_record(
+        status="partial",
+        notes="half of it is asserted, half is not",
+        debt_class="B",
+        clauses=[
+            {"id": "XX-01.c1", "text": "t", "status": "covered", "test_evidence": [UNIT_NODE]},
+            {"id": "XX-01.c2", "text": "u", "status": "uncovered"},
+        ],
+    )
+    base.update(overrides)
+    return base
+
+
+def test_an_open_criterion_without_a_debt_class_is_refused(fake_root: Path) -> None:
+    """The exact failure this taxonomy exists to prevent.
+
+    An unclassified `partial` is how "131 partial" became a number nobody could
+    plan against: it hides whether a test could close the row at all.
+    """
+    record = _open_record()
+    del record["debt_class"]
+    assert "DEBT_CLASS_REQUIRED" in codes(fake_root, record)
+
+
+def test_an_unknown_debt_class_is_refused(fake_root: Path) -> None:
+    assert "DEBT_CLASS_REQUIRED" in codes(fake_root, _open_record(debt_class="E"))
+
+
+def test_a_settled_criterion_may_not_carry_a_debt_class(fake_root: Path) -> None:
+    """`covered` has nothing to plan; a class on it would invite re-litigation."""
+    assert "DEBT_CLASS_NOT_ALLOWED" in codes(fake_root, make_record(debt_class="B"))
+
+
+def test_a_correctly_classified_open_criterion_passes(fake_root: Path) -> None:
+    for cls in scan.DEBT_CLASSES:
+        assert codes(fake_root, _open_record(debt_class=cls)) == []
+
+
+# ---- the ratchet -----------------------------------------------------------
+
+_BASELINE: dict[str, Any] = {
+    "ceilings": {
+        "total_criteria": 1,
+        "status": {"partial": 1, "uncovered": 0},
+        "debt_class": {"A": 0, "B": 1, "C": 0, "D": 0},
+    }
+}
+
+
+def test_the_ratchet_passes_when_debt_is_exactly_at_the_ceiling() -> None:
+    ok, lines = scan.ratchet({"criteria": [_open_record()]}, _BASELINE)
+    assert ok
+    assert "acceptance ratchet OK" in "\n".join(lines)
+
+
+def test_the_ratchet_fails_when_a_status_count_grows() -> None:
+    """A gate that cannot go red is decoration — prove it goes red."""
+    second = _open_record(
+        id="XX-02",
+        status="uncovered",
+        clauses=[{"id": "XX-02.c1", "text": "u", "status": "uncovered"}],
+    )
+    ok, lines = scan.ratchet({"criteria": [_open_record(), second]}, _BASELINE)
+    assert not ok
+    assert "status.uncovered: 1 measured, ceiling 0" in "\n".join(lines)
+
+
+def test_the_ratchet_fails_when_a_debt_class_grows() -> None:
+    """Class D growing while class B shrinks must not net out to green.
+
+    Ratcheting only the status totals would let 32 implementation gaps become 40
+    as long as someone closed eight test-debt rows in the same PR.
+    """
+    ok, lines = scan.ratchet({"criteria": [_open_record(debt_class="D")]}, _BASELINE)
+    assert not ok
+    assert "debt_class.D: 1 measured, ceiling 0" in "\n".join(lines)
+
+
+def test_the_ratchet_fails_when_the_corpus_shrinks() -> None:
+    """Deleting an inconvenient criterion must not read as progress."""
+    shrunk = {"ceilings": {**_BASELINE["ceilings"], "total_criteria": 5}}
+    ok, lines = scan.ratchet({"criteria": [_open_record()]}, shrunk)
+    assert not ok
+    assert "may be added but never dropped" in "\n".join(lines)
+
+
+def test_the_ratchet_prints_the_tightened_block_when_debt_falls() -> None:
+    loose = {
+        "ceilings": {
+            "total_criteria": 1,
+            "status": {"partial": 9, "uncovered": 9},
+            "debt_class": {"A": 9, "B": 9, "C": 9, "D": 9},
+        }
+    }
+    ok, lines = scan.ratchet({"criteria": [_open_record()]}, loose)
+    assert ok
+    rendered = "\n".join(lines)
+    assert "re-freeze" in rendered
+    assert '"partial": 1' in rendered
+
+
+# ---- the SHIPPED artefacts -------------------------------------------------
+
+
+def _shipped_baseline() -> dict[str, Any]:
+    path = REPO_ROOT / "docs" / "audit" / "acceptance_coverage_baseline.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_the_shipped_map_clears_its_own_frozen_ceiling(shipped_map: dict[str, Any]) -> None:
+    ok, lines = scan.ratchet(shipped_map, _shipped_baseline())
+    assert ok, "\n".join(lines)
+
+
+def test_the_frozen_ceiling_leaves_no_headroom(shipped_map: dict[str, Any]) -> None:
+    """A ceiling above today's measurement silently licenses the next unproven row.
+
+    "Leave a little room" is precisely how a ratchet stops ratcheting, so the
+    baseline must EQUAL the measurement, never exceed it.
+    """
+    ceilings = _shipped_baseline()["ceilings"]
+    measured = scan.measured_counts(shipped_map)
+    assert ceilings["status"] == measured["status"]
+    assert ceilings["debt_class"] == measured["debt_class"]
+    assert ceilings["total_criteria"] == measured["total_criteria"]
+
+
+def test_the_debt_ledger_is_not_stale(shipped_map: dict[str, Any]) -> None:
+    """The ledger is generated; a hand-edited or forgotten one is worse than none."""
+    committed = (REPO_ROOT / "docs" / "audit" / "acceptance_coverage_debt_ledger.md").read_text(
+        encoding="utf-8"
+    )
+    assert committed == scan.LEDGER_PREAMBLE + scan.ledger(shipped_map) + "\n"
+
+
+def test_the_ratchet_is_wired_into_ci() -> None:
+    """A ceiling nothing runs is a comment."""
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "acceptance_semantic_scan.py --root .. --report --ratchet" in workflow

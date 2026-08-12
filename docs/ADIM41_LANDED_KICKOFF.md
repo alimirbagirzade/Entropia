@@ -1,4 +1,6 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED by `docs/ADIM42_LANDED_KICKOFF.md` (ADIM 42, 2026-08-12).** Bu belge
+> ADIM 41 kapanışındaki durumu kaydeder; sayıları ve "next" maddesi bayattır.
 > **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 

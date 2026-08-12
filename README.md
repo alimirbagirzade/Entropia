@@ -80,7 +80,7 @@ This repository is built **stage by stage** from a canonical specification (see
 | `ENGINE_VERSION` | `backtest-engine-v18-gap-adjusted-stop-fill` |
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3484 in 334 files |
+| Backend tests **collected** (static, not a pass count) | 3497 in 334 files |
 | Backend `xfail` markers | 1 (1 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 711 in 70 files |
 | E2E test **call sites** (static) | 80 in 21 specs |

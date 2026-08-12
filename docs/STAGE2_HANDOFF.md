@@ -5306,6 +5306,54 @@ rapor **§6.7.9**; devir: `docs/ADIM41_LANDED_KICKOFF.md`.
 
 ---
 
+## ADIM 42 — RC §6.7 / P1-Gate3: kabul kriteri kapsamı ölçüldü, sınıflandırıldı, ratchet'lendi (PR pending)
+
+**Migration:** yok · **Yeni tablo:** yok · **Ürün kodu:** DEĞİŞMEDİ (`ENGINE_VERSION`,
+OpenAPI, alembic head sabit). Bu bir **test/kapı** slice'ıdır.
+
+**Ne landed:**
+
+* **Ölçüm.** `acceptance_semantic_scan.py --report` 2026-08-07'nin dağılımını **birebir**
+  yeniden üretti (383 kriter / 1175 clause; 229 / 131 / 8) — sayılar **bayat değildi**.
+  Kapının `partial`'ı geçer sayması **kasıtlı**: `validate()` haritanın kendisi hakkında
+  yalan söylemediğini kanıtlar, statü **dağılımına** bakmaz. Eksik olan yarı buydu.
+* **Sınıflandırma.** 139 kaydın tamamının gerekçesi okundu; **üç sınıf veriye uymadı**,
+  dördüncü eklendi. Her açık kayıt `debt_class: A|B|C|D` taşıyor, kapı sınıfsızı
+  **kırmızıya çevirir** (`DEBT_CLASS_REQUIRED` / `DEBT_CLASS_NOT_ALLOWED`).
+  **A=1 · B=95 · C=6 · D=32.** Açık borcun **%24'ü sınıf D** — *hiçbir test kapatamaz*,
+  ürün işidir.
+* **Ratchet.** `docs/audit/acceptance_coverage_baseline.json` (a11y ratchet'i şablon aldı):
+  statü ve sınıf sayıları **tavan**, `total_criteria` **taban** (kriter silmek ilerleme
+  sayılamaz), **pay yok** (testle kilitli). `ci.yml` → `--report --ratchet`.
+  **Negatifi kanıtlı:** CLI `exit 1` + 6 unit test.
+* **Pinler (8 clause / 5 kriter).** **O-31 adjudication:** üç belge tek reddi üç türlü
+  adlandırıyor (`ACTIVE_RUN_DEPENDENCY` / `DELETE_BLOCKED_BY_RUNNING_JOB` /
+  `OBJECT_IN_ACTIVE_RUN`) → **sevk edilen ad kanonik**. `AOS-17`, `TS-17`, `TR-06`,
+  `TL-19`, `AOS-18` **covered** oldu. Yeni taban **234 / 126 / 8**.
+* **Defter.** `docs/audit/acceptance_coverage_debt_ledger.md` — **üretilmiş**, 134 kalem,
+  bayatlığı testle kapılı.
+
+**Test sayıları:** kapı unit paketi **61 passed** (13'ü yeni) · iki pin testi **2 passed**
+(izole DB `entropia_p1gate3`). Kanıt: `docs/releases/evidence/2026-08-12/`.
+
+**Review outcome:** ürün kodu değişmediği için ürün-review'ı yok; kapı değişikliklerinin
+negatifi ampirik kanıtlandı.
+
+**Ertelenen / dürüst sınır:**
+
+* **134 açık kriterin hiçbiri kapatılmadı** (kapsam dışıydı) — sıralı defter yazıldı.
+* Sınıf D'nin **ürün kararı isteyen** alt kümesi (`RD-02`, `RD-03`, `AM-11`, `AOS-02`:
+  spec ↔ sevk edilen davranış **çelişiyor**) **PO'ya sorulmadı**, deftere kaydedildi.
+* Sınıflandırma kayıtların **kendi `notes` gerekçesinden** okundu; 134 test gövdesi tek tek
+  yeniden okunmadı → bir yanlış sınıflandırma mümkündür, `notes` otoritedir.
+* `AT-04` **sınıf D** çıktı: pinlenecek bir şey yoktu, sevk edilen RUN-zamanlı kod zaten
+  pinliydi. Brief'in `K-06 = upload kapısı` tanımı **yanlıştı** (o **K-07**); K-07 ölçüldü
+  ve **zaten pinli** bulundu.
+
+**P1-Gate3 KAPANMADI.** Blocker sayısı **üç**, verdict **BLOCKED**.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40 ve 41 bunu DEĞİŞTİRMEDİ** — üçü de test/kapı/belge slice'ıydı, motor

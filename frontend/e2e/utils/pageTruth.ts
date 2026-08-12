@@ -12,7 +12,12 @@ export interface PageContract {
   route: string;
   /** Exact page-title text (the app renders one per page). */
   heading: string;
-  /** Heading level — most pages use h1; User Manual uses h2. */
+  /**
+   * Heading level, defaulting to h1. **No route sets it today** — `/user-manual`
+   * was the sole divergence (`<h2 class="page-title">`) and ADIM 48 promoted it
+   * to `<h1>` (K-4). Kept as the declared escape hatch so a future divergence is
+   * stated in the contract rather than assumed by the assertion.
+   */
   level?: 1 | 2;
   /**
    * The protected read the page's own data actually comes from. Omitted only

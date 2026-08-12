@@ -7422,3 +7422,129 @@ Migration **yok**, `ENGINE_VERSION` **değişmedi**, OCC/Idempotency davranış�
 - **A-08 / #514'e DOKUNULMADI** — defter hâlâ boş (0/4), blocker sayısı **1**, izleme
   issue'su kapalı. Hiçbir belge A-08'i `Complete`/`PASS` göstermez.
 - **P10-B6, P11-1, P8-B3b, P4-3, P1-Gate3, P10-B3/B4/B5 açık** — bu slice'ın kapsamı dışı.
+
+---
+
+## ADIM 48 — RC §6.5'in iki PO kalemi: K-2 (skip link) + K-4 (`/user-manual` h1)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice
+presentation-only'dir: route yolu, react-query key'i, OCC token'ı (`If-Match` /
+`expected_*_version` / `X-*-Version`), `Idempotency-Key`, hook, SSE taksonomisi,
+`lib/*.ts` veri mantığı ve `app/nav.ts` NAV/ALL_NAV_ITEMS **değişmedi**. Backend'e
+hiç dokunulmadı → migration yok, `ENGINE_VERSION` değişmedi, `docs/openapi.json`
+değişmedi.
+
+**PO kararı (2026-08-12):** K-2 ve K-4 **FIX**; K-3 **kapsam dışı**; K-5 ve K-6
+**A-08'i bekler**. Uygulanan tam olarak budur — daha fazlası değil.
+
+### (A) K-2 — skip link (WCAG 2.4.1 Bypass Blocks)
+
+`app/Layout.tsx` artık `<div class="app-shell">`'in **ilk çocuğu** olarak
+`<a class="skip-link" href="#main-content">Skip to main content</a>` render ediyor;
+`<main>` ise `id="main-content"` + `tabIndex={-1}` taşıyor. Öncesinde her rotada ilk
+tabbable öğe shell'in `Log out` butonuydu (`AuthControl`), yani **23/23 rotada** klavye
+kullanıcısı sayfaya tüm menü çubuğunu tab'layarak başlıyordu.
+
+Üç kurulum ayrıntısı **taşıyıcıdır**, süs değil:
+
+1. **`<a href="#...">` olmak zorunda, `<button onClick>` değil.** Precheck probu ilk
+   tabbable'ı `/^a\[href=#/` ile eşliyor (`e2e/specs/20-a11y-prechecks.spec.ts`); bir
+   buton ölçümü yeşile çevirmez.
+2. **`.skip-link` gizli VE görünür durumda `position: absolute`.** `.app-shell` bir flex
+   sütunudur; akışta yer kaplayan bir düğüm 23 görsel baseline'ı birden kaydırırdı.
+   `display:none` → `static` geçişi tam olarak bu hatayı yapardı.
+3. **`absolute`, `fixed` DEĞİL.** Probun tabbable filtresi `offsetParent !== null`
+   arıyor; `position: fixed` bir öğede `offsetParent` **null** döner ve prob linki hiç
+   görmez — ölçüm "ilk tabbable Log out" demeye devam ederdi.
+
+`<main>`'deki `tabIndex={-1}` de zorunludur: onsuz tarayıcı `#main-content`'e **kaydırır**
+ama odağı linkte bırakır, sonraki Tab menü çubuğuna geri girer. **-1**, 0 değil — probun
+seçicisi `[tabindex]:not([tabindex="-1"])` olduğu için `<main>` tab durağı olmaz.
+
+### (B) K-4 — `/user-manual` kendini `<h1>` ile adlandırıyor
+
+`pages/UserManual.tsx` `<h2 className="page-title">` → `<h1 className="page-title">`.
+**Sınıf değişmedi ve bu kritik:** `.page-title` `global.css`'te `margin` / `font-size`
+(`18px`) / `font-weight` (`900`) / `color` değerlerini **açıkça** yazar, yani UA'nın h1
+varsayılanlarının tamamı zaten eziliyordu → **hesaplanmış stil bir piksel oynamaz**.
+`/user-manual` bu sapmayı taşıyan **tek** rotaydı.
+
+### Hizalanan testler + YENİ kapılar
+
+Hizalama (davranış değil, beklenti): `e2e/specs/17-page-coverage.spec.ts` `level: 2`
+kaldırıldı (varsayılan 1) · `e2e/utils/pageTruth.ts` sapma notu · spec 20'nin `h1Count > 1`
+gerekçe yorumu (h1 gerekçesi düştü, outline gerekçesi kaldı) · spec 20'nin skip-link
+advisory `note`'u (artık **regresyon dedektörü**: sıfır rotada ateşlemeli).
+
+**Asıl kazanç kapılardadır.** İki bulgu da precheck'te **advisory**'ydi — advisory build
+kıramaz. ADIM 48 ikisini de sıradan `npm test` suite'inde koşan **gerçek kapılara** bağladı:
+
+- `frontend/src/test/a11ySkipLink.test.tsx` (**YENİ**, 3 assert): ilk tabbable
+  `a[href="#main-content"]`, ikinci tabbable hâlâ `<header>` içinde (yani link chrome'un
+  **önünde**), `<main>` `id` + `tabindex="-1"` taşıyor ve tabbable listesinde **değil**,
+  link `hidden`/`aria-hidden`/`tabindex` ile öldürülmemiş. Tabbable seçicisi precheck
+  probundan **birebir kopyalandı** — ikisi "ilk tabbable" tanımında ayrışmamalı.
+- `userManual.test.tsx::"names itself with a level-1 heading (K-4)"`: seviye **1** +
+  `.page-title` sınıfı birlikte assert edilir (sınıf tek başına sessizce h2'ye dönebilirdi).
+
+**Negatifi kanıtlandı** (kapı olduğu görülmemiş bir test kapı değildir): skip link
+`</header>`'dan sonraya taşındı ve `<h1>` `<h2>`'ye geri döndürüldü → **2 failed / 18
+passed, exit 1**; sonra geri alındı.
+
+### Yan etki — GİZLENMEDİ: K-5 bir rota **genişledi**
+
+`/user-manual`'ın outline'ı `[2,3,4,5,6,6,6,6]` idi, yani **atlama içermiyordu** ve K-5'in
+21'inin **dışındaydı**. `h1`'e çıkınca `[1,3,4,5,6,6,6,6]` oluyor → `h1 → h3` atlaması →
+**K-5 21/23'ten 22/23'e çıkıyor**, geriye tek istisna olarak `/` kalıyor.
+
+Alternatif — o sayfanın `h3` bölümlerini `h2`'ye çekmek — K-5'in **22 rotanın hepsinde
+aynı olan** çaresini, denetimin verdicti gelmeden, tek sayfada uygulamak olurdu. ADIM 48
+bunu **yapmadı**. Sayı düşürülmedi; `a11y_screen_reader_audit_results.md` §6'ya ve RC
+§6.5'e **arttığı gibi** yazıldı.
+
+### Ölçüm — TÜRETİLDİ, ölçülmedi (dürüst sınır)
+
+**`scripts/a11y-audit-stack.sh up` bu oturumun container'ında ayağa KALKMADI**, dolayısıyla
+`npm run a11y` (≥2 koşu) ve `npm run visual` (23/23 baseline) **koşmadı**. Sebep ölçüldü ve
+beş kez tekrarlandı: Docker Hub manifest `429 Too Many Requests`, blob CDN
+(`production.cloudfront.docker.com`) `403 Forbidden` — agent proxy üzerinden. dockerd
+proxy'siz de proxy'li de denendi. Bu sınıf, proxy README'sine göre "report, do not work
+around".
+
+Bunun yerine post-fix precheck profili **ADIM 44'ün commit edilmiş run-5 kayıtlarından
+aritmetikle türetildi** (`docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt`):
+
+| sınıf | run 5 | türetilmiş |
+|---|---:|---:|
+| skip link (K-2) | 23 | **0** |
+| no `<h1>` (K-4) | 1 | **0** |
+| heading outline (K-5) | 21 | **22** |
+| `contentinfo` (K-3) | 23 | 23 |
+| `aria-live` (K-7) | 21 | 21 |
+| focus indicator (K-6) | 1 | 1 |
+| **toplam advisory** | **90** | **67** |
+
+**CI otoritedir** (`e2e.yml` → `a11y` + visual job'ları PR'da koşar) — **ama CI koşusu TEK
+ve SOĞUK bir koşudur**, ve §6'nın kendi kuralı soğuk koşunun K-5/K-7'yi **eksik**
+raporladığını söyler. Yani CI K-2 ve K-4'ü (kararlı sınıflar) kapatır, **K-5'in yeni
+sayısını kapatmaz**. Stack bir daha ayağa kalktığında ılık ve **≥2 kez** ölçülmeli.
+
+### Yerelde gerçekten koşan kapılar
+
+`npm run lint` **exit 0** · `npm run typecheck` **exit 0** · `npm run coverage` **exit 0**
+→ **71 dosya / 725 passed** (öncesi 70 / 721), line **%84.9** (eşik 83, `vite.config.ts`).
+Ham çıktı: `docs/releases/evidence/2026-08-12/adim48_local_gate_runs.txt`.
+
+### Dürüst sınırlar
+
+- **`npm run a11y` ve `npm run visual` YERELDE KOŞMADI** (yukarıdaki registry engeli).
+  Görsel baseline'ların değişmediği **iddia değil, beklentidir**: `.skip-link` iki durumda
+  da akış dışıdır. CI'da diff çıkarsa **baseline güncellenmez, CSS düzeltilir**.
+- **K-5'in 22'si TÜRETİLMİŞ sayıdır** ve run-5'in ±1 kararsızlığını (`/analysis-lab`,
+  `/backtest/history`, `/backtest/metrics`) aynen devralır.
+- **A-08 KIPIRDAMADI.** İki yapısal önkoşul iyileşti, biri bir tık kötüleşti; **hiçbiri
+  duyulmadı**. Defter §1/§2 hâlâ boş, dört çıkış kriteri de ☐, #514 insan kapısı.
+- **K-3 / K-5 / K-6 AÇIK kalır** — PO kararı onları kapsamadı.
+- **`pageTruth.ts::PageContract.level`** artık hiçbir contract tarafından kullanılmıyor.
+  Kaçış kapağı olarak **bilerek** bırakıldı (bir sonraki sapma varsayımla değil
+  contract'ta beyanla gelsin), notu buna göre yeniden yazıldı.

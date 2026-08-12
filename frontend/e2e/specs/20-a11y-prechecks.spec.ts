@@ -209,13 +209,12 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
       // ambiguous — the user cannot tell which one names the page — and no
       // route does that today, so a second one is a regression.
       //
-      // Not `=== 1`, deliberately. `/user-manual` renders its page title as
-      // `<h2 className="page-title">` (UserManual.tsx:181), a divergence
-      // already recorded in utils/pageTruth.ts:15. Promoting it to h1 would
-      // shift that page's whole h2→h3→h4→h5/h6 outline and change spec 17's
-      // expectation — a product decision, not an audit-preparation one. It is
-      // reported as an advisory below so the auditor tests it by rotor
-      // (checklist A-1 and A-3) instead of it being silently normalised here.
+      // Still `> 1`, not `=== 1`. The h1-count reason is gone — ADIM 48 promoted
+      // `/user-manual` to `<h1>` (K-4), so all 23 routes now name themselves
+      // once — but the OUTLINE reason stands: the "no <h1>" advisory below is
+      // the detector for a page that regresses to a lower-level title, and
+      // making the count blocking would turn that advisory into a red gate,
+      // i.e. decide by omission a question checklist A-1/A-3 exists to answer.
       if (rec.h1Count > 1) {
         blocking.push(`${target.path}: ${rec.h1Count} <h1> elements — a page may name itself once`);
       }
@@ -252,7 +251,7 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
           check: "skip link",
           observed: `first tabbable is ${rec.skipLinkFirstTabbable ?? "(none)"}`,
           wcag: "2.4.1 Bypass Blocks (A)",
-          note: "no in-page skip target precedes the primary nav, so a screen-reader user tabs the whole menu bar on every route. Adding one is a product change outside this preparation slice.",
+          note: "ADIM 48 shipped Layout.tsx's `.skip-link` -> #main-content as the shell's first tabbable node, so this should now fire on ZERO routes. A route reporting it again is a regression: either something tabbable was inserted ahead of the link, or .skip-link went position:fixed / display:none and dropped out of the tab order.",
         });
       }
       if (rec.headingSkips.length) {

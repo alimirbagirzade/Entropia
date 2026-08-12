@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 
 > **Bu belge ADIM 47 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →

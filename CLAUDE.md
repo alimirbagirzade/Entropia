@@ -189,9 +189,27 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `6da8a95`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `7dd1dfe`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
+> **Son dalga — ADIM 48 (RC §6.5'in İKİ PO kalemi, 2026-08-12): K-2 + K-4 KAPANDI.
+> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Presentation-only; backend,
+> OpenAPI, migration, `ENGINE_VERSION` **el değmedi**. (A) K-2: `Layout.tsx`'te
+> `.skip-link` → `#main-content` shell'in **ilk tabbable** düğümü; `<main>` `id` + `tabIndex={-1}`.
+> CSS **iki durumda da `position:absolute`** — `fixed` yaparsan `offsetParent` null olur ve
+> precheck probu linki hiç görmez; akışta bırakırsan **23 görsel baseline birden kayar**.
+> (B) K-4: `/user-manual` `<h2 class="page-title">` → `<h1>`; **sınıf değişmedi** → hesaplanmış
+> stil değişmedi. İkisi de artık `npm test` içinde **kapı** (`a11ySkipLink.test.tsx`,
+> `userManual.test.tsx`), **negatifi kanıtlı** — precheck advisory'leri regresyon dedektörü
+> olarak KALDI. **YAN ETKİ GİZLENMEDİ: K-5 21/23 → 22/23** (`/user-manual` artık `h1→h3`
+> atlıyor); tek sayfanın outline'ını yalıtılmış biçimde yeniden kesmek 22 rotanın ortak
+> çaresini denetimin verdicti gelmeden uygulamak olurdu. **Bu sayılar TÜRETİLDİ, ÖLÇÜLMEDİ:**
+> audit stack bu container'da ayağa kalkmadı (Docker Hub `429` + blob CDN `403`, 5× tekrar) →
+> `npm run a11y` / `npm run visual` **koşmadı**; otorite CI'dır ama **CI tek ve SOĞUK bir
+> koşudur** → K-2/K-4'ü kapatır, **K-5'in yeni sayısını kapatmaz** (ılık, ≥2 koşu şart).
+> Frontend **71 dosya / 725 passed**, line **%84.9** (eşik 83). **ecc/claude-mem yine BAĞLI
+> DEĞİLDİ → memory checkpoint ARKA ARKAYA İKİNCİ KEZ YAZILAMADI (ADIM 47 + 48 borcu).**
+> `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md` · RC §6.5.
+> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
 > BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** (A) `../validate` +
 > `../baseline-parse` **200 → 202** + tipli gövde (`ValidationRunAcceptedResponse`,
 > `BaselineParseAcceptedResponse`); **otorite PO KARARIDIR, kanonik hâlâ sessiz** — "repo
@@ -305,11 +323,14 @@ Before stopping a working session, produce **ALL** of the following:
 > uzlaştırması, #631), ADIM 28 (#628/#630), ADIM 27
 > (#626/#627), ADIM 26 (#624), ADIM 25 (#622) — **ADIM 23/24 artık `PROJECT_HISTORY.md`'de
 > KAYITLI** (borç kapandı).
-> **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
-> izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
+> **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐);
+> izleme issue'su #514 **AÇIK** — 2026-08-12'de bir insan **yeniden açtı** (`state_reason:
+> reopened`, ADIM 48'de API'den doğrulandı), yani eski "iş açık / izleme kapalı" ayrışması
+> **kapandı**. **Açık issue de denetimin ilerlediğinin kanıtı DEĞİLDİR**; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
-> K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
+> **K-2 ve K-4 ADIM 48'de KAPANDI** (PO kararı; K-5 bunun yan etkisiyle 21 → **22**);
+> K-3/K-5/K-6/K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
 > (ilk koşu soğuk, eksik raporlar) ·
 > **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
 > serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·
@@ -385,8 +406,10 @@ Before stopping a working session, produce **ALL** of the following:
   (güncel main'de **9/9 doğrulandı**) + `docs/implementation/a11y_screen_reader_audit_runbook.md`
   + `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
   Takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmış, 2026-08-03'te yeniden açılmış,
-  2026-08-07'de yine kanıtsız kapatılmıştır**; kapatma yetkisi insandadır, agent kapatamaz.
-  Kapalı issue ile boş defter arasındaki ayrışma **sürüyor**; ADIM 29 onu **çözmedi, KAYDETTİ**
+  2026-08-07'de yine kanıtsız kapatılmış, 2026-08-12'de yine bir insan tarafından YENİDEN
+  AÇILMIŞTIR** (ADIM 48'de API'den doğrulandı); kapatma yetkisi insandadır, agent kapatamaz.
+  Kapalı issue ile boş defter arasındaki ayrışma **okuma (B) ile kapandı** — ama defter hâlâ
+  BOŞ; ADIM 29 onu **çözmedi, KAYDETTİ**
   — kanonik blok `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue
   state*, diğer tüm belgeler oraya işaret eder. Açık duran iki çözüm yolu da **insan işidir**:
   (A) imzalı kalıcı sapma (D-10 biçimi: adı verilmiş imzalayan + ISO tarih + kapsam) —

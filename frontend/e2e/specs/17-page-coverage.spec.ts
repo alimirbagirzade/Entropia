@@ -104,7 +104,8 @@ const CONTRACTS: PageContract[] = [
   {
     route: "/user-manual",
     heading: "User Manual",
-    level: 2,
+    // K-4 (ADIM 48): was `level: 2` — the one page that named itself with <h2>.
+    // Now h1 like every other route, so the default applies.
     // The reader's own search projection, not the admin-only document list.
     api: "/manual/search?q=",
     projection: (page) => page.getByLabel("Search query"),

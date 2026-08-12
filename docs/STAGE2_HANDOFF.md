@@ -5570,15 +5570,73 @@ Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
 
 ---
 
+## Stage — ADIM 48: RC §6.5'in iki PO kalemi — K-2 (skip link) + K-4 (`/user-manual` h1) (PR pending)
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi.
+**OpenAPI:** değişmedi (backend'e hiç dokunulmadı). **Presentation-only:** route yolu,
+react-query key'i, OCC token'ı, `Idempotency-Key`, hook, SSE taksonomisi, `lib/*.ts` veri
+mantığı ve `app/nav.ts` NAV/ALL_NAV_ITEMS **değişmedi**.
+
+**PO kararı (2026-08-12):** K-2 ve K-4 FIX · K-3 kapsam dışı · K-5/K-6 A-08'i bekler.
+
+**(A) K-2 KAPANDI.** `app/Layout.tsx` shell'in **ilk tabbable** düğümü olarak
+`<a class="skip-link" href="#main-content">` render ediyor; `<main>` `id="main-content"` +
+`tabIndex={-1}` taşıyor. Öncesi: 23/23 rotada ilk tabbable `Log out` butonuydu.
+
+**(B) K-4 KAPANDI.** `pages/UserManual.tsx` `<h2 class="page-title">` → `<h1 class="page-title">`.
+Sınıf değişmedi → hesaplanmış stil değişmedi (`.page-title` margin/font-size/font-weight/color'ı
+`global.css`'te açıkça yazar).
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+
+- `frontend/src/app/Layout.tsx` — skip link `<div class="app-shell">`'in **ilk çocuğu**.
+  Önüne tabbable bir düğüm koyan her değişiklik kapıyı kırar. `<main>`'in `id` + `tabIndex={-1}`
+  ikilisi **birlikte** taşıyıcıdır: `id` olmadan link hiçbir yere gitmez, `tabIndex` olmadan
+  odak linkte kalır ve sonraki Tab menü çubuğuna geri girer.
+- `frontend/src/styles/global.css::.skip-link` + `::.skip-link:focus-visible` — **iki durumda
+  da `position: absolute`**. (i) akıştan çıkmazsa 23 görsel baseline birden kayar;
+  (ii) `position: fixed` yaparsan `offsetParent` **null** olur ve precheck probu linki hiç
+  görmez. `display:none`/`visibility:hidden` de olmaz — tab sırasından düşer. Clip/1px deseni
+  bu üç kısıtın kesişimidir.
+- `frontend/src/test/a11ySkipLink.test.tsx::TABBABLE` — tabbable seçicisi
+  `e2e/specs/20-a11y-prechecks.spec.ts`'ten **birebir kopya**. Birini değiştirirsen ikisini
+  birden değiştir; yoksa advisory ile kapı "ilk tabbable" tanımında ayrışır.
+- `frontend/e2e/utils/pageTruth.ts::PageContract.level` — artık **hiçbir contract
+  kullanmıyor** (`/user-manual` son sapmaydı). Kaçış kapağı bilerek bırakıldı.
+
+**Test sayıları:** frontend **71 dosya / 725 passed** (öncesi 70 / 721), line **%84.9**
+(eşik 83). `lint` + `typecheck` + `coverage` **exit 0**. **Negatifi kanıtlı:** her iki yeni
+kapı da kasıtlı regresyonda kırmızıya döndü (2 failed / 18 passed, exit 1).
+
+**Yan etki — GİZLENMEDİ:** `/user-manual` outline'ı `h2→h3` iken `h1→h3` oldu → **K-5
+21/23'ten 22/23'e ÇIKTI**, tek istisna `/` kaldı. O sayfanın `h3`'lerini tek başına yeniden
+kesmek, 22 rotanın hepsinde aynı olan çareyi denetimin verdicti gelmeden uygulamak olurdu.
+
+**Dürüst sınırlar:** **blocker sayısı DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+· **`npm run a11y` ve `npm run visual` YERELDE KOŞMADI** — bu container'da audit stack ayağa
+kalkmadı (Docker Hub manifest `429`, blob CDN `403 Forbidden`, 5× tekrar). Precheck profili
+run-5 kayıtlarından **türetildi, ölçülmedi**
+(`docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt`); **otorite CI'dır**,
+ama CI **tek ve soğuk** bir koşudur → K-2/K-4'ü kapatır, **K-5'in yeni sayısını kapatmaz**.
+· **Görsel baseline değişmediği bir BEKLENTİdir**, ölçüm değil. CI'da diff çıkarsa **baseline
+güncellenmez, CSS düzeltilir**.
+· **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` bu oturumda da bağlı değil
+(ritüel md. 4 **iki slice üst üste eksik**).
+· **A-08 kıpırdamadı** — defter boş (0/4), #514 insan kapısı, K-3/K-5/K-6 açık.
+
+Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38, 39, 40, 41, 45, 46 ve 47 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
-> slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
+> **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
+> (48: presentation-only a11y) slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
 > ayrışma **açık**. RC §6.7'de kalanlar: **P11-1** (branch protection — repo ayarı,
 > **insan kararı**, agent işi değil), **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**,
 > **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
-> Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
+> Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

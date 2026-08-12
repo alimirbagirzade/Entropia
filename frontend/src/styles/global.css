@@ -68,6 +68,55 @@ p a { text-decoration: underline; }
   background: #ffffff;
 }
 
+/* K-2 skip link (WCAG 2.4.1). The v18 mockup has no skip link to copy, so this
+   borrows the shell's own tokens (--accent border, --radius, Arial) instead of
+   inventing a look.
+
+   HIDDEN and VISIBLE are BOTH position:absolute on purpose:
+   · out of flow in both states -> .app-shell's flex column never reserves a row
+     for it, so the 23 visual baselines cannot move (a display:none/height:0
+     toggle that becomes static on focus WOULD shift the whole shell down);
+   · absolute (not fixed) keeps offsetParent non-null, which the precheck's
+     tabbable filter requires to see it at all — position:fixed would make the
+     probe report "first tabbable is the Log out button" again.
+   The clip/1px pattern (not display:none, not visibility:hidden) is what keeps
+   it reachable by Tab and readable by a screen reader while hidden. */
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* :focus-visible only — a mouse click on the anchor must not paint it. */
+.skip-link:focus-visible {
+  top: 6px;
+  left: 6px;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  padding: 6px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  /* --text, NOT --accent-dim. The accent blue measures 3.97:1 on white, i.e.
+     below AA for normal text — that is the D-10 axis, and D-10 froze a set of
+     45 known nodes rather than licensing new ones. axe would not catch this
+     (the link is clipped while unfocused, so the contrast rule skips it), which
+     is exactly why it is decided here rather than left to the scanner. The
+     accent stays where it owes only 3:1: the border. */
+  color: var(--text);
+  font-size: 12px;
+  font-weight: bold;
+  text-decoration: none;
+}
+
 .top-title {
   height: var(--topbar-h);
   background: #e8e8e8;

@@ -170,7 +170,7 @@ A `FAIL` **must** carry a finding ID from §3.
 
 | # | Route | Doc | A-1 | A-2 | A-3 | A-4 | A-5 | A-6 | A-7 | A-8 | Finding IDs |
 |---:|---|---:|---|---|---|---|---|---|---|---|---|
-| 1 | `/` | 1 | — | — | — | — | — | — | — | — | — |
+| 1 | `/` | 1 | PASS | PASS ᴷ³ | — | — | — | — | — | — | — |
 | 2 | `/strategy` | 2 | — | — | — | — | — | — | — | — | — |
 | 3 | `/outsource-signal` | 3 | — | — | — | — | — | — | — | — | — |
 | 4 | `/trading-signal` | 4 | — | — | — | — | — | — | — | — | — |
@@ -194,7 +194,25 @@ A `FAIL` **must** carry a finding ID from §3.
 | 22 | `/user-manual` | 21 | — | — | — | — | — | — | — | — | — |
 | 23 | `/future-dev` | 22 | — | — | — | — | — | — | — | — | — |
 
-**SR-2 Section A completion:** 0 / 23 routes.
+**SR-2 Section A completion:** **0 / 23 routes complete.** Route 1 (`/`) is
+*partially* run — A-1 and A-2 only — and a partially run route is not a
+completed one. The two cells it does carry are reported below rather than
+rounded up.
+
+> **ᴷ³ on route 1's A-2.** The auditor navigated the rotor's Landmarks list and
+> heard `banner`, `navigation` and `main`. **`contentinfo` was absent** — this
+> is K-3, already measured on 23/23 routes, and it is *not* re-filed as a
+> finding. `PASS` records the auditor's own judgement that the absence was
+> **cosmetic** — it did not impede landmark navigation — and it does **not**
+> mean four landmarks were heard. Three were.
+>
+> **A-3 on route 1 is deliberately `—`, not a result.** Asked whether the
+> `h1 → h3` jump misled rotor navigation, the auditor answered *"I didn't
+> notice the jump"*, which does not distinguish "navigated the heading list and
+> was not misled" (an answer to K-5) from "did not inspect the levels" (no
+> answer at all). The cell stays empty until that is settled. **K-5 remains
+> open**: nothing here supports re-cutting — or keeping — 21 pages' heading
+> outlines.
 
 ---
 

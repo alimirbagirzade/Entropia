@@ -424,12 +424,32 @@ senaryosu iş kuyruğa atmıyor" iddiası doğrulandı.
 | `results_history.list_backtest_results` | 6 → 6 | 0 | — | — |
 | `agent_workspace.list_tasks` | 1 → 1 | 0 | — | — |
 | `audit_log.list_audit_events` | 1 → 1 | 0 | — | — |
-| **`readiness_check.market_data_leg`** | 2 → **12** | **1** | **#617** | **CLOSED / COMPLETED** |
-| **`dependency_pins.ensure_pinned_resolvers_active`** | 2 → **22** | **2** | **#618** | **CLOSED / COMPLETED** |
+| ~~**`readiness_check.market_data_leg`**~~ → **2 → 2** | ~~2 → **12**~~ | ~~**1**~~ → **0** | **#617** | **ADIM 46: KOD TARAFI KAPANDI** |
+| ~~**`dependency_pins.ensure_pinned_resolvers_active`**~~ → **2 → 2** | ~~2 → **22**~~ | ~~**2**~~ → **0** | **#618** | **ADIM 46: KOD TARAFI KAPANDI** |
 
 Ampirik doğrulama (çıkarım değil): `-s` koşusunda `came in under budget` satırı **0 kez**
 geçti → ölçülen sayılar bütçeye **eşit**; ve kaynak hâlâ döngü içi await taşıyor
 (`commands/readiness_check.py:401-406`, `queries/dependency_pins.py:114-115`).
+
+> **2026-08-12 (ADIM 46) — iki N+1 de KAPANDI.** Üstü çizili sayılar **bayat değildi**:
+> kod yazılmadan önce `c931063` üzerinde birebir yeniden üretildi (**12** @ n=11, slope
+> **1.0**; **22** @ n=11, slope **2.0**) — yani ADIM 42–45 hiçbirini kapatmamıştı.
+> Düzeltme sonrası **ikisi de n=1'de ve n=11'de 2 statement, slope 0**.
+> `query_budgets.json` iki satırda da `queries_large: 2` / `per_item: 0`'a **sıkıldı** ve
+> **kapının dişi kanıtlandı**: yalnız `src/` geri alınınca gate *"12 queries at n=11,
+> budget 2"* ve *"22 queries at n=11, budget 2"* ile kırmızıya düşüyor.
+> **Yukarıdaki satır numaraları artık geçersiz** — sembole bak, satıra değil:
+> `commands/readiness_check.py::_resolve_market_data_issues` +
+> `market_repo.get_dataset_roots`; `queries/dependency_pins.py::_prefetch` +
+> `esp_repo.get_registry_by_keys`.
+> Sorgu sayısı **davranışı kanıtlamaz**, o yüzden eşdeğerlik ayrı dosyada pinli
+> (`tests/integration/test_batched_dereference_equivalence.py`, 13 test) ve **mutasyonla
+> sınandı**: `entity_type` kapısını batch'ten düşürmek, ve revizyon batch'ini registry
+> fallback'i olmadan kurmak, testleri kırmızıya çeviriyor. **Batch sırası taşıyıcıdır** —
+> `embedded_revision_id` vermeyen bir ref entry'nin `trusted_active_revision_id`'sine
+> düşer, yani revizyon batch'i ancak registry batch'inden SONRA kurulabilir.
+> **#617/#618'in issue durumu bu slice'ın çıktısı değildir** — kodu kapatır, izleme
+> kaydını insan kapatır. §6.6.
 
 **Sayfalama — bulgu P10-B2:** runtime'da **istisnasız** kelepçeli, ama iki katmanda.
 19 route parametresi `le=100` ilan ediyor (`shared/pagination.py`: `DEFAULT_LIMIT=20`,
@@ -1025,8 +1045,8 @@ Aynı desen **beş issue'da** ölçüldü: iş açık, izleme COMPLETED kapalı,
 | **#514** | A-08 human audit | `2026-08-07T03:52:03Z` | defter BOŞ, 0/4 kriter (§6.1) |
 | **#558** | product decision (bundle time-policy pin) | `2026-08-07T03:53:57Z` | **strict xfail bugün hâlâ düşüyor**; yorum sayısı 0, etiket hâlâ `product-decision` |
 | **#559** | product decision (DST fold/gap) | `2026-08-07T03:53:36Z` | davranış karakterize, **canon hâlâ sessiz** |
-| **#617** | N+1 `readiness_check.market_data_leg` | 2026-08-06 08:55 | `per_item=1` **hâlâ canlı**, kaynak döngü içi await taşıyor |
-| **#618** | N+1 `dependency_pins` | `2026-08-07 03:53` | `per_item=2` **hâlâ canlı** |
+| **#617** | N+1 `readiness_check.market_data_leg` | 2026-08-06 08:55 | ~~`per_item=1` **hâlâ canlı**, kaynak döngü içi await taşıyor~~ → **2026-08-12 (ADIM 46): AYRIŞMA KOD TARAFINDAN KAPANDI** — `per_item` ölçülen **0**, döngü içi await kalktı. İzleme kaydı **insan kararı** |
+| **#618** | N+1 `dependency_pins` | `2026-08-07 03:53` | ~~`per_item=2` **hâlâ canlı**~~ → **2026-08-12 (ADIM 46): AYRIŞMA KOD TARAFINDAN KAPANDI** — `per_item` ölçülen **0**. İzleme kaydı **insan kararı** |
 
 Karşıt kayıt: **#557 meşrudur** — düzeltildi, marker kaldırıldı, test bugün PASS. **#556**
 kod tarafı düzeltildi ama `unified_portfolio_oracle_acceptance.md` A17'ye göre **market
@@ -1035,6 +1055,15 @@ yarısı açık**.
 **Sonuç:** A17 çıkış kriteri *"tests green **unweakened**"* strict xfail durdukça
 **karşılanmamıştır**. Issue yeniden açmak **insan kararıdır**; bu dalgada hiçbir issue
 açılmadı/kapatılmadı.
+
+> **2026-08-12 güncellemesi.** Beş satırın durumu artık tek tip DEĞİL, karışmasın:
+> **#617 ve #618'in KODU kapandı** (ADIM 46 — `per_item` ikisinde de ölçülen **0**,
+> ratchet sıkıldı, negatifi kanıtlandı); **#514 / #558 / #559'un kodu AÇIK KALDI** ve bu
+> slice onlara **hiç dokunmadı** — A-08 defteri hâlâ **boş** (0/4), strict xfail hâlâ
+> yerinde. Bu tablonun asıl bulgusu *"kod açıkken izleme kapalı"* ayrışmasıydı;
+> **#617/#618'de ayrışmanın kod yarısı kapandı, izleme yarısı bir insan kararıdır** ve
+> bir agent tarafından kapatılamaz. **Hiçbir issue'nun kapanışı bu slice'ın kanıtı
+> sayılamaz** — kanıt ölçümdür, issue durumu değildir.
 
 ### 6.7 Blocker olmayan ama kapanmamış kalemler
 

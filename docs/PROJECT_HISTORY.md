@@ -7450,9 +7450,10 @@ ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. Stil `global.c
 1. **Büyük negatif offset değil, `clip`.** Odaklanan ekran-dışı bir öğe bazı
    tarayıcılarda sayfayı yana kaydırır; `clip` + `clip-path: inset(50%)` bunu yapmaz.
    Öğe **her durumda akış dışıdır** → shell'in flex kolonu ve görsel baseline'lar
-   etkilenmez. **Bu bir iddiadır, ölçüm değil**: doğrulayıcısı `@visual` kapısıdır
-   (23 rota) ve bu kayıt yazılırken koşu **bitmemişti**; tek bir baseline yeniden
-   üretilmedi, kapı kırmızıya dönerse düzeltilecek olan **CSS'tir, baseline değil**.
+   etkilenmez. **Bu bir iddia olarak yazıldı, sonra ÖLÇÜLDÜ:** görsel kapı
+   (`@visual`, job `94223919309`) **23/23 passed** (4.0 dk) — 23 rotanın hiçbirinde
+   piksel sapması yok ve **tek bir baseline yeniden üretilmedi**. Kapı kırmızıya
+   dönseydi düzeltilecek olan **CSS** olacaktı, baseline değil.
 2. **Tetikleyici `:focus`, `:focus-visible` DEĞİL.** Bu kontrole yalnız klavyeyle
    ulaşılır ve **K-6a'nın hâlâ açık olduğu heuristiğe bağlanmamalıdır**.
 3. **`main`'e `outline: none` YAZILMADI.** Atlamadan sonra workspace'in etrafında
@@ -7533,7 +7534,8 @@ rapor etti.
   (`--no-file-parallelism`); coverage kapısı geçti, **line %84.90**.
 - CI: Frontend job ✅.
 - **Yerelde KOŞULAMAYAN:** `@a11y` precheck, `@visual`, `@lighthouse` — bu oturumun
-  host'unda **docker yok**. Ölçüm CI'dan alındı.
+  host'unda **docker yok**. Ölçüm CI'dan alındı: `@a11y` **6 passed** (advisory 67,
+  ratchet 45/45), `@visual` **23/23 passed**, journey suite **39 passed / 1 skipped**.
 
 ### Honest boundary
 

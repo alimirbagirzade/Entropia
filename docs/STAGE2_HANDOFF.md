@@ -4405,8 +4405,8 @@ ne / kaç rotada / hangi ölçüt · **ölçülen** düzeltme maliyeti · düzel
 (axe `bypass` hep yeşildi) → bu bir **ergonomi** düzeltmesiydi, uygunluk düzeltmesi değil.
 
 **(B) K-4 KAPANDI.** `/user-manual` artık `<h1 class="page-title">`. `.page-title` sınıf
-tabanlı → **0 görsel diff beklenir**; doğrulayıcı `@visual` (23 rota), sonucu bu satıra
-işlenmeli. **Yan etki:** sayfa `h2 → h3` iken atlama taşımıyordu,
+tabanlı → **0 görsel diff** — ÖLÇÜLDÜ: `@visual` job `94223919309` **23/23 passed**,
+hiçbir baseline yeniden üretilmedi. **Yan etki:** sayfa `h2 → h3` iken atlama taşımıyordu,
 `h1 → h3` olunca taşıyor → **K-5'in kümesine girdi**: CI job `94221023796`
 **K-5 21 / 23 → 22 / 23**, toplam advisory **90 → 67**. Tek ve **soğuk** koşu →
 22 bir **taban**. Döküm: `docs/audit/a11y_screen_reader_audit_results.md` §6.

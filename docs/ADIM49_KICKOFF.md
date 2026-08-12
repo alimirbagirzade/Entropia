@@ -1,5 +1,13 @@
 <!-- doc-status: current -->
-# ADIM 48 KICKOFF — RC §6.5 (K-2..K-6): beş a11y gözlemi için ürün kararı promptları
+# ADIM 49 KICKOFF — RC §6.5 (K-2..K-6): beş a11y gözlemi için ürün kararı promptları
+
+> **NUMARA NOTU — bu slice ADIM 48 olarak yazılmaya başlandı, ADIM 49'a taşındı.**
+> `#686` (kabul borcu sınıf B, parti 01) main'e **ADIM 48 adıyla** merge edildi; iki slice
+> paralel yürüdü ve aynı numarayı aldı. Repo kuralı: **merge edilmiş ad kazanır** — merged
+> PR başlıkları ve commit mesajları değiştirilemez, o yüzden taşınan taraf **bu belgedir**.
+> Bu branch'in commit mesajlarında hâlâ `adim-48` yazar (onlar da yazıldıktan sonra
+> değiştirilemez); **slice'ın adı ADIM 49'dur**. Aynı tuzağın önceki iki örneği
+> (`ADIM 16`, `ADIM 21`) CLAUDE.md'de kayıtlıdır.
 
 > **Bu belge bir KARAR ÖNÜ belgesidir** — dört prompt, PO karar verdikten **sonra**
 > temiz bir oturuma yapıştırılmak üzere; her biri hangi kararı varsaydığını kendi
@@ -11,11 +19,11 @@
 > `docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` §6.5.
 > Sayısal otorite bu belge DEĞİL → `docs/generated/repository_facts.md`.
 
-## 0-a. DURUM — P-1 SEVK EDİLDİ (2026-08-12, PR #685)
+## 0-a. DURUM — P-1 SEVK EDİLDİ (2026-08-12, PR #685 — ADIM 49)
 
 | Prompt | Kalem | Durum |
 |---|---|---|
-| **P-1** | K-2 + K-4 | ✅ **LANDED** — PO kararı alındı ve uygulandı. Kayıt: `PROJECT_HISTORY.md` §ADIM 48, `STAGE2_HANDOFF.md` §ADIM 48, RC §6.5 |
+| **P-1** | K-2 + K-4 | ✅ **LANDED** — PO kararı alındı ve uygulandı. Kayıt: `PROJECT_HISTORY.md` §ADIM 49, `STAGE2_HANDOFF.md` §ADIM 49, RC §6.5 |
 | **P-2** | K-3 | ⏳ **PO kararı bekliyor** — prompt aşağıda, değişmedi |
 | **P-3** | K-6b | ⏳ **PO kararı bekliyor** — ADIM 48'de **ölçüldü**: `#00a9e8` ↔ beyaz **2.68 : 1** < 3 : 1 |
 | **P-4** | K-5 + K-6a | ⛔ **A-08 bekliyor** — uygulama promptu yok, olmayacak |
@@ -75,7 +83,11 @@ bağımsız, herhangi bir sırayla → K-5 / K-6a A-08'e kadar **dokunulmaz**.
 
 ---
 
-## 3. P-1 — K-2 + K-4 (FIX, tek slice)
+## 3. P-1 — K-2 + K-4 (FIX, tek slice) — **KOŞULDU, ADIM 49 olarak landed**
+
+> Aşağıdaki prompt metni **yapıştırıldığı hâliyle** korunuyor (içinde "ADIM 48" yazar;
+> slice sonradan ADIM 49'a taşındı — yukarıdaki numara notuna bak). Tarihsel kayıttır,
+> yeniden koşturulacak bir prompt değildir.
 
 > **Varsayılan karar:** *"K-2 skip link eklenecek, K-4 `/user-manual` başlığı `h1`'e
 > çıkarılacak."* PO bunu vermediyse bu promptu yapıştırma.
@@ -132,7 +144,8 @@ baseline'ı GÜNCELLEME, CSS'i düzelt.
 
 KAPANIŞ: CLAUDE.md §Session CLOSING ritüelinin altısı da. RC §6.5'te K-2 ve K-4
 satırları kapanır; K-3/K-5/K-6 AÇIK kalır. Blocker sayısı DEĞİŞMEZ (1 — yalnız
-A-08), verdict BLOCKED. docs/ADIM48_KICKOFF.md'yi `doc-status: historical`'a
+A-08), verdict BLOCKED. bu kickoff'u (bugün docs/ADIM49_KICKOFF.md) `doc-status:
+historical`'a
 düşür (aşağıdaki §7'ye bak) ve yeni kickoff'u `current` yap.
 ```
 
@@ -287,8 +300,9 @@ bir agent değiştiremez.
 
 **`doc-status` kapısı.** `scripts/generate_repository_facts.py::check_classification`
 `docs/*KICKOFF*.md`'yi sınıflandırır ve **aynı anda yalnız BİR belge `current`
-olabilir**. Bu belge `current` yapıldığı için `docs/ADIM47_LANDED_KICKOFF.md`
-`historical`'a düşürüldü. Sıradaki kickoff'u yazan oturum **bu belgeyi de** düşürmek
+olabilir**. Bu belge `current` yapıldığı için hem `docs/ADIM47_LANDED_KICKOFF.md` hem de
+`docs/ADIM48_LANDED_KICKOFF.md` (#686) `historical`'a düşürüldü — **kapı bunu merge
+sonrası kırmızıya çevirerek yakaladı**, iki belge birden `current` iddia ediyordu. Sıradaki kickoff'u yazan oturum **bu belgeyi de** düşürmek
 zorundadır, yoksa kapı kırmızıya döner:
 ```
 cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check
@@ -324,26 +338,26 @@ Kapı kırılıyorsa yeşile zorlama yok — **BLOCKED yaz**.
 ## 9. Paste-ready resume prompt (temiz oturum için)
 
 ```
-ENTROPIA — ADIM 48 sonrası devam
+ENTROPIA — ADIM 49 sonrası devam
 
 CLAUDE.md §Session START protokolünü uygula (fetch + origin/main log + PR listesi;
 handoff STALE-BY-DEFAULT'tur).
 
 ÖNCE OKU (otorite sırası)
-  1. docs/ADIM48_KICKOFF.md (bu belge — P-2 / P-3 / P-4 promptları içinde)
-  2. docs/STAGE2_HANDOFF.md → "## Stage — ADIM 48" + "## Next"
-  3. docs/PROJECT_HISTORY.md §ADIM 48
+  1. docs/ADIM49_KICKOFF.md (bu belge — P-2 / P-3 / P-4 promptları içinde)
+  2. docs/STAGE2_HANDOFF.md → "## Stage — ADIM 49" + "## Next"
+  3. docs/PROJECT_HISTORY.md §ADIM 49
   4. docs/generated/repository_facts.md (SAYISAL OTORİTE — CLAUDE.md'deki sayı değil)
 
 DURUM (doğrula, güvenme)
   · Blocker sayısı 1 (yalnız A-08), verdict BLOCKED. "READY" YAZMA.
-  · ADIM 48 K-2 ve K-4'ü kapattı. K-3 ve K-6b PO kararı bekliyor (A-08'e bağımlı
+  · ADIM 49 K-2 ve K-4'ü kapattı (ADIM 48 = #686, kabul borcu sınıf B). K-3 ve K-6b PO kararı bekliyor (A-08'e bağımlı
     DEĞİL). K-5 ve K-6a A-08 bekliyor — onlara uygulama promptu YAZMA.
   · A-08 defteri BOŞ (0/4), #514 kapalı. Hiçbir belge A-08'i Complete/PASS gösteremez.
 
 ÖNCELİK: birini seç, hepsini birden alma
-  (a) ADIM 48'in EKSİK ritüel maddesi: ecc + claude-mem memory checkpoint'i
-      (ADIM 47'de ve 48'de MCP sunucuları bağlı değildi — üst üste ikinci kez).
+  (a) ADIM 49'un EKSİK ritüel maddesi: ecc + claude-mem memory checkpoint'i
+      (ADIM 47'de ve 49'da MCP sunucuları bağlı değildi — üst üste ikinci kez).
       Önce bağlı mı ÖLÇ; değilse eksikliği kaydet, "yapıldı" YAZMA.
   (b) PO karar verdiyse P-2 (K-3) veya P-3 (K-6b) — promptlar bu belgede.
   (c) §6.7'nin açık kalemleri: P10-B6, P8-B3b, P4-3, P1-Gate3, P11-6b, P11-3b,

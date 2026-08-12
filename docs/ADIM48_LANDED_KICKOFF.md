@@ -1,4 +1,9 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 49 (2026-08-12).** Canlı kickoff artık
+> `docs/ADIM49_KICKOFF.md` (RC §6.5 / K-2..K-6 karar promptları; K-2 + K-4 landed).
+> Aşağısı ADIM 48 kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri
+> bayat olabilir. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
+
 # ADIM 48 LANDED — kabul borcu sınıf B, parti 01 · sıradaki slice için kickoff
 
 > **Bu belge ADIM 48 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →

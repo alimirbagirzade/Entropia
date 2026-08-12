@@ -189,9 +189,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `8d46a7d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `6482cde`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 48 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
+> **Son dalga — ADIM 49 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
 > BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Skip link (`Layout.tsx`
 > `.skip-link` + `<main id="main-content" tabIndex={-1}>`) ve `/user-manual` `<h1>`.
 > **K-2 bir UYGUNLUK düzeltmesi DEĞİLDİ** — 2.4.1 landmark'larla (ARIA11) zaten
@@ -203,13 +203,15 @@ Before stopping a working session, produce **ALL** of the following:
 > A-08 bekler ve **mevcut sonda ona kanıt üretmez** (programatik `el.focus()`
 > `:focus-visible`'ı eşleştirmez); **K-6b ölçüldü ve DÜŞÜYOR** — `#00a9e8` ↔ beyaz
 > **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **PO kararı bekliyor**.
-> **K-3 de PO'da.** Promptlar: `docs/ADIM48_KICKOFF.md` §P-2 / §P-3. Frontend **722 passed /
-> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 48 · RC §6.5.
-> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı): §6.7.9 + §6.7.5 KAPANDI.
-> **HEAD `7dd1dfe`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
-> 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
+> **K-3 de PO'da.** Promptlar: `docs/ADIM49_KICKOFF.md` §P-2 / §P-3. Frontend **722 passed /
+> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 49 · RC §6.5.
+> **NUMARA ÇAKIŞMASI (üçüncü kez):** bu slice ADIM 48 olarak yazıldı, `#686` main'e
+> **ADIM 48 adıyla** merge edilince **ADIM 49'a taşındı** — merge edilmiş ad kazanır.
+> Branch commit mesajları `adim-48` yazmaya devam eder. Çakışmayı gözle değil,
+> **`doc-status` kapısı** yakaladı (iki belge birden `current` iddia etti).
+>
+> Öncesinde ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi, #686):
+> **8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
 > DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kapananlar: `TL-03` `TL-06` `TL-07`
 > `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. **Ürün kodu DEĞİŞMEDİ** (tek satır bile).
 > **RATCHET YALNIZ AŞAĞI İNER** — `uncovered`/A/C/**D** tavanları el değmedi,

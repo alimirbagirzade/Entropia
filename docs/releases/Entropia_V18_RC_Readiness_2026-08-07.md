@@ -1073,7 +1073,7 @@ K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulma
   WCAG 1.4.11 odak göstergesi için **3 : 1** ister. axe bu kuralı **koşmuyor**, repoda başka
   hiçbir yerde ölçülü değil. D-10 (45 düğüm, 1.4.3) **ayrı ölçüttür ve bunu kapsamaz**.
   → **PO kararı bekliyor:** halka rengi 3:1'i geçen bir değere çevrilsin, ya da D-10
-  biçiminde **imzalı** sapmaya bağlansın. Prompt: `docs/ADIM48_KICKOFF.md` §P-3.
+  biçiminde **imzalı** sapmaya bağlansın. Prompt: `docs/ADIM49_KICKOFF.md` §P-3.
 
 ### 6.6 İzleme kaydı ↔ kod ayrışması — tekrarlayan desen (P8 §4.3, P10 §3.3)
 

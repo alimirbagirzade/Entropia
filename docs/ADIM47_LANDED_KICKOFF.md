@@ -1,11 +1,9 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — ADIM 48 KICKOFF (2026-08-12).** Canlı kickoff artık
-> `docs/ADIM48_KICKOFF.md` (RC §6.5 / K-2..K-6 karar promptları). Aşağısı ADIM 47
-> kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri bayat olabilir.
-> **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
-> **SUPERSEDED — ADIM 48 (2026-08-12).** Canlı kickoff artık
-> `docs/ADIM48_LANDED_KICKOFF.md`. Aşağısı ADIM 47 kapanışındaki durumu kaydeder;
-> sayıları ve "sıradaki iş" maddeleri bayat olabilir.
+> **SUPERSEDED — ADIM 48, sonra ADIM 49 (2026-08-12).** Bu belgeden sonra İKİ slice
+> landed: **ADIM 48** (`docs/ADIM48_LANDED_KICKOFF.md`, kabul borcu sınıf B / #686) ve
+> **ADIM 49** (`docs/ADIM49_KICKOFF.md`, RC §6.5 / K-2 + K-4). **Canlı kickoff ADIM 49'dur.**
+> Aşağısı ADIM 47 kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri
+> bayat olabilir. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
 
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 

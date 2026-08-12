@@ -1,4 +1,11 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge canlı slice kickoff'u DEĞİLDİR.** Aşağıdaki ölçüm
+> 2026-08-12'de main `7dd1dfe` üzerinde alınmıştır; check adları, sayılar ve süreler
+> o ana aittir. Güncel otorite: `CLAUDE.md` §Current position +
+> `docs/generated/repository_facts.md` (üretilmiş, CI'da `--check` ile kapılı).
+> **Yordam yürürlüktedir, ölçüm bayatlayabilir:** POST'tan önce §3'ün ön kontrolünü
+> koşun — bir job adı değiştiyse buradaki liste sizi kilitler, script durdurur.
+
 # main — required status check kurulumu (RC §6.7 / P11-1)
 
 > **BU BELGE HAZIRLIKTIR, UYGULAMA DEĞİL.** Repo ayarı değiştirmek agent yetkisinde

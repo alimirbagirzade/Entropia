@@ -189,9 +189,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `7dd1dfe`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `d6fa02f`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 48 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
+> **Son dalga — ADIM 49 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
 > KOD DEĞİŞMEDİ.**
 > #514 `11:08:58Z`'de **insan eliyle yeniden AÇILDI** → ADIM 29'un kaydettiği "kapalı issue
 > ↔ boş defter" ayrışması kapandı; 8 belge uzlaştırıldı (RC raporu **kendi içinde
@@ -201,10 +201,11 @@ Before stopping a working session, produce **ALL** of the following:
 > değişen tek şey izlemenin artık açık olması. **Harf karışıklığı pinlendi:** defterde
 > (A)=imzalı kabul / (B)=geri alma, RC §6.1'de (A)=denetimi koştur / (B)=imzalı sapma —
 > issue'daki *"path (A)"* **RC anlamındadır**; ikisi de yeniden numaralandırılMADI.
-> **#514'e DOKUNULMADI** (`human-only`). `PROJECT_HISTORY.md` §ADIM 48 ·
-> `docs/ADIM48_LANDED_KICKOFF.md`.
-> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
-> **Son dalga — ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
+> **#514'e DOKUNULMADI** (`human-only`). **ADIM 48 numarası #686'ya AİT** — bu slice
+> #686 merge edildikten sonra ADIM 49'a taşındı (merged başlık değiştirilemez, benimki
+> henüz merge edilmemişti). `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
+>
+> **Öncesinde ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
 > 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
 > DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kapananlar: `TL-03` `TL-06` `TL-07`
 > `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. **Ürün kodu DEĞİŞMEDİ** (tek satır bile).

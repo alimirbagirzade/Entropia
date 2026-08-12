@@ -1,10 +1,9 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — ADIM 48 (2026-08-12).** Canlı kickoff artık
-> `docs/ADIM48_LANDED_KICKOFF.md`. Aşağısı ADIM 47 kapanışındaki durumu kaydeder;
-> sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Özellikle:** bu belgenin
-> A-08 / #514 hakkındaki *"izleme issue'su kapalı"* ifadesi **bayattır** — #514
-> `2026-08-12T11:08:58Z`'de insan eliyle yeniden AÇILDI (ADIM 48).
-> sayıları ve "sıradaki iş" maddeleri bayat olabilir.
+> **SUPERSEDED — ADIM 48 (2026-08-12); canlı kickoff artık ADIM 49.** Güncel kickoff
+> `docs/ADIM49_LANDED_KICKOFF.md`. Aşağısı ADIM 47 kapanışındaki durumu kaydeder;
+> sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Özellikle:** aşağıdaki
+> *"izleme issue'su kapalı"* ifadesi **bayattır** — #514 `2026-08-12T11:08:58Z`'de
+> insan eliyle yeniden AÇILDI (ADIM 49). A-08 yine de **BLOCKED**: defter boş, `0/4`.
 
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 

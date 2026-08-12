@@ -50,8 +50,18 @@ a:hover { text-decoration: underline; }
    the clean v18 look; only in-paragraph content links are underlined. */
 p a { text-decoration: underline; }
 
+/* K-6b (WCAG 1.4.11 Non-text Contrast, AA): a focus indicator is a non-text
+   UI component and owes 3:1 against the surface it lands on. The v18 accent
+   never cleared it — #00a9e8 measures 2.68:1 on white and 2.46:1 on #f5f5f5.
+   --text (#222222) measures 15.91:1 on white, and the darkest surface a ring
+   can land on anywhere in the app is the #0092c8 menu-blue hover at 4.50:1
+   (#8f8f8f dropdown panel 4.92:1, #00a9e8 dropdown-blue 5.94:1) — every one
+   clears 3:1. This is the 1.4.11 axis, NOT the 1.4.3 text axis that D-10
+   signed off; the accent token itself is untouched, only the ring moved.
+   K-6a — whether a sighted keyboard user can SEE the ring — is a separate,
+   still-open question that only the A-08 screen-reader/manual audit settles. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--text);
   outline-offset: 2px;
   border-radius: 4px;
 }

@@ -4,6 +4,11 @@
 > **ADIM 49** (`docs/ADIM49_KICKOFF.md`, RC §6.5 / K-2 + K-4). **Canlı kickoff ADIM 49'dur.**
 > Aşağısı ADIM 47 kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri
 > bayat olabilir. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
+> **SUPERSEDED — ADIM 48 (2026-08-12).** Canlı kickoff artık
+> `docs/ADIM48_LANDED_KICKOFF.md`. Aşağısı ADIM 47 kapanışındaki durumu kaydeder;
+> sayıları ve "sıradaki iş" maddeleri bayat olabilir. **Memory checkpoint borcu ADIM 48'e
+> DEVREDİLDİ ve büyüdü** — ADIM 47 + ADIM 48 ikisi birden yazılmayı bekliyor.
+> sayıları ve "sıradaki iş" maddeleri bayat olabilir.
 
 # ADIM 47 LANDED — RC §6.7'nin iki PO kararı uygulandı · sıradaki slice için kickoff
 

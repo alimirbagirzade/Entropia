@@ -599,7 +599,7 @@ kırar).
 | D-10 neyi kapsar | D-10 neyi KAPSAMAZ |
 |---|---|
 | WCAG 2.2 AA **1.4.3 (Contrast — Minimum)**, düşük-görüş ekseni | **A-08** (ekran okuyucu ekseni) — defter §329: *"It is a low-vision axis, not a screen-reader one."* |
-| 45 düğümlük donmuş küme, iki renk çifti | K-2..K-6 (skip link, `contentinfo`, `<h1>`, başlık hiyerarşisi, odak göstergesi) |
+| 45 düğümlük donmuş küme, iki renk çifti | K-2..K-6 (skip link, `contentinfo`, `<h1>`, başlık hiyerarşisi, odak göstergesi) — **özellikle K-6b**: odak halkasının kontrastı **1.4.11** ölçütüdür, D-10'un 1.4.3 imzası onu **kapsamaz** (ADIM 48'de ayrıca kapatıldı) |
 | | Alertmanager boşluğu, P5/P6 kabul akışları, react-router advisory'si |
 
 **Ürün WCAG 2.2 AA 1.4.3 için UYUMLU DEĞİLDİR** ve hiçbir belge/pazarlama metni ürünü
@@ -1028,6 +1028,12 @@ A-08 denetimine **bağımlıdır**, **K-6b** ise ADIM 48'de ölçüldü ve **mak
 cevaplandı** (aşağıda) — o da A-08'i beklemez.
 **Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Bu beş kalemin hiçbiri
 blocker değildi; kapanmaları A-08'i ilerletmez.
+### 6.5 K-2..K-6 — ölçüldü, **K-6b hariç düzeltilmedi**, bilerek gate DIŞI
+
+`docs/audit/a11y_screen_reader_audit_results.md` §6. Dördü **"Open — reported, not
+gated"** statüsünde; hiçbiri CI'ı kırmaz, hiçbiri imzalı sapmaya bağlanmış değildir.
+**ADIM 48'de K-6 İKİYE ayrıldı** (aşağıdaki tabloda `K-6a` / `K-6b`): ölçülebilir kontrast
+yarısı **kapandı**, insan-gözü yarısı **açık kaldı**.
 
 | # | Bulgu | Kapsam | WCAG | Statü |
 |---|---|---|---|---|
@@ -1074,6 +1080,23 @@ K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulma
   hiçbir yerde ölçülü değil. D-10 (45 düğüm, 1.4.3) **ayrı ölçüttür ve bunu kapsamaz**.
   → **PO kararı bekliyor:** halka rengi 3:1'i geçen bir değere çevrilsin, ya da D-10
   biçiminde **imzalı** sapmaya bağlansın. Prompt: `docs/ADIM49_KICKOFF.md` §P-3.
+| **K-4** | **`/user-manual`'da `<h1>` yok** — kendini `<h2 class="page-title">` ile adlandırıyor (`UserManual.tsx:181`); diğer her route `<h1>` kullanıyor | 1 route | 1.3.1 / 2.4.6 | Open — reported, not gated |
+| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); setin **en yüksek erişimli** yapısal gözlemi | **21 / 23 route** | 1.3.1 (A-3) | Open — reported, not gated |
+| **K-6a** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 | Open — **insan gözü gerekiyor** |
+| **K-6b** | **Odak halkasının kontrastı 3:1'in altında** — `:focus-visible` halkası `var(--accent)` (`#00a9e8`) idi: beyazda **2.68:1**, `#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1**; uygulamadaki **15 zeminin hiçbirinde** eşiği geçmiyordu | her odaklanabilir düğüm, **23 / 23 route** | **1.4.11** | **KAPANDI (ADIM 48, 2026-08-12)** — halka `var(--text)`; beyaz **15.91:1**, en kötü zemin `#0092c8` **4.50:1** |
+
+**K-5 ve K-6a doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
+yanıltıyor mu) **21 sayfanın outline'ını yeniden kesmeyi önermeden ÖNCE** verilmelidir;
+K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
+**cevapsızdır**.
+
+**K-6b neden kapatılabildi, diğerleri neden hayır.** 3:1 **sayısal bir AA eşiğidir**, halka
+rengi v18 mockup'ında **hiç tarif edilmemiştir** (kanonda odak durumu yok → sapma değil), ve
+düzeltme hiçbir yerleşimi değiştirmeyen **tek bir deklarasyondur**. Diğerlerinin çaresi
+(footer eklemek, 21 sayfanın başlık ağacını yeniden kesmek) **ürün kararıdır**. **Bu kalem
+D-10 DEĞİLDİR:** D-10 **1.4.3** (metin) ekseninde imzalı kalıcı sapmadır; K-6b **1.4.11**
+(metin-dışı) ölçütüdür — ayrı ölçüt, ayrı eşik, ve `--accent` token'ına **dokunulmadı**.
+**axe bu kuralı koşmuyordu** — a11y ratchet'inin yeşil olması bu soru için kanıt değildi.
 
 ### 6.6 İzleme kaydı ↔ kod ayrışması — tekrarlayan desen (P8 §4.3, P10 §3.3)
 

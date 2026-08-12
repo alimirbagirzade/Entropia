@@ -7764,8 +7764,13 @@ silinmedi**; #688 de hiçbir tarihçe başlığı silmemişti (doğrulandı).
   temsil edildi.** Clause'un koruduğu şey **biten manifest**tir, düzenleme yolu değil;
   yine de bu bir vekildir ve öyle kaydedilmiştir.
 - **`TL-11.c3` AÇIK ve sınıfı şüpheli** (yukarıya bakınız) — bu parti onu kapatmadı.
-- **Memory checkpoint YAZILAMADI (ritüel madde 4).** `ecc` ve `claude-mem` bu oturumda
-  da bağlı değil → borç **ÜÇ slice**'a çıktı (ADIM 47, ADIM 48 ×2, ADIM 49).
+- **Memory checkpoint YAZILAMADI (ritüel madde 4)** — ve #690 bu boşluğun **sebebini
+  yapısal olarak saptadı:** iş remote container'da yürüyor, orada `ecc`/`claude-mem`
+  **kayıtlı değil**, yani borç **bu ortamdan kapatılamaz**. #690 iki slice'ın checkpoint
+  metnini `docs/memory/PENDING_CHECKPOINTS.md`'ye hazır hâlde yazdı. **ADIM 49 aynı
+  duvara çarptı** (ToolSearch'te ikisi de yok) → o dosyaya **ADIM 49 girdisi de
+  eklenmelidir**; borç artık **ÜÇ slice** (ADIM 47, ADIM 48 ×2, ADIM 49) ve bağlı bir
+  ortamda toplu yazılmalı.
 - **Codemap tazelemesi gerekmedi** — yeni endpoint/tablo/sayfa/job/aktör yok;
   `backend/src`, `alembic`, `frontend/src` diff'i **boş**.
 - **`P1-Gate3` KAPANMADI** — kalan borç **A=1 · B=82 · C=6 · D=32**, açık toplam **121**.

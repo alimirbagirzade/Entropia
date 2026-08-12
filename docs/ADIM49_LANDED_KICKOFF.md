@@ -70,9 +70,14 @@ doğrula; sevk edilmemişse **sınıfı yanlıştır** ve test yazmak boşluğu 
 
 ## Devralınan ritüel borcu
 
-**Memory checkpoint ÜÇ slice'tır yazılamadı** (ADIM 47, ADIM 48 ×2, ADIM 49) — `ecc`
-ve `claude-mem` bu oturumların hiçbirinde bağlı değildi. Bağlı bir oturumun **ilk işi**
-bu olmalı.
+**Memory checkpoint ÜÇ slice'tır yazılamadı** (ADIM 47, ADIM 48 ×2, ADIM 49). Sebep
+**ölçüldü ve yapısaldır** (#690): bu iş remote container'da yürüyor ve orada `ecc` /
+`claude-mem` **kayıtlı değil** — yani borç **bu ortamdan kapatılamaz**, tekrar denemek
+zaman kaybıdır.
+
+İçerik hazır: **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48 metinleri
+tam hâlde). **ADIM 49 girdisi oraya EKLENMELİDİR.** Bağlı bir ortamın ilk işi: üçünü
+birden yaz, sonra o dosyayı **SİL** — kendini tüketen bir belgedir.
 
 ---
 

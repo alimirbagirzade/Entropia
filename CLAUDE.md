@@ -189,10 +189,18 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `853a358`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `c931063`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 45 (RC blocker 2 KAPANDI): blocker sayısı 2 → 1, GERİYE YALNIZ A-08
-> KALDI, verdict BLOCKED KALIR.** `flows` artık `e2e.yml::acceptance-flows` olarak
+> **Son dalga — ADIM 46 (RC §6.6, iki KOD kalemi): #617 `per_item` 1 → 0, #618 `per_item`
+> 2 → 0. BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** `query_budgets.json`
+> iki satırda da `per_item: 0` — **ratchet, tavanı yükseltme**; N+1 geri gelirse slope
+> assertion'ı kırar. **`_prefetch`'in batch SIRASI taşıyıcıdır** (`embedded_revision_id`
+> vermeyen ref entry'nin `trusted_active_revision_id`'sine düşer → revizyon batch'i
+> registry'den SONRA). Yeni okuma yüzeyinde döngü içine `session.get` koyma; batch
+> karşılığını yaz. **#617/#618 issue durumu insan kararıdır.**
+> `PROJECT_HISTORY.md` §ADIM 46 · `docs/ADIM46_LANDED_KICKOFF.md` · RC §6.6.
+> Öncesinde ADIM 45 (RC blocker 2 KAPANDI): blocker sayısı 2 → 1, GERİYE YALNIZ A-08
+> KALDI, verdict BLOCKED KALIR. `flows` artık `e2e.yml::acceptance-flows` olarak
 > **bloklayıcı** bir CI kapısı ve **gerçekten koştu** (job `94097720164` → **67 passed /
 > 0 failed / 1 skipped**, `duration_seconds=137`); ürün kodu değişmedi. **`E2E_MAX_SKIPS`
 > bir KARARDIR** (CI: 1) — yeni skip'te tavanı yükseltme, RC §6.2'de gerekçelendir.
@@ -294,6 +302,8 @@ Before stopping a working session, produce **ALL** of the following:
 > delivery proof'u **CI kapısı değil** · **monitörü izleyen yok** ·
 > **P5/P6 ADIM 30'da yeniden ölçülüp COMMIT EDİLDİ** (`evidence/2026-08-10/`) — ama
 > ~~**`flows` CI'da koşmuyor**~~ **KAPANDI (ADIM 45)** — `e2e.yml::acceptance-flows` ·
+> **§6.6'nın #617/#618 KOD yarısı KAPANDI (ADIM 46)** — `per_item` ikisinde de ölçülen
+> **0**; izleme kaydı (issue durumu) **insan kararı**, #514/#558/#559 **açık kaldı** ·
 > **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde) ·
 > ~~**`ci.yml` concurrency kusuru**~~ **ONARILMIŞ** (ADIM 34'te doğrulandı): `ci.yml:9–14`
 > artık `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` — main'de iptal KAPALI.

@@ -5483,6 +5483,42 @@ Paste-ready resume prompt: `docs/ADIM45_LANDED_KICKOFF.md` en altta.
 
 ---
 
+## Stage — ADIM 46: RC §6.6, iki canlı N+1 kapandı (PR #681)
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi. **OpenAPI:** değişmedi.
+
+RC §6.6'nın iki **kod** kalemi kapandı: **#617** (`readiness_check.market_data_leg`,
+`per_item` **1 → 0**) ve **#618** (`dependency_pins.ensure_pinned_resolvers_active`,
+`per_item` **2 → 0**). İkisi de **kod yazılmadan önce** `c931063` üzerinde yeniden ölçüldü
+(12 @ n=11 ve 22 @ n=11) — rapor bayat değildi, ADIM 42–45 hiçbirini kapatmamıştı.
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+
+- `infrastructure/postgres/repositories/market_data.py::get_dataset_roots` — YENİ batch
+  okuyucu; `entity_type` kapısı **SQL'de**. Yeni bir per-item Root okuması yazacaksan bunu
+  kullan, `get_dataset_root`'u döngüye sokma.
+- `infrastructure/postgres/repositories/esp.py::get_registry_by_keys` — YENİ batch okuyucu;
+  `canonical_key` UNIQUE olduğu için dict keying güvenli.
+- `application/queries/dependency_pins.py::_prefetch` — iki batch'i **sırayla** kuran tek
+  yer. **Sırayı bozma:** `embedded_revision_id` vermeyen ref entry'nin
+  `trusted_active_revision_id`'sine düşer, revizyon id'leri registry'den SONRA bilinir.
+- `application/queries/dependency_pins.py::_pin_defect` — artık **saf**; session almaz.
+- `tests/integration/test_batched_dereference_equivalence.py` — 13 test, davranış
+  eşdeğerliği. Yeni bir batch dereference eklersen buraya yaz.
+
+**Kapı:** `docs/performance/query_budgets.json` iki satırda da `per_item: 0`. Bu bir
+**ratchet**; N+1 geri gelirse slope assertion'ı kırmızıya döner. Dişi kanıtlandı.
+
+**Test sayıları:** tam suite **3523 collected / 0 failed**, coverage **%93.66**.
+
+**Dürüst sınır:** **blocker sayısı değişmedi (1)**, verdict **BLOCKED**. A-08 / #514
+defteri hâlâ **boş** (0/4); #558 / #559 açık. **#617/#618'in issue durumu bir insan
+kararıdır** — bu slice yalnız kodu kapattı.
+
+Paste-ready resume prompt: `docs/ADIM46_LANDED_KICKOFF.md` en altta.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40, 41 ve 45 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge slice'ıydı, motor

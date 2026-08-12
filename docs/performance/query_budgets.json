@@ -48,9 +48,9 @@
       "n_small": 1,
       "n_large": 11,
       "queries_small": 2,
-      "queries_large": 12,
-      "per_item": 1,
-      "note": "OPEN N+1, recorded not blessed. O-24b batched the pinned market_dataset_revision read into one IN(), and tests/integration/test_readiness_query_count.py pins that at 1 — but it counts ONLY that table. Counting the whole leg shows commands/readiness_check.py::_resolve_market_data_issues still calls market_repo.get_dataset_root INSIDE the item loop, so a composition's Strategy count still decides how many round trips the page a user waits on costs. Tracked in GitHub #617; the fix is a batched root read and it tightens this row to per_item 0."
+      "queries_large": 2,
+      "per_item": 0,
+      "note": "Flat since ADIM 46 (#617). Two batched reads: one IN() over the pinned market_dataset_revision ids (O-24b), then one IN() over the Roots those revisions name (market_repo.get_dataset_roots). The root batch is built AFTER the revision map because a Root is only reachable through the revision that pins it. Before the repair this row was a live N+1 — 12 statements at 11 Strategy items, a slope of 1 — because _resolve_market_data_issues called get_dataset_root INSIDE the item loop. Re-introducing any per-item read on the page a user waits on fails HERE, on the slope, even when the small-n total is unchanged."
     },
     "dependency_pins.ensure_pinned_resolvers_active": {
       "title": "Approve Package — pinned ESP resolver re-validation (doc 06 §7)",
@@ -58,9 +58,9 @@
       "n_small": 1,
       "n_large": 11,
       "queries_small": 2,
-      "queries_large": 22,
-      "per_item": 2,
-      "note": "OPEN N+1, recorded not blessed. queries/dependency_pins.py::_pin_defect reads the registry entry and then the pinned revision, once per ref, so approval admission costs 2 round trips per pin. Smaller blast radius than the Ready Check row (pin counts are bounded by a package's declared calls, and this is an admin action, not a page load), which is why it is recorded rather than repaired inside a gates-only PR. Tracked in GitHub #618; batching both reads tightens this row to per_item 0."
+      "queries_large": 2,
+      "per_item": 0,
+      "note": "Flat since ADIM 46 (#618). queries/dependency_pins.py::_prefetch issues one IN() over embedded_resolver_registry.canonical_key and then one over the revision ids those entries resolve to, and _pin_defect became a pure function over the two maps. The order is load-bearing: a ref that names no embedded_revision_id falls back to its entry's trusted_active_revision_id, so the revision batch is only knowable after the registry batch. Before the repair this was 22 statements at 11 pins, a slope of 2 — one registry read plus one revision read per ref, inside the loop."
     },
     "agent_workspace.list_tasks": {
       "title": "Analysis Lab — Alpha Agent task queue/history page (doc 18 §7)",

@@ -7422,3 +7422,127 @@ Migration **yok**, `ENGINE_VERSION` **değişmedi**, OCC/Idempotency davranış�
 - **A-08 / #514'e DOKUNULMADI** — defter hâlâ boş (0/4), blocker sayısı **1**, izleme
   issue'su kapalı. Hiçbir belge A-08'i `Complete`/`PASS` göstermez.
 - **P10-B6, P11-1, P8-B3b, P4-3, P1-Gate3, P10-B3/B4/B5 açık** — bu slice'ın kapsamı dışı.
+
+---
+
+## ADIM 48 — RC §6.5: K-2 ve K-4 KAPANDI (PO kararı), K-6 ikiye ayrıldı (PR #685)
+
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok,
+`ENGINE_VERSION` değişmedi, OCC/Idempotency/route yolları/react-query key'leri/
+`app/nav.ts` **değişmedi**. Bu bir presentation-only frontend slice'ı + belge kaydıdır.
+
+### Nasıl başladı — brifing, sonra karar
+
+Oturum kod yazarak değil, **karar brifingi** üreterek başladı: beş gözlemin (K-2..K-6)
+her biri için *ne / kaç rotada / hangi WCAG ölçütü · düzeltmenin ölçülen maliyeti ·
+düzeltmemenin bedeli · öneri*. Brifing `docs/ADIM48_KICKOFF.md` olarak repoya yazıldı
+ve **dört paste-ready prompt** taşıyor (P-1..P-4). PO ardından **P-1'i** seçti:
+K-2 + K-4 FIX. K-3 ve K-6b hâlâ karar bekliyor, K-5 ve K-6a **A-08'e bağımlı**.
+
+### Sevk edilen (K-2)
+
+`app/Layout.tsx` shell'in **ilk çocuğu** olarak `Skip to main content` linki render
+ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. Stil `global.css`
+`.skip-link` / `.skip-link:focus`.
+
+Üç tasarım kararı, gerekçeleriyle:
+
+1. **Büyük negatif offset değil, `clip`.** Odaklanan ekran-dışı bir öğe bazı
+   tarayıcılarda sayfayı yana kaydırır; `clip` + `clip-path: inset(50%)` bunu yapmaz.
+   Öğe **her durumda akış dışıdır** → shell'in flex kolonu ve görsel baseline'lar
+   etkilenmez. **Bu bir iddiadır, ölçüm değil**: doğrulayıcısı `@visual` kapısıdır
+   (23 rota) ve bu kayıt yazılırken koşu **bitmemişti**; tek bir baseline yeniden
+   üretilmedi, kapı kırmızıya dönerse düzeltilecek olan **CSS'tir, baseline değil**.
+2. **Tetikleyici `:focus`, `:focus-visible` DEĞİL.** Bu kontrole yalnız klavyeyle
+   ulaşılır ve **K-6a'nın hâlâ açık olduğu heuristiğe bağlanmamalıdır**.
+3. **`main`'e `outline: none` YAZILMADI.** Atlamadan sonra workspace'in etrafında
+   odak halkası boyanır; bu görülebilir bir geri bildirimdir ve onu susturmak K-6'nın
+   şikâyet ettiği desenin ta kendisi olurdu.
+
+**Kayda geçen dürüst sınır:** WCAG **2.4.1 zaten karşılanıyordu** — banner/navigation/
+main landmark'ları ARIA11 tekniğini sağlıyor, axe `bypass` kuralı bu yüzden **hep
+yeşildi**. Yani bu bir **uygunluk** düzeltmesi değil, klavye kullanıcısı için
+**ergonomi** düzeltmesidir. §6.5'in ilk yazımı kalemi "WCAG 2.4.1" diye etiketleyerek
+olduğundan ağır göstermişti; kayıt düzeltildi.
+
+### Sevk edilen (K-4)
+
+`pages/UserManual.tsx` sayfayı artık `<h1 className="page-title">` ile adlandırıyor
+(23 route'ta 1 istisnaydı). `.page-title` **sınıf tabanlı** olduğu için değişiklik
+**yalnız semantik** — görsel diff yok.
+
+**Yan etki gizlenmedi:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu, yani
+taşımadığı bir atlamayı **taşımaya başladı** ve **K-5'in kümesine girdi**.
+
+### Pinler ve bilerek KOYULMAYAN kapı
+
+- **YENİ** `frontend/src/test/skipLink.test.tsx` — K-2'nin **üç parçalı** sözleşmesi:
+  (1) link shell'in ilk öğesi, (2) `href` gerçek bir öğeye çözülüyor, (3) hedef
+  `main` landmark'ı ve odak tutabiliyor. Yalnız (1)'i assert eden bir test hedefin
+  adı değişince yeşil kalırdı. **Negatifi kanıtlandı:** kırık `href` → exit 1;
+  `tabIndex` kalkarsa → exit 1.
+- `specs/17-page-coverage.spec.ts` `/user-manual` `level: 2 → 1` — K-4'ün regresyon
+  pini **burada**, çünkü bu spec sayfanın gerçek projeksiyonunu bekler.
+- **Eksik `<h1>`'i precheck'te BLOCKING yapmak değerlendirildi ve YAPILMADI.** O sonda
+  ilk DOM'u okur ve sayfaların ilk veri render'ıyla **yarışır** (K-5/K-7 sayılarının
+  koşudan koşuya oynamasının sebebi budur) → **çırpınan kapı, kapısızlıktan kötüdür.**
+  Gerekçe spec'in içine yazıldı.
+
+### K-6 İKİYE AYRILDI — birleşik kalem yanıltıcıydı
+
+- **K-6a (halka görünüyor mu, 2.4.7): A-08 bekliyor.** Ek bulgu: **mevcut sondanın
+  çıktısı bu soruya kanıt DEĞİLDİR.** `specs/20-a11y-prechecks.spec.ts` programatik
+  `el.focus()` kullanıyor; tarayıcılar `:focus-visible`'ı programatik odakta
+  eşleştirmez → `before === after` **beklenen bir ölçüm artefaktı**. Halka
+  `global.css`'te `:focus-visible { outline: 2px solid var(--accent) }` olarak
+  **yazılıdır**; §6.5'in *"UA varsayılan halkası boyanıyor olabilir"* tahmini
+  gereksizdi.
+- **K-6b (halkanın kontrastı, 1.4.11): A-08'i BEKLEMEZ, ölçüldü, DÜŞÜYOR.**
+  `#00a9e8` beyaza karşı **2.68 : 1**, `#f5f5f5` üzerinde **2.46 : 1**; ölçüt **3 : 1**.
+  axe bu kuralı **koşmuyor**; **D-10 (45 düğüm) 1.4.3 eksenidir ve bunu KAPSAMAZ**.
+  → PO kararı bekliyor (renk değişimi **veya** imzalı sapma); prompt
+  `docs/ADIM48_KICKOFF.md` §P-3.
+
+### K-5 hakkında ölçülen iki şey — ikisi de "düzelt" demiyor
+
+1. **Maliyet artık sayı:** merdiveni bir basamak kaydırmak **204 başlık / ~40 dosya**
+   (`<h3>` 98/36, `<h4>` 76/23, `<h5>` 28/6, `<h6>` 2/1). Asıl tuzak CSS'te: başlık
+   stilleri **tag-scoped descendant selector**'larla yazılmış (`.card h3`, `.card h4`,
+   `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) → tag değişip
+   selector unutulan her yerde başlık UA varsayılanına düşer.
+2. **K-4'ün fix'i K-5'i büyüttü — ÖLÇÜLDÜ.** CI job `94221023796` (`@a11y`,
+   6 passed, axe ratchet **45/45** değişmedi) satırı birebir bastı:
+   `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`
+   → **K-5 21 / 23 → 22 / 23**; set dışında yalnız `/` kaldı.
+
+**Advisory toplamı 90 → 67, dökümü tam:** skip link (K-2) **23 → 0**, `<h1>` yok
+(K-4) **1 → 0**, heading outline (K-5) **21 → 22**, `contentinfo` (K-3) 23 (aynı),
+`aria-live` (K-7) 21 (aynı), focus indicator (K-6) 1 (aynı). 23+22+21+1 = **67** —
+job'ın kendi özet satırıyla birebir. **Hiçbir sınıf susturulmadı**, iki sınıf
+**kayboldu** çünkü kusur kalktı.
+
+**Ölçümün sınırı, yazılmadan geçilmiyor:** bu **tek ve SOĞUK** bir koşudur. Defterin
+kendi kuralı soğuk koşunun *eksik* raporladığını söyler (ADIM 44: K-5'i 18 gösterdi,
+yerleşmiş değer 21) → bugünkü **22 bir TABANdır**, yerleşmiş değer değil. Üç oynak
+rota (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) bu koşuda **üçü de**
+rapor etti.
+
+### Doğrulama
+
+- Yerel: `npm run lint` / `typecheck` / `build` temiz; **vitest 722 passed / 71 dosya**
+  (`--no-file-parallelism`); coverage kapısı geçti, **line %84.90**.
+- CI: Frontend job ✅.
+- **Yerelde KOŞULAMAYAN:** `@a11y` precheck, `@visual`, `@lighthouse` — bu oturumun
+  host'unda **docker yok**. Ölçüm CI'dan alındı.
+
+### Honest boundary
+
+- **A-08'e DOKUNULMADI.** Defter hâlâ boş (0/4), `#514` hâlâ kapalı. K-2/K-4'ün
+  kapanması A-08'i **ilerletmez**; bu kalemler hiçbir zaman blocker değildi.
+- **K-3 ve K-6b karar bekliyor** — ikisi de A-08'e bağımlı **değil**, ikisi de bu
+  slice'ın kapsamı dışında bırakıldı (PO yalnız P-1'i seçti).
+- **Memory checkpoint** (`ecc` + `claude-mem`): bu oturumda MCP sunucuları **bağlı
+  değil** → ritüelin 4. maddesi **yapılamadı**, atlanmadı.
+- **Codemap tazelenmedi ve tazelenmesi GEREKMİYOR:** slice yeni route / sayfa /
+  `lib/*` / query-key / endpoint / job eklemedi; `FRONTEND_MAP.md` bu eksenlerde
+  haritalanmıştır, shell landmark'larını haritalamaz.

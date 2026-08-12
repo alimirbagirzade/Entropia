@@ -1033,8 +1033,8 @@ blocker değildi; kapanmaları A-08'i ilerletmez.
 |---|---|---|---|---|
 | **K-2** | ~~**Skip link yok**~~ → **2026-08-12 (ADIM 48, PR #685) KAPANDI.** `Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş `Skip to main content` linki render ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. **Fixle birlikte kayda geçen düzeltme:** 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu** — axe `bypass` bu yüzden hep yeşildi — yani bu bir **uygunluk** değil **ergonomi** düzeltmesiydi; §6.5'in ilk yazımı bunu "WCAG 2.4.1" diye etiketleyerek olduğundan ağır göstermişti | was 23 / 23 | 2.4.1 | **FIXED** |
 | **K-3** | **`contentinfo` landmark yok** — shell hiç `<footer>` render etmiyor; checklist A-2 dört landmark bekliyor, üç var | **23 / 23 route** | 1.3.1 / 2.4.1 | Open — reported, not gated |
-| **K-4** | ~~**`/user-manual`'da `<h1>` yok**~~ → **2026-08-12 (ADIM 48, PR #685) KAPANDI.** Sayfa artık `<h1 class="page-title">` kullanıyor; `.page-title` sınıf tabanlı olduğu için değişiklik **yalnız semantik** (0 görsel diff). Regresyon pini `specs/17-page-coverage.spec.ts` `level: 1` — eksik `<h1>`'i **BLOCKING** yapmak değerlendirildi ve **bilerek yapılmadı** (sonda ilk DOM'u okur, sayfaların veri render'ıyla yarışır; çırpınan kapı kapısızlıktan kötüdür). **YAN ETKİ:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu → **K-5'in kümesine girdi**, K-5 satırına bak | was 1 route | 1.3.1 / 2.4.6 | **FIXED** |
-| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); setin **en yüksek erişimli** yapısal gözlemi | **21 / 23 route** | 1.3.1 (A-3) | Open — reported, not gated |
+| **K-4** | ~~**`/user-manual`'da `<h1>` yok**~~ → **2026-08-12 (ADIM 48, PR #685) KAPANDI.** Sayfa artık `<h1 class="page-title">` kullanıyor; `.page-title` sınıf tabanlı olduğu için değişiklik **yalnız semantik**; bunun doğrulayıcısı görsel kapıdır (`@visual`, 23 rota) ve o kapı bu satır yazılırken **hâlâ koşuyordu** — sonucu bu belgeye işlenmelidir. Regresyon pini `specs/17-page-coverage.spec.ts` `level: 1` — eksik `<h1>`'i **BLOCKING** yapmak değerlendirildi ve **bilerek yapılmadı** (sonda ilk DOM'u okur, sayfaların veri render'ıyla yarışır; çırpınan kapı kapısızlıktan kötüdür). **YAN ETKİ:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu → **K-5'in kümesine girdi**, K-5 satırına bak | was 1 route | 1.3.1 / 2.4.6 | **FIXED** |
+| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); K-2 ve K-4 kapandıktan sonra setin **en yüksek erişimli** gözlemi. `/market-data` **iki seviye** atlıyor (`h1 → h4`) | **22 / 23 route** — ADIM 48'de yeniden ölçüldü (CI job `94221023796`); önceki `21 / 23`. **+1 = `/user-manual`**, K-4'ün fix'i onu bu kümeye **soktu** (bilinen ve kabul edilen bedel). Set dışında yalnız `/` kaldı | 1.3.1 (A-3) | Open — reported, not gated |
 | **K-6** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 / 1.4.11 | Open — **insan gözü gerekiyor** |
 
 **K-5 ve K-6a doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
@@ -1050,12 +1050,14 @@ K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulma
    selector**'larla yazılmış (`global.css` `.card h3`, `.card h4`, `.ready-report-card h3`,
    `.state h3`, `.manual-drawer-header h3`) → tag değişip selector unutulan her yerde
    başlık UA varsayılanına düşer ve v18 stili bozulur.
-2. **K-4'ün fix'i K-5'i BÜYÜTÜYOR.** `/user-manual` `h2 → h3` iken atlama taşımıyordu;
-   `h1 → h3` olunca taşıyor. Bu **bilinen ve kabul edilen** bir bedeldi, sessizce
-   olmadı. **Yeni sayı bu satır yazılırken HENÜZ ÖLÇÜLMEDİ** — ADIM 48 oturumunda
-   docker yoktu, precheck yerelde koşturulamadı; ölçüm CI'ın `@a11y` job'ından
-   alınacak ve K-5 satırına yazılacaktır. **O ana kadar tablodaki `21 / 23`
-   FIX ÖNCESİ ölçümdür** ve `/user-manual`'ı içermez.
+2. **K-4'ün fix'i K-5'i BÜYÜTTÜ — ölçüldü, tahmin edilmedi.** `/user-manual` `h2 → h3`
+   iken atlama taşımıyordu; `h1 → h3` olunca taşıyor. CI job `94221023796` satırı
+   birebir bastı: `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA
+   USER MANUAL"` → **K-5 21 → 22**. Bu **bilinen ve kabul edilen** bir bedeldi.
+   Toplam advisory **90 → 67** (−23 skip link, −1 `<h1>`, +1 heading); tam döküm
+   `docs/audit/a11y_screen_reader_audit_results.md` §6.
+   **Sınır:** tek **soğuk** koşu, ve soğuk koşu *eksik* raporlar → `22` bir **taban**,
+   yerleşmiş değer değil.
 
 **K-6 İKİYE AYRILDI (ADIM 48 ölçümü) — birleşik kalem yanıltıcıydı:**
 

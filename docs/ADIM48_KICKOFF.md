@@ -1,14 +1,32 @@
 <!-- doc-status: current -->
 # ADIM 48 KICKOFF — RC §6.5 (K-2..K-6): beş a11y gözlemi için ürün kararı promptları
 
-> **Bu belge bir slice KAYDI DEĞİL — bir KARAR ÖNÜ belgesidir.** Hiçbir kod
-> değişmedi, hiçbir karar VERİLMEDİ. Aşağıdaki dört prompt, PO karar verdikten
-> **sonra** temiz bir oturuma yapıştırılmak üzere hazırlanmıştır; her biri hangi
-> kararı varsaydığını kendi başlığında yazar.
+> **Bu belge bir KARAR ÖNÜ belgesidir** — dört prompt, PO karar verdikten **sonra**
+> temiz bir oturuma yapıştırılmak üzere; her biri hangi kararı varsaydığını kendi
+> başlığında yazar. **Dördünün biri artık sevk edildi:** PO 2026-08-12'de **P-1**'i
+> seçti (K-2 + K-4), uygulandı ve §0-a'da kayıtlıdır. Kalan üç prompt **olduğu gibi
+> geçerlidir** ve hâlâ karar bekler.
 >
 > Kaynak otorite: `docs/audit/a11y_screen_reader_audit_results.md` §6 (K-1..K-7) +
 > `docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` §6.5.
 > Sayısal otorite bu belge DEĞİL → `docs/generated/repository_facts.md`.
+
+## 0-a. DURUM — P-1 SEVK EDİLDİ (2026-08-12, PR #685)
+
+| Prompt | Kalem | Durum |
+|---|---|---|
+| **P-1** | K-2 + K-4 | ✅ **LANDED** — PO kararı alındı ve uygulandı. Kayıt: `PROJECT_HISTORY.md` §ADIM 48, `STAGE2_HANDOFF.md` §ADIM 48, RC §6.5 |
+| **P-2** | K-3 | ⏳ **PO kararı bekliyor** — prompt aşağıda, değişmedi |
+| **P-3** | K-6b | ⏳ **PO kararı bekliyor** — ADIM 48'de **ölçüldü**: `#00a9e8` ↔ beyaz **2.68 : 1** < 3 : 1 |
+| **P-4** | K-5 + K-6a | ⛔ **A-08 bekliyor** — uygulama promptu yok, olmayacak |
+
+**P-1 sonrası değişen sayılar (CI job `94221023796`, ölçüldü):** toplam advisory
+**90 → 67**; skip link **23 → 0**, `<h1>` yok **1 → 0**, heading outline (K-5)
+**21 → 22** — artıştaki +1 `/user-manual`, K-4'ün fix'inin **bilinen bedeli**.
+Kanonik değer ve sınırları (tek/soğuk koşu → 22 bir **taban**)
+`docs/audit/a11y_screen_reader_audit_results.md` §6'dadır, bu belgede değil.
+
+**Değişmeyen:** blocker sayısı **1** (yalnız A-08), verdict **BLOCKED**.
 
 ## 0. Neredeyiz
 
@@ -48,7 +66,7 @@ selector'larında ve görsel baseline'larda.
 | **K-2** skip link | 23 / 23 — stable | **FIX** — 2 dosya, 0 baseline, 0 test | Hayır | **P-1** |
 | **K-3** `contentinfo` | 23 / 23 — stable | **PO-APPROVE** — ürünü değil A-2 beklentisini hizala | Hayır | **P-2** |
 | **K-4** `/user-manual` h1 | 1 — stable | **FIX** — 1 token, 2 test satırı, 0 baseline | Hayır | **P-1** |
-| **K-5** h1→h3 | **21 / 23 ±1** — kararsız | **A-08 BEKLE** | **Evet** | **yok (P-4)** |
+| **K-5** h1→h3 | **22 / 23** (ADIM 48 sonrası; was 21) — kararsız sınıf | **A-08 BEKLE** | **Evet** | **yok (P-4)** |
 | **K-6a** halka görünüyor mu | probe: 1 | **A-08 BEKLE** | **Evet** | **yok (P-4)** |
 | **K-6b** halka kontrastı | global | **bugün karar verilebilir** — ölçüldü **2.68 : 1 < 3 : 1** | Hayır | **P-3** |
 
@@ -300,3 +318,59 @@ Kapı kırılıyorsa yeşile zorlama yok — **BLOCKED yaz**.
 3. **Hiçbir karar verilmedi.** Dört promptun dördü de bir PO kararını *varsayar*;
    `<TARİH>` / `<AD>` alanları doldurulmadan imzalı kayıt yazılamaz.
 4. **Bu belge blocker sayısını değiştirmez.** 1 (yalnız A-08), verdict **BLOCKED**.
+
+---
+
+## 9. Paste-ready resume prompt (temiz oturum için)
+
+```
+ENTROPIA — ADIM 48 sonrası devam
+
+CLAUDE.md §Session START protokolünü uygula (fetch + origin/main log + PR listesi;
+handoff STALE-BY-DEFAULT'tur).
+
+ÖNCE OKU (otorite sırası)
+  1. docs/ADIM48_KICKOFF.md (bu belge — P-2 / P-3 / P-4 promptları içinde)
+  2. docs/STAGE2_HANDOFF.md → "## Stage — ADIM 48" + "## Next"
+  3. docs/PROJECT_HISTORY.md §ADIM 48
+  4. docs/generated/repository_facts.md (SAYISAL OTORİTE — CLAUDE.md'deki sayı değil)
+
+DURUM (doğrula, güvenme)
+  · Blocker sayısı 1 (yalnız A-08), verdict BLOCKED. "READY" YAZMA.
+  · ADIM 48 K-2 ve K-4'ü kapattı. K-3 ve K-6b PO kararı bekliyor (A-08'e bağımlı
+    DEĞİL). K-5 ve K-6a A-08 bekliyor — onlara uygulama promptu YAZMA.
+  · A-08 defteri BOŞ (0/4), #514 kapalı. Hiçbir belge A-08'i Complete/PASS gösteremez.
+
+ÖNCELİK: birini seç, hepsini birden alma
+  (a) ADIM 48'in EKSİK ritüel maddesi: ecc + claude-mem memory checkpoint'i
+      (ADIM 47'de ve 48'de MCP sunucuları bağlı değildi — üst üste ikinci kez).
+      Önce bağlı mı ÖLÇ; değilse eksikliği kaydet, "yapıldı" YAZMA.
+  (b) PO karar verdiyse P-2 (K-3) veya P-3 (K-6b) — promptlar bu belgede.
+  (c) §6.7'nin açık kalemleri: P10-B6, P8-B3b, P4-3, P1-Gate3, P11-6b, P11-3b,
+      P10-B3/B4/B5, P11-1 (branch protection — İNSAN kararı).
+  (d) PR B (ItemParticipant) — ADR §16 insan kapısından geçmeden BAŞLAMA.
+
+TAVİZ VERİLEMEZ
+  · OCC (If-Match / expected_*_version / X-*-Version), Idempotency-Key, route
+    YOLLARI, react-query key'leri, ENGINE_VERSION, app/nav.ts DEĞİŞMEZ.
+  · UI işi v18 mockup'ı referans alır (docs/spec/index_guncellenmis_duzeltilmis_v18.html).
+  · A-08 / #514'ün durumunu DEĞİŞTİRME — insan kapısı.
+  · İmzalayan verilmeden imzalı sapma (D-10 biçimi) YAZMA.
+  · Yeşile zorlama YOK: kapı kırılıyorsa BLOCKED yaz.
+
+ÖLÇÜM TUZAKLARI (bu repoda gerçekten yaşandı)
+  · a11y precheck sayısını TEK KOŞUYLA tazeleme — ilk koşu soğuktur ve EKSİK
+    raporlar (K-5'i 18 gösterdi, doğrusu 21). En az iki koşu, ikinci sayı.
+  · vitest: --no-file-parallelism ZORUNLU; node_modules yoksa önce npm ci.
+  · pytest'i | tail'e BORULAMA; alt küme koşarken --no-cov EKLE.
+  · Görsel baseline sırası: down -v → seed → npm test → screenshots:update.
+  · Host'ta docker YOKSA @a11y / @visual / @lighthouse yerelde KOŞMAZ — sayıyı
+    CI job log'undan al, tahmin etme. PR branch'ine push CI'ı İPTAL EDER
+    (cancel-in-progress), ölçüm bekliyorsan push'u ölçümden SONRAYA bırak.
+  · docs PR'ı öncesi: git diff origin/main -- docs/ | grep '^-## ' → BOŞ olmalı.
+
+KAPANIŞ: CLAUDE.md §Session CLOSING ritüelinin 6 maddesi +
+  cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check
+  (bu belgeyi doc-status: historical'a düşür, yeni kickoff'u current yap —
+   aynı anda TEK belge current olabilir)
+```

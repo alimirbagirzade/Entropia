@@ -4389,6 +4389,59 @@ döngüsü), `ENGINE_VERSION` değişmedi, containment kapalı kaldı, migration
 `_ItemStepper` / `_build_stepper` modül-private, `__all__`'da değil — **üretimde çağıranı yok.**
 Devir: `docs/ADIM16_STEPPER_LANDED_KICKOFF.md`.
 
+## Stage — ADIM 48: RC §6.5'in K-2 ve K-4'ü KAPANDI (PO kararı, PR #685)
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi.
+**OpenAPI:** değişmedi. **OCC / Idempotency / route yolları / react-query key'leri /
+`app/nav.ts`:** değişmedi. Presentation-only frontend + belge kaydı.
+
+**Nasıl başladı:** kod değil, **karar brifingi**. Beş gözlemin (K-2..K-6) her biri için
+ne / kaç rotada / hangi ölçüt · **ölçülen** düzeltme maliyeti · düzeltmemenin bedeli ·
+öneri → `docs/ADIM48_KICKOFF.md` (dört paste-ready prompt: P-1..P-4). PO **P-1**'i seçti.
+
+**(A) K-2 KAPANDI.** `app/Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş
+`Skip to main content` linki; `<main>` `id="main-content"` + `tabIndex={-1}`.
+**Kayda geçen düzeltme:** WCAG 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu**
+(axe `bypass` hep yeşildi) → bu bir **ergonomi** düzeltmesiydi, uygunluk düzeltmesi değil.
+
+**(B) K-4 KAPANDI.** `/user-manual` artık `<h1 class="page-title">`. `.page-title` sınıf
+tabanlı → **0 görsel diff beklenir**; doğrulayıcı `@visual` (23 rota), sonucu bu satıra
+işlenmeli. **Yan etki:** sayfa `h2 → h3` iken atlama taşımıyordu,
+`h1 → h3` olunca taşıyor → **K-5'in kümesine girdi**: CI job `94221023796`
+**K-5 21 / 23 → 22 / 23**, toplam advisory **90 → 67**. Tek ve **soğuk** koşu →
+22 bir **taban**. Döküm: `docs/audit/a11y_screen_reader_audit_results.md` §6.
+
+**(C) K-6 İKİYE AYRILDI.** **K-6a** (halka görünüyor mu, 2.4.7) A-08 bekliyor **ve mevcut
+sondanın çıktısı ona kanıt DEĞİL** (programatik `el.focus()` `:focus-visible`'ı
+eşleştirmez; halka `global.css`'te yazılı). **K-6b** (kontrast, 1.4.11) **ölçüldü ve
+düşüyor**: `#00a9e8` ↔ beyaz **2.68 : 1** < 3 : 1; axe bu kuralı koşmuyor, D-10 (1.4.3)
+kapsamıyor → **PO kararı bekliyor**.
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+
+- `frontend/src/app/Layout.tsx` → `.skip-link` + `<main id="main-content" tabIndex={-1}>`
+  — **yeni bir shell landmark'ı eklerken** bu üçlüyü birlikte düşün: link / hedef id /
+  odaklanabilirlik. Biri eksikse link sessizce hiçbir şey yapmaz.
+- `frontend/src/styles/global.css` → `.skip-link` / `.skip-link:focus` — clip deseni
+  (**negatif offset DEĞİL**; odaklanan ekran-dışı öğe sayfayı yana kaydırır) ve tetikleyici
+  **`:focus`**, `:focus-visible` değil (K-6a hâlâ açık).
+- `frontend/src/test/skipLink.test.tsx` — K-2'nin **üç parçalı** sözleşmesi; negatifi
+  kanıtlı (kırık `href` → exit 1, `tabIndex` yok → exit 1). **Yalnız "link var" assert
+  eden bir test yazma** — hedef adı değişince yeşil kalır.
+- `frontend/e2e/specs/17-page-coverage.spec.ts` → `/user-manual` `level: 1` — K-4'ün
+  regresyon pini **burada**, precheck'te değil: **eksik `<h1>`'i BLOCKING yapmak
+  değerlendirildi ve bilerek yapılmadı** (sonda ilk DOM'u okur, veri render'ıyla yarışır →
+  çırpınan kapı). Gerekçe `specs/20-a11y-prechecks.spec.ts` içinde yazılı.
+
+**Testler:** frontend **722 passed / 71 dosya** (ölçüldü, `--no-file-parallelism`);
+coverage kapısı geçti (**line %84.90**). Backend'e dokunulmadı.
+
+**Açık kalan (bu slice kapsamadı):** **K-3** (footer/checklist kararı) ve **K-6b**
+(halka rengi) → ikisi de **A-08'e bağımlı DEĞİL**, ikisi de **PO kararı** bekliyor;
+promptlar `docs/ADIM48_KICKOFF.md` §P-2 / §P-3. **K-5 + K-6a** → **A-08 bekliyor**.
+**A-08'e dokunulmadı:** defter boş (0/4), `#514` kapalı, **blocker sayısı 1**, verdict
+**BLOCKED**.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `run_portfolio` call site → sonra ADIM 20**
 
 **Stepper indi (PR #602); kalan borç adaptör + call site.** `run_portfolio` hâlâ üretimde

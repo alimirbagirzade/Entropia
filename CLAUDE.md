@@ -189,9 +189,23 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `6da8a95`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `8d46a7d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
+> **Son dalga — ADIM 48 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
+> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Skip link (`Layout.tsx`
+> `.skip-link` + `<main id="main-content" tabIndex={-1}>`) ve `/user-manual` `<h1>`.
+> **K-2 bir UYGUNLUK düzeltmesi DEĞİLDİ** — 2.4.1 landmark'larla (ARIA11) zaten
+> karşılanıyordu, axe `bypass` hep yeşildi; ergonomiydi. **K-4'ün bedeli ÖLÇÜLDÜ:**
+> `/user-manual` K-5'in kümesine girdi → **K-5 21 → 22**, advisory toplamı **90 → 67**
+> (CI job `94221023796`; tek+soğuk koşu → 22 bir **taban**). **Eksik `<h1>`'i precheck'te
+> BLOCKING YAPMA** — sonda ilk DOM'u okur, veri render'ıyla yarışır; pin
+> `17-page-coverage.spec.ts` `level: 1`. **K-6 İKİYE ayrıldı:** K-6a (halka görünüyor mu)
+> A-08 bekler ve **mevcut sonda ona kanıt üretmez** (programatik `el.focus()`
+> `:focus-visible`'ı eşleştirmez); **K-6b ölçüldü ve DÜŞÜYOR** — `#00a9e8` ↔ beyaz
+> **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **PO kararı bekliyor**.
+> **K-3 de PO'da.** Promptlar: `docs/ADIM48_KICKOFF.md` §P-2 / §P-3. Frontend **722 passed /
+> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 48 · RC §6.5.
+> Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı): §6.7.9 + §6.7.5 KAPANDI.
 > BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** (A) `../validate` +
 > `../baseline-parse` **200 → 202** + tipli gövde (`ValidationRunAcceptedResponse`,
 > `BaselineParseAcceptedResponse`); **otorite PO KARARIDIR, kanonik hâlâ sessiz** — "repo
@@ -309,8 +323,9 @@ Before stopping a working session, produce **ALL** of the following:
 > izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
-> K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
-> (ilk koşu soğuk, eksik raporlar) ·
+> **K-2 ve K-4 KAPANDI (ADIM 48)**; **K-3 ve K-6b PO kararı bekliyor** (ikisi de A-08'e
+> bağımlı DEĞİL), **K-5 + K-6a A-08 bekliyor**, K-7 ölçüldü ama düzeltilmedi. K-5/K-7'nin
+> sayısı **koşudan koşuya oynuyor** (ilk koşu soğuk, eksik raporlar) ·
 > **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
 > serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·
 > delivery proof'u **CI kapısı değil** · **monitörü izleyen yok** ·
@@ -354,10 +369,10 @@ Before stopping a working session, produce **ALL** of the following:
 
 
 
-- **Testler (backend 2026-08-10 / ADIM 31'de ölçüldü; frontend 2026-08-06 / ADIM 25):**
+- **Testler (backend 2026-08-10 / ADIM 31'de ölçüldü; frontend 2026-08-12 / ADIM 48):**
   **otorite CI'dır.** Backend tam suite **3987 passed / 1 xfailed / 0 failed**, coverage
-  **%93.53** (kapı ≥90) — ADIM 31 frontend'e dokunmadı, o yüzden frontend sayıları ADIM 25
-  ölçümüdür ve yeniden koşulmadı: **721 passed / 70 dosya**, **%84.92 line**. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
+  **%93.53** (kapı ≥90) — ADIM 48 backend'e dokunmadı. Frontend ADIM 48'de yeniden ölçüldü:
+  **722 passed / 71 dosya**, **%84.90 line** (ADIM 25: 721/70, %84.92). **Dikkat (eski bir hata, tekrarlama):** ADIM 17
   koşusunda pytest'in özet satırı ve exit code'u yakalanmamıştı — çıktıyı dosyaya yaz, `$?`'i
   **ayrı** oku. **Bilinçli `xfail(strict)` sayısı 1'dir** (eskiden 4 yazıyordu — **bayat**):
   `test_research_point_in_time_parity.py:583`, tek issue **#558** (available-time policy pin'i

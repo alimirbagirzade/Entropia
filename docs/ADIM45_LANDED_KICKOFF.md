@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 45 landed — RC blocker 2 KAPANDI (`flows` artık bir CI kapısı) · sonraki oturum kickoff
 

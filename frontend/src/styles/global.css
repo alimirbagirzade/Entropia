@@ -68,6 +68,45 @@ p a { text-decoration: underline; }
   background: #ffffff;
 }
 
+/* K-2: skip link. Clipped rather than pushed off-screen with a large negative
+   offset — an off-screen element that receives focus makes some browsers scroll
+   the page sideways. Out of flow in every state, so the shell's flex column and
+   every visual baseline are untouched.
+   `:focus` (not `:focus-visible`) deliberately: this control is only ever
+   reached by keyboard, and it must paint in every focus case rather than
+   depending on the heuristic K-6a is still open on. */
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link:focus {
+  top: 8px;
+  left: 8px;
+  z-index: 60;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 6px 12px;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .top-title {
   height: var(--topbar-h);
   background: #e8e8e8;

@@ -12,7 +12,11 @@ export interface PageContract {
   route: string;
   /** Exact page-title text (the app renders one per page). */
   heading: string;
-  /** Heading level — most pages use h1; User Manual uses h2. */
+  /**
+   * Heading level. All 23 routes use h1 since K-4 (2026-08-12) — User Manual was
+   * the one exception and no longer is. The union is kept so a future divergence
+   * has to be DECLARED here rather than discovered by a rotor.
+   */
   level?: 1 | 2;
   /**
    * The protected read the page's own data actually comes from. Omitted only

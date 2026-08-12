@@ -178,7 +178,12 @@ export function UserManual() {
 
   return (
     <>
-      <h2 className="page-title">User Manual</h2>
+      {/* K-4: was <h2> — the only route of 23 that did not name itself with an
+          <h1>. `.page-title` carries every visual property (global.css), so the
+          level change is semantic only. It does move this page INTO K-5's set:
+          the outline is now h1 -> h3 (the reader title below), a skip it did not
+          have as h2 -> h3. Recorded, not hidden. */}
+      <h1 className="page-title">User Manual</h1>
       <p className="page-sub">
         Published guide stream (doc 21) — baseline first, appended sections in stream order.
       </p>

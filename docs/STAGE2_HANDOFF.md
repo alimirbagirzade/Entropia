@@ -5662,15 +5662,60 @@ ikizlerini de açar.
 **P1-Gate3 KAPANMADI** — kalan borç A=1 · B=87 · C=6 · D=32 (açık toplam **126**).
 Tam kayıt: `PROJECT_HISTORY.md` §ADIM 48 · kickoff: `docs/ADIM48_LANDED_KICKOFF.md`.
 
+## Stage — ADIM 49: P11-1 KAPANDI, main'de required status check ruleset'i (PR #683)
+
+**Landed:** PR #683 (`74bbd70`) + **repo ayarı** ruleset `20765617` (insan uyguladı,
+2026-08-12T23:14:40+03:00). **Migration yok · `ENGINE_VERSION` değişmedi · ürün
+ağaçlarına (`backend/src`, `alembic`, `frontend/src`) HİÇ dokunulmadı.**
+
+RC §6.7'nin **repo dışı** tek kalemi kapandı. Öncesi ölçüldü: `GET /rulesets` → `[]`,
+`GET /rules/branches/main` → `[]`, `branches/main` → `enforcement_level: "off"`.
+Yani ADIM 45'in `flows` kapısı dâhil **on altı kapı** merge'i durdurmuyordu.
+
+**Yeni dosyalar (reuse anchor'ları):**
+- `.github/rulesets/main-required-status-checks.json` — 16 context, hepsi
+  `integration_id: 15368`; `deletion` · `non_fast_forward` · `pull_request`
+  (`required_approving_review_count: 0`) · `required_status_checks`
+  (`strict_required_status_checks_policy: true`). **GitHub bu yolu otomatik OKUMAZ.**
+- `scripts/required-checks-preflight.sh` — POST öncesi **zorunlu** salt-okuma kapısı;
+  payload'ı üretilen check adlarıyla diff'ler, göremediğini `FATAL` + `exit 1` yapar.
+- `docs/implementation/required_status_checks_setup.md` — runbook (§2.1 Lighthouse kararı,
+  §3 komut, §5 uyarılar, §6 geri alma, §7 bakım sırası).
+
+**Sınıflandırma:** 16 zorunlu · 1 ayrıldı (çıplak `CodeQL` — farklı app `57789`,
+PR-only, alert triage) · 5 gürültü (nightly/manual; `Nightly failure notice` **iki
+workflow'dan aynı adla** gelir, tek-anlamlı required yapılamaz).
+
+**Lighthouse insan kararıyla ZORUNLU** (ilk taslak varyans gerekçesiyle ayırmıştı).
+Çırpınırsa **taban indirilmez**: skor `LH_REPEATS` medyanıdır → tekrar sayısını artır.
+**`armed: false` + boş `floors` spec'i GEÇİRİR** → required olduktan sonra bu bayrak
+kapının **sessiz kapatma düğmesidir**.
+
+**Doğrulandı (canlı ↔ main'deki payload, programatik):** 16 ad + `integration_id`
+sıra dâhil birebir · `/rules/branches/main` = 4 kural · `strict: true` ·
+`current_user_can_bypass: "never"` · **kilitlenme kontrolü: üretilmemiş ad YOK**.
+
+**Dürüst sınırlar:** `bypass_actors` salt-okuma token'ına görünmüyor (kanıt POST
+yanıtı) · **ruleset repoda değil** — silinirse hiçbir CI kapısı fark etmez, drift
+kapısı **yazılmadı (açık iş)** · **A-08 DEĞİŞMEDİ** (blocker 1, verdict BLOCKED) ·
+**memory checkpoint yine yazılamadı** → borç **ADIM 47 + 48 + 49**, üç oturum;
+sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md` (bu slice Entity C'yi ekledi).
+
+**Artık geçerli:** main'e doğrudan push kapalı; her PR 16 yeşil check + main ile
+güncellik ister (`Backend` ~48 dk — bilinçli bedel, runbook §3'te tek alanı çeviren
+komut var); muafiyet yok, sahibi dâhil. Kurtarma: ruleset `20765617` → `Disabled`/sil.
+
+Tam kayıt: `PROJECT_HISTORY.md` §ADIM 49 · kickoff: `docs/ADIM49_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
 > ya da sunum slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
-> ayrışma **açık**. RC §6.7'de kalanlar: **P11-1** (branch protection — repo ayarı,
-> **insan kararı**, agent işi değil), **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**,
-> **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
+> ayrışma **açık**. **P11-1 ADIM 49'da KAPANDI** — ruleset `20765617` aktif, 16 required
+> check doğrulandı; artık RC §6.7 kalanları arasında **değil**. RC §6.7'de kalanlar:
+> **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**, **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
 > **P1-Gate3 ADIM 48'de İŞLENMEYE BAŞLANDI ama KAPANMADI** (8 kriter kapandı, 126 açık).
 > Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
 

@@ -7658,3 +7658,156 @@ reddettiği literalleri sürer.
 - **Codemap tazelemesi gerekmedi (ritüel madde 5)** — slice yeni endpoint / tablo /
   sayfa / job / dramatiq aktörü eklemedi; `backend/src`, `alembic` ve `frontend/src`
   ağaçlarına **hiç dokunulmadı**, o yüzden `repository_facts.md` girdileri de değişmedi.
+
+---
+
+## ADIM 49 — P11-1 KAPANDI: main'de required status check ruleset'i (PR #683 + repo ayarı)
+
+**Tarih:** 2026-08-12 · **PR:** #683 (`74bbd70`) · **Repo ayarı:** ruleset `20765617`,
+`2026-08-12T23:14:40+03:00` · **Migration yok** · **`ENGINE_VERSION` değişmedi** ·
+**`backend/src`, `alembic`, `frontend/src` ağaçlarına HİÇ dokunulmadı.**
+
+RC §6.7 tablosunun **repo dışı** tek kalemi kapandı. ADIM 45 `flows`'u CI kapısı
+yapmıştı ama kendi kaydında *"required status check olmadan bu kapı merge'i
+DURDURAMAZ"* diyordu; bu slice o cümleyi geçersiz kıldı — 16 kapının hepsi için.
+
+### Ölçülen başlangıç durumu (kanıt, varsayım değil)
+
+| Sorgu | Sonuç |
+|---|---|
+| `GET /branches/main` → `.protection` | `enabled: false`, `enforcement_level: "off"`, `contexts: []` |
+| `GET /rulesets` | `[]` |
+| `GET /rules/branches/main` | `[]` |
+| `GET /branches/main/protection` | **`403`** — oturum token'ı admin değil |
+
+`403` yüzünden "beklenen 404" alınamadı; ama `branches/main` gövdesi aynı gerçeği
+doğrudan söylüyor. **Token'ın körlüğü sonradan çürütüldü:** probe ruleset'i canlıyken
+aynı token onu `count: 1` olarak gördü → önceki `[]` **gerçek yokluktu**, yetki
+artefaktı değil. Doğrulama yöntemi bu deneyle **kalibre edildi**.
+
+### Sınıflandırma — 16 ZORUNLU / 1 ayrıldı / 5 gürültü
+
+Kapıların çoğu ayrı bir check **değil**, bir job'ın **adımı**. Bu yüzden required
+liste kapı listesinden kısadır ve şu eşleşme kayda geçer:
+
+- **23-rota görsel regresyon** = `npm run visual`, `E2E — real browser …(F-23)`
+  job'ının **içinde**. Görsel kapının bloklayıcı olması **o satıra** bağlı.
+- **coverage (backend ≥90) · docs-truth · şema paritesi · OpenAPI drift ·
+  acceptance ratchet · pip-audit** = `Backend — lint, type, test` adımları.
+- **frontend coverage · visual baseline platform gate · npm-audit-gate** =
+  `Frontend — lint, typecheck, build, test` adımları.
+
+**Ayrılan (Tier 2, 1 kalem): çıplak `CodeQL`.** Farklı app üretiyor
+(`github-advanced-security` / `57789`; diğer 21'i `github-actions` / `15368`),
+**yalnız PR'da** var (main commit'inde 21, PR head'inde 22 check) ve semantiği
+deterministik kapı değil, **alert triage**. Taramanın koştuğu zaten
+`CodeQL — python` + `CodeQL — javascript-typescript` ile garanti.
+
+**Gürültü (Tier 3, 5 kalem):** nightly/manual job'lar, PR'da `skipped`.
+`Nightly failure notice` ayrıca **iki workflow'dan aynı adla** üretiliyor —
+tek-anlamlı required yapılamaz.
+
+**Dependabot:** ayrılacak gürültü **yok**. `.github/dependabot.yml` var ama
+Dependabot PR'ları **aynı 22 check'i** koşar, kendi job'ını üretmez.
+
+### Lighthouse — insan kararıyla ZORUNLU
+
+İlk taslak Lighthouse'u Tier 2'de tutuyordu (ölçülmüş **98–100 varyansı**; çırpınan
+bir required check insanı kapıya güvenmemeye alıştırır). **Karar tersine çevrildi ve
+kayda geçti** (runbook §2.1). Kaydın taşıdığı asıl bilgi çırpınma anında **ne
+yapılmayacağı**:
+
+- Skor **`LH_REPEATS` geçişin MEDYANI** (varsayılan 3) → gürültünün ilacı **tekrar
+  sayısı**, taban değil.
+- **`armed: false` + boş `floors` → spec uyarı basıp GEÇER** (bootstrap durumu).
+  Required olduktan sonra asıl risk budur: bir PR bu bayrağı çevirirse kapı **yeşil**
+  görünürken hiçbir şey ölçmez. Bu bir düzeltme değil, kapının kaldırılmasıdır.
+- `TARGET_PAGES`'te olup `floors`'ta olmayan rota **FAIL** — tabansız rota delik sayılır.
+- **Düzeltilen bir hata:** ilk taslak Lighthouse tabanının "üç yerde pinli" olduğunu
+  yazmıştı; o **loadgen gecikme bandı** (P10-7), farklı kapı. Lighthouse tabanı **tek
+  dosyada**: `frontend/e2e/lighthouse-baseline.json`, rota+kategori bazında.
+
+### Ne landed
+
+| Dosya | Ne |
+|---|---|
+| `.github/rulesets/main-required-status-checks.json` | `gh api --input` gövdesi. **Elle yazılmadı — ölçülen check-run yanıtından ÜRETİLDİ.** GitHub bu yolu **otomatik OKUMAZ**; dosya ayarın versiyonlanmış kaydı ve istek gövdesidir. |
+| `scripts/required-checks-preflight.sh` | Salt-okuma ön kontrol. Payload'ı GitHub'ın **gerçekten ürettiği** check listesiyle diff'ler; göremediği adı `FATAL` + `exit 1` ile reddeder. |
+| `docs/implementation/required_status_checks_setup.md` | Ölçüm · üç kademeli sınıflandırma · alan alan komut açıklaması · arayüz adımları · uyarılar · geri alma · bakım sırası. |
+
+### Yürürlüğe giren ayar (ölçülen)
+
+`enforcement: active`, `conditions.ref_name.include: ["~DEFAULT_BRANCH"]`
+(dal yeniden adlandırılırsa kural **kendiliğinden** takip etsin diye; `"main"` yazılmadı),
+`bypass_actors: []`, kurallar: `deletion` · `non_fast_forward` · `pull_request`
+(`required_approving_review_count: 0`) · `required_status_checks`
+(`strict_required_status_checks_policy: true`, 16 context, hepsi `integration_id: 15368`).
+
+**`pull_request` kuralı dekoratif değil, taşıyıcıdır:** required status check'ler
+**yalnız PR merge'ini** kapsar — o kural olmasa `git push origin main` on altısını da
+atlardı. `0` onay bilinçli: tek kişilik repoda kendi PR'ını onaylayamazsın, `1` yazmak
+kalıcı kilit demek.
+
+### Doğrulama (canlı ruleset ↔ main'deki payload, programatik)
+
+Tüm kontroller geçti: ruleset sayısı 1 · zarf birebir · **canlı kural tipleri = dala
+ETKİN uygulananlar** (`/rules/branches/main`) · `strict: true` · **16 ad +
+`integration_id` sıra dâhil birebir** · **kilitlenme kontrolü: üretilmemiş ad YOK** ·
+çift üretilen ad required değil · `current_user_can_bypass: "never"`.
+
+GitHub iki varsayılan ekledi — `required_reviewers: []`, `allowed_merge_methods:
+["merge","squash","rebase"]`. **Sapma değil, sunucu normalizasyonu.**
+
+### Kayda değer iki olay
+
+- **Sahte 422.** "422 alıyorum" teşhisi yanlıştı: o koşuda `cd /path/to/Entropia`
+  (belgedeki **yer tutucu**) patlamış, komut ev dizininde koşup dosyayı bulamamış ve
+  **`exit=1`** vermişti. Gerçek payload ilk denemede **`201`**. **Ders: `gh api`'nin
+  exit code'unu ve gövdesini ayrı ayrı oku; "hata veriyor" bir hata SINIFI değildir.**
+- **Probe ruleset'i** (`20765470`, tek `deletion` kuralı) zarfı izole etmek için
+  kuruldu, işi bitince **silindi** — silindiği doğrulandı (envanterde yok).
+
+### Dürüst sınırlar
+
+- **`bypass_actors` bağımsız doğrulanamadı.** GET yanıtı bu alanı salt-okuma
+  token'ına **hiç vermiyor**. Kanıt, POST yanıtındaki `[]` ve onunla tutarlı
+  `current_user_can_bypass: "never"` — agent ölçümü değil.
+- **Ruleset repoda DEĞİL.** Silinirse ya da `Disabled` yapılırsa **hiçbir CI kapısı
+  fark etmez**; tek iz bu kayıttır. Drift'i yakalayacak bir kapı **yazılmadı** (canlı
+  ruleset'i `.github/rulesets/*.json` ile karşılaştıran bir job) — **açık iş**.
+- **A-08 DEĞİŞMEDİ.** Defter boş (0/4), #514 kapalı, blocker sayısı **1**, verdict
+  **BLOCKED**. Buradaki hiçbir check A-08 kanıtı değildir.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4).** `ecc` ve `claude-mem` MCP
+  sunucuları bu oturumda da bağlı değil. **Sebep oturuma özel değil, ortama yapısaldır**
+  (#690 ölçtü: remote container'da bu sunucular kayıtlı değil) — o PR bunu önceden
+  görüp *"aynı ortamda açılan ADIM 49 da aynı şekilde başarısız olur"* demişti ve
+  **öyle oldu**. Borç **ADIM 47 + 48 + 49**, üç oturum. Atlanmadı, **yapılamadı**.
+  İçerik türetilmeyi beklemiyor: **hazır** — `docs/memory/PENDING_CHECKPOINTS.md`
+  (bu slice Entity C + üçüncü observation'ı ekledi). Kalıcı çözüm (remote'a `.mcp.json`
+  ya da ritüel 4'ün remote muafiyeti) **insan kararıdır**.
+- **Codemap tazelemesi gerekmedi (ritüel madde 5)** — yeni endpoint / tablo / sayfa /
+  job / dramatiq aktörü yok; ürün ağaçlarına dokunulmadı.
+- **ADIM 48 numarası İKİ slice tarafından kullanılmış** (K-6b odak halkası **ve**
+  kabul borcu sınıf B parti 01, iki paralel oturum). `ADIM48_LANDED_KICKOFF.md`
+  içinde **iki H1** yan yana duruyor, CLAUDE.md'de iki "Son dalga — ADIM 48" bloğu
+  var. Bu slice **49** alarak çakışmayı büyütmedi; **48'in ayrıştırılması insan
+  kararıdır** (CLAUDE.md'nin kendi kuralı: numaralar yeniden atanmaz, başlık ekiyle
+  ayrılır).
+
+### Bundan sonra kırılacak şeyler (bilerek)
+
+- **main'e doğrudan push kapandı.** Her değişiklik PR'dan geçer.
+- **Her PR 16 yeşil check ister** ve `strict: true` yüzünden dal main ile güncel olmalı.
+  `Backend` ~48 dakika sürüyor (ölçüldü) → **seri merge pahalı**. Bu bilinçli bir bedel;
+  gerekçesi runbook §3'te, tek alanı çeviren komut da orada.
+- **Muafiyet yok, sahibi dâhil** (`current_user_can_bypass: "never"`). Kurtarma yolu
+  bypass aramak değil: ruleset'i `Disabled` yap ya da sil (`20765617`).
+
+### Bakım kuralı (yeni kapı / yeniden adlandırma)
+
+Bir job'ın `name:` alanını değiştirmek **kapıyı sessizce açar**. Sıra: (1) workflow'da
+`name:` değiştir → (2) payload'da **aynı** adı güncelle → (3) PR merge olup yeni ad
+**en az bir kez üretildikten sonra** `scripts/required-checks-preflight.sh <pr>` koş →
+(4) `gh api --method PUT …/rulesets/20765617 --input <payload>`. **Ters sıra kilitler.**
+Yeni bloklayıcı kapı eklerken de aynı sıra: önce merge, sonra required.
+Ön kontrolün *"Produced but NOT required"* bölümü bu adımın hatırlatıcısıdır.

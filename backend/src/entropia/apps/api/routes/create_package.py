@@ -57,6 +57,48 @@ class CreateRequestBody(BaseModel):
     equivalence_claim: bool | None = None
 
 
+class PrecheckAcceptedResponse(BaseModel):
+    """Pre-Check admission body — doc 07 §10.3 names this response ``202 accepted``.
+
+    Nothing here is a Pre-Check RESULT: the scan does not exist yet. ``scan_id`` /
+    ``attempt_no`` / ``resolved`` / ``missing`` / ``warnings`` / ``registry_fingerprint``
+    are the command's deliberate placeholders (see ``cp_cmd.run_precheck``) that keep the
+    body assignable to the client's ``PrecheckActionResult`` while the worker is still
+    running — never a synthesized PASSED/BLOCKED. Declaring the model is what puts the
+    shape into ``docs/openapi.json``; a bare ``dict`` kept the drift guard green while
+    the contract stayed invisible (O-30).
+    """
+
+    request_id: str
+    job_id: str
+    status: str
+    state: str
+    scan_id: str
+    attempt_no: int
+    resolved: int
+    missing: list[Any]
+    warnings: list[Any]
+    registry_fingerprint: str
+    request_version: int
+
+
+class CandidateAcceptedResponse(BaseModel):
+    """Candidate-generation admission body — Master Technical Reference §7.1 spells this
+    wire contract out literally (``-> 202 Accepted`` carrying the job id and the
+    ``CANDIDATE_GENERATING`` state) and doc 07 §10.3 repeats the status.
+
+    ``candidate_hash`` is empty ON PURPOSE: no candidate exists at admission, and an
+    empty hash makes it impossible to chain a draft against one the worker has not
+    produced yet (see ``cp_cmd.submit_candidate_generation``).
+    """
+
+    request_id: str
+    state: str
+    candidate_hash: str
+    job_id: str
+    request_version: int
+
+
 class DraftBody(BaseModel):
     expected_candidate_hash: str | None = None
 
@@ -138,7 +180,11 @@ def dispatch_create_package_job(job_id: str) -> None:
     job_enqueue.send_job(run_create_package_job, job_id)
 
 
-@router.post("/create-package/requests/{request_id}/pre-check")
+@router.post(
+    "/create-package/requests/{request_id}/pre-check",
+    response_model=PrecheckAcceptedResponse,
+    status_code=202,
+)
 async def run_pre_check(
     request_id: str,
     ctx: RequestContext = Depends(request_context),
@@ -156,7 +202,11 @@ async def run_pre_check(
     return result
 
 
-@router.post("/create-package/requests/{request_id}/generate-candidate")
+@router.post(
+    "/create-package/requests/{request_id}/generate-candidate",
+    response_model=CandidateAcceptedResponse,
+    status_code=202,
+)
 async def generate_candidate(
     request_id: str,
     ctx: RequestContext = Depends(request_context),
@@ -198,6 +248,18 @@ async def run_validation(
     request_version: str | None = Header(default=None, alias=_REQUEST_VERSION_HEADER),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, Any]:
+    """STILL 200 ON PURPOSE — the sibling admissions above are 202 (RC P8-B2).
+
+    This is an admission exactly like pre-check / generate-candidate: it writes a
+    durable QUEUED job and returns before the run exists. What it does NOT have is a
+    canonical status: doc 06 §7 describes the behaviour ("returns validation_run_id;
+    rows show queued/running") and doc 08 §7 lists the endpoint, but neither names a
+    code, and the Master Technical Reference §13 mandates only that long analyze/parse/
+    validate work leaves the request. The repo's own 202 habit is a FACT, not a rule —
+    inventing a wire contract in a canonical gap is what this project refuses to do,
+    so the status stays as shipped and the decision sits with the PO. Do not "fix" the
+    asymmetry without that decision; ``test_p8b2_admission_status.py`` pins it.
+    """
     result = await cp_cmd.start_package_validation_run(
         ctx.session,
         ctx.actor,
@@ -262,7 +324,15 @@ async def parse_baseline(
 ) -> dict[str, Any]:
     """Admit the head baseline's parse (F-01c). Returns ``parsing`` immediately; the
     stored CSV is read and the terminal passed/failed status written by the durable
-    ``default``-queue worker, so closing the tab never cancels it."""
+    ``default``-queue worker, so closing the tab never cancels it.
+
+    STILL 200 ON PURPOSE — same reason as ``run_validation`` (RC P8-B2). Canonical does
+    not merely omit a status for this endpoint, it does not name the ENDPOINT: doc 06
+    §7 has one baseline surface ("asset upload and parse are async") and MTR §10.2
+    lists only ``POST /package-revisions/{id}/baseline-assets``. Splitting upload (201)
+    from parse is a shipped decomposition, so there is nothing to align TO. PO decision;
+    pinned by ``test_p8b2_admission_status.py``.
+    """
     result = await cp_cmd.start_baseline_parse(
         ctx.session,
         ctx.actor,

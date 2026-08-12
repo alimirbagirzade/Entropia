@@ -869,7 +869,7 @@ açılmadı/kapatılmadı.
 | **P11-8** | Lighthouse hâlâ bağlı değil | P11 |
 | **P10-7** | Latency **ratio gate** bağlanmamış (`_ratio_gate` yazılı + unit-test'li, devrede değil; aktivasyon için 5 gecelik baseline gerekiyor) | P10 |
 | ~~**P1-B1/B2**~~ | ~~`BACKEND_LAYERS.md` başlık sayıları bayat (37→38, 14→16); `CLAUDE.md` dual-token sayısı (16) codemap'e (17) göre bayat~~ → **2026-08-11 (ADIM 40) KAPANDI — sayı güncellenerek DEĞİL, sahipliği değiştirilerek.** İkisi de yeniden ölçüldü, ikisi de doğru çıktı. B1: üç sayı codemap'ten **silindi**, üretilmiş satıra taşındı (`repository_facts.md` §Summary ▸ *Application modules*); ölçüm ayrıca sayının **göremediği** kusuru buldu — `jobs` tablosunda `delivery.py` ve `heartbeat.py`'nin **hiç satırı yoktu** (14 satır / 16 modül), ikisi eklendi. B2: `CLAUDE.md`'den sayı **kaldırıldı**, otorite `BACKEND_ROUTES.md` §DUAL-TOKEN'ın tek tek sayan listesi (**17**). Tekrarı **yeni kapı** engelliyor: `check_codemap_coverage`, negatifi 5 testle kanıtlı. Ayrıntı: **§6.7.8** | P1 |
-| ~~**P8-B1**~~ · ~~**P8-B3**~~ · **P8-B2 AÇIK KALDI** | ~~`pending_data_job_dispatch` docstring gerekçesi bayat~~ → **KAPANDI (ADIM 40):** gerekçe yeniden yazıldı — `None` **admission** yüzünden dönüyor (replay yeni iş admit etmedi, dispatch edilecek şey yok); *"gövdede terminal-state guard yok"* öncülü ADIM 21'de sona ermişti (`trade_log.py`/`trading_signal.py` gövdeleri `claim_job_for_delivery` çağırıyor — bu koşuda doğrulandı). **Davranış ve imza DEĞİŞMEDİ.** ~~`JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış~~ → **KAPANDI (ADIM 40):** aktör tablosunun **"Satır" kolonu silindi** (aktör adı zaten sembolün kendisi; 12 değerin 11'i bayattı, yalnız `system_heartbeat :39` tutuyordu) ve tablonun tamlığı + kuyruk eşlemesi kapıya bağlandı. **P8-B2 (Create-Package 200 ↔ diğer dokuz 202) BU SLICE'A GİRMEDİ ve AÇIK** — belge sapması değil, **çözülmemiş API sözleşmesi**; wire contract'ı etkiler, ürün adjudication'ı ister. **P8 KAPANMADI.** Ayrıca **YENİ: P8-B3b** (aşağıda). Ayrıntı: **§6.7.8** | P8 |
+| ~~**P8-B1**~~ · ~~**P8-B3**~~ · **P8-B2 KARARA BAĞLANDI (kısmen — iki uç PO'da)** | ~~`pending_data_job_dispatch` docstring gerekçesi bayat~~ → **KAPANDI (ADIM 40):** gerekçe yeniden yazıldı — `None` **admission** yüzünden dönüyor (replay yeni iş admit etmedi, dispatch edilecek şey yok); *"gövdede terminal-state guard yok"* öncülü ADIM 21'de sona ermişti (`trade_log.py`/`trading_signal.py` gövdeleri `claim_job_for_delivery` çağırıyor — bu koşuda doğrulandı). **Davranış ve imza DEĞİŞMEDİ.** ~~`JOBS_AND_EVENTS.md` satır numaraları ~24 satır kaymış~~ → **KAPANDI (ADIM 40):** aktör tablosunun **"Satır" kolonu silindi** (aktör adı zaten sembolün kendisi; 12 değerin 11'i bayattı, yalnız `system_heartbeat :39` tutuyordu) ve tablonun tamlığı + kuyruk eşlemesi kapıya bağlandı. ~~**P8-B2** (Create-Package 200 ↔ diğer dokuz 202) BU SLICE'A GİRMEDİ ve AÇIK~~ → **2026-08-11 (ADIM 41) KARARA BAĞLANDI — kod ekseninde YARISI, ürün ekseninde AÇIK.** Ölçüm: **13** durable admission ucu (küme `enqueue_job` transitive closure'ından **türetildi**, elle sayılmadı), **hepsi** kuyruğa alıp iş bitmeden dönüyor → senkron uç **yok**. Raporun *"diğer dokuz 202"* ifadesi de **yanlıştı**: gerçek dağılım **4×200 + 1×201 + 8×202**. Kanonik uç uç soruldu: `pre-check` (doc 07 §10.3) ve `generate-candidate` (MTR §7.1 literal wire contract) **202 der** → ikisi **hizalandı** ve gövdeleri `dict[str, Any]`'den tiplenip şemada **yayımlandı**; `validate` ve `baseline-parse` için kanonik **status vermiyor** (baseline-parse için **ucu bile adlandırmıyor**) → **kod DEĞİŞMEDİ, PO kararı bekliyor**. Sevk edilmiş 202 deseni bir **olgu** olarak kaydedildi, kanonik boşlukta kural olarak kullanılmadı. Yeni kapı sınıflandırılmamış admission ucunu kırmızıya çevirir (negatifi kanıtlı). **P8 KAPANMADI.** Ayrıca **YENİ: P8-B3b** (aşağıda). Ayrıntı: **§6.7.8** + **§6.7.9** | P8 |
 | **P8-B3b** | **YENİ (ADIM 40 ölçümü, rapor bunu bildirmemişti).** `JOBS_AND_EVENTS.md`'in **gövdesinde** ~30 adet `dosya.py:NN` / `:NN` referansı daha var (`sse.py:270`, `_wait_for_tick:166`, `actors.py:334`, …) — aktör tablosuyla **aynı** yapısal kusur: her düzenleme onları kaydırır. B3 ölçümü yalnız aktör tablosunu kapsıyordu, bu yüzden yalnız o kapatıldı; gerisini sembol adına çevirmek her referansın **tek tek doğrulanmasını** ister → **ayrı PR**. Sınır dosyanın kendisine yazıldı. **Ölçüldü, düzeltilmedi** | ADIM 40 |
 | ~~**P6-6**~~ | ~~`dropdb` bu host'ta takılıyor → `backup-verify.sh` CI/cron'da sağlam bir yedeği **başarısız** raporlayabilir~~ → **2026-08-10 (ADIM 36) KAPANDI** — yanlış-negatif **yeniden üretildi** (sağlam yedek, `exit 1`), harici çağrılar sınırlandı, **yeni `exit 3` = "doğrulanamadı"** eklendi; "yedek bozuk" (1) ile karışmıyor, "sağlam" (0) ile **asla**. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
 | ~~**P6-ek**~~ | ~~`e2e-acceptance.sh` preflight koruması **takılmış** daemon'a karşı işlemiyor → net `exit 2` yerine sonsuz asılı kalma~~ → **2026-08-10 (ADIM 36) KAPANDI** — asılı kalma **yeniden üretildi** (25s'de hâlâ koşuyordu), preflight sınırlandı; takılı daemon'a karşı **sınırlı sürede `exit 2`** ölçüldü, "daemon yok" teşhisi ayrı mesajda korundu. Ayrıntı ve ham kanıt: **§6.7.4** | P6 |
@@ -1398,6 +1398,96 @@ gövde ve `__all__` aynı, fonksiyonun beş assert'i (`test_gateway_parity_s4.py
 
 ---
 
+#### 6.7.9 P8-B2 KARARA BAĞLANDI — iki uç hizalandı, iki uç PO'da (ADIM 41, 2026-08-11)
+
+**Verdict ve blocker sayısı DEĞİŞMEDİ.** P8-B2 blocker değildi; §8 hâlâ **BLOCKED**, açık
+blocker sayısı hâlâ **üç** (1, 2, 4). **Kalem KAPANMADI** — dördün ikisi PO'da.
+
+**Önce ayırt edici ölçüm, sonra karar.** "Tutarsızlık gördüm, hizalayayım" refleksine
+direnildi: her uç için tek soru soruldu — *iş isteğin İÇİNDE mi bitiyor, yoksa kuyruğa
+alınıp bitmeden mi dönülüyor?* Küme elle sayılmadı; `application/` katmanında
+`enqueue_job`'a **transitively** ulaşan fonksiyonlar çıkarıldı ve route tablosuna eşlendi:
+**13 durable admission yüzeyi**, hepsi kuyruğa alıp dönüyor. **Senkron tamamlanan tek uç
+yok** → sonuç (b) on üçünün hiçbirinde geçerli değil.
+
+| Sınıf | Uç | Sevk edilen status |
+|---|---|---|
+| Create Package | `../pre-check` · `../generate-candidate` · `../validate` · `../baseline-parse` | **200** (dekoratörde status yok) + gövde `dict[str, Any]` |
+| Library | `POST /library/{id}/validation-runs` | **201** (`PackageValidationRunAcceptedResponse`) |
+| Diğer sekiz | backtest-runs · retries · market/research analysis · trade-log/trading-signal/package imports · purge | **202** |
+
+**Raporun kendi sayısı yanlıştı.** §6.7 satırı *"diğer **dokuz** 202"* diyordu; ölçüm
+**sekiz** 202 + **bir** 201 buldu. 201'i döndüren uç (`/library/{id}/validation-runs`)
+`../validate` ile **aynı** validation run'ı sarar — yani sapma dört değil **beş** uçtaydı
+ve raporun ifadesi bir yüzeyi görünmez kılıyordu.
+
+**Kanonik'e soruldu — ve kanonik uç uç FARKLI konuşuyor.** Sayfa belgesi kendi ucunun
+otoritesidir; bulunanlar:
+
+| Uç | Kanonik ne diyor | Sonuç |
+|---|---|---|
+| `../pre-check` | **doc 07 §10.3** birebir: *"202 accepted or idempotent completed response: job/scan id, state precheck_pending/checking"* | **(a) HİZALA → 202** |
+| `../generate-candidate` | **MTR §7.1** literal wire contract: `POST /package-requests/{id}/generate-candidate -> 202 Accepted { candidate_job_id, state:"CANDIDATE_GENERATING", … }`; **MTR §4.2**: *"Senkron LLM cevabı bekleme; 202 Accepted + job_id döndür"*; **doc 07 §10.3** tekrar eder | **(a) HİZALA → 202** |
+| `../validate` | **Status YOK.** doc 06 §7 davranışı anlatır (*"Returns validation_run_id; rows show queued/running"*), doc 08 §7 ucu listeler (*"Job status via durable event/poll"*), **MTR §13** yalnız *"uzun analyze/parse/validate işlemleri HTTP request içinde tamamlanmaya çalışılmaz"* der — bu **davranış** kuralıdır, kod kuralı değil | **(c) UYDURMA → PO** |
+| `../baseline-parse` | **Ucun kendisi bile yok.** doc 06 §7'de tek baseline yüzeyi vardır (*"asset upload and parse are async"*), MTR §10.2 yalnız `POST /package-revisions/{id}/baseline-assets` listeler. Upload(201)/parse ayrımı **sevk edilmiş bir ayrıştırmadır** → hizalanacak kanonik bir uç yok | **(c) UYDURMA → PO** |
+
+**Sevk edilmiş desen bir OLGU olarak kaydedildi, kural olarak KULLANILMADI.** 202 bu
+repoda "durable job" demek değil: `agent-directives`, `agent-runtime/pause` · `/resume`,
+`agent-runs/{id}/stop` ve `backtest-runs/{id}/cancel` de 202 döner ama `enqueue_job`
+çağırmaz. Yani gerçek desen *"etki yanıttan sonra iniyorsa 202"*tır — ve **kanonik boşlukta
+bu desenden wire contract türetmek tam olarak reddedilen şeydir**. `../validate` ve
+`../baseline-parse` bu yüzden **200 kaldı**; kod değişmedi.
+
+**Wire contract değişikliği — üç bağımlılık ÖLÇÜLDÜ, tahmin edilmedi:**
+
+* **Frontend:** `lib/apiClient.ts::executeRequest` yalnız **204**'ü ayırır, gerisinde
+  `response.ok` kullanır → 200↔202 ayrımı istemciye **görünmez**. `lib/createPackage.ts`
+  hiçbir status'e assert etmez. Frontend testleri `fetch`'i stub'lar (status'ü **testin
+  kendisi** üretir), yani sunucu status'ünden **yapısal olarak** etkilenemezler.
+* **Idempotency-Key:** `run_idempotent` yalnız **gövdeyi** saklar (`response_ref`); status
+  route dekoratöründe yaşar. O-30'un "eski zarf katı şema altında 500'e döner" tuzağı
+  burada **oluşamaz** — backfill gerekmedi, ve replay ADIM 41 testinde uçtan uca koştu.
+* **Testler:** dört ucun hiçbirinde HTTP status assert'i yoktu (`test_create_package_contract.py`
+  yalnız hata yollarını sürüyor) — yani sözleşme hem **yayımlanmamış** hem **testsizdi**.
+
+**Gövde de yayımlandı (O-30 dersi).** İki hizalanan uç `dict[str, Any]` döndürüyordu →
+drift guard yeşil kalırken sözleşme şemada **görünmüyordu**. Artık
+`PrecheckAcceptedResponse` (11 alan) ve `CandidateAcceptedResponse` (5 alan)
+`components.schemas` altında. Alan düşmediği **hand-written beklentiyle değil**, saklanan
+idempotency zarfıyla karşılaştırılarak kanıtlandı (`test_typed_contract_replay_parity.py`,
+2 yeni test): `resp.json() == IdempotencyKey.response_ref` **ve** replay aynı gövdeyi aynı
+**202** ile döndürür.
+
+**Tekrarı ne engelliyor (yeni kapı).** `backend/tests/contract/test_p8b2_admission_status.py`:
+admission kümesini **türetir** (`enqueue_job` transitive closure) ve sınıflandırma tablosuyla
+karşılaştırır. **Negatifi kanıtlı** — sınıflandırılmamış bir admission ucu eklendiğinde
+*"new/unclassified: ['/package-imports']"* ile düşer; `status_code=202` geri alındığında
+*"assert 200 == 202"* ile düşer (ikisi de bu koşuda çalıştırıldı). Ayrıca on üç ucun
+**hepsinin** yayımlanmış status'ü pinlenir: bir "tutarlılık süpürgesi" sevk edilmiş bir
+sözleşmeyi sessizce yeniden kesemez.
+
+**PO'ya sorulan (kod DEĞİŞMEDİ, karar bekliyor):**
+
+> Create-Package `../validate` ve `../baseline-parse` uçları — ve onlarla aynı run'ı saran
+> `POST /library/{id}/validation-runs` (201) — durable admission oldukları hâlde kanonik
+> bir status taşımıyor. **Üç okuma var:** (1) üçü de **202**'ye çekilir (sevk edilmiş
+> desenle tam tutarlılık; üç yayımlanmış sözleşme değişir), (2) **olduğu gibi kalır**
+> (hiçbir sözleşme kırılmaz; sayfa düzlemi 202/202/200/200 kalır), (3) yalnız
+> `../validate` 202 olur ve `validation-runs` 201'de bırakılır (ikisi farklı kaynak
+> yaratıyor gerekçesiyle). **Öneri: (1)** — üçü de admission ve 202 bu repoda tam olarak
+> "etki yanıttan sonra iniyor" demek; maliyeti bir openapi snapshot + üç pin. Ama bu bir
+> **ürün kararıdır** ve agent vermez.
+
+**Bu dalganın DOKUNMADIKLARI (dürüst sınır):** P8-B3b (`JOBS_AND_EVENTS.md` gövdesindeki
+~30 `:NN`) hâlâ açık · diğer status sınıflarının genel denetimi yapılmadı (bu slice yalnız
+**durable admission** eksenidir; 200/201 ayrımı, 204'ler ve hata kodları kapsam dışı) ·
+`BACKEND_ROUTES.md`'nin `create_package.py` tablosundaki `:NN` kolonu bu PR'ın kendi
+kaydırmasını taşımamak için **silindi**, diğer tablolar ölçülmedi.
+
+**P8 KAPANMADI.** **Blocker sayısı DEĞİŞMEDİ (üç). §8 verdict BLOCKED kalır.**
+
+---
+
 ## 7. Unchanged boundaries
 
 Bu dalga bir **doğrulama** dalgasıdır. Aşağıdaki üç sınır **ölçülerek** doğrulanmıştır:
@@ -1406,7 +1496,7 @@ Bu dalga bir **doğrulama** dalgasıdır. Aşağıdaki üç sınır **ölçüler
 |---|---|---|
 | **Migration YOK** | `git diff 1f4b88b origin/main -- backend/alembic` → **boş**; P4: `git diff … \| grep '^\+.*def create_'` → **(none)**; `alembic/versions/*.py` = **43 dosya**, tek head `0043_i08_registry_strategy_fks` (canlı `alembic heads` ile birebir) | **DEĞİŞMEDİ** |
 | **`ENGINE_VERSION` değişmedi** | Dört bağımsız yerde aynı: `domain/backtest/manifest.py:126` · `docs/generated/repository_facts.md:26` · `engine_golden_digests.json` `engine_version` · `test_oracle_portfolio_containment_gate.py:194` → hepsi `backtest-engine-v18-gap-adjusted-stop-fill`. Ayrıca golden aggregate digest baseline JSON ile **birebir** eşleşti | **DEĞİŞMEDİ** |
-| **OpenAPI değişmedi** | P1 Gate 2: `openapi_export --check` → **exit 0**, `OpenAPI snapshot is up to date: docs/openapi.json`. Yayımlanmış sözleşme canlı FastAPI uygulamasıyla aynı; `ErrorResponse` zarfı ve `PurgeAcceptedResponse` şemada duruyor. **177 path / 196 operation** — P1 ayrıca `@router.<method>` sayımını ampirik **196** ölçtü | **DEĞİŞMEDİ** |
+| **OpenAPI değişmedi** (ADIM 29 dalgası; **ADIM 41 bunu bilerek DEĞİŞTİRDİ** — iki operation `200 → 202` oldu ve iki gövde şemaya girdi, path/operation **sayısı** aynı kaldı; §6.7.9) | P1 Gate 2: `openapi_export --check` → **exit 0**, `OpenAPI snapshot is up to date: docs/openapi.json`. Yayımlanmış sözleşme canlı FastAPI uygulamasıyla aynı; `ErrorResponse` zarfı ve `PurgeAcceptedResponse` şemada duruyor. **177 path / 196 operation** — P1 ayrıca `@router.<method>` sayımını ampirik **196** ölçtü | **DEĞİŞMEDİ** |
 
 Ek olarak: `SHARED_ALLOCATION_STATUS` **`future_dev`** (containment KAPALI, §4) ve
 `backend/src` / `frontend/src` / `backend/tests` / `frontend/e2e` / `.github` ağaçlarında

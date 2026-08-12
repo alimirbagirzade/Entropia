@@ -5265,13 +5265,55 @@ rapor **§6.7.8**; devir: `docs/ADIM40_LANDED_KICKOFF.md`.
 
 ---
 
+## ADIM 41 — RC §6.7 / P8-B2: durable admission status'ü karara bağlandı (PR pending)
+
+**Karar slice'ı, bug fix değil.** "Tutarsızlık gördüm, hizalayayım" refleksine direnildi.
+
+**Ölçüm önce (küme türetildi, elle sayılmadı).** `application/` katmanında `enqueue_job`'a
+**transitively** ulaşan fonksiyonlar AST ile çıkarıldı → **13 durable admission ucu**;
+on üçünün **tamamı** kuyruğa alıp iş bitmeden dönüyor → **senkron uç YOK**. Sevk edilen
+dağılım **4×200 + 1×201 + 8×202** — yani raporun *"diğer dokuz 202"* ifadesi **yanlıştı**
+(201'i döndüren `/library/{id}/validation-runs`, `../validate` ile **aynı** run'ı sarar).
+
+**Kanonik uç uç konuşuyor.** `pre-check` (doc 07 §10.3 birebir *"202 accepted"*) ve
+`generate-candidate` (MTR §7.1 literal `-> 202 Accepted`, §4.2, doc 07 §10.3) → **202'ye
+hizalandı** ve gövdeleri `dict[str, Any]`'den tiplenip şemada **yayımlandı**
+(`PrecheckAcceptedResponse` 11 alan, `CandidateAcceptedResponse` 5 alan).
+`../validate` ve `../baseline-parse` için kanonik **status vermiyor** (baseline-parse için
+**ucu bile adlandırmıyor**) → **kod DEĞİŞMEDİ, PO kararı bekliyor**; docstring'lere *neden
+200 kaldığı* yazıldı. Sevk edilmiş 202 deseni **olgu** olarak kaydedildi, kanonik boşlukta
+kural olarak kullanılmadı (202 dönen beş uç `enqueue_job` bile çağırmıyor).
+
+**Bağımlılıklar ölçüldü, tahmin edilmedi:** frontend `apiClient` yalnız 204'ü ayırır
+(2xx ayrımı istemciye görünmez, frontend'e tek satır dokunulmadı) · `run_idempotent` yalnız
+**gövdeyi** saklar, status route dekoratöründe → O-30'un backfill tuzağı **oluşamaz** ·
+dört ucun hiçbirinde HTTP status assert'i yoktu.
+
+**Yeni kapı:** `tests/contract/test_p8b2_admission_status.py` (5 test) admission kümesini
+**türetip** sınıflandırma tablosuyla karşılaştırır → **sınıflandırılmamış yeni admission ucu
+CI'da kırmızı**; on üç ucun yayımlanmış status'ü pinli. **Negatifi iki yönden kanıtlandı.**
+Alan düşmediği saklanan idempotency zarfıyla kanıtlandı (`test_typed_contract_replay_parity.py`
++2 test: `resp.json() == IdempotencyKey.response_ref`, replay aynı gövde + aynı **202**).
+
+**AÇIK — bilerek girmedi:** `../validate` + `../baseline-parse` (+ `validation-runs` 201)
+**PO kararı bekliyor** (öneri §6.7.9'da: üçünü de 202'ye çekmek) · **P8-B3b** · genel status
+denetimi bu slice'ın kapsamı DEĞİL. **P8 KAPANMADI.**
+
+Migration YOK · alembic head, `ENGINE_VERSION`, `SHARED_ALLOCATION_STATUS` değişmedi ·
+**OpenAPI snapshot bilerek değişti** (iki operation `200 → 202`, path/operation sayısı aynı) ·
+blocker sayısı **üç**, §8 verdict **BLOCKED**. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 41;
+rapor **§6.7.9**; devir: `docs/ADIM41_LANDED_KICKOFF.md`.
+
+---
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
-> **ADIM 38, 39 ve 40 bunu DEĞİŞTİRMEDİ** — üçü de test/kapı/belge slice'ıydı, motor
+> **ADIM 38, 39, 40 ve 41 bunu DEĞİŞTİRMEDİ** — üçü de test/kapı/belge slice'ıydı, motor
 > eksenine dokunmadı. Test ekseninde kalan RC §6.7 kalemleri: **P11-1** (branch
 > protection — repo ayarı, **insan kararı**, agent işi değil), **P11-6b**, **P11-8**
-> (Lighthouse). Belge ekseninde kalan: **P8-B2** (ürün kararı), **P8-B3b**.
-> Paste-ready resume prompt: `docs/ADIM40_LANDED_KICKOFF.md` en altta.
+> (Lighthouse). Belge ekseninde kalan: **P8-B2'nin PO yarısı** (`../validate` +
+> `../baseline-parse` + `validation-runs` — ADIM 41 ölçtü, kararı PO'ya bıraktı),
+> **P8-B3b**. Paste-ready resume prompt: `docs/ADIM41_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
 var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —

@@ -1,5 +1,6 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **DEVREDİLDİ.** Güncel devir belgesi: `docs/ADIM41_LANDED_KICKOFF.md`.
+> Sayısal gerçekler için otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 40 landed — devir belgesi (RC §6.7 / P1-B1+B2 + P8-B1+B3)

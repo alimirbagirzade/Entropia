@@ -6621,3 +6621,98 @@ hem **gerçek ağaçta** kanıtlandı (`heartbeat.py` satırı silindi + `run_tr
 bozuldu → kapı tam iki doğru bulgu verdi, sonra geri alındı) · tam backend suite
 **4034 passed / 1 xfailed / 0 failed**, coverage **%93,58** (kapı ≥90), exit **0**, 23 dk 13 sn
 (izole DB `entropia_adim40_counts`) · `git diff origin/main -- docs/ | grep '^-## '` **boş**.
+
+---
+
+## ADIM 41 — RC §6.7 / P8-B2: durable admission status'ü karara bağlandı (PR pending)
+
+**Ne yapıldı:** raporun P8-B2 kalemi (*"Create-Package durable admission uçları 200 dönüyor,
+diğer dokuzu 202"*) **adjudicate edildi**. Bir bug fix değil, bir karar slice'ı: önce ayırt
+edici ölçüm, sonra kanonik, en sonda kod.
+
+### 1. Ayırt edici ölçüm (küme türetildi, elle sayılmadı)
+
+Tek soru: *"iş isteğin İÇİNDE mi bitiyor, yoksa kuyruğa alınıp bitmeden mi dönülüyor?"*
+`application/` katmanında `enqueue_job`'a **transitively** ulaşan fonksiyonlar AST ile
+çıkarıldı ve route tablosuna eşlendi → **13 durable admission HTTP yüzeyi**. On üçünün
+**tamamı** kuyruğa alıp dönüyor (yanıtta `job_id` + terminal-olmayan state; sonuç worker'dan
+`resource.changed` ile iniyor) → **senkron tamamlanan uç YOK**, yani sonuç (b) hiçbirinde
+geçerli değil.
+
+Sevk edilen dağılım: **4×200** (Create Package `pre-check` · `generate-candidate` ·
+`validate` · `baseline-parse`, hepsi gövdede `dict[str, Any]`) + **1×201**
+(`POST /library/{id}/validation-runs`) + **8×202**.
+
+**Raporun sayısı yanlıştı:** *"diğer dokuz 202"* değil, **sekiz** 202 + **bir** 201. 201'i
+döndüren uç `../validate` ile **aynı** validation run'ı sarar — sapma dört değil beş uçtaydı.
+
+### 2. Kanonik uç uç soruldu — ve uçlar farklı cevap verdi
+
+| Uç | Kanonik | Sonuç |
+|---|---|---|
+| `../pre-check` | **doc 07 §10.3** birebir *"202 accepted … state precheck_pending/checking"* | **(a) 202'ye hizalandı** |
+| `../generate-candidate` | **MTR §7.1** literal wire contract (`-> 202 Accepted`), **§4.2** *"202 Accepted + job_id döndür"*, doc 07 §10.3 | **(a) 202'ye hizalandı** |
+| `../validate` | **status YOK** — doc 06 §7 / doc 08 §7 davranışı anlatır, MTR §13 yalnız *"HTTP request içinde tamamlanmaya çalışılmaz"* der | **(c) PO kararı bekliyor, kod değişmedi** |
+| `../baseline-parse` | **ucun kendisi yok** — doc 06 §7'de tek baseline yüzeyi, MTR §10.2 yalnız `/package-revisions/{id}/baseline-assets`; upload(201)/parse ayrımı sevk edilmiş bir ayrıştırma | **(c) PO kararı bekliyor, kod değişmedi** |
+
+**Sevk edilmiş desen OLGU olarak kaydedildi, kural olarak kullanılmadı.** 202 bu repoda
+"durable job" demek değil: `agent-directives`, `agent-runtime/pause` · `/resume`,
+`agent-runs/{id}/stop`, `backtest-runs/{id}/cancel` de 202 döner ama `enqueue_job` çağırmaz.
+Gerçek desen *"etki yanıttan sonra iniyorsa 202"*tır — ve kanonik boşlukta bu desenden wire
+contract türetmek tam olarak reddedilen şeydir.
+
+### 3. Wire contract değişikliğinin bağımlılıkları ÖLÇÜLDÜ
+
+- **Frontend kırılmıyor:** `lib/apiClient.ts::executeRequest` yalnız **204**'ü ayırır, gerisi
+  `response.ok`; `lib/createPackage.ts` status'e assert etmez. Frontend testleri `fetch`'i
+  stub'lar (status'ü testin kendisi üretir) → sunucu status'ünden **yapısal olarak**
+  etkilenemezler. Frontend'e **tek satır dokunulmadı**.
+- **Idempotency-Key tuzağı oluşamıyor:** `run_idempotent` yalnız **gövdeyi** saklar
+  (`response_ref`); status route dekoratöründedir. O-30'daki "eski zarf katı şema altında
+  500" durumu burada mümkün değil → **backfill gerekmedi**, replay uçtan uca koştu.
+- **Testler:** dört ucun hiçbirinde HTTP status assert'i yoktu — sözleşme hem yayımlanmamış
+  hem testsizdi.
+
+### 4. Kod değişikliği (yalnız iki dekoratör + iki model)
+
+`routes/create_package.py`: `run_pre_check` ve `generate_candidate` artık
+`status_code=202` + `response_model` taşıyor (**`PrecheckAcceptedResponse`** 11 alan,
+**`CandidateAcceptedResponse`** 5 alan). Komut gövdeleri, OCC (`X-Request-Version`),
+Idempotency-Key davranışı, route **yolları** ve react-query key'leri **DEĞİŞMEDİ**.
+`run_validation` / `parse_baseline` docstring'lerine *neden 200 kaldığı* yazıldı — bir
+sonraki okuyucu bunu "tutarsızlık" diye raporlamasın.
+
+### 5. Yeni kapı + negatif kanıt
+
+`backend/tests/contract/test_p8b2_admission_status.py` (5 test): admission kümesini
+**türetir** ve sınıflandırma tablosuyla karşılaştırır — **sınıflandırılmamış yeni bir
+admission ucu CI'da kırmızıdır**. On üç ucun hepsinin yayımlanmış status'ü pinlenir, böylece
+bir "tutarlılık süpürgesi" sevk edilmiş bir sözleşmeyi sessizce yeniden kesemez.
+**Negatifi iki yönden kanıtlandı** (ikisi de bu koşuda çalıştırıldı): tablodan bir uç
+silinince *"new/unclassified: ['/package-imports']"*, `status_code=202` geri alınınca
+*"assert 200 == 202"*.
+
+Alan düşmediği **hand-written beklentiyle değil** saklanan idempotency zarfıyla kanıtlandı
+(`test_typed_contract_replay_parity.py`, 2 yeni test): `resp.json() == IdempotencyKey.response_ref`
+**ve** replay aynı gövdeyi aynı **202** ile döndürür.
+
+### Dürüst sınırlar
+
+- **P8 KAPANMADI.** `../validate` + `../baseline-parse` (+ onlarla aynı run'ı saran
+  `validation-runs` 201) **PO kararı bekliyor**. Öneri raporda yazılı: üçünü de 202'ye
+  çekmek — ama bu bir **ürün kararıdır**, agent vermez.
+- **P8-B3b** hâlâ açık (`JOBS_AND_EVENTS.md` gövdesindeki ~30 `:NN`).
+- Bu slice **yalnız durable admission eksenidir**; genel status denetimi (200/201 ayrımı,
+  204'ler, hata kodları) **yapılmadı**.
+- `BACKEND_ROUTES.md`'nin `create_package.py` tablosundaki `:NN` kolonu **silindi** — bu
+  PR'ın kendi kaydırması on bir numarayı birden bayatlatıyordu (ADIM 40'ın aktör tablosu
+  kararının aynısı). Diğer codemap tabloları **ölçülmedi**.
+- Migration, alembic head, `ENGINE_VERSION`, `SHARED_ALLOCATION_STATUS`: **değişmedi**.
+- **Blocker sayısı üç, §8 verdict BLOCKED.**
+
+Rapor: §6.7 tablosu (P8-B2 satırı) + **§6.7.9**; §7'nin *"OpenAPI değişmedi"* sınırı da
+işaretlendi (iki operation `200 → 202`, path/operation **sayısı** aynı).
+
+> **Numara notu:** bu slice oturum promptunda `ADIM 38b` diye adlandırılmıştı; main'de
+> ADIM 38/39/40 zaten merge olmuştu, bu yüzden kayıt **ADIM 41** olarak açıldı. Repo kuralı
+> gereği merge edilmiş numaralar yeniden atanmaz.

@@ -189,9 +189,28 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `7dd1dfe`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `04c6a9c`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
+> **Son dalga — ADIM 49 (kabul borcu sınıf B, parti 02 — dış work object run
+> provenance'ı, docs 03/04/05): 5 kriter KAPANDI, `partial` 118 → 113,
+> `debt_class.B` 87 → 82. BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict
+> BLOCKED.** Kapananlar: `TL-12` `TL-20` `TS-11` `TS-21` `AOS-21`. **Ürün kodu
+> DEĞİŞMEDİ.** Eksik olan tek şey bir harness'tı — *dış work object içeren
+> kompozisyonda TAMAMLANMIŞ Backtest Run*; yeni
+> `tests/integration/test_external_object_run_provenance.py::_attach_trade_log` +
+> `::_completed_run`, diğer builder'lar **aynen** yeniden kullanıldı.
+> **ÜÇ AÇIK BULGU (insan/PO):** `TL-11.c3` **KAPATILAMAZ** — allocation-enabled run
+> bu build'de **admission'da fail-closed** (`SHARED_ALLOCATION_STATUS=future_dev`),
+> sınıfı **C** görünüyor ve **ADIM 48'in "kapatılabilir" önerisi YANLIŞTI**;
+> `TL-16` D görünüyor; `TL-01.c4` yol sapması. **Hiçbiri yeniden sınıflandırılmadı —
+> o tavanı YÜKSELTİRDİ.** **Parti seçmeden ÖNCE ÖLÇ:** kriterin adlandırdığı davranış
+> `backend/src`'te sevk edilmemişse sınıfı yanlıştır. **İki slice aynı "ADIM 48"
+> numarasını almıştı** — numaralar yeniden atanmadı, **başlık ekiyle** ayrıldı
+> (`ADIM 48 (K-6b)` / `ADIM 48 (kabul borcu B-01)`); `repository_facts --check` bunu
+> **yakalamaz**. **P1-Gate3 KAPANMADI** (A=1 · B=82 · C=6 · D=32, açık **121**).
+> `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
+>
+> Öncesinde ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): **TEK CSS deklarasyonu.**
 > `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli
 > **hiçbir** zeminde 3:1'i geçmiyordu (beyaz 2.68:1, `#f5f5f5` 2.46:1, `.dropdown-blue`
 > **1.00:1**), yenisi **her** zeminde geçiyor (beyaz 15.91:1; en kötü zemin `#0092c8`
@@ -205,8 +224,7 @@ Before stopping a working session, produce **ALL** of the following:
 > **Memory checkpoint yine YAZILAMADI** (ecc/claude-mem bağlı değil) — borç artık **ADIM 47 +
 > ADIM 48**, üst üste iki oturum. `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
 > Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
-> **Son dalga — ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
-> 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
+> Öncesinde ADIM 48 (kabul borcu B-01 — doc 05 Trade Log backend yüzeyi): **8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
 > DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kapananlar: `TL-03` `TL-06` `TL-07`
 > `TL-08` `TL-15` `TL-17` `TL-21` `TL-23`. **Ürün kodu DEĞİŞMEDİ** (tek satır bile).
 > **RATCHET YALNIZ AŞAĞI İNER** — `uncovered`/A/C/**D** tavanları el değmedi,
@@ -218,9 +236,11 @@ Before stopping a working session, produce **ALL** of the following:
 > `AccessDenied`). **İKİ BULGU AÇIK (insan/PO):** `TL-16`'nın sınıfı **şüpheli** —
 > `c4`'ün istediği "409 kanonik durum" alanı **yok**, B değil **D** görünüyor;
 > `TL-01.c4` **yol sapması** (kriter `GET /packages`, sevk edilen `GET /library`).
-> **Sıradaki parti:** `TL-11.c3`+`TL-12.c3`+`TL-20.c3` — üçü de *Trade Log içeren
-> kompozisyonda TAMAMLANMIŞ Backtest Run* harness'ını paylaşır. **P1-Gate3 KAPANMADI**
-> (A=1 · B=87 · C=6 · D=32, açık toplam **126**).
+> **O slice'ın "sıradaki parti" önerisi KISMEN YANLIŞTI** (ADIM 49'da ölçüldü):
+> `TL-12.c3`+`TL-20.c3` kapandı, ama **`TL-11.c3` KAPATILAMAZ**. Tarihsel metin:
+> ~~`TL-11.c3`+`TL-12.c3`+`TL-20.c3` — üçü de *Trade Log içeren
+> kompozisyonda TAMAMLANMIŞ Backtest Run* harness'ını paylaşır.~~ **P1-Gate3 KAPANMADI**
+> (o gün: A=1 · B=87 · C=6 · D=32, açık toplam **126**).
 > `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
 >
 > Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): **§6.7.9 + §6.7.5 KAPANDI.

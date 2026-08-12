@@ -6,11 +6,10 @@
 **Rapor tarihi:** 2026-08-07 · **Dalga:** ADIM 29 / P1–P13 (V18 RC verification)
 **Kaynak:** `docs/releases/evidence/2026-08-07/` — 13 kanıt belgesi + 34 ham çıktı dosyası
 
-> **FINAL VERDICT: BLOCKED** — **ÜÇ** bağımsız eksende kapatılmamış blocker var
+> **FINAL VERDICT: BLOCKED** — **İKİ** bağımsız eksende kapatılmamış blocker var
 > (A-08 insan kabul denetimi koşulmadı ve imzalı sapması yok · P5/P6'nın kabul akışları
-> koştu ama `flows` bir CI kapısı değil · react-router HIGH advisory'si imzasız
-> dondurulmuş); imzalı sapma D-10 **yalnız** WCAG 1.4.3 eksenini kapsar ve bu
-> blocker'ların hiçbirini kapatmaz. Gerekçe: §7.
+> koştu ama `flows` bir CI kapısı değil); imzalı sapma D-10 **yalnız** WCAG 1.4.3
+> eksenini kapsar ve bu blocker'ların hiçbirini kapatmaz. Gerekçe: §7.
 >
 > **2026-08-10 (ADIM 31) — blocker sayısı 4 → 3.** Eski blocker **(3) Alertmanager yok**
 > **KAPANDI**: bildirim yolu sevk edildi, fail-closed, ve ateşleyen gerçek bir alarmın bir
@@ -35,6 +34,11 @@
 > kapanması **P11-1'i (branch protection) kapatmaz**: bir *required status check* kuralı
 > olmadan kırmızı bir check merge'i fiilen durduramaz ve bu bir depo ayarı + insan
 > kararıdır.
+> **2026-08-12 (ADIM 44) — blocker sayısı 3 → 2.** Eski blocker **(4) react-router
+> `GHSA-qwww-vcr4-c8h2` imzasız dondurulmuş** **KAPANDI**, ve **imzayla değil,
+> kaldırmayla**: advisory upstream'de yeniden kapsamlandırıldı (`first_patched` 7.x hattı
+> için **7.18.2**), kurulu ağaç zaten 7.18.2, `npm audit` **0 vulnerability** (§6.4).
+> Verdict **BLOCKED kalır** — 1 ve 2 açıktır.
 
 ---
 

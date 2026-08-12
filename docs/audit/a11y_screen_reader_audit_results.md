@@ -23,9 +23,10 @@
 > Nothing in this repository — not the axe-core ratchet, not the keyboard spec,
 > not the automated prechecks added alongside this file — may be transcribed
 > into these tables as a screen-reader result. **A partly filled worksheet is
-> evidence for exactly the cells a person filled and for nothing else**; a `—`
-> is not a quiet `PASS`, and the completion counters below are deliberately not
-> rounded up.
+> evidence for exactly the cells a person filled and for nothing else.**
+> An empty template is not evidence — and almost every cell below is still
+> empty. A `—` is not a quiet `PASS`, and the completion counters are
+> deliberately not rounded up.
 >
 > **The tracking issue is CLOSED while this worksheet is 2/184 filled.** Read the
 > divergence block below before citing **GitHub #514** as tracking anything.
@@ -210,10 +211,12 @@ A `FAIL` **must** carry a finding ID from §3.
 | 22 | `/user-manual` | 21 | — | — | — | — | — | — | — | — | — |
 | 23 | `/future-dev` | 22 | — | — | — | — | — | — | — | — | — |
 
-**SR-2 Section A completion:** **0 / 23 routes complete.** Route 1 (`/`) is
-*partially* run — A-1 and A-2 only — and a partially run route is not a
-completed one. The two cells it does carry are reported below rather than
-rounded up.
+**SR-2 Section A completion:** 0 / 23 routes.
+
+> **`0`, not `1` — route 1 is partial, and partial is not complete.** Route 1
+> (`/`) carries A-1 and A-2 and nothing else. A route counts here only when all
+> eight checks carry a result, so the two cells it does hold are reported in the
+> table rather than rounded up into this counter.
 
 > **ᴷ³ on route 1's A-2.** The auditor navigated the rotor's Landmarks list and
 > heard `banner`, `navigation` and `main`. **`contentinfo` was absent** — this

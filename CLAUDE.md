@@ -207,9 +207,28 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `e2fa521`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `2a90fe3`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 53 (hafıza türetilir oldu + iki sessiz ajan kapısı, 2026-08-13):
+> **Son dalga — ADIM 54 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
+> satır bile değişmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> K-3 (`contentinfo` landmark yok, 23/23) **kod yazmadan** kapandı: eksik olan ürün değil
+> **BEKLENTİYDİ** — hiçbir WCAG SC'si contentinfo zorunlu kılmaz (1.3.1 *var olan* yapıyı
+> ister), v18'de footer yok. **Checklist A-2 artık ÜÇ landmark bekliyor**
+> (`banner`/`navigation`/`main`); dört arayan bir denetçi yanlış `FAIL` yazar. Kayıt
+> `a11y_ci_ratchet_and_adjudication.md` **§4b `Karar # : D-11`** — bu belge artık imzalı
+> a11y kararlarının **sicili** (D-10 kontrast + D-11 landmark); **imzalayan adı olmadan
+> D-xx YAZILMAZ**. **Boş/gizli footer AÇIKÇA REDDEDİLDİ** (sayacı yeşile çevirir, rotor
+> kullanıcısına hiçbir şey vermez) ve **advisory SUSTURULMADI** — karar dispozisyonu
+> belirler, ölçümü değil. **D-10 ile karıştırma:** D-10 gerçek bir ihlali (1.4.3, 45 düğüm)
+> imzalar, D-11 **olmayan bir yükümlülüğü** kaydeder. Yönü doğrulayan insan gözlemi:
+> A-08 SR-2 route 1'de denetçi üç landmark duydu, yokluğu **kozmetik** buldu (tek rota
+> genellenmez). **Yan iş:** audit §6 K-tablosunda K-4/K-5/K-6 satırları **iki kezdi**
+> (ikinci küme bayat: K-4 `Open`, K-5 `21/23`) — merge artefaktı, üç fazla satır silindi.
+> **A-08 DEĞİŞMEDİ:** defter **2/184** hücre, SR-1 hiç başlamadı, **0/4** kriter, #514 açık.
+> Açık: **K-5** (22/23; maliyet 204 başlık / ~40 dosya / 5 tag-scoped CSS kuralı) ve
+> **K-6a** → yalnız A-08; **K-7** ölçüldü. `PROJECT_HISTORY.md` §ADIM 54 · RC §6.5.
+>
+> Öncesinde ADIM 53 (hafıza türetilir oldu + iki sessiz ajan kapısı, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > Kapanış ritüeli **md. 4 yeniden yazıldı (insan kararı)**: memory checkpoint elle yazılmaz,
 > `docs/PROJECT_HISTORY.md`'den **türetilir** (`scripts/memory_index.mjs --write --only <slug>`)
@@ -448,8 +467,9 @@ Before stopping a working session, produce **ALL** of the following:
 > izleme issue'su #514 **2026-08-12'de yeniden AÇILDI** — hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
-> K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
-> (ilk koşu soğuk, eksik raporlar) ·
+> **K-2 + K-4 KAPANDI (#685), K-6b KAPANDI (#688), K-3 ADJUDICATED (D-11, kod yok)**;
+> **K-5 + K-6a yalnız A-08 ile kapanır**, **K-7** ölçüldü ama düzeltilmedi. K-5/K-7'nin
+> sayısı **koşudan koşuya oynuyor** (ilk koşu soğuk, eksik raporlar) ·
 > **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
 > serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·
 > delivery proof'u **CI kapısı değil** · **monitörü izleyen yok** ·

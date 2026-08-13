@@ -1,6 +1,10 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
-> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 54 (2026-08-13).** Canlı kickoff artık
+> `docs/ADIM54_LANDED_KICKOFF.md` (K-3 adjudicated, imzalı karar D-11 — kod yok).
+> Aşağısı ADIM 53 kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri
+> bayat olabilir. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
+> Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
+> `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 53 LANDED — hafıza türetilir oldu (agentmemory) + iki sessiz ajan kapısı onarıldı
 

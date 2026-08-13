@@ -1036,13 +1036,15 @@ downgrade yapılmadı.
 > bu repoda bir freeze'in en olası sonu, gerekçesinin bayatlamasıdır. `expires` alanı
 > tam olarak bunun için var.
 
-### 6.5 K-2..K-6 — ÜÇÜ KAPANDI (ADIM 50 + #688), üçü açık
+### 6.5 K-2..K-6 — DÖRDÜ ÇÖZÜLDÜ (ADIM 50 · #688 · D-11), İKİSİ A-08'de
 
 `docs/audit/a11y_screen_reader_audit_results.md` §6.
-**2026-08-12, iki slice:** **ADIM 50** (PR #685) PO'nun K-2 + K-4 kararını sevk etti;
-**`#688`** (main'de ADIM 48 adıyla kayıtlı) K-6b'yi kapattı. **Kalan üçün durumu tek tip DEĞİL, karışmasın:**
-**K-3** bir ürün/checklist kararı bekliyor (A-08'e bağımlı **değil**), **K-5 ve K-6a**
-A-08 denetimine **bağımlıdır**.
+**Dört kalem çözüldü, ÜÇ AYRI yolla — fark sayıdan önemli.** **ADIM 50** (PR #685) PO'nun
+K-2 + K-4 kararını **kodla** sevk etti; **`#688`** (main'de ADIM 48 adıyla kayıtlı) K-6b'yi
+**kodla** kapattı; **D-11** (2026-08-13) K-3'ü **kod yazmadan adjudicate etti** — eksik olan
+ürün değil **beklentiydi**, checklist A-2 artık üç landmark bekliyor.
+**Kalan ikisi tek tip:** **K-5 ve K-6a** A-08 denetimine **bağımlıdır** ve başka hiçbir şey
+onları kapatamaz.
 **Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Bu kalemlerin hiçbiri
 blocker değildi; kapanmaları A-08'i ilerletmez.
 
@@ -1052,7 +1054,7 @@ insan-gözü yarısı **açık kaldı**.
 | # | Bulgu | Kapsam | WCAG | Statü |
 |---|---|---|---|---|
 | **K-2** | ~~**Skip link yok**~~ → **2026-08-12 (ADIM 50, PR #685) KAPANDI.** `Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş `Skip to main content` linki render ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. **Fixle birlikte kayda geçen düzeltme:** 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu** — axe `bypass` bu yüzden hep yeşildi — yani bu bir **uygunluk** değil **ergonomi** düzeltmesiydi; §6.5'in ilk yazımı bunu "WCAG 2.4.1" diye etiketleyerek olduğundan ağır göstermişti | was 23 / 23 | 2.4.1 | **FIXED** |
-| **K-3** | **`contentinfo` landmark yok** — shell hiç `<footer>` render etmiyor; checklist A-2 dört landmark bekliyor, üç var | **23 / 23 route** | 1.3.1 / 2.4.1 | Open — reported, not gated |
+| **K-3** | ~~**`contentinfo` landmark yok** — checklist A-2 dört landmark bekliyor, üç var~~ → **2026-08-13 ADJUDICATED, imzalı karar D-11** (`docs/implementation/a11y_ci_ratchet_and_adjudication.md` §4b). **Eksik olan ürün değil BEKLENTİYDİ:** hiçbir WCAG SC `contentinfo` zorunlu kılmaz (1.3.1 *var olan* yapıyı ister), Entropia footer sevk etmez, v18 mockup'ta footer yok. **A-2 artık ÜÇ landmark bekliyor.** Görünür footer fiyatlandırıldı ve **reddedildi** (23 baseline + Lighthouse yeniden tabanlama + yeni v18 sapma kaydı); **boş/gizli footer AÇIKÇA reddedildi** — sayacı yeşile çevirip rotor kullanıcısına hiçbir şey vermezdi. **Bu satırın eski `1.3.1 / 2.4.1` etiketi kalemi olduğundan ağır gösteriyordu** ve düzeltildi. Yönü doğrulayan insan gözlemi: A-08 SR-2, route 1, A-2 → denetçi üç landmark duydu, yokluğu **kozmetik** buldu | was 23 / 23 | — (hiçbir SC zorunlu kılmıyor) | **PO-APPROVE (D-11)** — precheck advisory'si **SUSTURULMADI** |
 | **K-4** | ~~**`/user-manual`'da `<h1>` yok**~~ → **2026-08-12 (ADIM 50, PR #685) KAPANDI.** Sayfa artık `<h1 class="page-title">` kullanıyor; `.page-title` sınıf tabanlı olduğu için değişiklik **yalnız semantik** — ve bu bir çıkarım değil **ölçüm**: görsel kapı (`@visual`, job `94223919309`) **23/23 passed**, tek bir baseline yeniden üretilmedi. Regresyon pini `specs/17-page-coverage.spec.ts` `level: 1` — eksik `<h1>`'i **BLOCKING** yapmak değerlendirildi ve **bilerek yapılmadı** (sonda ilk DOM'u okur, sayfaların veri render'ıyla yarışır; çırpınan kapı kapısızlıktan kötüdür). **YAN ETKİ:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu → **K-5'in kümesine girdi**, K-5 satırına bak | was 1 route | 1.3.1 / 2.4.6 | **FIXED** |
 | **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); K-2 ve K-4 kapandıktan sonra setin **en yüksek erişimli** gözlemi. `/market-data` **iki seviye** atlıyor (`h1 → h4`) | **22 / 23 route** — ADIM 50'de yeniden ölçüldü (CI job `94221023796`); önceki `21 / 23`. **+1 = `/user-manual`**, K-4'ün fix'i onu bu kümeye **soktu** (bilinen ve kabul edilen bedel). Set dışında yalnız `/` kaldı | 1.3.1 (A-3) | Open — reported, not gated |
 | **K-6a** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 | Open — **insan gözü gerekiyor** |
@@ -1090,6 +1092,15 @@ düzeltme hiçbir yerleşimi değiştirmeyen **tek bir deklarasyondur**. Diğerl
 D-10 DEĞİLDİR:** D-10 **1.4.3** (metin) ekseninde imzalı kalıcı sapmadır; K-6b **1.4.11**
 (metin-dışı) ölçütüdür — ayrı ölçüt, ayrı eşik, ve `--accent` token'ına **dokunulmadı**.
 **axe bu kuralı koşmuyordu** — a11y ratchet'inin yeşil olması bu soru için kanıt değildi.
+
+**K-3 üçüncü bir yol açtı: kod değil, BEKLENTİ değişti (D-11).** K-6b'de eşik sayısaldı ve
+ürün onu karşılamıyordu → kod değişti. K-3'te ise **eşiğin kendisi uydurmaydı**: dört
+landmark beklentisi checklist'in kendi cümlesiydi, hiçbir WCAG SC'sinden gelmiyordu. O
+yüzden doğru düzeltme ürüne footer eklemek değil, **beklentiyi ürünün gerçeğine
+hizalamak** oldu. Bu ayrım kayda değer çünkü **üçüncü seçenek — boş/gizli footer — tam
+olarak "sayacı memnun et" çözümüydü ve reddedildi.** Bir kalem üç şekilde kapanabilir:
+kod düzelir (K-2/K-4/K-6b), beklenti düzelir (K-3), ya da insan duyar (K-5/K-6a — hâlâ
+açık). Dördüncü bir yol, yani ölçümü susturmak, bu dosyada **yok**.
 
 ### 6.6 İzleme kaydı ↔ kod ayrışması — tekrarlayan desen (P8 §4.3, P10 §3.3)
 

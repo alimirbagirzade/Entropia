@@ -62,7 +62,7 @@ Sayfa listesi = `frontend/e2e/utils/screenshotMatrix.ts::TARGET_PAGES` (axe tara
 | # | Kontrol | Beklenen | Kaynak |
 |---|---|---|---|
 | A-1 | Sayfa yüklendiğinde başlık duyurusu | Sayfa adı duyulur; `<h1>` sayfa başına **bir** tane | rules §Semantic HTML |
-| A-2 | Landmark gezinimi (NVDA `D` / VO rotor) | `banner`, `navigation`, `main`, `contentinfo` ayrı ayrı bulunur | rules §Semantic HTML |
+| A-2 | Landmark gezinimi (NVDA `D` / VO rotor) | **ÜÇ** landmark ayrı ayrı bulunur: `banner`, `navigation`, `main`. **`contentinfo` BEKLENMEZ** — Entropia footer sevk etmez; imzalı karar **D-11** (2026-08-13), bkz. `a11y_ci_ratchet_and_adjudication.md` §4b | rules §Semantic HTML + D-11 |
 | A-3 | Başlık gezinimi (NVDA `H` / VO rotor) | `h1→h2→h3` sırası atlamasız | rules §Semantic HTML |
 | A-4 | Tüm etkileşimli öğeler sanal imleçle bulunabiliyor | Buton/link/alan listesi eksiksiz | rules §Keyboard |
 | A-5 | Buton mu link mi doğru duyuruluyor | Aksiyon = "button", gezinme = "link"; `div onClick` YOK | rules §Semantic HTML |

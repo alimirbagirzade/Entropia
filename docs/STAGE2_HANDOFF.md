@@ -5971,7 +5971,6 @@ Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 57 · `docs/ADIM57_LANDED_KICKOFF.md
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
 > ya da sunum slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
-> slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
 > ayrışma **açık**. **P11-1 ADIM 49'da KAPANDI** — ruleset `20765617` aktif, 16 required
 > check doğrulandı; artık RC §6.7 kalanları arasında **değil**. RC §6.7'de kalanlar:

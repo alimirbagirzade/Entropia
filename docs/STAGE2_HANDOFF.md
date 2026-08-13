@@ -5402,7 +5402,7 @@ yarısı, B3–B6) · Lighthouse kapısı P11-1 açık olduğu için *required s
 
 ---
 
-## ADIM 44 — RC blocker 4 KAPANDI, blocker 1 koşulabilir hâle geldi (PR pending)
+## ADIM 44 — RC blocker 4 KAPANDI, blocker 1 koşulabilir hâle geldi (PR #678)
 
 **Migration YOK** · `ENGINE_VERSION` değişmedi · **bağımlılık sürümü değişmedi.**
 Base `e719af1`. (Seed prompt kendini "ADIM 41" sanıyordu; o numara **#668'de** kullanıldı

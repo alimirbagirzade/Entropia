@@ -5859,7 +5859,7 @@ Defterde artık **beş** açık bulgu var; **parti seçmeden ÖNCE ÖLÇ**.
 **P1-Gate3 KAPANMADI** — kalan borç A=1 · B=80 · C=6 · D=32 (açık toplam **119**).
 Tam kayıt: `PROJECT_HISTORY.md` §ADIM 54 · kickoff: `docs/ADIM54_LANDED_KICKOFF.md`.
 
-## Stage — ADIM 55: agentmemory sunucusu yerele alındı, semantik geri çağırma (PR pending)
+## Stage — ADIM 55: agentmemory sunucusu yerele alındı, semantik geri çağırma (PR #699, `c4cd932`)
 
 **Ürün kodu değişmedi.** Migration yok, `ENGINE_VERSION`/OpenAPI aynı. **A-08 blocker AÇIK,
 verdict BLOCKED** (bu slice ölçmedi).

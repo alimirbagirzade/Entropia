@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Entropia deposunun kendi plugin marketplace'i.",
-    "version": "0.4.1"
+    "version": "0.4.2"
   },
   "plugins": [
     {
       "name": "entropia-maintenance",
       "source": "./plugins/entropia-maintenance",
       "description": "Entropia'ya ozgu ajanlar, adjudicated invariant skill'leri ve uretilmis dosyalari koruyan hook'lar.",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "category": "development"
     }
   ]

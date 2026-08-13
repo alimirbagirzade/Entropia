@@ -1,8 +1,7 @@
 <!-- doc-status: historical -->
-> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
-> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
-> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
-> (üretilmiş, CI'da `--check` ile kapılı). **Superseded by `docs/ADIM58_LANDED_KICKOFF.md`.**
+> **SUPERSEDED — ADIM 58 bu belgeden SONRA indi.** Kayıt olarak doğrudur; devam
+> noktası için `docs/ADIM58_LANDED_KICKOFF.md`'ye bak. Sayısal otorite:
+> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 57 LANDED — K-3 adjudicated (imzalı karar D-11) · sıradaki slice için kickoff
 

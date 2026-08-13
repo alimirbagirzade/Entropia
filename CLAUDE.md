@@ -87,6 +87,12 @@ Before stopping a working session, produce **ALL** of the following:
   EDIT/WRITE to an existing file triggers fact-force (present 4 facts: importers / affected
   public API / data schema / user request verbatim -> retry). First Bash of a session
   triggers a one-time fact gate.
+- **İki bloklayıcı guard artık plugin kurulumundan bağımsız koşar (ADIM 58).**
+  `.claude/settings.json` `guard-git.sh` (Bash) + `guard-generated.sh` (Edit/Write) betiklerini
+  doğrudan kaydeder. Pratik sonucu: **`git push --force … main`, self-merge (`gh pr merge`) ve
+  bu desenleri yalnızca İÇEREN bir heredoc/döngü Bash çağrını bloklar** — eşleşme komut
+  dizesinin tamamındadır (fail-closed, bilinçli). Böyle bir metni **Write ile dosyaya yaz,
+  sonra dosyayı koştur.** Davranış kapısı `scripts/hook-guard-proof.sh` (`Frontend` job'ında).
 - **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
   — `addopts` artık `--cov-fail-under=90` taşıyor, yani **tam suite** koşusu CI'daki coverage
   kapısını da doğruluyor (**ölçülen toplam %92.06**, 2712 passed; frontend %84.67 line —
@@ -206,9 +212,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `916a49b`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `e547391`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 58 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
+> **Son dalga — ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ (dört ağaçta 0 satır). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > verdict BLOCKED.** Kanıtlandı: `run_portfolio` (`portfolio_engine.py:518`),
 > `project_portfolio_run` ve `build_portfolio_manifest` üretimde **çağrısız** (son ikisinin
@@ -225,11 +231,46 @@ Before stopping a working session, produce **ALL** of the following:
 > **`combine_item_runs` bağımsız modun da yoludur** — hepsini faz döngüsüne yönlendiren bir
 > wiring bayraksız her bağımsız Result'ı yeniden fiyatlar. **Ortam tuzağı:** alt küme
 > koşusundan önce `uv sync --all-extras`, yoksa **exit 4** (`--no-cov` tanınmaz).
-> **Auto-merge ÖLÇÜLDÜ:** #707 açıkken main üç kez ilerledi, numara **taşınmadı**.
-> `PROJECT_HISTORY.md` §ADIM 58 · `docs/ADIM58_LANDED_KICKOFF.md` ·
+> **NUMARA: bu slice 58 → 59 taşındı.** Denetim PR'ı `#707` ADIM 58 adıyla merge edildi;
+> kapanış PR'ı `#718` sıra beklerken main **`#715`**'i aldı ve o **`feat(adim-58)`** adıyla
+> indi. **Merge edilmiş ad kazanır**; dal/commit `stage-58` yazar, slice **ADIM 59**'dur.
+> **Auto-merge'ün kapatamadığı pencere ÖLÇÜLDÜ:** çare denetim PR'ında **çalıştı** (#707,
+> üç main ilerlemesi, taşıma yok), ama **kapanış** PR'ı `Backend`'in ~50 dk'sı boyunca açık
+> kalmak zorunda → paralel oturum o pencerede numarayı alabiliyor. **Numarayı kapanış
+> commit'ini YAZARKEN doğrula, merge'den hemen önce `grep '^## ADIM'` ile bir kez daha.**
+> `PROJECT_HISTORY.md` §ADIM 59 · `docs/ADIM59_LANDED_KICKOFF.md` ·
 > `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
 >
-> Öncesinde **HEAD `31ed27d`** · **ADIM 57 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
+>
+> Öncesinde **HEAD `e0c25e6`** ·
+> **ADIM 58 (plugin hook'ları kurulumdan bağımsız oldu, 2026-08-13): ÜRÜN KODU
+> DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> **Ölçüm: `enabledPlugins` KURULUM DEĞİLDİR** — `installed_plugins.json` bu container'da
+> **boş**, çünkü kurulum bir **onay istemi** ister ve remote etkileşimsizdir (yapılandırma
+> hatası DEĞİL; `agent-config-gate` adı çözüyor). Yani `guard-git.sh`'in docs-regresyon
+> kapısı #590/#604'ten sonra yazılmıştı ve **hiç koşmamıştı**. `.claude/settings.json` artık
+> `guard-git.sh` + `guard-generated.sh`'i `${CLAUDE_PROJECT_DIR}` ile **doğrudan** kaydediyor —
+> **dosya kopyalanmadı, ikilenen yalnız KAYIT**. **Çift koşma bilinçli taviz** (yerelde plugin
+> kuruluysa iki kez koşar; ölçülen **≈25 ms/çağrı**, salt-okur + idempotent); alternatifi
+> *"kuruluysa atla"* **fail-open** olurdu. Gerekçe `plugins/entropia-maintenance/README.md`
+> §Çift koşma'da — *"kopya bırakılmadı"* kararı sessizce çiğnenmedi, **açıkça gözden geçirildi**.
+> YENİ KAPI **`scripts/hook-guard-proof.sh`** → `Frontend` job'ına **ADIM** (yeni job DEĞİL):
+> **19 beklenti = 6 engelleme + 13 GEÇİŞ**, çünkü her şeyi engelleyen guard pozitif-yalnız
+> testi geçer. Üç negatif kontrol ailesi de kırmızı verdi; **kapı bu oturumun kendi Bash
+> çağrılarını üç kez blokladı** (canlı kanıt). **Ölçülmüş sınır:** `guard-git.sh` **komut
+> dizesinin tamamında** desen arar → `feat/main-menu` de, bu desenleri *içeren* bir
+> heredoc/döngü de bloklanır (fail-closed, düzeltilmedi) → metni **Write ile dosyaya yaz**.
+> **Plugin HÂLÂ kurulu değil** — ajanlar/skill'ler/komutlar remote'ta yüklenmiyor; kurmak
+> **insan kararı**. `PROJECT_HISTORY.md` §ADIM 58 · `docs/ADIM58_LANDED_KICKOFF.md`.
+>
+> **NUMARA: bu slice ADIM 57 yazıldı, `#698` o adı MERGE EDİLMİŞ olarak aldı → ADIM 58.**
+> Kural değişmedi: **numaralar yeniden atanmaz, merge edilmiş ad kazanır**; dal commit
+> mesajları `adim-57` yazar. Aynı gün main'e inen K-3/D-11 slice'ı da üç ad taşımıştı
+> (54 → 55 → 56 → 57) — bu haftanın **üçüncü** çakışma dizisi.
+>
+> Öncesinde **HEAD `31ed27d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **Öncesinde ADIM 57 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
 > satır bile değişmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > K-3 (`contentinfo` landmark yok, 23/23) **kod yazmadan** kapandı: eksik olan ürün değil
 > **BEKLENTİYDİ** — hiçbir WCAG SC'si contentinfo zorunlu kılmaz (1.3.1 *var olan* yapıyı

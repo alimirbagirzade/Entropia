@@ -5035,6 +5035,13 @@ başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi*
 **RC verdict'i BLOCKED kalır, blocker sayısı DEĞİŞMEDİ (üç).** Tam kayıt:
 `docs/PROJECT_HISTORY.md` §ADIM 34.
 
+> **Sonradan düzeltildi (PR #702, 2026-08-13).** Yukarıdaki *"başlık bu iki belgede hâlâ
+> `(PR pending)` diyor"* tespiti **artık geçerli değildir**: 22 başlık son eki gerçek PR
+> numarasını taşıyor (ADIM 32 → **#655**) ve repoda `(PR pending)` biçiminde **hiçbir `## `
+> başlığı kalmadı**. Guard'ın rename'i delete'ten ayıramadığı tespiti **hâlâ doğrudur** —
+> kapı `ENTROPIA_DOCS_GUARD=off` ile bilinçli aşıldı, aşmadan önce `## ` sayılarının
+> `origin/main` ile birebir aynı kaldığı kanıtlandı. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 33.
+
 ---
 
 ## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu landed (PR #659)
@@ -5983,7 +5990,55 @@ K-3'ün kapanması A-08'i **ilerletmez**; bu kalem hiç blocker değildi.
 **Açık kalan:** **K-5** (22/23, maliyet ölçülü: 204 başlık / ~40 dosya / 5 tag-scoped CSS
 kuralı) ve **K-6a** — ikisi de **yalnız A-08** ile kapanır. **K-7** ölçüldü, düzeltilmedi.
 
-## Stage — ADIM 58: P-A1 shared portfolio erişilebilirlik denetimi (PR #707)
+## Stage — ADIM 58: plugin hook'ları kurulumdan bağımsız oldu (iki bloklayıcı guard)
+
+**Ürün kodu DEĞİŞMEDİ** (`backend/src`, `alembic`, `frontend/src` el değmedi). Migration
+yok, `ENGINE_VERSION` değişmedi. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict
+BLOCKED.**
+
+**Ölçüm önce, karar sonra: `enabledPlugins` KURULUM DEĞİLDİR.**
+`/root/.claude/plugins/installed_plugins.json` bu container'da `{"version":2,"plugins":{}}`
+— **boş**. Yani ADIM 53'ün *"depoya güvenen her oturumda önerilir/etkinleşir"* cümlesi
+remote'ta **yanlıştı** ve `guard-git.sh`'in docs-regresyon kapısı — #590/#604'ten sonra tam
+onları durdurmak için yazılmıştı — **hiç koşmamıştı**. Sebep yapılandırma hatası **değil**
+(`agent-config-gate.mjs` adı çözüyor, yeşil): kurulum bir **onay istemi** ister, remote
+container etkileşimsizdir.
+
+**Ne landed:** `.claude/settings.json` artık `guard-git.sh` (Bash) ve `guard-generated.sh`
+(Edit/Write/MultiEdit/NotebookEdit) betiklerini `${CLAUDE_PROJECT_DIR}` üzerinden
+**doğrudan** kaydediyor. **Dosya kopyalanmadı** — tek kaynak plugin'in içinde, ikilenen
+yalnız **kayıt**. `${CLAUDE_PLUGIN_ROOT}` kullanılamazdı: onu plugin çalıştırıcısı kurar.
+
+**Çift koşma bilinçli bir tavizdir ve `plugins/entropia-maintenance/README.md` §Çift koşma'da
+gerekçesiyle yazılıdır** — *"kopya bırakılmadı"* kararı sessizce çiğnenmedi, açıkça gözden
+geçirildi ve kapsamı **dosya**yla sınırlandı. Bedel ölçüldü: **≈25 ms/çağrı** (20 koşu:
+24 / 27 ms), yan etki yok, iki guard da salt-okur + idempotent. Alternatifi
+(*"kuruluysa atla"*) **fail-open**'dır; çift koşma fail-closed. **Yalnız BLOKLAYAN ikisi**
+ikilendi — `post-edit-lint` / `session-brief` / `vendor-react-rules` hatırlatmadır.
+
+**YENİ KAPI — `scripts/hook-guard-proof.sh`, `Frontend` job'ına ADIM olarak** (yeni job
+DEĞİL; ruleset `20765617`, check adı job adıdır ve değişmedi). `agent-config-gate.mjs`
+**kabloyu** kanıtlar, davranışı kanıtlayamaz: bir `case` kolunu düzenlemek her yolu geçerli
+bırakırken guard'ı sessizce etkisizleştirir. Yeni kapı **19 beklenti** koşar — **6
+engelleme + 13 geçiş**, çünkü her şeyi engelleyen bir guard pozitif-yalnız testi geçerken
+işe yaramaz olur. Kaydın kendisi de assert edilir: `settings.json` betiklerden birini
+adlandırmayı bırakırsa kırmızı.
+
+**Üç negatif kontrol ailesi koşuldu ve üçü de kırmızı verdi:** guard davranışı (kapıyı
+etkisizleştir / her şeyi engelle) · `agent-config-gate` yeni yolları (yeniden adlandır /
+`chmod -x` — ikinci durumda **her iki yapılandırmayı da** adlandırdı) · kaydın silinmesi.
+**Canlı kanıt:** kapı bu oturumun kendi Bash çağrılarını **üç kez** bloklladı.
+
+**Ölçülmüş sınır (düzeltilmedi, fail-closed):** `guard-git.sh` **komut dizesinin tamamında**
+desen arar → `feat/main-menu` de engellenir, bu desenleri *içeren* bir heredoc/döngü de.
+Kaçınma yolu: metni Write ile bir **dosyaya** yaz, dosyayı koştur. Ayrıca
+`docs-history-guard.py` (origin/main'e karşı, 2 dosya) ile `guard-git.sh`'in docs kapısı
+(staged diff, tüm `docs/`) **farklı eksenlerdir**; tekilleştirmek birini kaybettirir.
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 58 · `docs/ADIM58_LANDED_KICKOFF.md`
+(paste-ready resume prompt en altta).
+
+## Stage — ADIM 59: P-A1 shared portfolio erişilebilirlik denetimi (PR #707)
 
 **Migration:** yok. **Kod:** `backend/src`, `frontend/src`, `backend/alembic`,
 `backend/tests` → `git diff --stat` **0 satır**. **OpenAPI / OCC / Idempotency / route /
@@ -6048,12 +6103,23 @@ dokunur, 46 golden digest ADR §15 R-4'ün riskidir, ADR §16 insan kapısı yer
 stepper için *"was never written"* diyor (ADR §12 AMENDMENT / #602 bunu geçersiz kılar);
 GH **#582**'nin gövdesi üç iddiada bayat (durumu **OPEN** ve doğru).
 
+**NUMARA NOTU — bu slice 58 → 59 taşındı.** Denetim PR'ı `#707` ADIM 58 adıyla merge
+edilmişti; kapanış PR'ı `#718` sıra beklerken main **`#715`**'i aldı ve o PR
+**`feat(adim-58)`** adıyla indi. **Merge edilmiş ad kazanır**, taşınan taraf merge
+edilmemiş olandır. Dal ve commit mesajları `stage-58` yazar; slice'ın adı **ADIM 59**.
+`#715`'in kayıtlarına dokunulmadı, yalnız kickoff'unun `doc-status`'ü düşürüldü.
+**Ders (auto-merge'ün kapatamadığı pencere):** auto-merge denetim PR'ında **çalıştı**
+(#707 üç main ilerlemesine rağmen taşınmadı), ama **kapanış** PR'ı `Backend`'in ~50
+dk'sı boyunca açık kalmak zorunda ve paralel bir oturum o pencerede aynı numarayı
+alabiliyor. **Numarayı kapanış commit'ini YAZARKEN doğrula, ve merge'den hemen önce
+`grep '^## ADIM' docs/PROJECT_HISTORY.md` ile BİR KEZ DAHA.**
+
 **Süreç:** ADIM 57'nin çaresi **ölçüldü** — auto-merge açıkken main #707 altında üç kez
 ilerledi, yeşilin ardından merge oldu, **numara taşınmadı**.
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
-> **ADIM 58 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli
+> **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli
 > (faz-bölünmüş bar) **KAPALI** — `_ItemStepper` `engine.py:756`, `E(t)` girişi
 > `_phase_entry(bar, *, equity)` `engine.py:2448`. **Kalan tek engel (b):** üç faz book
 > eder, `ItemParticipant` tarif ister. Bu `run_engine`'in bar gövdesine dokunur →

@@ -1,168 +1,108 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 59 bu belgeden SONRA indi.** Kayıt olarak doğrudur; devam
+> noktası için `docs/ADIM59_LANDED_KICKOFF.md`'ye bak. Sayısal otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
-# ADIM 58 LANDED — P-A1 shared portfolio erişilebilirlik denetimi · sıradaki slice için kickoff
+# ADIM 58 landed — plugin hook'ları kurulumdan bağımsız, sıradaki oturum
 
-> **NUMARA NOTU — bu kez taşınmadı, ve sebebi kayda değer.** ADIM 57 numara taşımanın
-> yapısal sebebini (`Backend` ~50 dk + ruleset `strict: true` → yoğun günde **koşu bandı**)
-> ve çaresini (**auto-merge**) kaydetmişti. Bu slice çareyi **ölçtü**: #707 açıkken main
-> **üç kez** ilerledi (`76a7a8c`, `e9a9ca3`, `7c662ad` — üçü de main'i içeri alan merge),
-> auto-merge 18:41Z'de açıldı ve yeşilin ardından **19:34:32Z'de merge edildi**. Numara
-> taşınmadı. **Kayıt: çare çalışıyor.** Elle beklemek bandı kapatmıyordu; auto-merge
-> kapatıyor.
+> Kayıt: `docs/PROJECT_HISTORY.md` §ADIM 58. Bu belge **devam noktasıdır**, kayıt değil.
 
----
+## Nerede duruyoruz
 
-## Neredeyiz
+**Ürün ekseninde hiçbir şey değişmedi.** `backend/src`, `alembic`, `frontend/src` el
+değmedi; migration yok, `ENGINE_VERSION` aynı. **A-08 blocker AÇIK, blocker sayısı 1,
+verdict BLOCKED.** Bu slice ajan araç zincirini onardı, ürünü değil.
 
-**Blocker sayısı 1 (yalnız A-08), verdict BLOCKED.** ADIM 58 bunu **değiştirmedi** ve
-değiştirmeyi hedeflemedi — salt-okunur bir denetim slice'ıydı.
+Kapanan boşluk şuydu: `plugins/entropia-maintenance` **kurulmuyor** ve bu yüzden onun
+içindeki iki **bloklayıcı** guard remote'ta hiç koşmuyordu — üstelik biri (`guard-git.sh`)
+tam olarak üç kez yaşanmış bir regresyonu (#590 211 satır, #604 194 satır) durdurmak için
+yazılmıştı ve hiçbir CI kapısı `docs/` okumuyor.
 
-- **Ürün kodu DEĞİŞMEDİ.** `backend/src` · `frontend/src` · `backend/alembic` ·
-  `backend/tests` → `git diff --stat origin/main` = **0 satır**. Migration yok,
-  `ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS = "future_dev"` (containment KAPALI).
-- **Sevk edilen tek artefakt:** `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`
-  (579 satır, `doc-status: historical`).
-- **A-08 DEĞİŞMEDİ:** defter **2 / 184** hücre, SR-1 hiç başlamadı, çıkış kriterleri
-  **0 / 4**, `#514` **açık**.
+## Bu slice'ın bıraktıkları (reuse anchor'ları, tam sembol adlarıyla)
 
----
+| Anchor | Ne |
+|---|---|
+| `.claude/settings.json` → `hooks.PreToolUse` | iki yeni kayıt; yollar `${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/…` |
+| `scripts/hook-guard-proof.sh` | guard **davranış** kapısı — 19 beklenti (6 engelleme, 13 geçiş) + kaydın kendisini assert eder |
+| `.github/workflows/ci.yml` → `frontend` job → adım **`Agent hook behaviour proof`** | kapının CI bağlantısı (**yeni job değil**) |
+| `scripts/agent-config-gate.mjs` | değişmedi — yeni yolları zaten kapsıyor, negatifi bu slice'ta 3 mutasyonla kanıtlandı |
+| `plugins/entropia-maintenance/README.md` §**Çift koşma** | *"kopya bırakılmadı"* kararının gözden geçirilmiş hâli + ölçülmüş bedel |
+| `.claude/README.md` | `enabledPlugins` ≠ kurulum ölçümü; ADIM 53'ün fazla iddialı cümlesi düzeltildi |
 
-## Bu slice'ın bıraktıkları (reuse anchor'ları — tam adlarıyla)
+## Sıradaki oturum için işaretler
 
-| Anchor | Nerede | Ne için |
-|---|---|---|
-| `closure_w0_shared_portfolio_2026-08-13.md` | `docs/audit/` | §0 doğrulama tablosu · iki mermaid akış · importer haritası · tripwire assert-assert analizi · A1–A22 KARŞILANAN/KARŞILANMAYAN · en riskli beş seam |
-| `_ItemStepper` | `domain/backtest/engine.py:756` | adapter'ın oturacağı substrat (faz-bölünmüş bar) |
-| `_build_stepper` | `domain/backtest/engine.py:793` | stepper'ı kuran fabrika; `run_engine` (`:3279`) onun dokuz satırlık sürücüsü |
-| `_phase_carry` / `_phase_held` / `_phase_entry` | `engine.py:1913` / `:2264` / `:2448` | describe/book ayrımının **tam olarak** dokunacağı üç yer |
-| `ItemParticipant` | `domain/backtest/portfolio_engine.py:238` | adapter'ın karşılaması gereken üç hook |
-| `run_portfolio` | `domain/backtest/portfolio_engine.py:518` | faz döngüsü — üretimde **çağrısız** |
-| `_ScriptedParticipant` / `simulate` | `tests/unit/oracles/portfolio_harness.py:156` / `:210` | adapter'ın **şekil** referansı (davranış referansı DEĞİL) |
-| containment gate | `tests/unit/oracles/test_oracle_portfolio_containment_gate.py` | E5'in kıracağı beş assert: `:180` `:184` `:218` `:222` `:125`/`:129` |
-| iki fail-closed kapısı | `commands/backtest_run.py:542` · `domain/allocation/rules.py:154` | tek doğruluk kaynağı `domain/allocation/capability.py:105` |
+**Ana eksen değişmedi: `## Next` hâlâ PR B** (`ItemParticipant` adaptörü +
+`jobs/backtest_engine.py:298` call site) ve o **ADR §16 insan kapısının** arkasında.
+Detay: `docs/ADIM35_LANDED_KICKOFF.md`.
 
----
+**Bu slice'ın açık bıraktıkları — hiçbiri blocker değil:**
 
-## Tavizsiz kurallar (bu slice'ta kanıtlandı)
+1. **Plugin hâlâ kurulu değil.** Ajanlar, skill'ler, slash command'lar ve öteki üç hook
+   remote'ta yüklenmiyor. Kurmak **insan kararıdır** (yerel `/plugin install`). Bu slice
+   sadece iki bloklayıcı guard'ı kurtardı — **"plugin artık çalışıyor" DEME.**
+2. **`guard-git.sh` aşırı-engelliyor** (komut dizesinin tamamında desen arar). Bilinçli,
+   fail-closed. Düzeltmek istersen: eşleşmeyi `git push` argüman listesine daraltmak
+   gerekir ve **o daraltma bir kaçırma riski açar** — daraltmadan önce
+   `scripts/hook-guard-proof.sh`'e o kaçırmayı yakalayan bir beklenti ekle.
+3. **`Frontend` job'ının yeni adımı CI'da koşmadı** (yerel koştu). İlk yeşil koşuda
+   job log'undan **gerçekten koştuğunu** doğrula — ADIM 34'ün "0-job'lı sahte yeşil"
+   dersi burada da geçerli.
 
-1. **Containment-gate'in YEŞİLİ ters okunur.** Geçmesi shared engine'in aktif olduğunu
-   **değil**, üretimin `run_portfolio`'ya **ulaşmadığını** kanıtlar. İki merkezi assert
-   negatiftir (`assert callers == []`); `5000.00` fixture'ı da sevk edilen fold **hâlâ
-   yanlış** olduğu için geçer. `3000.00` raporladığı gün düşer — **o düşüş kabul kanıtıdır.**
-2. **E5 tripwire'ı SİLMEZ, DARALTIR.** Boş beklenti → pinli çağıran allowlist'i
-   (`_AUTHORISED_LOOP_CALLERS` / `_AUTHORISED_PROJECTION_CALLERS`) + `:182-184`/`:222`'yi
-   bayrağa koşullu yapmak + *"hiçbir şey çağırmıyor"*un yerine geçecek asıl assert:
-   worker'ın `shared_allocation_is_executable` / `shared_allocation_requested`'tan geçtiği.
-   **`:225-233` ve `:103` E5'te DEĞİŞMEZ** — onlar *lift* kapısıdır. Bir E5 kendini
-   `:230` ya da `:125`'i düzenlerken bulursa sessizce **ADIM 20 olmuştur**.
-3. **`combine_item_runs` BAĞIMSIZ modun da yoludur** (`jobs/backtest_engine.py:348-372`).
-   Doc 13 §1.1 bağımsız modu **birinci sınıf** ilan eder. Tüm çok-item koşularını faz
-   döngüsüne yönlendiren bir wiring, **bayraksız, `ENGINE_VERSION` bump'sız ve kullanıcıya
-   görünmeden** her bağımsız-mod kompozit Result'ını yeniden fiyatlar. Dal **tek** yerde
-   ve `alloc_probe is not None and shared_allocation_is_executable()` olmalı.
-4. **Tripwire bir METİN taramasıdır, AST değil.** `:180` bare `"run_portfolio(" in text`
-   eşler → bir üretim modülündeki **yorum satırı** bile kırmızıya çevirir. `:222` çıplak
-   `"portfolio_projection"` alt dizisini eşler. Mevcut docstring'ler yalnız parantezsiz
-   ``run_portfolio`` yazdıkları için hayatta.
-5. **Adapter'ı `execution/` İÇİNE koymak importer kontrolünü (`:170`) yapısal olarak
-   çözer** (`path.parent.name == "execution"` muaf), **1-5'i çözmez**.
-6. **Alt küme koşarken `uv sync --all-extras` ÖNCE.** Soğuk venv'de
-   `uv run pytest -q --no-cov …` **exit 4** verir:
-   `unrecognized arguments: --cov=entropia … --no-cov`. Test hatası değil, ortam hatası.
-7. **Bayat tabanlı bir denetim ölçümlerini KOPYALAMAZ.** Bu slice'ın prompt'u `31ed27d`
-   diyordu, main `0d8bf8f`'ti; dokuz ölçümün ikisi **yol** olarak, biri **anlam** olarak
-   yanlıştı. Kopyalanan ölçüm denetim değil **yankıdır**.
+## Yöntem — bu slice'ta işe yarayan çalışma döngüsü
 
----
-
-## Açık kalanlar (ADIM 58 bunları KAPATMADI)
-
-- **`ItemParticipant` adapter'ı + worker call site — YAZILMADI.** Tek kalan engel (b).
-- **A1 · A2 · A3 · A4/A18 · A5 · A9 · A15 · A16 · A21** — hepsi KARŞILANMIYOR.
-- **GH #544 (NET)** ve **#559 (DST)** — ikisi de **açık** `product-decision`.
-- **GH #582** — **açık**; durumu doğru, **gövdesi üç iddiada bayat** (`run_portfolio`
-  artık var · stepper artık var · A17 xfail 4 → **1**). **Düzeltilmedi: insan kaydı.**
-- **Containment gate docstring `:146`** — hâlâ stepper için *"was never written"* diyor;
-  ADR §12 AMENDMENT (#602) bunu geçersiz kılar. **Düzeltilmedi: denetim salt-okunurdu.**
-- **A-08** · **K-5** (22/23) · **K-6a** · **K-7** — hiçbirine dokunulmadı.
-- **P1-Gate3** kapanmadı.
-
----
-
-## Sıradaki iş
-
-**İki yol var, ikisi de meşru — ama biri kapıya bağlı.**
-
-**(A) Adapter'ın saf-refactor yarısı (kapı gerektirmez).** `_phase_carry` / `_phase_held` /
-`_phase_entry`'i describe/book olarak ayır: her biri ne yapacağını **döndürsün**, book
-etme ayrı bir çağrı olsun. **Kabul ölçütü tektir: 46 golden digest'in HİÇBİRİ oynamayacak**
-ve `backend/tests/unit/engine_golden_digests.json` dosyası değişmeyecek. Kendi PR'ında
-inisin. **Digest oynarsa DUR** — o bir re-price'tır, restructure değil (ADR §15 R-4).
-
-**(B) Wiring (ADR §16 insan kapısı GEREKİR).** Adapter + `run_portfolio` call site +
-tripwire daraltması + A21 checkpoint yeniden konumlandırması + `PriorItemInterval`
-emekliliği. **#544 açıkken lift edilmez** (ADR §9.4 onu ADIM 19'dan önce/onunla istiyordu).
-
-**Seam sıralaması (en riskliden):** (1) faz describe/book ayrımı · (2) tripwire'ın beş
-assert'i · (3) `combine_item_runs`'ın bağımsız-mod yolu · (4) cancellation checkpoint'leri
-item→tick · (5) `PriorItemInterval` ↔ kanonik arbitrasyon çifte adjudication'ı.
-Gerekçeler: `docs/audit/closure_w0_shared_portfolio_2026-08-13.md` §"Top 5 riskiest seams".
+- **Ölç, sonra karar ver.** Bu slice'ın tamamı tek bir `cat installed_plugins.json`
+  ölçümüne dayanıyor. "Yapılandırma bozuk" teşhisi yanlış olurdu ve bir sonraki oturumu
+  `settings.json`'ı onarmaya gönderirdi.
+- **Pozitif yeşil kanıt değil.** Her kapı, geçirmesi gereken girdiyle de ateşlendi; kapının
+  kendisi de üç mutasyonla kırmızıya çevrildi. Bir guard'ın *her şeyi* engellemesi
+  pozitif-yalnız bir testi geçer.
+- **Yeni CI job'ı EKLEME.** Ruleset `20765617` 16 required check adını **başlıkla** tanır;
+  üretilmeyen bir ad tüm merge'leri kilitler (ADIM 49). Var olan job'a **adım** ekle.
+- **Hook artık senin de kapındır.** `git push --force`, self-merge ya da bu desenleri
+  *içeren* bir heredoc/döngü Bash çağrını bloklar. Metni Write ile **dosyaya** yaz, sonra
+  dosyayı koştur.
 
 ---
 
 ## Paste-ready resume prompt
 
 ```
-[ORTAK SÖZLEŞME bloğunu buraya yapıştır]
+Entropia — ADIM 59
 
-ENTROPIA — ADIM 59 (ADIM 58'in ardından)
+ÖNCE CLAUDE.md §Session START protokolünü uygula: git fetch, git log --oneline
+origin/main -6, gh pr list --state all. ADIM numarasını `grep '^## ADIM'
+docs/PROJECT_HISTORY.md | tail -3` ile DOĞRULA — bu depoda numara beş kez taşındı ve
+merge edilmiş ad kazanır.
 
-Session START protokolünü uygula. Otorite sırası:
-  1. docs/ADIM58_LANDED_KICKOFF.md  (bu belge — sen buradan devam ediyorsun)
-  2. docs/audit/closure_w0_shared_portfolio_2026-08-13.md  (P-A1 denetimi, ölçülmüş)
-  3. docs/STAGE2_HANDOFF.md §"Stage — ADIM 58" + §Next
-  4. docs/adr/0002-unified-clock-portfolio-simulation.md §12 / §13.1 / §14 / §16
-  5. docs/generated/repository_facts.md  (SAYISAL OTORİTE)
+DURUM (ADIM 58 sonrası, doğrula):
+- A-08 blocker AÇIK, blocker sayısı 1, verdict BLOCKED. #514 açık (human-only —
+  agent ne kapatabilir ne açabilir). Hiçbir belgeye A-08 için Complete/PASS yazma.
+- alembic head `0043_i08_registry_strategy_fks`, ENGINE_VERSION değişmedi,
+  SHARED_ALLOCATION_STATUS = future_dev.
+- ADIM 58 ürün koduna dokunmadı: iki bloklayıcı ajan hook'unu (guard-git.sh,
+  guard-generated.sh) .claude/settings.json'a doğrudan bağladı — plugin remote'ta
+  KURULMUYOR (onay istemi gerekir, container etkileşimsiz). Yeni kapı:
+  scripts/hook-guard-proof.sh, `Frontend` job'ında ADIM olarak.
+- P1-Gate3 KAPANMADI (A=1 · B=80 · C=6 · D=32, açık 119).
 
-DURUM (doğrula, kopyalama):
-  - Blocker 1 (yalnız A-08), verdict BLOCKED. SHARED_ALLOCATION_STATUS = future_dev.
-  - run_portfolio / project_portfolio_run / build_portfolio_manifest: üretimde ÇAĞRISIZ.
-  - ItemParticipant'ın üretim implementasyonu YOK.
-  - İlk sapma: application/jobs/backtest_engine.py:299 (for prepared in prepared_items:)
-  - CLAUDE.md §4.1 (a) KAPALI: _ItemStepper engine.py:756, E(t) girişi
-    _phase_entry(bar, *, equity) engine.py:2448. Kalan tek engel (b).
+SIRADAKİ İŞ — seçeneklerden birini seç ve GEREKÇESİNİ YAZ:
+(a) `## Next` ana ekseni: PR B — ItemParticipant adaptörü +
+    jobs/backtest_engine.py:298 call site. ADR §16 İNSAN KAPISI + ADR amendment'ı
+    gerektirir; o kapıdan geçmeden başlama (docs/ADIM35_LANDED_KICKOFF.md §4.1).
+(b) Kabul borcu sınıf B, parti 04. PARTİ SEÇMEDEN ÖNCE ÖLÇ: kriterin adlandırdığı
+    davranış backend/src'te sevk edilmemişse sınıfı yanlıştır (ADIM 52/54 dersi).
+    Sınıfı değiştirmek bir adjudication'dır — tavanı YÜKSELTİR, test slice'ının
+    kararı değil.
+(c) RC §6.7'de kalanlar: P11-6b · P11-3b · P8-B3b · P4-3 · P10-B6 · P10-B3/B4/B5.
 
-İŞ — İKİSİNDEN BİRİNİ SEÇ VE GEREKÇESİNİ YAZ:
-
-(A) SAF REFACTOR, kapı gerektirmez — engine.py'nin üç fazını describe/book olarak ayır:
-    _phase_carry (:1913) -> CarryCharges döndürsün
-    _phase_held  (:2264) -> MandatoryExit döndürsün
-    _phase_entry (:2448) -> ItemIntent döndürsün
-    book etme AYRI bir çağrı olsun.
-    KABUL ÖLÇÜTÜ TEK: 46 golden digest'in hiçbiri oynamayacak ve
-    backend/tests/unit/engine_golden_digests.json DEĞİŞMEYECEK.
-    Digest oynarsa DUR ve raporla — o bir re-price'tır (ADR §15 R-4).
-    run_portfolio'ya çağıran EKLEME; containment gate yeşil kalmalı.
-
-(B) WIRING — ADR §16 İNSAN KAPISI GEREKİR, kapıdan geçmeden BAŞLAMA.
-    Kapı açıksa: adapter + call site + tripwire daraltması + A21 + PriorItemInterval.
-    #544 (NET) açıkken LIFT ETME.
-
-YASAK:
-  - ENGINE_VERSION bump (o ADIM 20'dir)
-  - SHARED_ALLOCATION_STATUS flip
-  - containment gate'i SİLMEK (daraltmak serbest, silmek değil)
-  - test_the_containment_flag_and_engine_version_are_both_untouched (:225-233) ve
-    test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock (:103) düzenlemek
-  - `-X theirs` ile strateji çözümü
-  - #514 / #582 / #544 / #559 issue durumuna dokunmak
-
-YEREL DOĞRULAMA: ORTAK SÖZLEŞME §YEREL DOĞRULAMA (tam suite, gerçek exit code'ları yaz).
-Alt küme koşarken --no-cov ve ÖNCE uv sync --all-extras.
-
-KAPANIŞ: CLAUDE.md §Session CLOSING ritüelinin ALTI maddesi.
-Dal: docs/stage-59-landed (docs) veya feat/stage-59-<slug> (kod).
-Commit: <type>(stage-59): <subject>. AI attribution YOK. PR aç, MERGE ETME.
+KURALLAR:
+- Yeni CI job'ı EKLEME (ruleset 20765617 — üretilmeyen required ad tüm merge'leri
+  kilitler). Var olan job'a ADIM ekle.
+- Ratchet YALNIZ AŞAĞI iner; eşik düşürme, kriter silme yok.
+- Her CRITICAL/HIGH code-review bulgusunu düzeltmeden ÖNCE ampirik doğrula.
+- Bash çağrıların artık guard-git.sh'ten geçiyor: "git push --force … main",
+  self-merge ya da bu desenleri İÇEREN bir heredoc/döngü bloklanır. Metni Write ile
+  dosyaya yaz, dosyayı koştur.
+- Kapanışta CLAUDE.md ritüelinin altı çıktısı; md. 4 türetilir:
+  node scripts/memory_index.mjs --sync --only <slug>.
 ```

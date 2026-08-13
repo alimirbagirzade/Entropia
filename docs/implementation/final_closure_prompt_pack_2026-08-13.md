@@ -89,6 +89,27 @@ artık geçerli değil.** İnsan bugün defteri elle uzlaştırmış:
 > tarafından teyididir — yani raporun finansal bulguları bağımsız olarak doğrulanmış
 > sayılır. `P-A2` yine de kanıtı **koddan** üretir; issue durumu hâlâ kanıt değildir.
 
+### 1.4 `doc-status` kapısı — bu paketin CI'da yiyerek öğrendiği tuzak
+
+Bu paketin ilk push'u `Backend` job'ını **50 saniyede** kırmızıya çevirdi. Sebep test
+değil, `scripts/generate_repository_facts.py::check_classification`:
+
+```
+ALWAYS_HISTORICAL_GLOBS = (..., "docs/audit/*.md", "docs/implementation/*.md")
+```
+
+Bu iki dizindeki **her** dosya `<!-- doc-status: historical -->` işaretlenmek zorunda,
+ve aynı anda **yalnız bir** belge `current` olabilir. Paket `current` yazmıştı → iki
+bulgu, tek sebep.
+
+**Bu paketin sekiz prompt'u tam da o iki dizine yazıyor** (`P-A1` `P-A2` `P-A3`
+`P-B` `P-C1` `P-C2` `P-D` ve `P-DEC`'in çıktısı `docs/decisions/` hariç). Kural
+`§3 ORTAK SÖZLEŞME` içine banner metniyle birlikte yazıldı — her prompt onu taşıyor,
+böylece sekiz oturumun her biri aynı 50 saniyelik kırmızıyı yeniden keşfetmez.
+
+**Kapı erken adımdır:** düşerse testler hiç koşmaz, yani "docs PR'ı, CI'ı önemsemem"
+diye geçiştirilemez. Push'tan önce yerelde `--check` koş.
+
 ---
 
 ## 1. Raporun kaçırdığı üç şey (paralelliği doğrudan etkiler)
@@ -275,6 +296,36 @@ YEREL DOĞRULAMA (backend)
   cd frontend && npm ci && npm run typecheck && npm test -- --run
 
   GERÇEK exit code'ları raporla. "geçti" yazma, sayıyı yaz.
+
+DOCS YAZARKEN — doc-status KAPISI (bu paket bunu CI'da yiyerek öğrendi)
+  scripts/generate_repository_facts.py::check_classification bir KAPIDIR ve
+  `Backend` job'ının ERKEN adımıdır — düşerse job ~50 saniyede kırmızı olur,
+  testlerin hiç koşmaz.
+
+  Kural: şu glob'lardaki HER dosya `historical` işaretlenmek ZORUNDA
+    docs/PROJECT_HISTORY.md · docs/POST_V1_SPEC_GAP_BACKLOG_*.md ·
+    docs/V18_R2_ROADMAP.md · docs/audit/*.md · docs/implementation/*.md
+
+  Yani bu paketteki AUDIT ve DESIGN prompt'larının ürettiği her dosya
+  (docs/audit/closure_w0_*.md, docs/implementation/closure_design_*.md,
+   docs/implementation/final_closure_ordered_plan_*.md,
+   docs/audit/final_closure_reconciliation_*.md) bu kapsamdadır.
+
+  Yeni dosyanın İLK SATIRLARI tam olarak şu olmalı (ilk 3 satır taranır):
+
+    <!-- doc-status: historical -->
+    > **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+    > kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+    > Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+    > (üretilmiş, CI'da `--check` ile kapılı).
+
+  AYRICA: aynı anda YALNIZ BİR belge `doc-status: current` olabilir.
+  Şu an o belge docs/ADIM55_LANDED_KICKOFF.md. Yeni bir KICKOFF yazıyorsan
+  (kapanış ritüeli md. 2) eskisini `historical`a DEMOTE ET, yoksa kapı düşer.
+
+  Push etmeden ÖNCE yerelde doğrula:
+    cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check
+    -> "documentation-truth gate OK" ve exit=0 görmeden push etme.
 
 GATEGUARD
   YENİ dosyayı Bash heredoc ile yaz (cat > f << 'PYEOF') -> gate-free.

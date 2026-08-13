@@ -1,8 +1,17 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir.
+> Güncel otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`
+> (üretilmiş, CI'da `--check` ile kapılı).
 
 # Entropia V18 — Final Closure Prompt Pack (paralel dalgalar)
 
 **Üretildi:** 2026-08-13 · **Ölçülen main:** `31ed27dfc1f3bf7448b0e03c7c732d22d8b758c4`
+
+> **Bu paket bir ÖLÇÜM ANIDIR.** `§0` tablosu `31ed27d` üzerinde doğrulandı. Main
+> ilerlediyse prompt'lar yine kullanılabilir — her biri `§3 ORTAK SÖZLEŞME` içinde
+> "taban farklıysa `§0` satırlarını yeniden ölç" talimatını zaten taşıyor. Satır
+> numaralarına değil, **sembol adlarına** güven.
 
 Bu belge **prompt paketidir** — burada hiçbir ürün kodu değişmez. Her blok, temiz bir
 Claude Code oturumuna **olduğu gibi yapıştırılmak** üzere yazıldı. Aynı dalgadaki bloklar

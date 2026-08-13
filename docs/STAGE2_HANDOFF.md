@@ -5832,7 +5832,38 @@ Tam kayıt: `PROJECT_HISTORY.md` §ADIM 52 · kickoff: `docs/ADIM52_LANDED_KICKO
 
 Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 53 · `docs/ADIM53_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
 
-## Stage — ADIM 54: K-3 ADJUDICATED — imzalı karar D-11, KOD YOK
+## Stage — ADIM 54: kabul borcu sınıf B, parti 03 (Research Data revizyon değişmezliği)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Ürün kodu **DEĞİŞMEDİ**;
+migration yok, `ENGINE_VERSION`/OpenAPI sabit. **`partial` 113 → 111, `debt_class.B` 82 → 80.**
+
+**Kapananlar:** `RD-04` (c3) · `RD-06` (c2). Ayrıca `RD-09.c3` clause'u kapandı ama
+**`RD-09` partial KALDI** (c4 açık) — yarım kanıtla işaretlenmedi, tavanı hareket ettirmedi.
+
+**RD-04'ün dersi:** kriterin sözü (*"stale işaretlenir"*) ile sevk edilen davranış aynı
+şey değildi; sevk edilen daha güçlü ve yapısal (onaylı revizyon yeniden zamanlanamaz,
+replacement DRAFT doğar, `DRAFT → APPROVED` yasal değil). Test bayrak **icat etmedi**.
+İki tuzak testin içine yazıldı: politika önce kurulmazsa **yanlış refüz** kanıtlanıyor,
+onay **Admin-only**.
+
+**RD-09.c4 neden açık:** manifest research revizyonunu **yalnız funding kaynağı**
+üzerinden pinliyor; readiness funding revizyonunun stratejinin **kendi** market
+revizyonuna bağlı olmasını istiyor, worker da native asset satırları çözülmezse
+`RUN_FAILED_FUNDING_SOURCE_INVALID` veriyor. Uçtan uca bağlamak partiyi aştı.
+`_ready_composition`'a denenen parametreler **geri alındı**.
+
+**ÜÇ yeni bulgu (insan/PO):** `RD-01.c4` · `RD-05.c5` · `RD-11.c2` — üçü de sevk
+edilmemiş alan/araç adlandırıyor, hiçbiri yeniden sınıflandırılmadı (tavan yükseltirdi).
+Defterde artık **beş** açık bulgu var; **parti seçmeden ÖNCE ÖLÇ**.
+
+**P1-Gate3 KAPANMADI** — kalan borç A=1 · B=80 · C=6 · D=32 (açık toplam **119**).
+Tam kayıt: `PROJECT_HISTORY.md` §ADIM 54 · kickoff: `docs/ADIM54_LANDED_KICKOFF.md`.
+
+## Stage — ADIM 55: K-3 ADJUDICATED — imzalı karar D-11, KOD YOK
+
+> **NUMARA NOTU:** ADIM 54 olarak yazıldı; `#701` main'e ADIM 54 adıyla merge edilince
+> **merge edilmiş ad kazandı** ve bu slice **ADIM 55**'e taşındı. Branch commit mesajları
+> `adim-54` yazar. `#701`'in kaydına dokunulmadı — yalnız `doc-status` düşürüldü.
 
 **Migration:** yok. **Kod:** **tek satır bile değişmedi** — `backend/src`, `frontend/src`,
 `alembic` ağaçlarına dokunulmadı. **OpenAPI / OCC / Idempotency / route / query-key /

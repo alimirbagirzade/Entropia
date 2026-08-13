@@ -1,10 +1,11 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — ADIM 54 (2026-08-13).** Canlı kickoff artık
-> `docs/ADIM54_LANDED_KICKOFF.md` (K-3 adjudicated, imzalı karar D-11 — kod yok).
-> Aşağısı ADIM 53 kapanışındaki durumu kaydeder; sayıları ve "sıradaki iş" maddeleri
-> bayat olabilir. **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED.
-> Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
-> `docs/generated/repository_facts.md` (üretilmiş).
+> **SUPERSEDED — sonrasında İKİ slice landed (2026-08-13):** **ADIM 54** (kabul borcu
+> sınıf B, parti 03 · `#701` · `docs/ADIM54_LANDED_KICKOFF.md`) ve **ADIM 55** (K-3
+> adjudicated, imzalı karar D-11 — kod yok · `docs/ADIM55_LANDED_KICKOFF.md`).
+> **Canlı kickoff ADIM 55'tir.** Aşağısı ADIM 53 kapanışını kaydeder; **sıradaki parti
+> önerisi BAYAT** (TL-12.c3/TL-20.c3 ADIM 52'de kapandı, TL-11.c3 kapatılamaz).
+> **Değişmeyen:** blocker sayısı 1 (yalnız A-08), verdict BLOCKED. Sayısal gerçekler
+> için otorite: `CLAUDE.md` §Current position + `docs/generated/repository_facts.md`.
 
 # ADIM 53 LANDED — hafıza türetilir oldu (agentmemory) + iki sessiz ajan kapısı onarıldı
 

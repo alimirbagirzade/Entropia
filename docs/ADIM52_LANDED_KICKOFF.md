@@ -1,4 +1,8 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 53 (2026-08-13).** Canlı kickoff artık
+> `docs/ADIM53_LANDED_KICKOFF.md`. Aşağısı ADIM 52 kapanışındaki durumu kaydeder;
+> SHA'lar ve "next" maddeleri bayat olabilir. **Değişmeyen:** blocker sayısı 1
+> (yalnız A-08), verdict BLOCKED.
 > **NUMARA — bu slice DÖRT KEZ taşındı.** Dal ADIM 49 olarak açıldı; ben çalışırken
 > `#691` ADIM 49'u, `#685` ADIM 50'yi, `#687` ADIM 51'i **merge edilmiş** adlarla aldı.
 > Kural: numaralar yeniden atanmaz, **merge edilmiş ad kazanır**; taşınan taraf hep

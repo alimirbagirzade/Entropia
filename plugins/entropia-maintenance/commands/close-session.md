@@ -33,10 +33,19 @@ birebir metin).
   test sayıları, son dalga, Next). **Buraya slice anlatısı YAZMA** — CLAUDE.md
   her oturumda tamamen context'e yüklenir.
 
-### 4. Memory checkpoint — **İKİ sistem birden**
-- **ecc knowledge graph**: `Entropia Stage <x> — <title>` varlığı + zengin
-  olgusal gözlemler + sonraki stage'e `unblocks` ilişkisi.
-- **claude-mem**: aranabilir checkpoint gözlemi (`mem-search` ile bulunur).
+### 4. Memory checkpoint — **türetilir, elle yazılmaz** (ADIM 52)
+Md. 3'teki `PROJECT_HISTORY.md` kaydını yazdıktan **sonra**:
+
+```bash
+node scripts/memory_index.mjs --write --only <slice-slug>
+```
+
+`<slice-slug>` = başlığın slug'ı (`node scripts/memory_index.mjs --emit` ile gör).
+Tek doğruluk kaynağı git'teki belgedir; `agentmemory` onun **aranabilir
+indeksidir**. Store efemer bir container'da kaybolursa borç doğmaz —
+`--write` (argümansız) hepsini yeniden üretir. Ayrıntı + sınırlar:
+`CLAUDE.md` §Hafıza. **`ecc` / `claude-mem` artık zorunlu değil** (yerelde
+bağlıysa yazmak serbest).
 
 ### 5. Codemap tazeleme
 Slice yeni endpoint / tablo / sayfa / job eklediyse `docs/CODEMAPS/` içindeki

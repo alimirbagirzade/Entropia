@@ -1,4 +1,8 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat olabilir. Güncel otorite:
+> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+> **Yerini ADIM 55 kickoff'u aldı.**
 > **CURRENT SLICE KICKOFF.** Sayısal otorite bu belge DEĞİL →
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 

@@ -32,6 +32,20 @@ const CONFIG_FILES = [
 ]
 
 const PINNED_NPX = /^(@[a-z0-9-]+\/)?[a-z0-9._-]+@\d+\.\d+\.\d+/
+/** `npx [-y|--yes] <spec>` inside a launcher script; the spec may be a variable. */
+const NPX_INVOCATION = /\bnpx\s+(?:-y\s+|--yes\s+)?(\S+)/g
+const SHELL_ASSIGNMENT = /^\s*([A-Za-z_][A-Za-z0-9_]*)=["']?([^"'\n]+?)["']?\s*$/gm
+
+/** Resolve `"$PKG"` / `${PKG}` against the script's own literal assignments. */
+function resolveSpec(token, scriptText) {
+  const bare = token.replace(/^["']|["']$/g, '')
+  const variable = /^\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?$/.exec(bare)
+  if (!variable) return bare
+  for (const [, name, value] of scriptText.matchAll(SHELL_ASSIGNMENT)) {
+    if (name === variable[1]) return value.replace(/^["']|["']$/g, '')
+  }
+  return bare
+}
 
 const problems = []
 
@@ -72,6 +86,28 @@ function hookScriptPaths(command, configFile) {
   )
 }
 
+/**
+ * Repo-relative script references inside a launcher's own text.
+ *
+ * SCRIPT_TOKEN cannot be reused here: it stops at `$`, so `"$ROOT/scripts/x.sh"`
+ * comes back as the non-existent `ROOT/scripts/x.sh` and the chain is silently
+ * dropped — which is exactly how the first version of this gate passed its own
+ * negative control. Anchoring on the repo's directory names instead survives any
+ * variable prefix.
+ */
+const REPO_SCRIPT_REF = /((?:scripts|\.claude\/hooks)\/[A-Za-z0-9._-]+\.(?:sh|mjs|js|py))\b/g
+
+/** `npx` in command position — not the word "npx" inside a comment or a message. */
+function npxSpecs(text) {
+  const specs = []
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('#') || trimmed.includes('echo ') || trimmed.includes('command -v')) continue
+    for (const [, token] of line.matchAll(NPX_INVOCATION)) specs.push(resolveSpec(token, text))
+  }
+  return specs
+}
+
 for (const configFile of CONFIG_FILES) {
   const absolute = path.join(REPO_ROOT, configFile)
   if (!existsSync(absolute)) {
@@ -105,10 +141,38 @@ for (const configFile of CONFIG_FILES) {
 
   if (configFile === '.mcp.json') {
     for (const [name, server] of Object.entries(parsed.mcpServers ?? {})) {
-      if (server.command !== 'npx') continue
-      const spec = (server.args ?? []).find((arg) => !arg.startsWith('-'))
-      if (!spec || !PINNED_NPX.test(spec)) {
-        problems.push(`.mcp.json: "${name}" sürüm pinlemiyor ("${spec ?? '?'}") — npx -y <pkg>@<x.y.z> yaz`)
+      if (server.command === 'npx') {
+        const spec = (server.args ?? []).find((arg) => !arg.startsWith('-'))
+        if (!spec || !PINNED_NPX.test(spec)) {
+          problems.push(`.mcp.json: "${name}" sürüm pinlemiyor ("${spec ?? '?'}") — npx -y <pkg>@<x.y.z> yaz`)
+        }
+        continue
+      }
+
+      // A server launched through a repo script would otherwise escape the pin
+      // rule entirely: the `npx` call moves inside the script, where the check
+      // above cannot see it. Follow it in.
+      // A launcher may delegate to another launcher (memory_mcp.sh -> memory_server.sh),
+      // so follow every script path the command mentions and every script those name.
+      const queue = hookScriptPaths(server.command, configFile)
+      const visited = new Set()
+      while (queue.length > 0) {
+        const script = queue.shift()
+        if (visited.has(script)) continue
+        visited.add(script)
+        if (!existsSync(script)) {
+          problems.push(`${path.relative(REPO_ROOT, script)}: "${name}" sunucusunun çağırdığı betik yok`)
+          continue
+        }
+        const text = readFileSync(script, 'utf8')
+        for (const [, reference] of text.matchAll(REPO_SCRIPT_REF)) queue.push(path.join(REPO_ROOT, reference))
+        for (const spec of npxSpecs(text)) {
+          if (!PINNED_NPX.test(spec)) {
+            problems.push(
+              `${path.relative(REPO_ROOT, script)}: "${name}" sunucusu pinsiz npx çağırıyor ("${spec}") — <pkg>@<x.y.z> yaz`,
+            )
+          }
+        }
       }
     }
   }

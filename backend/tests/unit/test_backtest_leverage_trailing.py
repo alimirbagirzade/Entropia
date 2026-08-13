@@ -43,7 +43,6 @@ _ZERO_COST = {"slippage_mode": "percentage_slippage", "slippage_value": "0"}
 
 def _config(
     *,
-    base_position_size: str = "10",
     leverage_mode: str = "isolated",
     leverage: str = "1",
     trail_percentage: str | None = None,
@@ -110,9 +109,16 @@ def _config(
                 "partial_aftermath": partial_aftermath,
             },
             "protection_stop_logic": protection,
+            # GH #550 made ``base_position_size`` a PERCENT of resolved capital. This file
+            # is about the LEVERAGE multiplier and the trailing stop, so the unlevered size
+            # has to stay constant while the bars move for a doubling to be readable off
+            # the fill. Risk-based sizing states the same 10 units — 1% of 10 000 across a
+            # 10.00 stop distance — and divides by a stop DISTANCE, not a price level.
+            # ``stop_loss_point`` feeds sizing only; ``protection_stop_logic`` above is
+            # still the only thing that installs a stop, so the trailing cases are intact.
             "position_sizing": {
-                "method": "base_position_size",
-                "base_position_size": base_position_size,
+                "method": "risk_based_sizing",
+                "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "10.00"},
                 "leverage_mode": leverage_mode,
                 "leverage": leverage,
             },

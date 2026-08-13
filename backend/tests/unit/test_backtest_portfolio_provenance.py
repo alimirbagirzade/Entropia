@@ -505,4 +505,7 @@ def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None
         "portfolio-manifest-v1",
     ):
         assert field not in shipped, f"{field!r} leaked into the shipped manifest"
-    assert 'ENGINE_VERSION = "backtest-engine-v18-gap-adjusted-stop-fill"' in shipped
+    # The literal tracks whatever the CURRENT shipped version is; #550/#551/#552 moved it.
+    # What the assertion pins is that lifting containment cannot happen without editing
+    # this line, not the particular string.
+    assert 'ENGINE_VERSION = "backtest-engine-v18-percent-sizing-per-fill-commission"' in shipped

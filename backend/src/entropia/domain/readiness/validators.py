@@ -446,6 +446,43 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
             )
         )
 
+    # GH #550 / option A, the transition gate. The three sizing magnitudes
+    # (base_position_size and the min/max limits) are PERCENTAGES of resolved capital;
+    # before the cutover the engine executed the same stored numbers as unit counts while
+    # the UI labelled them `%`. A revision saved under the old reading would therefore run
+    # at a DIFFERENT SIZE after the fix, and no automatic migration is possible: 50 as
+    # units is 51% of a 10 000 account at price 102 and 5000% of it at price 10 000, and
+    # reading the pinned market revision's price still does not recover which the author
+    # meant. So the change is surfaced instead of applied — the run is blocked until a
+    # human confirms the value as a percent, which sets `size_semantics`.
+    #
+    # Scoped to revisions that actually carry one of the three fields: a strategy sizing
+    # by risk or Kelly with no limits configured has nothing whose meaning moved, and
+    # blocking it would be noise the user cannot act on.
+    sizing_cfg = config.position_sizing
+    limits = sizing_cfg.position_size_limits
+    carries_magnitude = sizing_cfg.base_position_size is not None or (
+        limits is not None
+        and (limits.min_position_size is not None or limits.max_position_size is not None)
+    )
+    if carries_magnitude and sizing_cfg.size_semantics is None:
+        issues.append(
+            ReadinessIssue(
+                Code.STRATEGY_SIZING_SEMANTICS_UNCONFIRMED,
+                Sev.BLOCKER,
+                Scope.STRATEGY,
+                "This strategy was saved before position sizes became percentages of "
+                "resolved capital, so its base size and min/max limits would now execute "
+                "at a different size than when they were saved.",
+                remediation="Re-open the strategy and confirm each sizing magnitude as a "
+                "percent of capital (for example 10 = 10% of equity, not 10 units). "
+                "Saving re-states them under the new reading; nothing is converted "
+                "automatically, because the stored number does not say which was meant.",
+                field_path="position_sizing.size_semantics",
+                scope_id=item.item_id,
+            )
+        )
+
     # F-09: an unsupported / misconfigured position-sizing method must BLOCK RUN — the
     # engine fails closed (opens no position) for it, so a run would silently produce
     # nothing. Surface it as a blocker with a concrete remediation instead. Shares the

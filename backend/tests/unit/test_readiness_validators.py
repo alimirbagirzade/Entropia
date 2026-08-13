@@ -68,7 +68,16 @@ def _strategy_payload(**overrides: Any) -> dict[str, Any]:
         },
         "position_exit_logic": {},
         "protection_stop_logic": {"percentage_stop": {"enabled": True, "loss_percentage": "1.0"}},
-        "position_sizing": {"method": "base_position_size", "base_position_size": "1.0"},
+        # ``size_semantics`` marks this revision as saved AFTER GH #550, i.e. its 1.0 means
+        # 1% of resolved capital. Without it every strategy fixture in this module would
+        # carry the SIZING_SEMANTICS_UNCONFIRMED transition blocker and stop being a
+        # fixture for whatever it is actually about. The blocker has its own cases in
+        # ``test_sizing_semantics_*`` below.
+        "position_sizing": {
+            "method": "base_position_size",
+            "base_position_size": "1.0",
+            "size_semantics": "percent_of_capital",
+        },
         "restrictions_filters": {},
         "conflict_position_handling": {},
     }
@@ -434,6 +443,7 @@ def test_strategy_unsupported_signal_strength_blocks() -> None:
         payload["position_sizing"] = {
             "method": "base_position_size",
             "base_position_size": "1.0",
+            "size_semantics": "percent_of_capital",
             "signal_strength_adjustment": mode,
         }
         result = evaluate_readiness(
@@ -451,6 +461,7 @@ def test_strategy_supported_signal_strength_does_not_block() -> None:
         payload["position_sizing"] = {
             "method": "base_position_size",
             "base_position_size": "1.0",
+            "size_semantics": "percent_of_capital",
             "signal_strength_adjustment": mode,
         }
         result = evaluate_readiness(
@@ -461,6 +472,81 @@ def test_strategy_supported_signal_strength_does_not_block() -> None:
     assert Code.STRATEGY_SIGNAL_STRENGTH_UNSUPPORTED.value not in _codes(default)
 
 
+# --------------------------------------------------------------------------- #
+# GH #550 — the sizing-semantics transition gate                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_sizing_semantics_unconfirmed_blocks_a_pre_cutover_revision() -> None:
+    # The three sizing magnitudes are now PERCENTAGES of resolved capital. A revision saved
+    # while the engine read them as unit counts would run at a DIFFERENT SIZE after the
+    # cutover, and the stored number cannot say which reading its author meant — 50 is 51%
+    # of a 10 000 account at price 102 and 5000% of it at price 10 000. So the change is
+    # surfaced rather than applied: BLOCKER until a human re-confirms the value.
+    payload = _strategy_payload()
+    payload["position_sizing"] = {"method": "base_position_size", "base_position_size": "50"}
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_SIZING_SEMANTICS_UNCONFIRMED.value in _codes(result)
+    assert result.state == ReadinessState.NOT_READY
+    issue = next(
+        i for i in result.issues if str(i.code) == Code.STRATEGY_SIZING_SEMANTICS_UNCONFIRMED.value
+    )
+    assert issue.severity is ReadinessSeverity.BLOCKER
+    assert issue.field_path == "position_sizing.size_semantics"
+
+
+def test_sizing_semantics_gate_also_covers_a_revision_carrying_only_limits() -> None:
+    # The min/max caps moved to percentages too, so a strategy whose magnitude lives ONLY
+    # in ``position_size_limits`` is just as exposed as one with a base size. Sizing here is
+    # risk-based — the method itself is unaffected by #550 — which is exactly why the gate
+    # keys on the FIELDS that changed meaning and not on the method.
+    payload = _strategy_payload()
+    payload["position_sizing"] = {
+        "method": "risk_based_sizing",
+        "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+        "position_size_limits": {"max_position_size": "25"},
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_SIZING_SEMANTICS_UNCONFIRMED.value in _codes(result)
+
+
+def test_sizing_semantics_gate_is_silent_when_no_magnitude_changed_meaning() -> None:
+    # The negative control that keeps the gate from being noise: a strategy that sizes by
+    # risk with no configured limits carries none of the three fields #550 re-read, so
+    # there is nothing for a human to confirm and nothing to block. Blocking it would be an
+    # error the user cannot act on.
+    payload = _strategy_payload()
+    payload["position_sizing"] = {
+        "method": "risk_based_sizing",
+        "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_SIZING_SEMANTICS_UNCONFIRMED.value not in _codes(result)
+    assert result.state == ReadinessState.READY
+
+
+def test_sizing_semantics_confirmed_clears_the_gate() -> None:
+    # Confirming the reading is what clears it — the flag is set by re-saving the strategy,
+    # and nothing converts the number, because there is no conversion that could be right.
+    payload = _strategy_payload()
+    payload["position_sizing"] = {
+        "method": "base_position_size",
+        "base_position_size": "50",
+        "size_semantics": "percent_of_capital",
+    }
+    result = evaluate_readiness(
+        [_strategy_item(payload=payload)], allocation_enabled=False, allocation_issues=[]
+    )
+    assert Code.STRATEGY_SIZING_SEMANTICS_UNCONFIRMED.value not in _codes(result)
+    assert result.state == ReadinessState.READY
+
+
 def test_strategy_unsupported_leverage_blocks() -> None:
     # F-07f: 'Cross' margin mode needs a portfolio-level risk model the single-position
     # bar-replay engine does not implement → fails closed (opens no position) → BLOCKER.
@@ -468,6 +554,7 @@ def test_strategy_unsupported_leverage_blocks() -> None:
     payload["position_sizing"] = {
         "method": "base_position_size",
         "base_position_size": "1.0",
+        "size_semantics": "percent_of_capital",
         "leverage_mode": "cross",
         "leverage": "2",
     }
@@ -485,6 +572,7 @@ def test_strategy_supported_leverage_does_not_block() -> None:
     payload["position_sizing"] = {
         "method": "base_position_size",
         "base_position_size": "1.0",
+        "size_semantics": "percent_of_capital",
         "leverage_mode": "no_leverage",
         "leverage": "5",
     }
@@ -496,6 +584,7 @@ def test_strategy_supported_leverage_does_not_block() -> None:
     isolated_payload["position_sizing"] = {
         "method": "base_position_size",
         "base_position_size": "1.0",
+        "size_semantics": "percent_of_capital",
         "leverage_mode": "isolated",
         "leverage": "2",
     }

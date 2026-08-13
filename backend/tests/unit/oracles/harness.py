@@ -161,8 +161,33 @@ def oracle_config(
                 if protection is None
                 else protection
             ),
+            # GH #550: ``base_position_size`` and the min/max limits are PERCENTAGES of
+            # resolved capital, not unit counts. This default used to read
+            # ``base_position_size: "50"`` and mean 50 units at any price.
+            #
+            # It is now stated as RISK-BASED sizing, which is the one modelled method that
+            # is price-INDEPENDENT: ``equity * risk% / stop_distance`` = 10 000 * 1% / 2.00
+            # = exactly 50 units, whatever the bar prices are. The percent reading cannot
+            # do that. Percent sizing divides by the EFFECTIVE fill price, so under a
+            # spread or a slippage the size itself moves — and these fixtures are about
+            # fills, costs, stops, scaling and restrictions, with the 50-unit position as
+            # their INPUT rather than their subject. Sizing a cost oracle off the very
+            # price the cost perturbs would destroy the one-knob-one-delta property the
+            # module docstring rests on: the pnl delta would mix the cost with a size
+            # change. ``test_oracle_sizing.py`` covers the percent path head-on.
+            #
+            # ``stop_loss_point`` here is a SIZING input only — nothing installs a stop
+            # from it (the protection stop is the separate ``protection_stop_logic``
+            # argument above), so this does not smuggle an exit into any fixture.
+            #
+            # Still equity-dependent, exactly as the percent reading is: a fixture that
+            # opens a SECOND position after booking PnL sizes off the new equity. Those
+            # numbers moved on purpose and were recomputed, not patched.
             "position_sizing": sizing
-            or {"method": "base_position_size", "base_position_size": "50"},
+            or {
+                "method": "risk_based_sizing",
+                "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+            },
             **({"scaling_logic": scaling} if scaling is not None else {}),
             "restrictions_filters": restrictions or {"rule": "any", "filters": []},
             "conflict_position_handling": conflict or {},

@@ -616,6 +616,15 @@ export function mergeFlatSections(
     // branches are explicitly overridden to undefined below (exactly-one-method).
     ...asRecord(payload.position_sizing),
     method: s.method,
+    // GH #550: the three sizing magnitudes are percentages of resolved capital. Revisions
+    // saved before the engine read them that way carry no `size_semantics` and Ready Check
+    // BLOCKS them (STRATEGY_SIZING_SEMANTICS_UNCONFIRMED) until a human re-confirms the
+    // value — nothing is converted automatically, because the stored number does not say
+    // which reading its author meant. Stamping it on save is that confirmation, and it is
+    // honest here because this form has always rendered all three inputs with a `%` unit
+    // (`StrategyConfigForm.tsx`: "Base position size", "Min position size", "Max position
+    // size"), so the number the user just re-affirmed was shown to them as a percent.
+    size_semantics: "percent_of_capital",
     base_position_size:
       s.method === "base_position_size" ? decOrOmit(s.base_position_size) : undefined,
     risk_based:

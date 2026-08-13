@@ -694,7 +694,7 @@
     "visual_deviation_rows": 38
   },
   "engine": {
-    "engine_version": "backtest-engine-v18-gap-adjusted-stop-fill",
+    "engine_version": "backtest-engine-v18-percent-sizing-per-fill-commission",
     "shared_allocation_status": "future_dev"
   },
   "frontend": {
@@ -974,7 +974,7 @@
   },
   "schema_version": 1,
   "tests": {
-    "backend_collected_test_functions": 3545,
+    "backend_collected_test_functions": 3547,
     "backend_test_files": 338,
     "backend_xfail_markers": 1,
     "backend_xfail_strict_markers": 1,

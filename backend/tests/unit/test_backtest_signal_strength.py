@@ -38,7 +38,7 @@ _ZERO_COST = {"slippage_mode": "percentage_slippage", "slippage_value": "0"}
 
 def _config(
     *,
-    base_position_size: str = "10",
+    base_position_size: str | None = None,
     signal_strength_adjustment: str = "no_adjustment",
     entry_timing: str = "current_candle_close",
     position_size_limits: dict[str, Any] | None = None,
@@ -46,12 +46,25 @@ def _config(
     """A minimal VALID StrategyConfig; only the fields the engine reads matter.
 
     Zero costs so a fill lands exactly on the resolved price; no protection stops so a
-    follow-up bar never closes the position before the assertions read it."""
-    sizing: dict[str, Any] = {
-        "method": "base_position_size",
-        "base_position_size": base_position_size,
-        "signal_strength_adjustment": signal_strength_adjustment,
-    }
+    follow-up bar never closes the position before the assertions read it.
+
+    GH #550 made ``base_position_size`` a PERCENT of resolved capital, so the DEFAULT here
+    is the risk-based statement of the same 10-unit position — 1% of 10 000 across a 10.00
+    stop distance — which divides by a stop DISTANCE and therefore holds while the bars
+    move. This file is about the STRENGTH multiplier, so the unscaled size has to be a
+    constant for a doubling to be readable off the result. Passing ``base_position_size``
+    selects the base (percent) path for the two cases that call ``_position_size`` directly
+    at a price of 100, where a percent of a 10 000 account converts one-for-one into units
+    and the numbers are the same under either reading."""
+    sizing: dict[str, Any] = (
+        {"method": "base_position_size", "base_position_size": base_position_size}
+        if base_position_size is not None
+        else {
+            "method": "risk_based_sizing",
+            "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "10.00"},
+        }
+    )
+    sizing["signal_strength_adjustment"] = signal_strength_adjustment
     if position_size_limits is not None:
         sizing["position_size_limits"] = position_size_limits
     return StrategyConfig.model_validate(

@@ -54,18 +54,25 @@ def _blocked_reason(out: EngineOutput) -> str:
 # --------------------------------------------------------------------------- #
 # Sizing methods                                                               #
 # --------------------------------------------------------------------------- #
-def test_base_position_size_is_taken_as_the_size() -> None:
-    """50 units at 102 = 5100 notional; pnl = (104 - 102) * 50 = 100.00.
+def test_base_position_size_is_a_percent_of_resolved_capital() -> None:
+    """Doc 02's worked example, run: "Equity 10.000 USD ve Position Size %10 -> 1.000 USD
+    nominal". 10% of 10 000 is a 1 000 NOTIONAL, and at an entry of 102 that notional buys
+    1 000 / 102 = 9.80392156862... -> 9.80392157 units at the engine's 8-decimal step.
+    pnl = 2.00 * 9.80392157 = 19.60784314 -> 19.61.
 
-    SPEC BOUNDARY: doc 02 labels this field a PERCENT of resolved capital (its V18 form
-    input carries a ``%`` suffix and its worked example reads "Equity 10.000 USD ve
-    Position Size %10 -> 1.000 USD nominal"). The shipped engine reads it as an absolute
-    quantity of units. This oracle pins the SHIPPED reading; the divergence is filed as
-    issue #550."""
-    out = _sized({"method": "base_position_size", "base_position_size": "50"})
+    The notional is the invariant worth reading twice: 9.80392157 * 102 = 1 000.00 to the
+    cent, at ANY price the fixture could have used. That is the whole of GH #550. Until it
+    was fixed this test read ``base_position_size: "50"`` -> 50 units and asserted a
+    5 100 notional from a field the shipped UI has always labelled ``%``, under the name
+    ``test_base_position_size_is_taken_as_the_size`` — the divergence pinned as an oracle,
+    which is what an oracle is for. A user who typed 10 meaning 10% of the account opened
+    10 units: 1 020 of notional here, 100 000 at an instrument costing 10 000."""
+    out = _sized({"method": "base_position_size", "base_position_size": "10"})
 
-    assert _entry_size(out) == Decimal("50")
-    assert out.trades[0].pnl == Decimal("100.00")
+    size = _entry_size(out)
+    assert size == Decimal("9.80392157")
+    assert (size * Decimal("102")).quantize(Decimal("0.01")) == Decimal("1000.00")
+    assert out.trades[0].pnl == Decimal("19.61")
 
 
 def test_risk_based_sizing_spends_the_risk_budget_across_the_stop_distance() -> None:
@@ -152,7 +159,14 @@ def test_a_non_positive_kelly_edge_opens_nothing() -> None:
 # Limits and leverage                                                          #
 # --------------------------------------------------------------------------- #
 def test_a_max_limit_pulls_the_size_down() -> None:
-    """50 requested, cap 20 -> 20 units. pnl = 2.00 * 20 = 40.00."""
+    """The caps are percentages too (GH #550, doc 02's ⓘ panel: a 25% Max Single Position
+    means the position may not exceed 25% of equity). 50% asked for, 20% allowed:
+    5 000 / 102 = 49.01960784 requested, capped to 2 000 / 102 = 19.60784314.
+    pnl = 2.00 * 19.60784314 = 39.21568628 -> 39.22.
+
+    Both numbers used to be unit counts (50 pulled down to 20), which made a "25% max" cap
+    mean twenty-five UNITS — a cap that tightens as the instrument gets cheaper and is
+    meaningless above it."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -161,11 +175,12 @@ def test_a_max_limit_pulls_the_size_down() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("20"), Decimal("40.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("19.60784314"), Decimal("39.22"))
 
 
 def test_a_min_limit_pushes_the_size_up() -> None:
-    """50 requested, floor 80 -> 80 units. pnl = 2.00 * 80 = 160.00."""
+    """50% asked for, floor 80%: 49.01960784 pushed up to 8 000 / 102 = 78.43137255.
+    pnl = 2.00 * 78.43137255 = 156.8627451 -> 156.86."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -174,12 +189,13 @@ def test_a_min_limit_pushes_the_size_up() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("80"), Decimal("160.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("78.43137255"), Decimal("156.86"))
 
 
 def test_isolated_leverage_multiplies_the_computed_size() -> None:
-    """50 * 3 = 150 units. pnl = 2.00 * 150 = 300.00 — leverage scales the size, so it
-    scales every downstream notional, exposure and PnL figure with it."""
+    """49.01960784 * 3 = 147.05882352 units. pnl = 2.00 * 147.05882352 = 294.11764704
+    -> 294.12 — leverage scales the size, so it scales every downstream notional, exposure
+    and PnL figure with it."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -189,12 +205,13 @@ def test_isolated_leverage_multiplies_the_computed_size() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("150"), Decimal("300.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("147.05882352"), Decimal("294.12"))
 
 
 def test_no_leverage_normalizes_to_one_x_whatever_multiplier_is_saved() -> None:
     """Master Ref §10.2: "No Leverage modunda 1x olarak normalize edilir." A stale 3
-    in the saved field must NOT leak through: 50 units, pnl 100.00."""
+    in the saved field must NOT leak through: the unlevered 49.01960784 units,
+    pnl = 2.00 * 49.01960784 = 98.03921568 -> 98.04."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -204,7 +221,7 @@ def test_no_leverage_normalizes_to_one_x_whatever_multiplier_is_saved() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("50"), Decimal("100.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("49.01960784"), Decimal("98.04"))
 
 
 def test_cross_margin_opens_no_position_at_all() -> None:

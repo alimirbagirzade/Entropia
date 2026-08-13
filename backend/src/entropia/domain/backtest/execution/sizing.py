@@ -168,36 +168,107 @@ def _leverage_multiplier(config: StrategyConfig) -> Decimal:
     return Decimal(sizing.leverage)
 
 
-def _clamp_to_limits(size: Decimal, limits: PositionSizeLimits | None) -> Decimal:
+def _percent_of_capital(percent: Decimal, equity: Decimal, entry_price: Decimal) -> Decimal | None:
+    """``percent`` of resolved capital, expressed as a SIZE at ``entry_price``.
+
+    The one conversion #550 turns on, in one place so the base size and the two bounds
+    cannot drift: notional = capital * pct / 100, size = notional / price. ``None`` when
+    the conversion is undefined (non-positive price), which callers treat as "no bound"
+    rather than as zero — a bound nobody can evaluate must not silently cap to nothing.
+
+    Quantized to the engine's ``_QTY`` step HERE rather than at each call site. The
+    division is exact only by accident (1 000 / 102 is not), and a bound left at the
+    28-digit context precision would put an un-representable quantity on the wire the
+    moment a cap binds — the pre-#550 bounds were unit counts and needed no step."""
+    if entry_price <= _ZERO:
+        return None
+    return (max(equity, _ZERO) * percent / _HUNDRED / entry_price).quantize(_QTY)
+
+
+def _clamp_to_limits(
+    size: Decimal,
+    limits: PositionSizeLimits | None,
+    *,
+    equity: Decimal,
+    entry_price: Decimal,
+) -> Decimal:
     """Clamp a computed size to the strategy's configured min/max position caps (§6).
+
+    **The caps are PERCENTAGES of resolved capital (GH #550, option A adopted
+    2026-08-04).** They used to be applied verbatim as unit counts while the shipped UI
+    labelled all three sizing fields ``%``; canon is unanimous the other way — Master Ref
+    §10.1, doc 02's ⓘ panel (a 25% Max Single Position means a position may not exceed 25%
+    of equity), the V18 mockup and the running form. Each bound is
+    converted through :func:`_percent_of_capital` at this entry price, so a 25% cap means
+    a notional cap of 25% of equity whatever the instrument costs.
+
+    **Applied AFTER leverage, deliberately.** ``_position_size`` multiplies by the
+    leverage and strength multipliers first, so a 25% cap bounds the notional actually
+    controlled rather than the pre-leverage figure — which is what doc 02's wording asks
+    for. That ordering is unchanged from before this fix.
 
     A no-op when no ``position_size_limits`` are configured OR the size is already
     non-positive: ``0`` is the fail-closed "do not open" sentinel returned by
     ``_raw_position_size`` (bust equity / non-positive entry price), and a ``min`` cap
     must NOT resurrect it into a live position, nor may a stray negative be lifted
     positive. A misconfigured window (``min > max`` — no size can satisfy both) fails
-    closed to ``0`` rather than silently honouring one bound and violating the other.
-    Only a genuinely positive size is pulled DOWN to ``max`` then UP to ``min``; the
-    final ``max(., 0)`` also neutralises a nonsensical negative cap. Caps are in the
-    same UNITS as the size (contracts/coins), applied verbatim (unquantized) — mirrors
-    the unquantized ``base_position_size`` branch."""
+    closed to ``0`` rather than silently honouring one bound and violating the other;
+    the comparison is done in PERCENT, before conversion, so it does not depend on a
+    price being available. Only a genuinely positive size is pulled DOWN to ``max`` then
+    UP to ``min``; the final ``max(., 0)`` also neutralises a nonsensical negative cap."""
     if limits is None or size <= _ZERO:
         return size
     minimum = limits.min_position_size
     maximum = limits.max_position_size
     if minimum is not None and maximum is not None and minimum > maximum:
         return _ZERO
-    if maximum is not None and size > maximum:
-        size = maximum
-    if minimum is not None and size < minimum:
-        size = minimum
+    if maximum is not None:
+        cap = _percent_of_capital(maximum, equity, entry_price)
+        if cap is not None and size > cap:
+            size = cap
+    if minimum is not None:
+        floor = _percent_of_capital(minimum, equity, entry_price)
+        if floor is not None and size < floor:
+            size = floor
     return max(size, _ZERO)
+
+
+def max_position_size_cap(
+    config: StrategyConfig, entry_price: Decimal, equity: Decimal
+) -> Decimal | None:
+    """The §6 ``max_position_size`` cap expressed as a QUANTITY at ``entry_price``.
+
+    The public form of the conversion :func:`_clamp_to_limits` applies, for the two call
+    sites that bind the same configured cap against an already-open position rather than
+    against a freshly computed size: the scaling ladder's layer check and the
+    same-direction stacking tranche check (both in ``engine``). GH #550 made the stored
+    number a PERCENT, so those two comparisons would otherwise read it as a unit count
+    while the sizing chain read it as a percentage — one config field, two meanings, and
+    a ladder that binds at a different place than the entry that preceded it.
+
+    ``None`` when no cap is configured OR the price cannot express it, which callers
+    already treat as "this bound does not apply". Pass the SLEEVE as ``equity`` under
+    allocation: that is the capital ``_position_size`` sized the position against."""
+    limits = config.position_sizing.position_size_limits
+    if limits is None or limits.max_position_size is None:
+        return None
+    return _percent_of_capital(limits.max_position_size, equity, entry_price)
 
 
 def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Decimal) -> Decimal:
     """Deterministic sizing: explicit base size, risk-based, Kelly, else fail closed.
 
-    ``base_position_size`` returns the explicit size. ``risk_based_sizing`` risks a
+    ``base_position_size`` is a PERCENT of resolved capital (GH #550, option A adopted
+    2026-08-04): ``size = equity * pct / 100 / entry_price``, so it is entry-price
+    DEPENDENT exactly as Kelly is. It used to return the stored number verbatim as a unit
+    count while the shipped UI labelled the field ``%`` — a user who typed 10 meaning 10%
+    of capital opened 10 units, and the two readings diverge without bound with price
+    (at an instrument costing 10 000 the unit reading opens 10x the account as notional).
+    Canon is unanimous: Master Ref §10.1 ("a percentage of resolved capital"), doc 02's ⓘ
+    panel (equity 10 000 with Position Size 10% opens a 1 000 nominal position), the V18
+    mockup and the running form. ``risk_percentage_per_trade`` was already a true
+    percent in this module, so this makes the three outliers agree with their neighbour
+    rather than introducing a new convention. ``risk_based_sizing`` risks a
     fixed % of (non-negative) equity across the configured stop distance —
     ``size = equity * risk% / 100 / stop_loss_point`` — and is therefore independent
     of the entry price. ``formula_based_sizing`` with a valid ``kelly_criterion`` config
@@ -213,7 +284,11 @@ def _raw_position_size(config: StrategyConfig, entry_price: Decimal, equity: Dec
     to the configured ``position_size_limits`` by ``_position_size``."""
     sizing = config.position_sizing
     if sizing.method == "base_position_size" and sizing.base_position_size is not None:
-        return Decimal(sizing.base_position_size)
+        base = _percent_of_capital(Decimal(sizing.base_position_size), equity, entry_price)
+        # A non-positive entry price cannot be converted; fail closed to 0 like every
+        # other price-dependent branch rather than falling back to the raw number, which
+        # is what the pre-#550 reading would have opened.
+        return _ZERO if base is None else base.quantize(_QTY)
     usable_equity = max(equity, _ZERO)
     if sizing.method == "risk_based_sizing" and sizing.risk_based is not None:
         risk = sizing.risk_based
@@ -262,7 +337,12 @@ def _position_size(
     size = _raw_position_size(config, entry_price, equity)
     if size > _ZERO:
         size = size * _leverage_multiplier(config) * strength
-    return _clamp_to_limits(size, config.position_sizing.position_size_limits)
+    return _clamp_to_limits(
+        size,
+        config.position_sizing.position_size_limits,
+        equity=equity,
+        entry_price=entry_price,
+    )
 
 
 def _cap_to_sleeve(desired: Decimal, sleeve_capital: Decimal, entry_price: Decimal) -> Decimal:

@@ -122,7 +122,15 @@ def _strategy_payload(indicator_revision_id: str = "pkg_rev_parity") -> dict[str
         },
         "position_exit_logic": {},
         "protection_stop_logic": {"percentage_stop": {"enabled": True, "loss_percentage": "1.0"}},
-        "position_sizing": {"method": "base_position_size", "base_position_size": "1.0"},
+        # GH #550: ``size_semantics`` marks this revision as saved AFTER sizing became a
+        # percent of resolved capital. Without it Ready Check raises the
+        # STRATEGY_SIZING_SEMANTICS_UNCONFIRMED transition blocker and this fixture stops
+        # being a fixture for whatever it is about.
+        "position_sizing": {
+            "method": "base_position_size",
+            "base_position_size": "1.0",
+            "size_semantics": "percent_of_capital",
+        },
         "restrictions_filters": {},
         "conflict_position_handling": {},
     }

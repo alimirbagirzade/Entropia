@@ -142,6 +142,7 @@ from entropia.domain.backtest.execution.sizing import (
     _sizing_is_honored,
     blocked_reason,
     leverage_is_modelled,
+    max_position_size_cap,
     planned_size,
     sleeve_capital,
 )
@@ -2915,18 +2916,22 @@ def _build_stepper(
                         else:
                             tranche = _position_size(config, stack_eff, led.equity, stack_strength)
                         stacked_size = position.size + tranche
-                        size_limits = config.position_sizing.position_size_limits
+                        # GH #550: the configured cap is a PERCENT of resolved capital, so
+                        # it is converted at THIS tranche's price (and against the sleeve
+                        # when allocation is on, which is the capital the tranche itself
+                        # was sized against) before it can be compared with a quantity.
+                        stack_size_cap = max_position_size_cap(
+                            config,
+                            stack_eff,
+                            _sleeve_capital(led.equity) if alloc_on else led.equity,
+                        )
                         stack_reject: str | None = None
                         stack_cap: str | None = None
                         if tranche <= _ZERO:
                             stack_reject = "stack_size_not_positive"
-                        elif (
-                            size_limits is not None
-                            and size_limits.max_position_size is not None
-                            and stacked_size > size_limits.max_position_size
-                        ):
+                        elif stack_size_cap is not None and stacked_size > stack_size_cap:
                             stack_reject = "position_size_limit"
-                            stack_cap = str(size_limits.max_position_size)
+                            stack_cap = str(stack_size_cap)
                         elif alloc_on:
                             sleeve_remaining = _sleeve_capital(led.equity) - position.entry_notional
                             if (stack_eff * tranche) > sleeve_remaining:
@@ -3101,17 +3106,19 @@ def _build_stepper(
                     bar.close, is_buy=scale_long, half_spread=half_spread, slip=slippage
                 )
                 scaled_size = position.size + layer_size
-                size_limits = config.position_sizing.position_size_limits
                 # The composition-wide cap is a MONEY basis, distinct from the
                 # per-strategy size-units "max_total_exposure"; both bind here and
                 # the precedence order decides which name reaches the ledger.
+                # GH #550: the §6 cap is a PERCENT, converted at this layer's price (and
+                # against the sleeve under allocation) so the ladder binds it exactly
+                # where the entry sizing chain did.
                 reject_reason, reject_cap = resolve_scale_rejection(
                     layer_size=layer_size,
                     layer_notional=layer_eff * layer_size,
                     scaled_size=scaled_size,
                     max_total_size=scale_max_total,
-                    max_position_size=(
-                        size_limits.max_position_size if size_limits is not None else None
+                    max_position_size=max_position_size_cap(
+                        config, layer_eff, _sleeve_capital(led.equity) if alloc_on else led.equity
                     ),
                     sleeve_remaining=(
                         _sleeve_capital(led.equity) - position.entry_notional if alloc_on else None

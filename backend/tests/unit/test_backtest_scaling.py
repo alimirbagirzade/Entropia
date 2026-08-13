@@ -112,7 +112,18 @@ def _config(
     the only thing governing the position's life, exactly as this fixture's bars intend. The
     retired breakout proxy produced no opposite signal over these retracement bars, so this
     fixture never had to say which rule it meant."""
-    sizing: dict[str, Any] = {"method": "base_position_size", "base_position_size": "50"}
+    # GH #550 made ``base_position_size`` a PERCENT of resolved capital, so a base size is
+    # now entry-price dependent. The ladder fixtures need the INITIAL position pinned at 50
+    # units while the bars retrace, so the base size is stated as the risk-based equivalent
+    # — 1% of 10 000 across a 2.00 stop distance — which is the one modelled method that
+    # divides by a stop DISTANCE rather than a price level. ``stop_loss_point`` feeds sizing
+    # only; ``protection_stop_logic`` below stays empty, so the ladder still governs the
+    # position's life. Layer sizes are percentages of the INITIAL position (or fixed
+    # amounts), so they are unaffected either way.
+    sizing: dict[str, Any] = {
+        "method": "risk_based_sizing",
+        "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+    }
     if position_size_limits is not None:
         sizing["position_size_limits"] = position_size_limits
     costs: dict[str, Any] = dict(_ZERO_COST)

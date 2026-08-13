@@ -26,6 +26,7 @@ from entropia.domain.backtest.execution.sizing import (
     leverage_is_modelled,
     sizing_is_modelled,
 )
+from entropia.domain.strategy.config import PositionSizeLimits
 from tests.unit.test_backtest_engine import _config
 from tests.unit.test_backtest_leverage_trailing import _config as _lev_config
 
@@ -151,20 +152,32 @@ def test_cross_margin_is_never_modelled() -> None:
 # --------------------------------------------------------------------------- #
 # _clamp_to_limits                                                             #
 # --------------------------------------------------------------------------- #
+# GH #550: the bounds are PERCENTAGES of resolved capital, so the clamp needs the equity
+# and the entry price to evaluate them. Every case below is about the fail-closed
+# behaviour and NOT about the conversion, so it is run at the calibration where a percent
+# converts one-for-one into a unit (10 000 of equity at a price of 100), which keeps each
+# expected number the pre-#550 number. The conversion is pinned in
+# ``test_backtest_engine.py::test_clamp_to_limits_reads_its_bounds_as_percentages_of_capital``.
+def _clamp(size: str, limits: PositionSizeLimits | None) -> Decimal:
+    return _clamp_to_limits(
+        Decimal(size), limits, equity=Decimal("10000"), entry_price=Decimal("100")
+    )
+
+
 def test_clamp_does_not_resurrect_a_zero_size_via_the_min_cap() -> None:
     """0 is the fail-closed "do not open" sentinel — a min cap must not lift it
     into a live position."""
     limits = _config(min_size="10").position_sizing.position_size_limits
-    assert _clamp_to_limits(Decimal("0"), limits) == Decimal("0")
+    assert _clamp("0", limits) == Decimal("0")
 
 
 def test_clamp_fails_closed_when_the_window_is_impossible() -> None:
     limits = _config(min_size="50", max_size="10").position_sizing.position_size_limits
-    assert _clamp_to_limits(Decimal("30"), limits) == Decimal("0")
+    assert _clamp("30", limits) == Decimal("0")
 
 
 def test_clamp_is_a_noop_without_limits() -> None:
-    assert _clamp_to_limits(Decimal("33"), None) == Decimal("33")
+    assert _clamp("33", None) == Decimal("33")
 
 
 # --------------------------------------------------------------------------- #
@@ -173,7 +186,7 @@ def test_clamp_is_a_noop_without_limits() -> None:
 def test_limits_remain_the_final_word_after_a_leverage_boost() -> None:
     """A leveraged size is still capped — leverage must not be able to breach the
     configured maximum."""
-    cfg = _lev_config(base_position_size="10", leverage_mode="isolated", leverage="5")
+    cfg = _lev_config(leverage_mode="isolated", leverage="5")
     raw = _raw_position_size(cfg, _PRICE, _EQUITY)
     assert raw == Decimal("10")
     assert _position_size(cfg, _PRICE, _EQUITY) == Decimal("50")  # 10 * 5x, no caps set

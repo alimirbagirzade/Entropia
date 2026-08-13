@@ -168,7 +168,9 @@ Cell values: `PASS` · `FAIL` · `N/A` (state the reason) · `—` (not run).
 A `FAIL` **must** carry a finding ID from §3.
 
 - **A-1** — Page title announced on load; exactly one `<h1>`
-- **A-2** — Landmark navigation reaches banner / navigation / main / contentinfo
+- **A-2** — Landmark navigation reaches banner / navigation / main. **`contentinfo` is
+  NOT expected** — Entropia ships no footer; PO-signed decision **D-11** (2026-08-13),
+  see K-3 in §6. A route where only these three are heard is a `PASS`, not a partial.
 - **A-3** — Heading navigation h1→h2→h3 with no skipped level
 - **A-4** — Every interactive element reachable with the virtual cursor
 - **A-5** — Buttons announce as button, links as link (no `div onClick`)
@@ -247,6 +249,13 @@ A `FAIL` **must** carry a finding ID from §3.
 > finding. `PASS` records the auditor's own judgement that the absence was
 > **cosmetic** — it did not impede landmark navigation — and it does **not**
 > mean four landmarks were heard. Three were.
+>
+> **This cell became the evidence for a decision (2026-08-13).** K-3 is now
+> adjudicated by PO-signed **D-11**: three landmarks are what this product has and
+> what checklist A-2 asks for. The observation above did not *make* that decision —
+> one route cannot — but it is the only **human** input it had, and it pointed the
+> same way as the machine count. The `PASS` therefore stands unchanged: it was
+> already recorded against three landmarks, not four.
 >
 > **A-3 on route 1 is deliberately `—`, not a result.** Asked whether the
 > `h1 → h3` jump misled rotor navigation, the auditor answered *"I didn't
@@ -458,12 +467,9 @@ the count: the run printed the skip verbatim, which is what makes K-4's side eff
 |---|---|---|---|---|
 | K-1 | **D-10 — 45 accent-blue low-contrast nodes.** PO-signed permanent deviation dated 2026-07-30. WCAG 2.2 AA **1.4.3 is not met**; the product is not compliant for that criterion. | — | Adjudicated — **do not re-file** | Nothing. It is a *low-vision* axis, not a screen-reader one. Record anything **new** you hit. |
 | K-2 | ~~**No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1.~~ → **FIXED 2026-08-12 (PO decision, PR #685).** `Layout.tsx` renders a clipped `Skip to main content` link as the shell's first child; `<main>` carries `id="main-content"` + `tabIndex={-1}`. **Recorded with the fix:** 2.4.1 was **already met** through the banner/navigation/main landmarks (technique ARIA11) — which is why axe's `bypass` rule stayed green throughout — so this was an **ergonomics** fix for keyboard users, not a conformance one. | was 23 / 23 routes | **FIXED** | Nothing structural. If the link is announced misleadingly (wrong name, wrong destination), file it as a **new** finding. |
-| K-3 | **No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist. | 23 / 23 routes | Open — reported, not gated | Whether the absence is felt during landmark navigation, or is cosmetic. |
+| K-3 | ~~**No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist.~~ → **ADJUDICATED 2026-08-13 — PO-signed decision D-11** (`../implementation/a11y_ci_ratchet_and_adjudication.md` §4b). **The expectation was wrong, not the product:** no WCAG success criterion requires a `contentinfo` landmark (1.3.1 asks that *existing* structure be conveyed), Entropia ships no footer, and the v18 mockup describes none. Checklist **A-2 now expects THREE** landmarks — `banner` / `navigation` / `main`. A visible footer was priced and declined (23 baselines + Lighthouse re-baseline + a v18 deviation record); an **empty or visually-hidden `<footer>` was explicitly rejected** — it would satisfy the counter and give a rotor user nothing. | was 23 / 23 routes | **PO-APPROVE (D-11)** — the precheck advisory is **NOT silenced**; it stays a measurement, the decision only fixes its disposition | Nothing. Do **not** re-file it. If the product later ships real footer *content*, that is a **new** decision — D-11 does not cover it. |
 | K-4 | ~~**`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`).~~ → **FIXED 2026-08-12 (PO decision, PR #685).** The page now uses `<h1 class="page-title">` like the other 22 routes; `.page-title` is class-based, so the change is semantic only. Regression pin: `specs/17-page-coverage.spec.ts` declares `level: 1` (a *blocking* precheck for a missing `<h1>` was considered and **deliberately not added** — that probe races each page's first data render, and a flapping gate is worse than none). **Side effect, not hidden:** this page's outline is now `h1 → h3` where it was `h2 → h3`, so it **entered K-5's set** — measured, not predicted: CI job `94221023796` printed `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`, taking K-5 from `21 / 23` to `22 / 23`. | was 1 route | **FIXED** | A-1 still applies: is the page title announced on load? The fix changed the level, not the announcement. |
 | K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is now — with K-2 and K-4 fixed — the highest-reach observation left in the set. **`/market-data` skips two levels** (`h1 → h4`) and `/packages/library` carries a second skip (`h2 "Import package" → h5 "Recent imports"`). | **22 / 23 routes** — re-measured 2026-08-12 (ADIM 48, CI job `94221023796`); was `21 / 23`. **The +1 is `/user-manual`**, which K-4's fix moved into this set (`h1 "User Manual" → h3 "ENTROPIA USER MANUAL"`) — a known, accepted cost, not a discovery. Only `/` is now outside the set. ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 22 pages' outlines — the measured cost of doing so is **204 headings across ~40 files**, plus five tag-scoped CSS rules (`.card h3`, `.card h4`, `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) that silently drop a heading to the UA default if a tag moves without them. |
-| K-6 | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7 / 1.4.11. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. |
-| K-4 | **`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`) — a divergence already recorded in `frontend/e2e/utils/pageTruth.ts:15`. Every other route uses `<h1>`. | 1 route | Open — reported, not gated | A-1: is the page title announced on load? |
-| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **21 / 23 routes** — re-derived 2026-08-12, **unchanged**; ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 21 pages' outlines. |
 | K-6a | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. **A-08 settles this one; nothing else does.** |
 | K-6b | **Focus-ring contrast below WCAG 1.4.11 Non-text Contrast (AA).** `global.css :focus-visible` painted `2px solid var(--accent)`, and **#00a9e8 measures 2.68:1 on white / 2.46:1 on #f5f5f5** — a focus indicator is a non-text UI component and owes **3:1**. Nothing in the repo measured this: axe does not run a focus-ring contrast rule, and the green ratchet was never evidence. **Separate criterion from K-1/D-10**, which is the 1.4.3 *text* axis. | every focusable node, 23 / 23 routes | **CLOSED 2026-08-12** — ring re-pointed to `var(--text)` (`#222222`) | Nothing. **Measured after the change:** 15.91:1 on white, 14.59:1 on #f5f5f5, 12.98:1 on the #e8e8e8 title bar, 5.94:1 on the #00a9e8 `dropdown-blue` panel, 4.92:1 on the #8f8f8f dropdown panel, and **4.50:1 on the #0092c8 menu-blue hover — the worst surface in the app**. All ≥ 3:1. `--accent` itself was not touched. |
 | **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
@@ -471,7 +477,7 @@ the count: the run printed the skip verbatim, which is what makes K-4's side eff
 K-2 through K-7 are **reported rather than gated on purpose** — with **K-6b as the
 one exception**, and the exception is instructive about where the line is. Each of
 the others' fixes is a product decision — add a footer? promote a heading and
-re-cut 21 pages' outlines? mount a persistent status region? — that an
+re-cut 22 pages' outlines? mount a persistent status region? — that an
 audit-preparation change has no mandate to make, and turning any of them into a
 red CI gate would be making that decision by omission. K-6b was not a product
 decision: 3:1 is a numeric AA threshold, the ring colour is not described by the
@@ -479,6 +485,17 @@ v18 mockup (which has no focus state at all), and the fix is one declaration tha
 changes no layout. That is why it could be closed here while K-6a — *can a person
 see it?* — stays open for A-08. They stay visible in every precheck run's `::warning::`
 output and in `a11y-report/precheck-results.json` until a human resolves them.
+
+**Three of the seven have since been resolved, in three different ways — the
+difference matters more than the count.** K-2 and K-4 were **fixed** (code changed,
+PR #685). K-6b was **fixed** (one declaration, #688). K-3 was **adjudicated
+without code**: PO-signed **D-11** established that this product's landmark set is
+three, so the *expectation* moved, not the product. None of those three is a WCAG
+compliance claim, and none of them touched A-08: the remaining open observations
+are **K-5**, **K-6a** and **K-7**, and the first two are exactly what the human
+audit exists to settle. **A resolved observation keeps emitting its advisory** —
+K-3's `::warning::` line still appears on all 23 routes, because the decision fixed
+its disposition, not the measurement.
 
 ### How these counts were obtained — and why two of them are a range
 

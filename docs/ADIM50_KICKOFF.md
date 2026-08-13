@@ -31,7 +31,7 @@
 | Prompt | Kalem | Durum |
 |---|---|---|
 | **P-1** | K-2 + K-4 | ✅ **LANDED** — PO kararı alındı ve uygulandı. Kayıt: `PROJECT_HISTORY.md` §ADIM 50, `STAGE2_HANDOFF.md` §ADIM 50, RC §6.5 |
-| **P-2** | K-3 | ⏳ **PO kararı bekliyor** — prompt aşağıda, değişmedi |
+| **P-2** | K-3 | ✅ **KOŞULDU — 2026-08-13, Varyant A.** PO `D-11`'i imzaladı: footer eklenmedi, checklist A-2 **üç** landmark bekliyor. Kayıt `a11y_ci_ratchet_and_adjudication.md` §4b. Aşağıdaki prompt **tarihsel** — yeniden koşturma |
 | **P-3** | K-6b | ✅ **LANDED (#688, main'de ADIM 48 adıyla kayıtlı)** — ADIM 49'da ölçülmüştü (`#00a9e8` ↔ beyaz **2.68 : 1** < 3 : 1); halka `var(--text)`'e taşındı, her zeminde 3:1 geçiliyor. Kayıt: `docs/ADIM48_LANDED_KICKOFF.md` |
 | **P-4** | K-5 + K-6a | ⛔ **A-08 bekliyor** — uygulama promptu yok, olmayacak |
 
@@ -79,7 +79,7 @@ selector'larında ve görsel baseline'larda.
 | # | Kapsam (precheck) | Öneri | A-08'e bağımlı mı | Prompt |
 |---|---|---|---|---|
 | **K-2** skip link | 23 / 23 — stable | **FIX** — 2 dosya, 0 baseline, 0 test | Hayır | **P-1** |
-| **K-3** `contentinfo` | 23 / 23 — stable | **PO-APPROVE** — ürünü değil A-2 beklentisini hizala | Hayır | **P-2** |
+| **K-3** `contentinfo` | 23 / 23 — stable | **PO-APPROVE** — ürünü değil A-2 beklentisini hizala → **UYGULANDI, D-11 (2026-08-13)** | Hayır | **P-2 (koşuldu)** |
 | **K-4** `/user-manual` h1 | 1 — stable | **FIX** — 1 token, 2 test satırı, 0 baseline | Hayır | **P-1** |
 | **K-5** h1→h3 | **22 / 23** (ADIM 48 sonrası; was 21) — kararsız sınıf | **A-08 BEKLE** | **Evet** | **yok (P-4)** |
 | **K-6a** halka görünüyor mu | probe: 1 | **A-08 BEKLE** | **Evet** | **yok (P-4)** |

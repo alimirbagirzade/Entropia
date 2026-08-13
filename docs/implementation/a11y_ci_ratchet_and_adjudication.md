@@ -13,6 +13,10 @@ Kapsam: `chore/a11y-ci-baseline`. Bu belge **iki** işi yapar:
 2. **A11Y-01** (kontrast) sapmasını yeniden ölçülmüş rakamlarla **adjudicate eder**; D-10
    product-owner kararı 2026-07-30'da imzalanmıştır (§4).
 
+Belge zamanla **imzalı a11y ürün kararlarının sicili** hâline geldi ve bugün **iki** karar
+taşıyor: **D-10** (kontrast, 1.4.3 — §4) ve **D-11** (landmark kümesi / K-3 — §4b). Yeni bir
+imzalı a11y kararı buraya, aynı `Karar # / Onaylayan / Tarih / Kayıt` biçiminde yazılır.
+
 Kapatmadığı eksenleri Complete YAPMAZ — §6.
 
 ---
@@ -222,6 +226,56 @@ Kayıt    : 45 accent-mavi düğüm mevcut a11y baseline'ında dondurulur. V18 i
            korunur. Bu karar WCAG 2.2 AA 1.4.3 uyumluluğu iddiası DEĞİLDİR; ürün bu
            ölçüt için uyumlu olarak pazarlanamaz. Yeni veya artan ihlaller CI ratchet'ini
            kırmaya devam eder.
+```
+
+---
+
+## 4b. Product-owner kararı — D-11 ✅ İMZALI (K-3, landmark kümesi)
+
+**Karar konusu:** Shell hiçbir `<footer>` render etmiyor, yani `contentinfo` landmark'ı
+**23 / 23 route'ta yok** (K-3; precheck sınıfı beş koşuda da `23` — kararlı, oynamıyor).
+Denetim checklist'inin **A-2** maddesi ise `banner`, `navigation`, `main`, `contentinfo`
+olmak üzere **dört** landmark bekliyor. Soru: eksik olan **ürün mü, beklenti mi?**
+
+| Seçenek | Sonuç | Maliyet |
+|---|---|---|
+| **(i) Checklist'i hizala + imzalı sapma** (öneri) | Entropia'nın landmark kümesi **üç**tür (`banner`/`navigation`/`main`); A-2 bunu bekler; K-3 `PO-APPROVE` olur | Sıfır kod. Ürün ileride footer isterse **yeni** bir karar gerekir. |
+| **(ii) Görünür footer ekle** | Dördüncü landmark gerçekten var olur | v18 mockup'ta footer **YOK** (`grep` → 0 eşleşme) → **zorunlu görsel referansın ihlali**; 23 `-linux` baseline'ının 23'ü yeniden üretilir; Lighthouse CLS tabanı yeniden ölçülür; ayrıca **yeni bir v18 sapma kaydı** gerekir |
+| **(iii) Boş / görsel olarak gizli `<footer>`** | Sayaç yeşile döner | **REDDEDİLDİ.** 0 baseline değişir ama landmark'ı **doldurmaz**: rotor'la `contentinfo`'ya atlayan kullanıcı hiçbir şey duymaz. Ölçüyü ürüne değil **ölçüme** uydurmak olurdu. |
+
+**Karar (i)'in dayanağı — iki ölçüm, biri insan:**
+
+1. **Hiçbir WCAG başarı ölçütü `contentinfo` landmark'ı zorunlu kılmaz.** 1.3.1 *var olan*
+   yapının programatik olarak sunulmasını ister; var olmayan bir footer'ın sunulması
+   gerekmez. A-2'nin "dört landmark" beklentisi **checklist'in kendi beklentisiydi**, dış
+   bir ölçütün değil — RC §6.5'in K-3 satırındaki `1.3.1 / 2.4.1` etiketi bu yüzden kalemi
+   olduğundan ağır göstermişti.
+2. **A-08'in insan denetçisi bu soruyu zaten cevapladı.** SR-2 (VoiceOver / Safari /
+   macOS, 2026-08-12) oturumunda route 1 (`/`) A-2 kontrolünde denetçi rotor'un Landmarks
+   listesini gezdi, `banner` / `navigation` / `main` duydu, **`contentinfo` yoktu** ve
+   yokluğu **kozmetik** buldu — landmark gezinmesini **engellemedi**. Kayıt:
+   `docs/audit/a11y_screen_reader_audit_results.md` §1 ▸ route 1 dipnotu **ᴷ³**. Tek
+   rotanın gözlemi karara tek başına yetmez, ama **kararın yönünü insan gözlemi
+   doğruladı**: makine ölçümü (23/23 yok) ile insan yargısı (engellemiyor) aynı yöne bakıyor.
+
+```
+Karar #  : D-11
+Konu     : K-3 — `contentinfo` landmark'ı yok (23/23 route); checklist A-2 dört bekliyor
+Seçenekler: (i) checklist'i hizala + imzalı sapma [öneri] / (ii) görünür footer /
+           (iii) boş-gizli footer [reddedildi]
+Onaylayan: alimirbagirzade (product owner)
+Tarih    : 2026-08-13
+Karar    : (i) Checklist'i hizala + imzalı kalıcı sapma
+Kayıt    : Entropia bir footer SEVK ETMEZ. Uygulamanın landmark kümesi ÜÇ'tür —
+           `banner`, `navigation`, `main` — ve denetim checklist'inin A-2 maddesi bu
+           ürün için üçü bekler. K-3 bu kararla `PO-APPROVE` olur; yeniden
+           dosyalanmaz. Bu karar bir WCAG uyumluluk iddiası DEĞİLDİR, ama bir
+           uyumluluk EKSİĞİ de değildir: hiçbir SC contentinfo'yu zorunlu kılmaz.
+           İki sınır bilerek yazılıdır: (a) precheck'in K-3 advisory'si
+           SUSTURULMAZ — advisory ölçümdür, karar yalnız dispozisyonunu belirler;
+           (b) ürün ileride gerçek footer İÇERİĞİ isterse (sürüm / ortam / yasal
+           metin) bu YENİ bir karardır ve bir v18 sapma kaydı gerektirir — D-11
+           onu kapsamaz.
 ```
 
 ---

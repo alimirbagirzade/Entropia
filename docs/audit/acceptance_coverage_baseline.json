@@ -21,15 +21,15 @@
   ],
   "provenance": {
     "measured_by": "docs/audit/acceptance_semantic_scan.py --root .. --report",
-    "measured_at": "2026-08-12T21:00:00Z",
-    "slice": "ADIM 49 — RC §6.7 P1-Gate3 follow-through (class-B debt, batch 02: external-object run provenance, docs 03/04/05)",
-    "base_commit": "04c6a9c",
+    "measured_at": "2026-08-13T10:30:00Z",
+    "slice": "ADIM 54 — RC §6.7 P1-Gate3 follow-through (class-B debt, batch 03: Research Data revision immutability, doc 12)",
+    "base_commit": "2a90fe3",
     "conditions": "static scan; ast + title extraction against the live test tree; no database, no network, no test run",
-    "supersedes": "the ADIM 48 freeze (118 partial / 8 uncovered; A1 B87 C6 D32, base 7dd1dfe). Nothing was reclassified and no criterion was deleted: this slice closed FIVE class-B criteria on the external work-object line (TL-12, TL-20, TS-11, TS-21, AOS-21) by building the harness they all lacked — a COMPLETED Backtest Run over a composition containing an external object. partial fell 118 -> 113 and class B fell 87 -> 82. The uncovered, A, C and D ceilings are untouched.",
+    "supersedes": "the ADIM 52 freeze (113 partial / 8 uncovered; A1 B82 C6 D32, base 04c6a9c). Nothing was reclassified and no criterion was deleted: this slice closed TWO class-B criteria on the doc 12 Research Data line (RD-04, RD-06) plus the RD-09.c3 clause, so partial fell 113 -> 111 and class B fell 82 -> 80. RD-09 stays partial on c4 by choice — see its notes. The uncovered, A, C and D ceilings are untouched.",
     "clause_totals_at_freeze": {
-      "covered": 994,
+      "covered": 997,
       "partial": 9,
-      "uncovered": 133,
+      "uncovered": 130,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "product_decision_required": 0
@@ -41,17 +41,18 @@
     "class_C_is_never_closable": "6 criteria rest on a clause that is not assertable by nature — a statement about the V18 mockup document, another page's document scope, a V1 feature deliberately left closed (retention auto-purge, doc 20 §16), or a scenario Production cannot construct (CP-06, SUPPORTED_TARGET_RUNTIMES == {python}). Their ceiling must never be driven to zero; driving it down would mean someone invented a product to satisfy a document sentence.",
     "O-31_active_run_refusal_name": "Three page documents named ONE refusal three ways: ACTIVE_RUN_DEPENDENCY (doc 03 §14, doc 04 §15), DELETE_BLOCKED_BY_RUNNING_JOB (doc 20 §15) and OBJECT_IN_ACTIVE_RUN (doc 01/15). Only the last ships. Settled the O-02 way — the SHIPPED name is canonical, the other two are historical — and pinned by backend/tests/integration/test_backtest_persistence.py::test_active_run_blocks_work_object_delete, which now asserts the wire code and http_status 409 instead of the exception class alone.",
     "class_B_batches_are_deliberately_small": "101 open class-B criteria cannot be closed in one pass without the review degenerating into a rubber stamp — and a criterion marked covered by a test that does not actually prove it is worse than one honestly left partial. Batches are therefore scoped to one page document and one surface (batch 01 = doc 05, backend). Each closed clause cites a node that fails when the behaviour is removed; where the assertion could plausibly pass vacuously it was negative-controlled by hand (see the notes on TL-03, TL-15 and TL-17 in acceptance_semantic_map.yaml).",
-    "TL_11_c3_is_very_likely_class_C_not_B": "ADIM 49 finding, recorded rather than acted on. TL-11.c3 names a run over an ALLOCATION-ENABLED composition. Shared capital allocation is fail-closed at ADMISSION in this build (domain/allocation/capability.py SHARED_ALLOCATION_STATUS = 'future_dev'; commands/backtest_run.py raises ALLOCATION_SHARED_MODE_NOT_IN_BUILD before any run, manifest or job exists), so the run the clause describes cannot be constructed and NO test can close it. That is the class C definition, not class B. It was NOT moved: B -> C would RAISE the C ceiling, and ceilings only fall except by adjudication. ADIM 48's kickoff recommended this row as closable; that was wrong. Two such findings are now open — this and TL-16 (c4 wants a 409 field that does not exist, so class D)."
+    "TL_11_c3_is_very_likely_class_C_not_B": "ADIM 49 finding, recorded rather than acted on. TL-11.c3 names a run over an ALLOCATION-ENABLED composition. Shared capital allocation is fail-closed at ADMISSION in this build (domain/allocation/capability.py SHARED_ALLOCATION_STATUS = 'future_dev'; commands/backtest_run.py raises ALLOCATION_SHARED_MODE_NOT_IN_BUILD before any run, manifest or job exists), so the run the clause describes cannot be constructed and NO test can close it. That is the class C definition, not class B. It was NOT moved: B -> C would RAISE the C ceiling, and ceilings only fall except by adjudication. ADIM 48's kickoff recommended this row as closable; that was wrong. Two such findings are now open — this and TL-16 (c4 wants a 409 field that does not exist, so class D).",
+    "three_more_doc12_clauses_look_misclassified": "ADIM 54 findings, recorded rather than acted on — the same shape as the TL-11.c3 finding of ADIM 52. RD-01.c4 wants an ANALYSIS-time DEPENDENCY_BLOCKED gate that does not exist and is not needed (market_entity_id is required at create). RD-05.c5 wants an Agent research draft/analysis tool; ToolName exposes none. RD-11.c2 wants the evidence bundle to pin feature definitions, time policies and mapping ids; _seal_bundle members carry five fields and none of those three. None was moved: B -> C/D RAISES a ceiling, and ceilings only fall except by adjudication. FIVE such findings are now open across the ledger (TL-11.c3, TL-16, TL-01.c4 and these three clauses), which is itself the signal: ADIM 42 classified from each record's own notes without re-reading product code, and said so."
   },
   "ceilings": {
     "total_criteria": 383,
     "status": {
-      "partial": 113,
+      "partial": 111,
       "uncovered": 8
     },
     "debt_class": {
       "A": 1,
-      "B": 82,
+      "B": 80,
       "C": 6,
       "D": 32
     }

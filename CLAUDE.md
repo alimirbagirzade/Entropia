@@ -207,7 +207,24 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `e2fa521`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `2a90fe3`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **Son dalga — ADIM 54 (kabul borcu sınıf B, parti 03 — Research Data revizyon
+> değişmezliği, doc 12): `RD-04` + `RD-06` KAPANDI, `partial` 113 → 111,
+> `debt_class.B` 82 → 80. BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> **Ürün kodu DEĞİŞMEDİ.** `RD-09` **partial KALDI** (yalnız c3 kapandı; c4 funding-run
+> yolunu ister, yarım kanıtla işaretlenmedi). **KRİTERİN SÖZÜ ≠ SEVK EDİLEN DAVRANIŞ:**
+> RD-04 *"stale işaretlenir"* diyor, sevk edilen daha güçlü — onaylı revizyon yeniden
+> zamanlanamaz (`ensure_time_policy_mutable`), replacement DRAFT doğar, `DRAFT→APPROVED`
+> yasal değil; test bayrak **icat etmedi**. İki tuzak: politika önce kurulmazsa **yanlış
+> refüz** kanıtlanır, onay **Admin-only**. **ÜÇ YENİ BULGU (insan/PO):** `RD-01.c4`
+> (analysis'te kapı yok, gerekmiyor) · `RD-05.c5` (`ToolName`'de research aracı yok) ·
+> `RD-11.c2` (paket üyeleri beş alan). **Defterde artık BEŞ açık bulgu** — ADIM 42
+> sınıflandırmayı `notes`'tan okudu, ürün kodunu doğrulamadığını kendi yazdı:
+> **PARTİ SEÇMEDEN ÖNCE ÖLÇ.** **P1-Gate3 KAPANMADI** (A=1·B=80·C=6·D=32, açık **119**).
+> `PROJECT_HISTORY.md` §ADIM 54 · `docs/ADIM54_LANDED_KICKOFF.md`.
+>
+> Öncesinde > **HEAD `e2fa521`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 53 (hafıza türetilir oldu + iki sessiz ajan kapısı, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**

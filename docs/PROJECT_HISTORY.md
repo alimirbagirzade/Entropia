@@ -8299,3 +8299,68 @@ adı değişmedi, ruleset'e dokunulmadı. `memory_index.mjs --check` de aynı ye
   `ci.yml` YAML ayrıştırması.
 - **`generate_repository_facts.py --check` yerelde koşmadı** (backend bağımlılıkları yok);
   yalnız `check_classification` bölümü ayrıca koşturuldu → yeşil.
+
+---
+
+## ADIM 54 — kabul borcu sınıf B, parti 03 (Research Data revizyon değişmezliği, doc 12)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Ürün kodu **DEĞİŞMEDİ**;
+migration yok, `ENGINE_VERSION` ve OpenAPI sabit. **`partial` 113 → 111, `debt_class.B`
+82 → 80.** Kapananlar: **`RD-04`** ve **`RD-06`** (+ `RD-09.c3` clause'u).
+
+| ID | Kapanan | Kapatan test |
+|---|---|---|
+| `RD-04` | c3 | `test_retiming_an_approved_revision_is_refused_and_the_replacement_is_re_analysed` |
+| `RD-06` | c2 | `test_order_book_dataset_keeps_its_native_columns` |
+| `RD-09` | **yalnız c3** | `test_approved_revision_content_survives_the_next_revision` |
+
+### Kriterin sözü ile sevk edilen davranış aynı şey değildi (RD-04)
+
+Satır *"önceki analiz stale işaretlenir"* diyor. Sevk edilen mekanizma **daha güçlü ve
+yapısal**: onaylı bir revizyon **hiç yeniden zamanlanamıyor**
+(`time_policy.py::ensure_time_policy_mutable` → `LifecycleBlocked`), kurtarma yolu yeni
+revizyon, o da **DRAFT** doğuyor ve `DRAFT → APPROVED` **yasal bir geçiş değil**. Test
+bir "stale bayrağı" icat etmedi, sevk edileni assert etti.
+
+**İki tuzak ölçüldü ve testin içine yazıldı:** (a) yeni revizyonun zaman politikası
+**önce** kurulmazsa onay daha erken, *eksik-politika* kapısında düşüyor ve test **yanlış
+refüzü** kanıtlıyor; (b) onay **Admin-only**, `OWNER` ile denenirse rol kapısına
+takılıyor. İkisi de ilk koşuda yakalandı.
+
+### "Hiç fixture'ı olmayan" kategori (RD-06)
+
+`ORDER_BOOK` / `MACRO_CALENDAR` için `backend/tests` genelinde **tek bir referans yoktu**.
+Test gerçek bir analysis job'ı sürüyor (parse/write enjekte, object storage yok) ve
+persist edilen `native_schema_descriptor` kolonlarının kaynakla **birebir** eşleştiğini
+**ve** yolda `open/high/low/close/volume`'dan hiçbirinin uydurulmadığını assert ediyor.
+
+### Negatif kontroller (üçü de düştü)
+
+`RD-06`'da kaynağa bir OHLCV kolonu koyunca "reshape yok" assertion'ı düşüyor ·
+`RD-09.c3`'te v1.0 yerine yeni head okununca eşitlik düşüyor · `RD-04`'te replacement
+`VERIFIED`'e taşınınca refüz kayboluyor.
+
+### AÇIK BIRAKILAN — `RD-09.c4` (dürüst sınır)
+
+*"Mevcut bir run v1.0'a bağlı kalır"* **kapatılabilir ama kapatılmadı.** Manifest bir
+research revizyonunu **yalnız stratejinin funding kaynağı** üzerinden pinliyor
+(`backtest_run_context::_research_entries`); readiness ayrıca funding revizyonunun
+**stratejinin KENDİ market revizyonuna** bağlı olmasını istiyor, worker da native asset
+satırları çözülmezse `RUN_FAILED_FUNDING_SOURCE_INVALID` ile fail-closed oluyor. Bu yolu
+uçtan uca bağlamak partiyi aştı; **yarım kanıtla işaretlemek yerine açık bırakıldı** —
+`RD-09` bu yüzden `partial` kaldı ve **tavanı hareket ettirmedi**. Bir sonraki partinin
+doğal ilk kalemi; anchor'lar: readiness çapraz kontrolü + `run_backtest(load_funding_rows=…)`.
+Paylaşılan `_ready_composition` helper'ına denenen `funding` / `on_market_ready`
+parametreleri **geri alındı** — kullanılmayan kod bırakılmadı.
+
+### ÜÇ YENİ BULGU (insan/PO) — ve asıl sinyal
+
+`RD-01.c4` (analysis'te DEPENDENCY_BLOCKED kapısı **yok** ve gerekmiyor — `market_entity_id`
+create'te zorunlu) · `RD-05.c5` (`ToolName`'de research draft/analysis aracı **yok**) ·
+`RD-11.c2` (kanıt paketi üyeleri **beş alan**; feature definition / time policy / mapping id
+**yok**). Hiçbiri yeniden sınıflandırılmadı — **tavan yükseltirdi**.
+
+**Defterde artık BEŞ açık bulgu var** (`TL-11.c3`, `TL-16`, `TL-01.c4` + bu üçü). Asıl
+sinyal bu: ADIM 42 sınıflandırmayı her kaydın **kendi `notes` gerekçesinden** okudu ve
+ürün kodunu tek tek doğrulamadığını kendi raporunda **yazdı**. Ölçülen her partide en az
+bir yanlış sınıflandırma çıkıyor. **Parti seçmeden ÖNCE ÖLÇ.**

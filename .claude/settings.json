@@ -22,6 +22,23 @@
             "if": "Bash(git commit:*)",
             "timeout": 15,
             "statusMessage": "docs history guard"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/guard-git.sh\"",
+            "timeout": 15,
+            "statusMessage": "git guard"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/guard-generated.sh\"",
+            "timeout": 10,
+            "statusMessage": "generated-file guard"
           }
         ]
       }

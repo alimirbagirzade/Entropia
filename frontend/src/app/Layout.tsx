@@ -388,14 +388,12 @@ export function Layout() {
 
   return (
     <div className="app-shell">
-      {/* K-2 (WCAG 2.4.1 Bypass Blocks): this must stay the FIRST tabbable node in
-          the shell — before <header>, which opens with AuthControl's "Log out"
-          button. Without it every route began by tabbing the whole menu bar. The
-          precheck probe (e2e/specs/20-a11y-prechecks.spec.ts) matches the first
-          tabbable against /^a\[href=#/, so it has to be a real in-page anchor, not
-          a button with an onClick. Presentation-only: .skip-link is absolutely
-          positioned in BOTH states, so it never occupies layout and the 23 visual
-          baselines are untouched. */}
+      {/* K-2 (a11y precheck, 23/23 routes): the first tab stop used to be the
+          shell's Log out button, so every route began by tabbing the whole menu
+          bar. WCAG 2.4.1 is already met via the banner/navigation/main landmarks
+          (technique ARIA11) — this is an ergonomics fix for keyboard users, not
+          a conformance one. Off-screen until focused, so it adds no pixels to
+          any visual baseline. */}
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
@@ -464,11 +462,7 @@ export function Layout() {
         </div>
       ) : null}
 
-      {/* tabIndex={-1} is what makes the skip link actually MOVE focus: without it
-          the browser scrolls to #main-content but leaves focus on the link, so the
-          next Tab re-enters the menu bar. -1 keeps <main> out of the tab sequence
-          (the precheck's tabbable selector excludes [tabindex="-1"]). */}
-      <main id="main-content" className="workspace" tabIndex={-1}>
+      <main className="workspace" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
 

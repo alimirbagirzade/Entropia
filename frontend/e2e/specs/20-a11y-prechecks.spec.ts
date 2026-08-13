@@ -209,12 +209,20 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
       // ambiguous — the user cannot tell which one names the page — and no
       // route does that today, so a second one is a regression.
       //
-      // Still `> 1`, not `=== 1`. The h1-count reason is gone — ADIM 48 promoted
-      // `/user-manual` to `<h1>` (K-4), so all 23 routes now name themselves
-      // once — but the OUTLINE reason stands: the "no <h1>" advisory below is
-      // the detector for a page that regresses to a lower-level title, and
-      // making the count blocking would turn that advisory into a red gate,
-      // i.e. decide by omission a question checklist A-1/A-3 exists to answer.
+      // Still `> 1`, not `=== 1`, but for a DIFFERENT reason than before.
+      // The product decision this comment used to defer — promote
+      // `/user-manual`'s `<h2 className="page-title">` to h1 — was taken by the
+      // PO on 2026-08-12 (K-4) and has landed, so all 23 routes now name
+      // themselves with exactly one h1 and the `h1Count === 0` advisory below
+      // fires on none of them.
+      //
+      // Making a missing h1 BLOCKING was considered and deliberately not done
+      // here: this probe reads the INITIAL DOM and races each page's first data
+      // render (see the audit file's count caveat — routes drop in and out of
+      // the h3/aria-live counts between runs), and a gate that flaps is worse
+      // than no gate. The regression pin lives where it is stable instead —
+      // specs/17-page-coverage.spec.ts declares `level: 1` for `/user-manual`
+      // and waits for the page's real projection before asserting.
       if (rec.h1Count > 1) {
         blocking.push(`${target.path}: ${rec.h1Count} <h1> elements — a page may name itself once`);
       }
@@ -251,7 +259,7 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
           check: "skip link",
           observed: `first tabbable is ${rec.skipLinkFirstTabbable ?? "(none)"}`,
           wcag: "2.4.1 Bypass Blocks (A)",
-          note: "ADIM 48 shipped Layout.tsx's `.skip-link` -> #main-content as the shell's first tabbable node, so this should now fire on ZERO routes. A route reporting it again is a regression: either something tabbable was inserted ahead of the link, or .skip-link went position:fixed / display:none and dropped out of the tab order.",
+          note: "no in-page skip target precedes the primary nav, so a screen-reader user tabs the whole menu bar on every route. Adding one is a product change outside this preparation slice.",
         });
       }
       if (rec.headingSkips.length) {

@@ -189,32 +189,75 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `7dd1dfe`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `ce823a8`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 48 (RC §6.5'in İKİ PO kalemi, 2026-08-12): K-2 + K-4 KAPANDI.
-> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Presentation-only; backend,
-> OpenAPI, migration, `ENGINE_VERSION` **el değmedi**. (A) K-2: `Layout.tsx`'te
-> `.skip-link` → `#main-content` shell'in **ilk tabbable** düğümü; `<main>` `id` + `tabIndex={-1}`.
-> CSS **iki durumda da `position:absolute`** — `fixed` yaparsan `offsetParent` null olur ve
-> precheck probu linki hiç görmez; akışta bırakırsan **23 görsel baseline birden kayar**.
-> (B) K-4: `/user-manual` `<h2 class="page-title">` → `<h1>`; **sınıf değişmedi** → hesaplanmış
-> stil değişmedi. İkisi de artık `npm test` içinde **kapı** (`a11ySkipLink.test.tsx`,
-> `userManual.test.tsx`), **negatifi kanıtlı** — precheck advisory'leri regresyon dedektörü
-> olarak KALDI. **YAN ETKİ GİZLENMEDİ: K-5 21/23 → 22/23** (`/user-manual` artık `h1→h3`
-> atlıyor); tek sayfanın outline'ını yalıtılmış biçimde yeniden kesmek 22 rotanın ortak
-> çaresini denetimin verdicti gelmeden uygulamak olurdu. **Sayılar önce TÜRETİLDİ (stack bu
-> container'da ayağa kalkmadı: Docker Hub `429` + blob CDN `403`, 5× tekrar), sonra CI'da
-> ÖLÇÜLDÜ — altı sınıfın altısı birebir tuttu** (run `31626856387`, job `94215349370`,
-> **SUCCESS**): skip link **0**, no-`<h1>` **0**, heading outline **22**, toplam advisory
-> **67** (90'dan); axe ratchet **45/45 değişmedi**. **Kapılar İKİ KEZ koştu** (docs commit'i
-> yeniden tetikledi) ve **(rota, sınıf) kümesi olarak simetrik farkları BOŞ** — kararsız üç
-> rota dahil. K-2/K-4 **kapandı**; **K-5 = 22 iki örnekle destekli ama ikisi de SOĞUK
-> koşu** → ±1 notu korunur (ılık, ≥2 koşu emekliye ayırır). **Görsel kapı da ölçüldü: 23/23 passed, SIFIR baseline diff** — markup'ı
-> değişen `visual: user-manual` dahil (`.page-title` sınıf tabanlı olduğu için tek piksel
-> oynamadı). `adim48_ci_a11y_measured.txt` · `adim48_ci_visual_measured.txt`.
-> Frontend **71 dosya / 725 passed**, line **%84.9** (eşik 83). **ecc/claude-mem yine BAĞLI
-> DEĞİLDİ → memory checkpoint ARKA ARKAYA İKİNCİ KEZ YAZILAMADI (ADIM 47 + 48 borcu).**
-> `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md` · RC §6.5.
+> **Son dalga — ADIM 51 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
+> KOD DEĞİŞMEDİ.**
+> #514 `11:08:58Z`'de **insan eliyle yeniden AÇILDI** → ADIM 29'un kaydettiği "kapalı issue
+> ↔ boş defter" ayrışması kapandı; 8 belge uzlaştırıldı (RC raporu **kendi içinde
+> çelişiyordu**: banner yeniden açılmayı yazarken §6.1 + P12 tablosu + `İzleme` bloğu hâlâ
+> `CLOSED` diyordu). **BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED** —
+> defter hâlâ boş, `0/4`, 0/46 rota, 0/20 akış. **Yeniden açma bir SONUÇ DEĞİLDİR**;
+> değişen tek şey izlemenin artık açık olması. **Harf karışıklığı pinlendi:** defterde
+> (A)=imzalı kabul / (B)=geri alma, RC §6.1'de (A)=denetimi koştur / (B)=imzalı sapma —
+> issue'daki *"path (A)"* **RC anlamındadır**; ikisi de yeniden numaralandırılMADI.
+> **#514'e DOKUNULMADI** (`human-only`). **NUMARA: bu slice ÜÇ KEZ taşındı** — ADIM 48'i
+> #686+#688, ADIM 49'u #691, ADIM 50'yi #685 aldı; dördü de merge edildiği için başlıkları
+> değişmez, benimki edilmemişti → **ADIM 51**. `PROJECT_HISTORY.md` §ADIM 51 ·
+> `docs/ADIM51_LANDED_KICKOFF.md`.
+>
+> **Öncesinde ADIM 50 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
+> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Skip link (`Layout.tsx`
+> `.skip-link` + `<main id="main-content" tabIndex={-1}>`) ve `/user-manual` `<h1>`.
+> **K-2 bir UYGUNLUK düzeltmesi DEĞİLDİ** — 2.4.1 landmark'larla (ARIA11) zaten
+> karşılanıyordu, axe `bypass` hep yeşildi; ergonomiydi. **K-4'ün bedeli ÖLÇÜLDÜ:**
+> `/user-manual` K-5'in kümesine girdi → **K-5 21 → 22**, advisory toplamı **90 → 67**
+> (CI job `94221023796`; tek+soğuk koşu → 22 bir **taban**). **Eksik `<h1>`'i precheck'te
+> BLOCKING YAPMA** — sonda ilk DOM'u okur, veri render'ıyla yarışır; pin
+> `17-page-coverage.spec.ts` `level: 1`. **K-6 İKİYE ayrıldı:** K-6a (halka görünüyor mu)
+> A-08 bekler ve **mevcut sonda ona kanıt üretmez** (programatik `el.focus()`
+> `:focus-visible`'ı eşleştirmez); **K-6b ölçüldü ve DÜŞÜYOR** — `#00a9e8` ↔ beyaz
+> **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **`#688`'de KAPANDI**
+> (halka `var(--text)`; main'de ADIM 48 adıyla kayıtlı). **K-3 hâlâ PO'da** — prompt `docs/ADIM50_KICKOFF.md` §P-2. Frontend **722 passed /
+> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 50 · RC §6.5.
+> **NUMARA ÇAKIŞMASI (aynı gün DÖRT oturum):** bu slice ADIM 48 yazıldı → 49 denendi →
+> `#691` 49'u merge edilmiş adla alınca **ADIM 50** oldu. Kural: **numaralar yeniden
+> atanmaz, merge edilmiş ad kazanır**; taşınan taraf hep merge edilmemiş olandır. Branch
+> commit mesajları `adim-48` yazar. Çakışmayı gözle değil **`doc-status` kapısı** yakaladı.
+> **Başkasının slice'ını yeniden düzenleme:** K-6b'yi ayrı belgeye taşıma denemesi
+> `#691`'in kaydı üzerine **geri alındı** — o düzenleme bir **insan kararıdır**.
+>
+> Öncesinde ADIM 49 (P11-1 KAPANDI): **main'de required status check ruleset'i
+> `20765617` AKTİF** (PR #683 hazırlığı + ayarı insan uyguladı). **16 zorunlu check**,
+> hepsi `integration_id: 15368`; `pull_request` (0 onay) · `strict: true` ·
+> `bypass_actors: []`. **ÇALIŞMA ŞEKLİ DEĞİŞTİ: main'e doğrudan push YOK, her PR 16 yeşil
+> check + main ile güncellik ister** (`Backend` ~48 dk — bilinçli bedel). **Yeni CI job'ı
+> ya da `name:` değişikliğinde SIRA: önce merge → adın üretildiğini gör →
+> `scripts/required-checks-preflight.sh <pr>` → `PUT …/rulesets/20765617`. TERS SIRA TÜM
+> MERGE'LERİ KİLİTLER.** Lighthouse **insan kararıyla** zorunlu; çırpınırsa **taban
+> indirilmez** (`LH_REPEATS` medyanı) ve **`armed: false` kapının sessiz kapatma
+> düğmesidir**. Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED. **Ruleset repoda
+> DEĞİL — silinirse hiçbir kapı fark etmez (drift kapısı açık iş).** **Memory checkpoint
+> yine YAZILAMADI** (ortam yapısal — remote'ta `ecc`/`claude-mem` kayıtlı değil) → borç
+> **ADIM 47 + 48 + 49**; sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md`.
+> `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
+> Öncesinde **ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
+> `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli
+> **hiçbir** zeminde 3:1'i geçmiyordu (beyaz 2.68:1, `#f5f5f5` 2.46:1, `.dropdown-blue`
+> **1.00:1**), yenisi **her** zeminde geçiyor (beyaz 15.91:1; en kötü zemin `#0092c8`
+> `.menu-blue:hover` **4.50:1**). **axe bunu KOŞMAZ** — yeşil ratchet bu soru için kanıt
+> değildi. **Bu D-10 DEĞİL** (D-10 = 1.4.3 metin ekseni; bu 1.4.11 metin-dışı) ve **v18
+> sapması DEĞİL** (mockup hiçbir odak durumu tarif etmiyor); `--accent` token'ına ve
+> palete DOKUNULMADI. **K-6 defterde İKİYE ayrıldı: K-6b KAPANDI (ölçülü), K-6a AÇIK —
+> yalnız A-08 kapatabilir.** Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED.
+> **`npm run visual` / `npm run a11y` YERELDE KOŞMADI** (ortam Docker Hub blob CDN'ine
+> **403**) → **otorite CI**; görsel diff çıkarsa **tabanı güncelleme**, selector'ı daralt.
+> **Memory checkpoint YAZILAMAZ, sebebi YAPISAL (ölçüldü 2026-08-12):** remote container'da
+> `ecc`/`claude-mem` **kayıtlı değil** (`mcpServers` boş, `.mcp.json` yok) → borç bu ortamdan
+> kapatılamaz, **yerel** oturum ister. İçerik **hazır bırakıldı**:
+> **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48, yapıştır-ve-sil).
+> Sunucuları kaydetmek ya da remote'u md. 4'ten muaf tutmak **insan kararıdır**.
+> `PROJECT_HISTORY.md` §ADIM 48 · `docs/ADIM48_LANDED_KICKOFF.md`.
 > Öncesinde ADIM 47 (RC §6.7'nin İKİ PO kararı, 2026-08-12): §6.7.9 + §6.7.5 KAPANDI.
 > **Son dalga — ADIM 48 (kabul borcu sınıf B, parti 01 — doc 05 Trade Log backend yüzeyi):
 > 8 kriter KAPANDI, `partial` 126 → 118, `debt_class.B` 95 → 87. BLOCKER SAYISI
@@ -348,14 +391,11 @@ Before stopping a working session, produce **ALL** of the following:
 > uzlaştırması, #631), ADIM 28 (#628/#630), ADIM 27
 > (#626/#627), ADIM 26 (#624), ADIM 25 (#622) — **ADIM 23/24 artık `PROJECT_HISTORY.md`'de
 > KAYITLI** (borç kapandı).
-> **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐);
-> izleme issue'su #514 **AÇIK** — 2026-08-12'de bir insan **yeniden açtı** (`state_reason:
-> reopened`, ADIM 48'de API'den doğrulandı), yani eski "iş açık / izleme kapalı" ayrışması
-> **kapandı**. **Açık issue de denetimin ilerlediğinin kanıtı DEĞİLDİR**; hiçbir belge A-08'i
+> **Açık sınırlar:** **A-08 denetimi YAPILMADI** (defter BOŞ, dört çıkış kriteri de ☐) ve
+> izleme issue'su #514 **KAPALI** — iş açık, izleme kapalı; hiçbir belge A-08'i
 > `Complete`/`PASS`/`Done` gösteremez (ADIM 44 yalnız **hazırlığı** bitirdi: yığın 9/9,
 > runbook, tazelenmiş sayılar — **denetim değil**) · ~~P9-B2 imzasız~~ **KAPANDI (ADIM 44)** ·
-> **K-2 ve K-4 ADIM 48'de KAPANDI** (PO kararı; K-5 bunun yan etkisiyle 21 → **22**);
-> K-3/K-5/K-6/K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
+> K-2..K-7 ölçüldü ama **düzeltilmedi**, K-5/K-7'nin sayısı **koşudan koşuya oynuyor**
 > (ilk koşu soğuk, eksik raporlar) ·
 > **Alertmanager ARTIK VAR (ADIM 31)** ama üç artık açık: kurallar **gerçek production
 > serilerine karşı hiç değerlendirilmedi** (repo içinde kapatılamaz, imzalı sapma DEĞİL) ·
@@ -431,10 +471,8 @@ Before stopping a working session, produce **ALL** of the following:
   (güncel main'de **9/9 doğrulandı**) + `docs/implementation/a11y_screen_reader_audit_runbook.md`
   + `docs/audit/a11y_screen_reader_audit_results.md` (**BOŞ defter**, dört çıkış kriteri de ☐).
   Takip **GitHub #514 — 2026-07-30'da kanıtsız kapatılmış, 2026-08-03'te yeniden açılmış,
-  2026-08-07'de yine kanıtsız kapatılmış, 2026-08-12'de yine bir insan tarafından YENİDEN
-  AÇILMIŞTIR** (ADIM 48'de API'den doğrulandı); kapatma yetkisi insandadır, agent kapatamaz.
-  Kapalı issue ile boş defter arasındaki ayrışma **okuma (B) ile kapandı** — ama defter hâlâ
-  BOŞ; ADIM 29 onu **çözmedi, KAYDETTİ**
+  2026-08-07'de yine kanıtsız kapatılmıştır**; kapatma yetkisi insandadır, agent kapatamaz.
+  Kapalı issue ile boş defter arasındaki ayrışma **sürüyor**; ADIM 29 onu **çözmedi, KAYDETTİ**
   — kanonik blok `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue
   state*, diğer tüm belgeler oraya işaret eder. Açık duran iki çözüm yolu da **insan işidir**:
   (A) imzalı kalıcı sapma (D-10 biçimi: adı verilmiş imzalayan + ISO tarih + kapsam) —

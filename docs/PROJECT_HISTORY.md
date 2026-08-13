@@ -7425,162 +7425,125 @@ Migration **yok**, `ENGINE_VERSION` **değişmedi**, OCC/Idempotency davranış�
 
 ---
 
-## ADIM 48 — RC §6.5'in iki PO kalemi: K-2 (skip link) + K-4 (`/user-manual` h1)
+## ADIM 48 — K-6b: odak halkasının kontrastı (WCAG 1.4.11), tek CSS deklarasyonu
 
-**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice
-presentation-only'dir: route yolu, react-query key'i, OCC token'ı (`If-Match` /
-`expected_*_version` / `X-*-Version`), `Idempotency-Key`, hook, SSE taksonomisi,
-`lib/*.ts` veri mantığı ve `app/nav.ts` NAV/ALL_NAV_ITEMS **değişmedi**. Backend'e
-hiç dokunulmadı → migration yok, `ENGINE_VERSION` değişmedi, `docs/openapi.json`
-değişmedi.
+**Dalganın tipi:** presentation-only erişilebilirlik düzeltmesi. **Tek ürün kodu değişikliği
+bir deklarasyondur** — `frontend/src/styles/global.css` `:focus-visible` kuralında
+`outline: 2px solid var(--accent)` → `var(--text)`. Migration yok, `ENGINE_VERSION`
+değişmedi, OpenAPI değişmedi. Route path, react-query key, OCC token, Idempotency-Key,
+hook, SSE taksonomisi, `lib/*.ts`, `app/nav.ts` **hiç dokunulmadı**. Base `7dd1dfe` (#682).
 
-**PO kararı (2026-08-12):** K-2 ve K-4 **FIX**; K-3 **kapsam dışı**; K-5 ve K-6
-**A-08'i bekler**. Uygulanan tam olarak budur — daha fazlası değil.
+### Neden — ve iddia sıfırdan yeniden ölçüldü
 
-### (A) K-2 — skip link (WCAG 2.4.1 Bypass Blocks)
+Kickoff'un verdiği sayılar kabul edilmedi, WCAG 2.x relatif luminans formülüyle
+(`(L1+0.05)/(L2+0.05)`, sRGB linearizasyonu) **bağımsız olarak yeniden hesaplandı** ve
+**birebir doğrulandı**:
 
-`app/Layout.tsx` artık `<div class="app-shell">`'in **ilk çocuğu** olarak
-`<a class="skip-link" href="#main-content">Skip to main content</a>` render ediyor;
-`<main>` ise `id="main-content"` + `tabIndex={-1}` taşıyor. Öncesinde her rotada ilk
-tabbable öğe shell'in `Log out` butonuydu (`AuthControl`), yani **23/23 rotada** klavye
-kullanıcısı sayfaya tüm menü çubuğunu tab'layarak başlıyordu.
+| Halka | Zemin | Oran | 1.4.11 (3:1) |
+|---|---|---:|---|
+| `#00a9e8` (`--accent`) | `#ffffff` | **2.68 : 1** | **FAIL** |
+| `#00a9e8` | `#f5f5f5` | **2.46 : 1** | **FAIL** |
 
-Üç kurulum ayrıntısı **taşıyıcıdır**, süs değil:
+Ölçüm zemin kümesine genişletildi ve **accent halkası uygulamadaki 15 zeminin HİÇBİRİNDE
+3:1'i geçmiyordu** — en iyi hâli beyaz üzerinde 2.68:1, en kötüsü kendi üzerinde 1.00:1
+(`.dropdown-blue .item`, `background: #00a9e8` — halka görünmez).
 
-1. **`<a href="#...">` olmak zorunda, `<button onClick>` değil.** Precheck probu ilk
-   tabbable'ı `/^a\[href=#/` ile eşliyor (`e2e/specs/20-a11y-prechecks.spec.ts`); bir
-   buton ölçümü yeşile çevirmez.
-2. **`.skip-link` gizli VE görünür durumda `position: absolute`.** `.app-shell` bir flex
-   sütunudur; akışta yer kaplayan bir düğüm 23 görsel baseline'ı birden kaydırırdı.
-   `display:none` → `static` geçişi tam olarak bu hatayı yapardı.
-3. **`absolute`, `fixed` DEĞİL.** Probun tabbable filtresi `offsetParent !== null`
-   arıyor; `position: fixed` bir öğede `offsetParent` **null** döner ve prob linki hiç
-   görmez — ölçüm "ilk tabbable Log out" demeye devam ederdi.
+**Bunu repoda hiçbir şey ölçmüyordu.** axe-core'un `color-contrast` kuralı **metin** içindir
+ve odak göstergesi için bir kontrast kuralı **koşmuyor**; a11y ratchet'i, Lighthouse ratchet'i
+ve görsel kapı yeşildi ve **yeşil olmaları kanıt değildi** — hiçbiri bu soruyu sormuyordu.
 
-`<main>`'deki `tabIndex={-1}` de zorunludur: onsuz tarayıcı `#main-content`'e **kaydırır**
-ama odağı linkte bırakır, sonraki Tab menü çubuğuna geri girer. **-1**, 0 değil — probun
-seçicisi `[tabindex]:not([tabindex="-1"])` olduğu için `<main>` tab durağı olmaz.
+### Neden bu D-10 DEĞİL — ve neden v18 sapması DEĞİL
 
-### (B) K-4 — `/user-manual` kendini `<h1>` ile adlandırıyor
+İki ayrı gerekçe, ikisi de kapatılmadan bu slice yazılamazdı:
 
-`pages/UserManual.tsx` `<h2 className="page-title">` → `<h1 className="page-title">`.
-**Sınıf değişmedi ve bu kritik:** `.page-title` `global.css`'te `margin` / `font-size`
-(`18px`) / `font-weight` (`900`) / `color` değerlerini **açıkça** yazar, yani UA'nın h1
-varsayılanlarının tamamı zaten eziliyordu → **hesaplanmış stil bir piksel oynamaz**.
-`/user-manual` bu sapmayı taşıyan **tek** rotaydı.
+1. **Ölçüt farklı.** D-10 (2026-07-30 imzalı kalıcı sapma, 45 accent-blue düğüm) **1.4.3
+   Contrast (Minimum)** eksenidir — *metin* rengi. Bu kalem **1.4.11 Non-text Contrast**'tır
+   — bir UI bileşeninin görsel göstergesi. Ayrı başarı ölçütü, ayrı eşik (4.5:1 vs 3:1),
+   ayrı imza gerekirdi. D-10'un imzası bu ekseni **kapsamıyor**; bir metin sapmasına verilmiş
+   imzayı bir gösterge sapmasına genişletmek imzayı sahiplenmek olurdu.
+2. **Mockup bu durumu tarif etmiyor.** `docs/spec/index_guncellenmis_duzeltilmis_v18.html`
+   içinde **hiçbir odak durumu yok** — ne `:focus`, ne `:focus-visible`, ne bir odak halkası
+   görseli. Bir sapma ancak kanonun söylediği bir şeyden sapabilir. Halka rengi **v18
+   sapması değildir**; `--accent` token'ını, dolguları, kenarlıkları veya link paletini
+   değiştirmek **olurdu** — bu yüzden hiçbirine dokunulmadı.
 
-### Hizalanan testler + YENİ kapılar
+### Sevk edilen — ve neden `var(--text)`
 
-Hizalama (davranış değil, beklenti): `e2e/specs/17-page-coverage.spec.ts` `level: 2`
-kaldırıldı (varsayılan 1) · `e2e/utils/pageTruth.ts` sapma notu · spec 20'nin `h1Count > 1`
-gerekçe yorumu (h1 gerekçesi düştü, outline gerekçesi kaldı) · spec 20'nin skip-link
-advisory `note`'u (artık **regresyon dedektörü**: sıfır rotada ateşlemeli).
+`--text` (`#222222`) seçildi çünkü palette **zaten var** (yeni token icat edilmedi) ve
+uygulamadaki **her** zeminde 3:1'i geniş bir payla geçiyor. Değişiklikten sonra ölçülen:
 
-**Asıl kazanç kapılardadır.** İki bulgu da precheck'te **advisory**'ydi — advisory build
-kıramaz. ADIM 48 ikisini de sıradan `npm test` suite'inde koşan **gerçek kapılara** bağladı:
+| Zemin | Nerede | Oran |
+|---|---|---:|
+| `#ffffff` | gövde, kartlar | **15.91 : 1** |
+| `#f5f5f5` | | **14.59 : 1** |
+| `#e8e8e8` | başlık çubuğu | **12.98 : 1** |
+| `#00a9e8` | `.dropdown-blue` paneli | **5.94 : 1** |
+| `#8f8f8f` | `.dropdown` paneli | **4.92 : 1** |
+| `#8b8b8b` | `.run-button:disabled` | **4.67 : 1** |
+| `#0092c8` | `.menu-blue:hover` — **uygulamadaki EN KÖTÜ zemin** | **4.50 : 1** |
 
-- `frontend/src/test/a11ySkipLink.test.tsx` (**YENİ**, 3 assert): ilk tabbable
-  `a[href="#main-content"]`, ikinci tabbable hâlâ `<header>` içinde (yani link chrome'un
-  **önünde**), `<main>` `id` + `tabindex="-1"` taşıyor ve tabbable listesinde **değil**,
-  link `hidden`/`aria-hidden`/`tabindex` ile öldürülmemiş. Tabbable seçicisi precheck
-  probundan **birebir kopyalandı** — ikisi "ilk tabbable" tanımında ayrışmamalı.
-- `userManual.test.tsx::"names itself with a level-1 heading (K-4)"`: seviye **1** +
-  `.page-title` sınıfı birlikte assert edilir (sınıf tek başına sessizce h2'ye dönebilirdi).
+En kötü hâli bile eşiğin **%50 üstünde**. `#b60000` / `#00a651` / `#d98c00` zeminleri
+(`.ready-status`) tabloda **yok** çünkü o şerit odaklanabilir değildir — `<div>`'dir ve içinde
+odak hedefi yoktur; `outline-offset: 2px` halkayı **ebeveynin** zeminine bastığı için ölçülmesi
+gereken yüzey ebeveynin yüzeyidir.
 
-**Negatifi kanıtlandı** (kapı olduğu görülmemiş bir test kapı değildir): skip link
-`</header>`'dan sonraya taşındı ve `<h1>` `<h2>`'ye geri döndürüldü → **2 failed / 18
-passed, exit 1**; sonra geri alındı.
+**Kapsam dışı bırakılan bir benzer:** `pages/RationaleFamilies.tsx:368` inline
+`outline: "2px solid var(--accent)"` — bu bir **seçim** göstergesidir, odak halkası değil;
+ayrı bir ölçüt ve ayrı bir karar, bu slice'ın kapsamı dışı.
 
-### Yan etki — GİZLENMEDİ: K-5 bir rota **genişledi**
+### Doğrulama — ve neyin koşulamadığı
 
-`/user-manual`'ın outline'ı `[2,3,4,5,6,6,6,6]` idi, yani **atlama içermiyordu** ve K-5'in
-21'inin **dışındaydı**. `h1`'e çıkınca `[1,3,4,5,6,6,6,6]` oluyor → `h1 → h3` atlaması →
-**K-5 21/23'ten 22/23'e çıkıyor**, geriye tek istisna olarak `/` kalıyor.
+Koştu: `npm run lint` **exit 0** · `npm run typecheck` **exit 0** ·
+`npm test -- --no-file-parallelism` → **721 passed / 70 dosya, exit 0** (taban ADIM 25 ile
+**birebir aynı**, hiçbir test yeniden hizalanmadı — kural görünür etiket veya kapsayıcı
+değiştirmiyor).
 
-Alternatif — o sayfanın `h3` bölümlerini `h2`'ye çekmek — K-5'in **22 rotanın hepsinde
-aynı olan** çaresini, denetimin verdicti gelmeden, tek sayfada uygulamak olurdu. ADIM 48
-bunu **yapmadı**. Sayı düşürülmedi; `a11y_screen_reader_audit_results.md` §6'ya ve RC
-§6.5'e **arttığı gibi** yazıldı.
+**`npm run visual` ve `npm run a11y` bu ortamda KOŞTURULAMADI.** Docker daemon elle
+başlatıldı ve çalıştı, ama imaj çekilemedi: ortamın ağ politikası
+`production.cloudfront.docker.com`'a CONNECT'i **403 ile reddediyor** (agent proxy
+`recentRelayFailures` ile doğrulandı) ve `registry-1.docker.io` **429** veriyor. Üç deneme
+aynı biçimde düştü. **Otorite CI'dır** — `e2e.yml::e2e` (görsel kapı) ve `e2e.yml::a11y`
+(axe ratchet) ikisi de PR'da bloklayıcı koşar.
 
-### Ölçüm — önce TÜRETİLDİ, sonra CI'da ÖLÇÜLDÜ (altı sınıfın altısı tuttu)
+Yerelde bunun yerine **statik olarak** kanıtlandı: görsel taban ekran görüntüleri odaklanmış
+öğe **yokken** alınır. `specs/11-visual-regression.spec.ts` yalnız `ensureAdmin` → `goto` →
+`settle` → `toHaveScreenshot` yapar; dosyada `focus`/`blur`/`activeElement` **geçmiyor**, ve
+`goto` her hâlükârda odağı belgeye sıfırlar. Uygulamadaki tek `autoFocus`
+(`pages/Login.tsx:157`) **çekilen 23 rotanın hiçbirinde değil**; diğer tüm `.focus()`
+çağrıları modal / drawer / dropdown içinde ve görsel spec bunların hiçbirini **açmıyor**.
+Dolayısıyla beklenen **0 diff**. **Beklenti kanıt değildir** — CI'ın söylediği geçerlidir; ve
+diff çıkarsa doğru tepki tabanı güncellemek değil, kuralın kapsamını daraltmaktır.
 
-**`scripts/a11y-audit-stack.sh up` bu oturumun container'ında ayağa KALKMADI**, dolayısıyla
-`npm run a11y` (≥2 koşu) ve `npm run visual` (23/23 baseline) **koşmadı**. Sebep ölçüldü ve
-beş kez tekrarlandı: Docker Hub manifest `429 Too Many Requests`, blob CDN
-(`production.cloudfront.docker.com`) `403 Forbidden` — agent proxy üzerinden. dockerd
-proxy'siz de proxy'li de denendi. Bu sınıf, proxy README'sine göre "report, do not work
-around".
+### Defter
 
-Bunun yerine post-fix precheck profili **ADIM 44'ün commit edilmiş run-5 kayıtlarından
-aritmetikle türetildi** (`docs/releases/evidence/2026-08-12/adim48_k2_k4_precheck_derivation.txt`):
+`docs/audit/a11y_screen_reader_audit_results.md` §6'da **K-6 İKİYE ayrıldı**:
 
-| sınıf | run 5 | türetilmiş | **CI'da ÖLÇÜLEN** |
-|---|---:|---:|---:|
-| skip link (K-2) | 23 | 0 | **0** ✓ |
-| no `<h1>` (K-4) | 1 | 0 | **0** ✓ |
-| heading outline (K-5) | 21 | 22 | **22** ✓ |
-| `contentinfo` (K-3) | 23 | 23 | **23** ✓ |
-| `aria-live` (K-7) | 21 | 21 | **21** ✓ |
-| focus indicator (K-6) | 1 | 1 | **1** ✓ |
-| **toplam advisory** | **90** | **67** | **67** ✓ |
+- **K-6a** — *"odak göstergesi computed style ile saptanamıyor"* → **AÇIK**, insan gözü ister,
+  **A-08 dışında hiçbir şey kapatamaz**. Sayım tablosundaki satır da `K-6a` olarak yeniden
+  adlandırıldı (ölçen prob odur).
+- **K-6b** — *"odak halkasının kontrastı 1.4.11'in altında"* → **KAPANDI 2026-08-12**,
+  ölçülmüş oranlarla birlikte.
 
-**Sonra CI koştu ve türetme birebir tuttu.** Run `31626856387`, job `94215349370`,
-commit `2b13e41`, conclusion **SUCCESS**, 6 passed. Job'ın kendi özet satırı:
-*"a11y prechecks: 23 route(s) inspected, **67** advisory observation(s). Tab order walked
-on 23/23 route(s); NOT walked on 0."* Sayılar `::warning::` bloğundan **makineyle** yeniden
-sayıldı, gözle okunmadı. Ham kayıt: `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
-
-**K-2 ve K-4'ün advisory'leri 67 satırın içinde bir kez bile geçmiyor** — ve blokları
-spec'te **bilerek bırakıldı**, dolayısıyla bu sessizlik bir **ölçümdür**, silme değil.
-**K-5'in yan etkisi de birebir ölçüldü:**
-`/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`; atlama
-içermeyen tek rota olarak `/` kaldı.
-
-**axe ratchet değişmedi:** *"45 serious node(s) measured against a frozen ceiling of 45"*
-— skip link 46. düğümü **eklemedi**. Zaten bu yüzden etiket rengi `--text` seçilmişti;
-axe onu yakalayamazdı (odaksızken clip'li, contrast kuralı atlıyor), yani renk **incelemede**
-karara bağlandı, tarayıcı tarafından değil.
-
-**SONRA İKİNCİ KEZ KOŞTU — ve iki koşu BİREBİR aynı çıktı.** Docs-only follow-up commit'i
-(`e3d5a2a`; frontend bundle'ı 2b13e41 ile **aynı**) kapıları yeniden tetikledi: run
-`31627736544`, job `94218440525`, **SUCCESS**, yine **67**. İki koşu yalnız toplam olarak
-değil, **(rota, sınıf) çiftlerinin KÜMESİ** olarak karşılaştırıldı → **simetrik fark BOŞ**.
-ADIM 44'ün kararsız bulduğu üç rota (`/analysis-lab`, `/backtest/history`,
-`/backtest/metrics`) ikisinde de aynı raporlandı; aria-live advisory'si meşru olarak
-bulunmayan iki rota (`/rationale-families`, `/user-manual`) da öyle.
-
-**Bu neyi değiştirir, neyi değiştirmez.** Değiştirir: **K-5 = 22 artık tek örnek değil** —
-iki bağımsız stack bring-up'ı aynı 23 rotayı yürüdü ve birebir anlaştı. Değiştirmez: **iki
-koşu da SOĞUK** (her job'da taze Compose stack, hemen problanıyor). ADIM 44'ün beş koşuluk
-deneyi **tek ılık stack üzerindeki** varyansı ölçmüştü; aynı runner imajındaki iki soğuk
-koşu, ılık bir koşunun taşımayacağı ortak bir sistematik sapmayı hâlâ paylaşabilir.
-**Pratik okuma:** 22'yi **yüksek güvenle** çalışma değeri say, ±1 notunu ılık ve ≥2 koşuya
-kadar koru — ama bunun için ayrı bir slice harcama: `h1 → h3` atlamasının önemli olup
-olmadığı **A-3'ün sorusudur**, sayı onu yalnız boyutlandırır.
-
-### Yerelde gerçekten koşan kapılar
-
-`npm run lint` **exit 0** · `npm run typecheck` **exit 0** · `npm run coverage` **exit 0**
-→ **71 dosya / 725 passed** (öncesi 70 / 721), line **%84.9** (eşik 83, `vite.config.ts`).
-Ham çıktı: `docs/releases/evidence/2026-08-12/adim48_local_gate_runs.txt`.
+*"K-2 … K-7 bilerek raporlanır, kapı değildir"* paragrafı da düzeltildi: K-6b **tek
+istisnadır** ve istisnanın nerede olduğunu tarif eder — 3:1 sayısal bir AA eşiğidir, halka
+rengi kanonda tarif edilmemiştir ve düzeltme hiçbir yerleşimi değiştirmez; diğerleri
+(footer eklemek, 21 sayfanın başlık ağacını yeniden kesmek, kalıcı status bölgesi mount
+etmek) **ürün kararıdır** ve bir hazırlık slice'ının onları verme yetkisi yoktur.
 
 ### Dürüst sınırlar
 
-- **`npm run a11y` ve `npm run visual` YERELDE KOŞMADI** (yukarıdaki registry engeli) —
-  ama **ikisi de CI'da koştu ve YEŞİL geldi**. Görsel kapı: **23/23 passed, SIFIR baseline
-  diff** (job `94215349503`, step 11), markup'ı değişen `visual: user-manual` dahil —
-  `.page-title`'ın sınıf tabanlı olması tam da burada ölçüldü. Aynı job'da E2E suite
-  **39 passed / 1 skipped**; hizalanan `17-page-coverage` `/user-manual` satırı **gerçek
-  DOM'da** yeşil (jsdom'da değil). `adim48_ci_visual_measured.txt`.
-- **K-5'in 22'si ölçüldü ama ±1 çekincesini KORUR** — run-5'in kararsız rotaları
-  (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) daha soğuk bir örneklemede
-  yine düşebilir. 22'yi dokunulmaz sayma.
-- **A-08 KIPIRDAMADI.** İki yapısal önkoşul iyileşti, biri bir tık kötüleşti; **hiçbiri
-  duyulmadı**. Defter §1/§2 hâlâ boş, dört çıkış kriteri de ☐, #514 insan kapısı.
-- **K-3 / K-5 / K-6 AÇIK kalır** — PO kararı onları kapsamadı.
-- **`pageTruth.ts::PageContract.level`** artık hiçbir contract tarafından kullanılmıyor.
-  Kaçış kapağı olarak **bilerek** bırakıldı (bir sonraki sapma varsayımla değil
-  contract'ta beyanla gelsin), notu buna göre yeniden yazıldı.
+- **K-6a AÇIK.** Bu slice onu kapatmadı ve kapattığını iddia etmiyor. Bir halkanın
+  **ölçülebilir** kontrastı ile bir insanın onu **görebilmesi** aynı soru değildir.
+- **A-08 KAPANMADI.** Defter hâlâ **0/4**, dört çıkış kriteri de ☐, #514 kanıtsız kapalı.
+  Hiçbir belge A-08'i `Complete`/`PASS`/`Done` göstermez.
+- **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08). Verdict BLOCKED.**
+- **Görsel + axe kapıları yerelde koşmadı** (yukarıdaki ağ politikası). CI otoritedir.
+- **Backend'e dokunulmadı** → backend suite yeniden koşulmadı; gerek yoktu.
+- **Memory checkpoint YAZILAMADI** — `ecc` ve `claude-mem` MCP sunucuları bu oturumda da
+  **bağlı değil** (araç listesinde yoklar). Kapanış ritüelinin **4. maddesi EKSİKTİR**;
+  atlanmadı, yapılamadı. **ADIM 47 ile üst üste ikinci oturum** — biriken borç: ADIM 47 +
+  ADIM 48. Bir sonraki bağlı oturumda **ikisi birden** yazılmalı.
+- **Codemap tazelenmedi** çünkü gerekmedi: yeni endpoint / tablo / sayfa / job **yok**.
 ## ADIM 48 — kabul kriteri borç defteri, sınıf B parti 01 (doc 05 Trade Log backend yüzeyi)
 
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Bu slice bir blocker
@@ -7675,10 +7638,402 @@ reddettiği literalleri sürer.
   TL-16 · TL-20 · TL-22` + `TL-18` uncovered).
 - **A-08 / #514'e DOKUNULMADI** — defter boş (0/4), izleme issue'su kapalı, blocker 1.
 - **`P1-Gate3` KAPANMADI.** 126 kalem açık; bu parti borcun **%6'sını** kapattı.
-- **Memory checkpoint YAZILAMADI (ritüel madde 4).** Bu oturumda da `ecc` ve
-  `claude-mem` MCP sunucuları **bağlı değil** (ToolSearch'te yoklar) — ADIM 47 ile aynı
-  boşluk, **iki oturumdur birikiyor**. Atlanmadı, **yapılamadı**; bir sonraki oturumda
-  ADIM 47 **ve** ADIM 48 için yazılmalı.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4) — ve sebebi merge sonrası ÖLÇÜLDÜ.**
+  ADIM 47 ile aynı boşluk, iki oturumdur birikiyordu. İlk iki kayıt *"bir sonraki
+  oturumda yazılmalı"* dedi; ikincisi geldiğinde koşul değişmemişti, çünkü sorun
+  **oturuma özel değil ortama yapısaldır:** bu iş Claude Code on the web (remote
+  container) üzerinde yürüyor ve o ortamda `ecc` / `claude-mem` / `codebase-memory-mcp`
+  **hiç kayıtlı değil** — `/root/.claude.json`'da bu projenin `mcpServers` listesi
+  **boş (`[]`)**, repoda `.mcp.json` **yok**, araç aramasında `ecc` **sıfır eşleşme**
+  veriyor. Bağlı olanlar `github` / `Figma` / `Google_Drive` / `Claude_Code_Remote`;
+  hiçbiri knowledge graph değil. **Yani borç bu ortamdan kapatılamaz** ve aynı ortamda
+  açılan bir sonraki slice de aynı şekilde kaçırır — *"bir dahaki sefere"* demek onu
+  kapatmıyordu.
+  **Yapılan:** checkpoint içeriği **tam metin** hâlde
+  `docs/memory/PENDING_CHECKPOINTS.md`'ye yazıldı (iki ecc entity'si + iki claude-mem
+  observation'ı, ilişkileriyle). Bağlı bir **yerel** oturum onu yeniden türetmeden
+  yapıştırır ve dosyayı siler — belge kendini tüketir. **Kalıcı çözüm insan kararıdır:**
+  ya sunucular remote ortama kaydedilir (`.mcp.json`), ya remote oturumlar ritüelin
+  4. maddesinden resmen muaf tutulur. Üçüncü seçenek yok.
 - **Codemap tazelemesi gerekmedi (ritüel madde 5)** — slice yeni endpoint / tablo /
   sayfa / job / dramatiq aktörü eklemedi; `backend/src`, `alembic` ve `frontend/src`
   ağaçlarına **hiç dokunulmadı**, o yüzden `repository_facts.md` girdileri de değişmedi.
+
+---
+
+## ADIM 49 — P11-1 KAPANDI: main'de required status check ruleset'i (PR #683 + repo ayarı)
+
+**Tarih:** 2026-08-12 · **PR:** #683 (`74bbd70`) · **Repo ayarı:** ruleset `20765617`,
+`2026-08-12T23:14:40+03:00` · **Migration yok** · **`ENGINE_VERSION` değişmedi** ·
+**`backend/src`, `alembic`, `frontend/src` ağaçlarına HİÇ dokunulmadı.**
+
+RC §6.7 tablosunun **repo dışı** tek kalemi kapandı. ADIM 45 `flows`'u CI kapısı
+yapmıştı ama kendi kaydında *"required status check olmadan bu kapı merge'i
+DURDURAMAZ"* diyordu; bu slice o cümleyi geçersiz kıldı — 16 kapının hepsi için.
+
+### Ölçülen başlangıç durumu (kanıt, varsayım değil)
+
+| Sorgu | Sonuç |
+|---|---|
+| `GET /branches/main` → `.protection` | `enabled: false`, `enforcement_level: "off"`, `contexts: []` |
+| `GET /rulesets` | `[]` |
+| `GET /rules/branches/main` | `[]` |
+| `GET /branches/main/protection` | **`403`** — oturum token'ı admin değil |
+
+`403` yüzünden "beklenen 404" alınamadı; ama `branches/main` gövdesi aynı gerçeği
+doğrudan söylüyor. **Token'ın körlüğü sonradan çürütüldü:** probe ruleset'i canlıyken
+aynı token onu `count: 1` olarak gördü → önceki `[]` **gerçek yokluktu**, yetki
+artefaktı değil. Doğrulama yöntemi bu deneyle **kalibre edildi**.
+
+### Sınıflandırma — 16 ZORUNLU / 1 ayrıldı / 5 gürültü
+
+Kapıların çoğu ayrı bir check **değil**, bir job'ın **adımı**. Bu yüzden required
+liste kapı listesinden kısadır ve şu eşleşme kayda geçer:
+
+- **23-rota görsel regresyon** = `npm run visual`, `E2E — real browser …(F-23)`
+  job'ının **içinde**. Görsel kapının bloklayıcı olması **o satıra** bağlı.
+- **coverage (backend ≥90) · docs-truth · şema paritesi · OpenAPI drift ·
+  acceptance ratchet · pip-audit** = `Backend — lint, type, test` adımları.
+- **frontend coverage · visual baseline platform gate · npm-audit-gate** =
+  `Frontend — lint, typecheck, build, test` adımları.
+
+**Ayrılan (Tier 2, 1 kalem): çıplak `CodeQL`.** Farklı app üretiyor
+(`github-advanced-security` / `57789`; diğer 21'i `github-actions` / `15368`),
+**yalnız PR'da** var (main commit'inde 21, PR head'inde 22 check) ve semantiği
+deterministik kapı değil, **alert triage**. Taramanın koştuğu zaten
+`CodeQL — python` + `CodeQL — javascript-typescript` ile garanti.
+
+**Gürültü (Tier 3, 5 kalem):** nightly/manual job'lar, PR'da `skipped`.
+`Nightly failure notice` ayrıca **iki workflow'dan aynı adla** üretiliyor —
+tek-anlamlı required yapılamaz.
+
+**Dependabot:** ayrılacak gürültü **yok**. `.github/dependabot.yml` var ama
+Dependabot PR'ları **aynı 22 check'i** koşar, kendi job'ını üretmez.
+
+### Lighthouse — insan kararıyla ZORUNLU
+
+İlk taslak Lighthouse'u Tier 2'de tutuyordu (ölçülmüş **98–100 varyansı**; çırpınan
+bir required check insanı kapıya güvenmemeye alıştırır). **Karar tersine çevrildi ve
+kayda geçti** (runbook §2.1). Kaydın taşıdığı asıl bilgi çırpınma anında **ne
+yapılmayacağı**:
+
+- Skor **`LH_REPEATS` geçişin MEDYANI** (varsayılan 3) → gürültünün ilacı **tekrar
+  sayısı**, taban değil.
+- **`armed: false` + boş `floors` → spec uyarı basıp GEÇER** (bootstrap durumu).
+  Required olduktan sonra asıl risk budur: bir PR bu bayrağı çevirirse kapı **yeşil**
+  görünürken hiçbir şey ölçmez. Bu bir düzeltme değil, kapının kaldırılmasıdır.
+- `TARGET_PAGES`'te olup `floors`'ta olmayan rota **FAIL** — tabansız rota delik sayılır.
+- **Düzeltilen bir hata:** ilk taslak Lighthouse tabanının "üç yerde pinli" olduğunu
+  yazmıştı; o **loadgen gecikme bandı** (P10-7), farklı kapı. Lighthouse tabanı **tek
+  dosyada**: `frontend/e2e/lighthouse-baseline.json`, rota+kategori bazında.
+
+### Ne landed
+
+| Dosya | Ne |
+|---|---|
+| `.github/rulesets/main-required-status-checks.json` | `gh api --input` gövdesi. **Elle yazılmadı — ölçülen check-run yanıtından ÜRETİLDİ.** GitHub bu yolu **otomatik OKUMAZ**; dosya ayarın versiyonlanmış kaydı ve istek gövdesidir. |
+| `scripts/required-checks-preflight.sh` | Salt-okuma ön kontrol. Payload'ı GitHub'ın **gerçekten ürettiği** check listesiyle diff'ler; göremediği adı `FATAL` + `exit 1` ile reddeder. |
+| `docs/implementation/required_status_checks_setup.md` | Ölçüm · üç kademeli sınıflandırma · alan alan komut açıklaması · arayüz adımları · uyarılar · geri alma · bakım sırası. |
+
+### Yürürlüğe giren ayar (ölçülen)
+
+`enforcement: active`, `conditions.ref_name.include: ["~DEFAULT_BRANCH"]`
+(dal yeniden adlandırılırsa kural **kendiliğinden** takip etsin diye; `"main"` yazılmadı),
+`bypass_actors: []`, kurallar: `deletion` · `non_fast_forward` · `pull_request`
+(`required_approving_review_count: 0`) · `required_status_checks`
+(`strict_required_status_checks_policy: true`, 16 context, hepsi `integration_id: 15368`).
+
+**`pull_request` kuralı dekoratif değil, taşıyıcıdır:** required status check'ler
+**yalnız PR merge'ini** kapsar — o kural olmasa `git push origin main` on altısını da
+atlardı. `0` onay bilinçli: tek kişilik repoda kendi PR'ını onaylayamazsın, `1` yazmak
+kalıcı kilit demek.
+
+### Doğrulama (canlı ruleset ↔ main'deki payload, programatik)
+
+Tüm kontroller geçti: ruleset sayısı 1 · zarf birebir · **canlı kural tipleri = dala
+ETKİN uygulananlar** (`/rules/branches/main`) · `strict: true` · **16 ad +
+`integration_id` sıra dâhil birebir** · **kilitlenme kontrolü: üretilmemiş ad YOK** ·
+çift üretilen ad required değil · `current_user_can_bypass: "never"`.
+
+GitHub iki varsayılan ekledi — `required_reviewers: []`, `allowed_merge_methods:
+["merge","squash","rebase"]`. **Sapma değil, sunucu normalizasyonu.**
+
+### Kayda değer iki olay
+
+- **Sahte 422.** "422 alıyorum" teşhisi yanlıştı: o koşuda `cd /path/to/Entropia`
+  (belgedeki **yer tutucu**) patlamış, komut ev dizininde koşup dosyayı bulamamış ve
+  **`exit=1`** vermişti. Gerçek payload ilk denemede **`201`**. **Ders: `gh api`'nin
+  exit code'unu ve gövdesini ayrı ayrı oku; "hata veriyor" bir hata SINIFI değildir.**
+- **Probe ruleset'i** (`20765470`, tek `deletion` kuralı) zarfı izole etmek için
+  kuruldu, işi bitince **silindi** — silindiği doğrulandı (envanterde yok).
+
+### Dürüst sınırlar
+
+- **`bypass_actors` bağımsız doğrulanamadı.** GET yanıtı bu alanı salt-okuma
+  token'ına **hiç vermiyor**. Kanıt, POST yanıtındaki `[]` ve onunla tutarlı
+  `current_user_can_bypass: "never"` — agent ölçümü değil.
+- **Ruleset repoda DEĞİL.** Silinirse ya da `Disabled` yapılırsa **hiçbir CI kapısı
+  fark etmez**; tek iz bu kayıttır. Drift'i yakalayacak bir kapı **yazılmadı** (canlı
+  ruleset'i `.github/rulesets/*.json` ile karşılaştıran bir job) — **açık iş**.
+- **A-08 DEĞİŞMEDİ.** Defter boş (0/4), #514 kapalı, blocker sayısı **1**, verdict
+  **BLOCKED**. Buradaki hiçbir check A-08 kanıtı değildir.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4).** `ecc` ve `claude-mem` MCP
+  sunucuları bu oturumda da bağlı değil. **Sebep oturuma özel değil, ortama yapısaldır**
+  (#690 ölçtü: remote container'da bu sunucular kayıtlı değil) — o PR bunu önceden
+  görüp *"aynı ortamda açılan ADIM 49 da aynı şekilde başarısız olur"* demişti ve
+  **öyle oldu**. Borç **ADIM 47 + 48 + 49**, üç oturum. Atlanmadı, **yapılamadı**.
+  İçerik türetilmeyi beklemiyor: **hazır** — `docs/memory/PENDING_CHECKPOINTS.md`
+  (bu slice Entity C + üçüncü observation'ı ekledi). Kalıcı çözüm (remote'a `.mcp.json`
+  ya da ritüel 4'ün remote muafiyeti) **insan kararıdır**.
+- **Codemap tazelemesi gerekmedi (ritüel madde 5)** — yeni endpoint / tablo / sayfa /
+  job / dramatiq aktörü yok; ürün ağaçlarına dokunulmadı.
+- **ADIM 48 numarası İKİ slice tarafından kullanılmış** (K-6b odak halkası **ve**
+  kabul borcu sınıf B parti 01, iki paralel oturum). `ADIM48_LANDED_KICKOFF.md`
+  içinde **iki H1** yan yana duruyor, CLAUDE.md'de iki "Son dalga — ADIM 48" bloğu
+  var. Bu slice **49** alarak çakışmayı büyütmedi; **48'in ayrıştırılması insan
+  kararıdır** (CLAUDE.md'nin kendi kuralı: numaralar yeniden atanmaz, başlık ekiyle
+  ayrılır).
+
+### Bundan sonra kırılacak şeyler (bilerek)
+
+- **main'e doğrudan push kapandı.** Her değişiklik PR'dan geçer.
+- **Her PR 16 yeşil check ister** ve `strict: true` yüzünden dal main ile güncel olmalı.
+  `Backend` ~48 dakika sürüyor (ölçüldü) → **seri merge pahalı**. Bu bilinçli bir bedel;
+  gerekçesi runbook §3'te, tek alanı çeviren komut da orada.
+- **Muafiyet yok, sahibi dâhil** (`current_user_can_bypass: "never"`). Kurtarma yolu
+  bypass aramak değil: ruleset'i `Disabled` yap ya da sil (`20765617`).
+
+### Bakım kuralı (yeni kapı / yeniden adlandırma)
+
+Bir job'ın `name:` alanını değiştirmek **kapıyı sessizce açar**. Sıra: (1) workflow'da
+`name:` değiştir → (2) payload'da **aynı** adı güncelle → (3) PR merge olup yeni ad
+**en az bir kez üretildikten sonra** `scripts/required-checks-preflight.sh <pr>` koş →
+(4) `gh api --method PUT …/rulesets/20765617 --input <payload>`. **Ters sıra kilitler.**
+Yeni bloklayıcı kapı eklerken de aynı sıra: önce merge, sonra required.
+Ön kontrolün *"Produced but NOT required"* bölümü bu adımın hatırlatıcısıdır.
+
+---
+
+## ADIM 50 — RC §6.5: K-2 ve K-4 KAPANDI (PO kararı), K-6 ikiye ayrıldı (PR #685)
+
+> **NUMARA NOTU.** Bu slice ADIM 48 olarak yazıldı, sonra 49, sonunda **ADIM 50** oldu. `#686` (kabul borcu
+> Aynı gün **dört** oturum paralel yürüdü: `#686` ve `#688` main'e **ADIM 48** adıyla,
+> `#691` **ADIM 49** adıyla girdi. Kural: **merge edilmiş ad kazanır, numaralar yeniden
+> atanmaz** → taşınan taraf hep merge edilmemiş olan, yani bu slice oldu (iki kez).
+> Branch'in commit mesajlarında hâlâ `adim-48` yazar ve **öyle kalacaktır** (yazılmış
+> commit mesajı değiştirilmez); slice'ın adı **ADIM 49**'dur. Çakışma `doc-status`
+> kapısı tarafından yakalandı (iki belge birden `current` iddia etti), gözle değil.
+
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok,
+`ENGINE_VERSION` değişmedi, OCC/Idempotency/route yolları/react-query key'leri/
+`app/nav.ts` **değişmedi**. Bu bir presentation-only frontend slice'ı + belge kaydıdır.
+
+### Nasıl başladı — brifing, sonra karar
+
+Oturum kod yazarak değil, **karar brifingi** üreterek başladı: beş gözlemin (K-2..K-6)
+her biri için *ne / kaç rotada / hangi WCAG ölçütü · düzeltmenin ölçülen maliyeti ·
+düzeltmemenin bedeli · öneri*. Brifing `docs/ADIM50_KICKOFF.md` olarak repoya yazıldı
+ve **dört paste-ready prompt** taşıyor (P-1..P-4). PO ardından **P-1'i** seçti:
+K-2 + K-4 FIX. K-3 ve K-6b hâlâ karar bekliyor, K-5 ve K-6a **A-08'e bağımlı**.
+
+### Sevk edilen (K-2)
+
+`app/Layout.tsx` shell'in **ilk çocuğu** olarak `Skip to main content` linki render
+ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. Stil `global.css`
+`.skip-link` / `.skip-link:focus`.
+
+Üç tasarım kararı, gerekçeleriyle:
+
+1. **Büyük negatif offset değil, `clip`.** Odaklanan ekran-dışı bir öğe bazı
+   tarayıcılarda sayfayı yana kaydırır; `clip` + `clip-path: inset(50%)` bunu yapmaz.
+   Öğe **her durumda akış dışıdır** → shell'in flex kolonu ve görsel baseline'lar
+   etkilenmez. **Bu bir iddia olarak yazıldı, sonra ÖLÇÜLDÜ:** görsel kapı
+   (`@visual`, job `94223919309`) **23/23 passed** (4.0 dk) — 23 rotanın hiçbirinde
+   piksel sapması yok ve **tek bir baseline yeniden üretilmedi**. Kapı kırmızıya
+   dönseydi düzeltilecek olan **CSS** olacaktı, baseline değil.
+2. **Tetikleyici `:focus`, `:focus-visible` DEĞİL.** Bu kontrole yalnız klavyeyle
+   ulaşılır ve **K-6a'nın hâlâ açık olduğu heuristiğe bağlanmamalıdır**.
+3. **`main`'e `outline: none` YAZILMADI.** Atlamadan sonra workspace'in etrafında
+   odak halkası boyanır; bu görülebilir bir geri bildirimdir ve onu susturmak K-6'nın
+   şikâyet ettiği desenin ta kendisi olurdu.
+
+**Kayda geçen dürüst sınır:** WCAG **2.4.1 zaten karşılanıyordu** — banner/navigation/
+main landmark'ları ARIA11 tekniğini sağlıyor, axe `bypass` kuralı bu yüzden **hep
+yeşildi**. Yani bu bir **uygunluk** düzeltmesi değil, klavye kullanıcısı için
+**ergonomi** düzeltmesidir. §6.5'in ilk yazımı kalemi "WCAG 2.4.1" diye etiketleyerek
+olduğundan ağır göstermişti; kayıt düzeltildi.
+
+### Sevk edilen (K-4)
+
+`pages/UserManual.tsx` sayfayı artık `<h1 className="page-title">` ile adlandırıyor
+(23 route'ta 1 istisnaydı). `.page-title` **sınıf tabanlı** olduğu için değişiklik
+**yalnız semantik** — görsel diff yok.
+
+**Yan etki gizlenmedi:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu, yani
+taşımadığı bir atlamayı **taşımaya başladı** ve **K-5'in kümesine girdi**.
+
+### Pinler ve bilerek KOYULMAYAN kapı
+
+- **YENİ** `frontend/src/test/skipLink.test.tsx` — K-2'nin **üç parçalı** sözleşmesi:
+  (1) link shell'in ilk öğesi, (2) `href` gerçek bir öğeye çözülüyor, (3) hedef
+  `main` landmark'ı ve odak tutabiliyor. Yalnız (1)'i assert eden bir test hedefin
+  adı değişince yeşil kalırdı. **Negatifi kanıtlandı:** kırık `href` → exit 1;
+  `tabIndex` kalkarsa → exit 1.
+- `specs/17-page-coverage.spec.ts` `/user-manual` `level: 2 → 1` — K-4'ün regresyon
+  pini **burada**, çünkü bu spec sayfanın gerçek projeksiyonunu bekler.
+- **Eksik `<h1>`'i precheck'te BLOCKING yapmak değerlendirildi ve YAPILMADI.** O sonda
+  ilk DOM'u okur ve sayfaların ilk veri render'ıyla **yarışır** (K-5/K-7 sayılarının
+  koşudan koşuya oynamasının sebebi budur) → **çırpınan kapı, kapısızlıktan kötüdür.**
+  Gerekçe spec'in içine yazıldı.
+
+### K-6 İKİYE AYRILDI — birleşik kalem yanıltıcıydı
+
+- **K-6a (halka görünüyor mu, 2.4.7): A-08 bekliyor.** Ek bulgu: **mevcut sondanın
+  çıktısı bu soruya kanıt DEĞİLDİR.** `specs/20-a11y-prechecks.spec.ts` programatik
+  `el.focus()` kullanıyor; tarayıcılar `:focus-visible`'ı programatik odakta
+  eşleştirmez → `before === after` **beklenen bir ölçüm artefaktı**. Halka
+  `global.css`'te `:focus-visible { outline: 2px solid var(--accent) }` olarak
+  **yazılıdır**; §6.5'in *"UA varsayılan halkası boyanıyor olabilir"* tahmini
+  gereksizdi.
+- **K-6b (halkanın kontrastı, 1.4.11): A-08'i BEKLEMEZ, ölçüldü, DÜŞÜYOR.**
+  `#00a9e8` beyaza karşı **2.68 : 1**, `#f5f5f5` üzerinde **2.46 : 1**; ölçüt **3 : 1**.
+  axe bu kuralı **koşmuyor**; **D-10 (45 düğüm) 1.4.3 eksenidir ve bunu KAPSAMAZ**.
+  → PO kararı bekliyor (renk değişimi **veya** imzalı sapma); prompt
+  `docs/ADIM50_KICKOFF.md` §P-3.
+
+### K-5 hakkında ölçülen iki şey — ikisi de "düzelt" demiyor
+
+1. **Maliyet artık sayı:** merdiveni bir basamak kaydırmak **204 başlık / ~40 dosya**
+   (`<h3>` 98/36, `<h4>` 76/23, `<h5>` 28/6, `<h6>` 2/1). Asıl tuzak CSS'te: başlık
+   stilleri **tag-scoped descendant selector**'larla yazılmış (`.card h3`, `.card h4`,
+   `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) → tag değişip
+   selector unutulan her yerde başlık UA varsayılanına düşer.
+2. **K-4'ün fix'i K-5'i büyüttü — ÖLÇÜLDÜ.** CI job `94221023796` (`@a11y`,
+   6 passed, axe ratchet **45/45** değişmedi) satırı birebir bastı:
+   `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`
+   → **K-5 21 / 23 → 22 / 23**; set dışında yalnız `/` kaldı.
+
+**Advisory toplamı 90 → 67, dökümü tam:** skip link (K-2) **23 → 0**, `<h1>` yok
+(K-4) **1 → 0**, heading outline (K-5) **21 → 22**, `contentinfo` (K-3) 23 (aynı),
+`aria-live` (K-7) 21 (aynı), focus indicator (K-6) 1 (aynı). 23+22+21+1 = **67** —
+job'ın kendi özet satırıyla birebir. **Hiçbir sınıf susturulmadı**, iki sınıf
+**kayboldu** çünkü kusur kalktı.
+
+**Ölçümün sınırı, yazılmadan geçilmiyor:** bu **tek ve SOĞUK** bir koşudur. Defterin
+kendi kuralı soğuk koşunun *eksik* raporladığını söyler (ADIM 44: K-5'i 18 gösterdi,
+yerleşmiş değer 21) → bugünkü **22 bir TABANdır**, yerleşmiş değer değil. Üç oynak
+rota (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) bu koşuda **üçü de**
+rapor etti.
+
+### Doğrulama
+
+- Yerel: `npm run lint` / `typecheck` / `build` temiz; **vitest 722 passed / 71 dosya**
+  (`--no-file-parallelism`); coverage kapısı geçti, **line %84.90**.
+- CI: Frontend job ✅.
+- **Yerelde KOŞULAMAYAN:** `@a11y` precheck, `@visual`, `@lighthouse` — bu oturumun
+  host'unda **docker yok**. Ölçüm CI'dan alındı: `@a11y` **6 passed** (advisory 67,
+  ratchet 45/45), `@visual` **23/23 passed**, journey suite **39 passed / 1 skipped**.
+
+### Honest boundary
+
+- **A-08'e DOKUNULMADI.** Defter hâlâ boş (0/4), `#514` hâlâ kapalı. K-2/K-4'ün
+  kapanması A-08'i **ilerletmez**; bu kalemler hiçbir zaman blocker değildi.
+- **K-3 ve K-6b karar bekliyor** — ikisi de A-08'e bağımlı **değil**, ikisi de bu
+  slice'ın kapsamı dışında bırakıldı (PO yalnız P-1'i seçti).
+- **Memory checkpoint** (`ecc` + `claude-mem`): bu oturumda MCP sunucuları **bağlı
+  değil** → ritüelin 4. maddesi **yapılamadı**, atlanmadı.
+- **Codemap tazelenmedi ve tazelenmesi GEREKMİYOR:** slice yeni route / sayfa /
+  `lib/*` / query-key / endpoint / job eklemedi; `FRONTEND_MAP.md` bu eksenlerde
+  haritalanmıştır, shell landmark'larını haritalamaz.
+
+---
+
+## ADIM 51 — #514 izleme ayrışması KAPANDI, A-08 blocker AÇIK: belgeler uzlaştırıldı
+
+**Tarih:** 2026-08-12 · **Base:** `origin/main` @ `d6fa02f` (#686, ADIM 48) ·
+**Numara notu:** bu slice **ADIM 48 olarak yazıldı**; iş sürerken #683 ve #686 main'e
+merge edildi ve **#686 "ADIM 48" adını aldı**. Merged başlıklar değiştirilemez, bu slice
+ise henüz merge edilmemişti → **ADIM 49'a taşındı**. CLAUDE.md'nin uyardığı çakışma
+(*"yeniden numaralandırma YASAK"*) **merged** kayıtlar içindir; burada ucuzken önlendi. ·
+**Kod değişikliği YOK** — yalnız belge uzlaştırması. Migration yok, `ENGINE_VERSION`
+değişmedi, alembic head `0043_i08_registry_strategy_fks`.
+
+**Tetikleyen olgu.** Oturum başı doğrulamasında ölçüldü: GitHub **#514**
+`2026-08-12T11:08:58Z`'de bir **insan** tarafından yeniden **AÇILDI**
+(`state=OPEN`, `state_reason=reopened`), gerekçesi issue'ya yazıldı:
+
+> *"Reopened 2026-08-12 to run path (A) of the RC readiness report §6.1 … The
+> 2026-08-07T03:52:03Z closure carried stateReason=COMPLETED while the worksheet was
+> empty — 0/4 exit criteria, 0/46 routes, 0/20 flows, 0 recorded SR-BULGU. No signed
+> permanent deviation exists for A-08. The audit stack is prepared and validated;
+> auditor assignment is the remaining human step."*
+
+**Sorun.** Repository bunu hiçbir yerde kaydetmemişti. RC raporu **kendi içinde
+çelişiyordu**: üst banner'ı (`:31`) yeniden açılmayı yazarken, blocker kaydının kendisi
+(§6.1), P12 ölçüm tablosu (`:494`) ve `İzleme` kod bloğu (`:662`) hâlâ
+`CLOSED 2026-08-07 / COMPLETED` diyordu. Kanonik defter de `CLOSED` diyordu. Yani ADIM 29'un
+kaydettiği ayrışma **gerçekte çözülmüştü ama belgelerde açık görünüyordu** — ve bu, ADIM 29
+ile aynı sınıftan bir docs-truth kusuruydu, yalnız ters yönde.
+
+**Karar — ayrışma KAPANDI, blocker KAPANMADI.** İnsan (defterin harflemesiyle) **(B)**
+yolunu seçti: hatalı kapatmayı geri aldı. İmzalı kalıcı sapma yolu **seçilmedi** ve A-08
+için böyle bir kayıt hâlâ **YOK**. Değişen tek şey **izleme durumudur**: defter hâlâ boş,
+dört çıkış kriteri hâlâ `0 / 4`, 0/46 rota, 0/20 akış, 0 `SR-BULGU`. **Yeniden açma bir
+sonuç değildir** — kapatmanın olmadığı gibi.
+
+**Uzlaştırılan belgeler (8):**
+- `docs/audit/a11y_screen_reader_audit_results.md` — **kanonik blok**. STATUS banner'ı +
+  *Tracking-issue state* tablosu `OPEN/reopened`'a çevrildi; başlık *"divergence RESOLVED
+  2026-08-12"*; okuma tablosu **(A) NOT TAKEN / (B) TAKEN** olarak kapatıldı; §5'in kapanış
+  paragrafı *"in either direction"* hâline getirildi.
+- `docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` — P12 ölçüm tablosu, `İzleme`
+  bloğu, §6.1 giriş banner'ı ve ADIM 45 banner'ı (`:2136`) düzeltildi; §6.1'in *"(A)
+  seçilirse #514'ün önce yeniden açılması gerekir"* şartının **yerine getirildiği** kayda
+  geçti.
+- `docs/implementation/a11y_screen_reader_audit_checklist.md` · `…_runbook.md` ·
+  `entropia_v18_remediation_status.md` · `v18_final_acceptance.md` ·
+  `docs/STAGE2_HANDOFF.md` · `CLAUDE.md`.
+
+**HARF KARIŞIKLIĞI PİNLENDİ (yeni tuzak).** Defter ile RC raporu seçenekleri **ters**
+harfliyor: defterde **(A)** = imzalı kabul, **(B)** = hatalı kapatmanın geri alınması; RC
+§6.1'de **(A)** = denetimi koştur, **(B)** = imzalı sapma. Issue yorumundaki *"path (A)"*
+**RC anlamındadır**. İki belgeye de bunu söyleyen bir not kondu; **hiçbiri yeniden
+numaralandırılmadı** — ikisi de başka yerlerden kimlikle anılıyor.
+
+**Doğrulama.**
+- `generate_repository_facts.py --root .. --check` → **exit 0**, *"documentation-truth gate
+  OK — artefakts fresh, documents classified, no stale claims."*
+- `git diff origin/main -- docs/ | grep '^-## '` → **BOŞ** (docs regresyon guard'ı temiz;
+  bu kusur bu repoda üç kez yaşandı: #590, #604).
+- Test koşulmadı: **kod değişmedi**, yalnız markdown.
+
+**Honest boundary — bu slice'ın YAPMADIĞI şey.**
+- **A-08 denetimi YAPILMADI.** Defter boş, `0 / 4`, hiçbir belge `Complete`/`PASS`/`Done`
+  demiyor ve verdict **BLOCKED** kalıyor. Blocker sayısı **1** — değişmedi.
+- **#514'e DOKUNULMADI** — `human-only`; agent ne kapatabilir ne açabilir. Bu slice yalnız
+  insanın yaptığı hareketi **kaydetti**.
+- **SR-2 bu oturumda koşulamazdı:** oturum uzak bir Linux konteynerinde çalışıyor,
+  kullanıcı macOS'ta; `a11y-audit-stack.sh` burada ayağa kalksa bile kullanıcının
+  Safari'sinden erişilemez. Kâtiplik oturumu **kullanıcının kendi makinesinde** yığını
+  kaldırmasını gerektirir.
+- **P11-1'e dokunulmadı** — hazırlığı **PR #683** (taslak, aynı gün) yapıyor; bu slice onu
+  çoğaltmadı.
+- **Memory checkpoint YAZILAMADI** — `ecc` ve `claude-mem` MCP sunucuları bu oturumda da
+  **bağlı değil** (ADIM 47'de de öyleydi) → kapanış ritüelinin 4. maddesi **eksiktir**.
+- **YENİ BULGU — `A08_COMPLETE` kapısının kapsamı dar (ÖLÇÜLDÜ, DÜZELTİLMEDİ).**
+  `generate_repository_facts.py::INVARIANT_GLOBS` A-08'in en kritik üç belgesini
+  **taramıyor**: kanonik defter, kanonik readiness raporu (`doc-status: current`) ve **canlı
+  kickoff**. Negatif kanıt: kickoff'a `A-08 denetimi tamamlandı ve PASS.` eklendi → kapı
+  **exit 0** (yakalamadı); satır geri alındı. Glob'ları genişletmek bugün **7 sahte kırmızı**
+  üretir — yedisi de invariant'ı doğru ifade eden **yasak** cümleleridir; `NEGATION_RE`
+  `gösteremez` / `tanımlayamaz` / `yazma` / `Nothing` / `no document` biçimlerini tanımıyor.
+  **Sıra zorunlu:** önce `NEGATION_RE` (her terim için negatifi kanıtlanarak), sonra glob.
+  Ayrıntı + tablo: `docs/ADIM48_LANDED_KICKOFF.md` §YENİ BULGU. **Kapının mesaj metni bu
+  slice'ta güncellendi** (eski hâli *"#514 no longer tracks it"* diyordu — bayat), **deseni
+  ve kapsamı değişmedi**.
+- **Satır tabanlı kural tuzağı.** `A-08[^\n]{0,80}?(Complete|…)` newline geçmez: `A-08` ile
+  `Complete` ayrı satırlara düşerse kural **hiç ateşlenmez**. Bu slice'ta bir yeniden sarma
+  önce kapıyı kırmızıya çevirdi (STAGE2_HANDOFF), sonra özgün sarma düzenine dönülerek
+  çözüldü. **Bir satırı yeniden sararken kapının davranışını değiştirdiğini bil.**
+---
+

@@ -178,11 +178,11 @@ export function UserManual() {
 
   return (
     <>
-      {/* K-4: this was the one route that named itself with <h2>. .page-title is
-          class-based (global.css: margin/font-size/font-weight/color all written
-          out), so the tag change does not move a pixel. Known side effect, not
-          hidden: the page's outline becomes h1 -> h3, so it now joins K-5's
-          skipped-level set instead of being one of its two exceptions. */}
+      {/* K-4: was <h2> — the only route of 23 that did not name itself with an
+          <h1>. `.page-title` carries every visual property (global.css), so the
+          level change is semantic only. It does move this page INTO K-5's set:
+          the outline is now h1 -> h3 (the reader title below), a skip it did not
+          have as h2 -> h3. Recorded, not hidden. */}
       <h1 className="page-title">User Manual</h1>
       <p className="page-sub">
         Published guide stream (doc 21) — baseline first, appended sections in stream order.

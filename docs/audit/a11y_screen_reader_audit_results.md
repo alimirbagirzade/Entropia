@@ -18,58 +18,64 @@
 > automated prechecks added alongside this file — may be transcribed into these
 > tables as a screen-reader result.
 >
-> **The tracking issue was CLOSED while this worksheet was still empty — twice.**
-> A human re-opened it both times, most recently on **2026-08-12** (`state: open`,
-> `state_reason: reopened`). Read the divergence block below before citing
-> **GitHub #514** as tracking anything: an open issue means the work is tracked,
-> **not** that any of it is done. `#514` carries the `human-only` label; an agent
-> or automated scan must not close it — nor re-open it.
+> **The tracking issue is OPEN again.** A human re-opened **GitHub #514** on
+> `2026-08-12T11:08:58Z` (`state_reason: reopened`) expressly to run this audit.
+> The closure/evidence divergence this file used to carry is therefore
+> **RESOLVED — by reading (B)**; the record of it is kept below as history, not
+> as a live conflict. **This changes the tracking state and nothing else:** the
+> worksheet is still empty, the four exit criteria are still `0 / 4`, and A-08 is
+> still `HUMAN-BLOCKED`. `#514` carries the `human-only` label; an agent or
+> automated scan must not close it — nor re-open it.
 >
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.
 
-### Tracking-issue state — closure/evidence divergence (recorded 2026-08-07; **RESOLVED by reading (B)**, re-derived 2026-08-12)
+### Tracking-issue state — divergence RESOLVED 2026-08-12 (recorded 2026-08-07)
 
-This block is the **canonical record** of the divergence. Every other document
-points here instead of restating it.
-
-> **2026-08-12 — the divergence closed itself the only legitimate way: a human
-> re-opened #514.** Re-derived from the GitHub API during ADIM 48:
-> `state: open`, `state_reason: reopened`, `updated_at: 2026-08-12T11:08:58Z`,
-> label still `human-only`. That is **reading (B)** below, enacted by a person —
-> the **second** evidence-free closure to be reverted. **Nothing else changed:** the
-> ledger is still empty, the exit criteria are still `0 / 4`, and A-08 is still
-> the release's one open blocker. An open tracking issue is not progress on the
-> audit; it just stops the record from claiming a completion that never happened.
-> The table below keeps the closed-state facts because they are what the
-> divergence *was*.
+This block is the **canonical record** of the tracking-issue state. Every other
+document points here instead of restating it.
 
 | Fact | Value | How to re-derive |
 |---|---|---|
-| GitHub **#514** state | **OPEN** — `state_reason: reopened` (2026-08-12). Was CLOSED `2026-08-07T03:52:03Z` with `state_reason: completed`, which is the divergence this block recorded | `gh issue view 514 --json state,closedAt,stateReason` |
+| GitHub **#514** state | **OPEN** — re-opened `2026-08-12T11:08:58Z`, `state_reason: reopened` | `gh issue view 514 --json state,stateReason,updatedAt` |
 | Issue label | `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"* | `gh issue view 514 --json labels` |
 | Audit performed? | **NO** — every result cell is `—` | §1, §2 below |
 | Exit criteria met? | **0 / 4** — all four still `☐` | §5 below |
 | Findings committed? | **NO** — the register holds only its placeholder row | §3 below |
 
-**A closed issue is not evidence of a completed audit.** These facts are in
-conflict, and this file records the conflict rather than resolving it. Both
-readings below stay open: choosing between them is a **human** decision an agent
-may neither make nor enact, because each one either changes the issue's state or
-adds a signature.
+**The divergence is closed; the blocker is not.** From 2026-08-07 to 2026-08-12
+this file recorded a conflict — the issue said `COMPLETED` while this worksheet
+was empty. On `2026-08-12T11:08:58Z` a human resolved it by taking **reading
+(B)**: re-opening #514 with the reason recorded on the issue itself —
 
-| Reading | What it would mean | What it requires — human action |
+> *"Reopened 2026-08-12 to run path (A) of the RC readiness report §6.1 … The
+> 2026-08-07T03:52:03Z closure carried stateReason=COMPLETED while the worksheet
+> was empty — 0/4 exit criteria, 0/46 routes, 0/20 flows, 0 recorded SR-BULGU.
+> No signed permanent deviation exists for A-08. The audit stack is prepared and
+> validated; auditor assignment is the remaining human step."*
+
+**Only the tracking state moved.** Re-opening the issue is not a result any more
+than closing it was: it added no auditor, no version string and no finding. The
+gate is §5's four criteria, which are still `0 / 4`.
+
+> **Mind the lettering — the two documents number their options in opposite
+> directions.** In *this* file's table below, **(A)** = signed acceptance and
+> **(B)** = the erroneous closure being reverted. In the readiness report
+> ([`Entropia_V18_RC_Readiness_2026-08-07.md`](../releases/Entropia_V18_RC_Readiness_2026-08-07.md)
+> §6.1), **(A)** = run the audit and **(B)** = signed deviation. The issue comment
+> quoted above says *"path (A)"* in the **report's** sense — run the audit. Same
+> two outcomes, two numberings; neither file was renumbered, because both are
+> cited by ID elsewhere.
+
+| Reading | Status | What it meant |
 |---|---|---|
-| **(A) Deliberate acceptance** | The product owner knowingly accepted shipping without the audit | A **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — recorded in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). **No signer has been supplied, so no such record exists**, and none may be written on an agent's initiative. |
-| **(B) Closed in error** ← **THIS IS WHAT HAPPENED** (2026-08-12) | The tracking issue was closed by mistake | A human **re-opens #514** — done, and it is the **second** evidence-free closure to be reverted; the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. Reading (A) was never enacted: **no signed deviation exists**, so this was the only remaining way out. |
+| **(A) Deliberate acceptance** | **NOT TAKEN** | Would have required a **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). No signer was ever supplied, so **no such record exists**; none may be written on an agent's initiative. |
+| **(B) Closed in error** | **TAKEN — 2026-08-12** | A human re-opened #514. This is the **second** evidence-free closure to be reverted; the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
 
-Neither reading lets A-08 be reported as done. Under **(A)** what is accepted is
-the *absence* of the audit, not a result; under **(B)** — the one that happened —
-the audit is simply still outstanding. The recurrence is itself the finding:
-**#514 has now been closed twice without a single committed result**, which is why
-§5's exit criteria — not the issue's state — are the gate. That holds in both
-directions now: an **open** #514 is no more evidence of an audit in progress than
-a closed one was of an audit completed.
+The recurrence stands as the finding: **#514 was closed twice without a single
+committed result, and both closures had to be reverted.** That is why §5's exit
+criteria — not the issue's state — are the gate. Under (B) the audit is simply
+still outstanding, which is exactly where A-08 sits today.
 
 ---
 
@@ -308,10 +314,11 @@ Copied from the checklist so this file can be read alone:
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.
 
-**Closing the tracking issue satisfies none of the four.** GitHub #514 was closed
-on `2026-08-07T03:52:03Z` with this table still at `0 / 4`; the closure changed
-the issue's state, not this file's contents, and it added no auditor, no version
-string and no finding. The gate is this table. See the divergence block in the
+**The tracking issue's state satisfies none of the four — in either direction.**
+GitHub #514 was closed on `2026-08-07T03:52:03Z` and re-opened on
+`2026-08-12T11:08:58Z` with this table at `0 / 4` both times. Each move changed
+the issue's state, not this file's contents; neither added an auditor, a version
+string or a finding. The gate is this table. See the tracking-issue block in the
 STATUS banner above.
 
 ---
@@ -343,70 +350,57 @@ screen-reader user is actually impeded. They are where to look first.
 observations** once the numbers settle. The figure previously recorded here was
 `85`, from the ADIM 28 preparation run.
 
+**Re-measured again 2026-08-12 (ADIM 48, after K-2 + K-4 landed)** — CI job
+`94221023796`, a **single cold run** on a fresh stack: 23 routes, **0 blocking
+failures**, **67 advisory observations**. The drop is fully accounted for and
+nothing was suppressed:
+
+| Class | ADIM 44 (settled) | ADIM 48 (CI) | Why |
+|---|---:|---:|---|
+| skip link (K-2) | 23 | **0** | fixed — the class no longer fires on any route |
+| no `<h1>` (K-4) | 1 | **0** | fixed |
+| heading outline (K-5) | 21 | **22** | **+1: `/user-manual`**, moved in by K-4's fix |
+| `contentinfo` (K-3) | 23 | 23 | untouched |
+| `aria-live` (K-7) | 21 | 21 | untouched |
+| focus indicator (K-6) | 1 | 1 | untouched |
+| **total** | **90** | **67** | −23 −1 +1 |
+
+**Two caveats that keep this honest.** (1) This is **one cold run**, and rule 1 below
+says a cold run *under-reports* — so `22` for K-5 is a **floor**, not a settled figure;
+the three flaky routes (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) all
+happened to report in this run. (2) The `/user-manual` line is not an inference from
+the count: the run printed the skip verbatim, which is what makes K-4's side effect a
+**measurement** rather than a prediction.
+
 > **Read the count caveat below before trusting any reach number in this table.**
 > Two of the six classes are **not reproducible run to run**; four are rock-stable
 > and can be taken at face value. The methodology note under the table says which.
 
-> **ADIM 48 (2026-08-12) FIXED two of them — K-2 and K-4 — by PO decision, and in
-> doing so made K-5 WORSE by one route.** The post-fix figures below are
-> **MEASURED in CI** (run `31626856387`, job `94215349370`, commit `2b13e41`,
-> conclusion SUCCESS): *"23 route(s) inspected, **67** advisory observation(s)"*,
-> down from 90. `skip link` and `page has no <h1>` do not appear once in those 67
-> lines — and their advisory blocks were deliberately **kept** in the spec as
-> regression detectors, so the silence is a measurement, not a deletion. Raw
-> counts: `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
->
-> They were **derived first** and the derivation was published before the run:
-> all six classes landed on the predicted number, exactly
-> (`adim48_k2_k4_precheck_derivation.txt`). The derivation was needed because the
-> audit stack could not start in that session's container (Docker Hub 429 on the
-> manifest, 403 Forbidden on the blob CDN through the agent proxy, five attempts).
->
-> **It then ran a SECOND time** on the docs-only follow-up commit (`e3d5a2a`,
-> identical frontend bundle; run `31627736544`, job `94218440525`). Both runs were
-> compared as **sets of (route, class) pairs**, not just totals: **67 = 67, and the
-> symmetric difference is empty** — the same routes in every class, including all
-> three that ADIM 44 found flipping between runs. K-2 and K-4 are settled (stable
-> classes, and now pinned by unit gates on every commit), and **K-5 = 22 is backed
-> by two independent samples, not one.**
->
-> **A residual caveat remains, smaller than before.** Both runs are *cold* — a
-> fresh Compose stack per job, probed at once — so they could share a systematic
-> bias that a warm run would not. Treat 22 as the working figure with high
-> confidence and retire the ±1 only after a warm, ≥2-run measurement. Do not spend
-> a slice on that before the audit answers whether the `h1 → h3` jump matters at
-> all: that is A-3's question, and the count only sizes it.
-
 | # | Observation | Reach | Status | What the audit should settle |
 |---|---|---|---|---|
 | K-1 | **D-10 — 45 accent-blue low-contrast nodes.** PO-signed permanent deviation dated 2026-07-30. WCAG 2.2 AA **1.4.3 is not met**; the product is not compliant for that criterion. | — | Adjudicated — **do not re-file** | Nothing. It is a *low-vision* axis, not a screen-reader one. Record anything **new** you hit. |
-| K-2 | ~~**No skip link.** The first tabbable element on every route was the shell's `Log out` button, not an in-page jump target — so each route began by tabbing the whole menu bar. WCAG 2.4.1.~~ **FIXED, ADIM 48 (PO, 2026-08-12):** `Layout.tsx` renders `<a class="skip-link" href="#main-content">` as the shell's first tabbable node, ahead of the auth control, and `<main id="main-content" tabIndex={-1}>` takes the focus. | was 23 / 23 → **0 / 23** (measured, CI `31626856387`) | **Fixed** — pinned by `frontend/src/test/a11ySkipLink.test.tsx` (a real gate; the precheck advisory below stays advisory and is now the *regression* detector) | Whether the link is **announced and usable** — that it exists in the DOM is all the machine established. Tab once from page load and listen. |
+| K-2 | ~~**No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1.~~ → **FIXED 2026-08-12 (PO decision, PR #685).** `Layout.tsx` renders a clipped `Skip to main content` link as the shell's first child; `<main>` carries `id="main-content"` + `tabIndex={-1}`. **Recorded with the fix:** 2.4.1 was **already met** through the banner/navigation/main landmarks (technique ARIA11) — which is why axe's `bypass` rule stayed green throughout — so this was an **ergonomics** fix for keyboard users, not a conformance one. | was 23 / 23 routes | **FIXED** | Nothing structural. If the link is announced misleadingly (wrong name, wrong destination), file it as a **new** finding. |
 | K-3 | **No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist. | 23 / 23 routes | Open — reported, not gated | Whether the absence is felt during landmark navigation, or is cosmetic. |
-| K-4 | ~~**`/user-manual` has no `<h1>`.** It named itself with `<h2 class="page-title">` — a divergence recorded in `frontend/e2e/utils/pageTruth.ts`. Every other route uses `<h1>`.~~ **FIXED, ADIM 48 (PO, 2026-08-12):** promoted to `<h1 class="page-title">`. `.page-title` is class-based (margin / font-size / font-weight / colour all written out in `global.css`), so the computed style did not move. **Side effect, not hidden — see K-5.** | was 1 route → **0 routes** (measured, CI `31626856387`) | **Fixed** — pinned by `userManual.test.tsx::"names itself with a level-1 heading (K-4)"`; `pageTruth.ts`'s `level` escape hatch is now unused by every contract | A-1: is the page title announced on load? Still worth hearing — the tag is right, the announcement is what nobody has checked. |
-| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **22 / 23 routes** — was 21; **ADIM 48's K-4 fix moved `/user-manual` INTO this set**, leaving `/` as the only route with an unbroken outline. **Measured** in CI, verbatim: `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`; ⚠ the ±1 caveat still applies | Open — **grew by one, deliberately** | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 22 pages' outlines. ADIM 48 refused to re-cut one page's `h3` sections in isolation: the remedy is identical on all 22 and is the same product decision. |
+| K-4 | ~~**`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`).~~ → **FIXED 2026-08-12 (PO decision, PR #685).** The page now uses `<h1 class="page-title">` like the other 22 routes; `.page-title` is class-based, so the change is semantic only. Regression pin: `specs/17-page-coverage.spec.ts` declares `level: 1` (a *blocking* precheck for a missing `<h1>` was considered and **deliberately not added** — that probe races each page's first data render, and a flapping gate is worse than none). **Side effect, not hidden:** this page's outline is now `h1 → h3` where it was `h2 → h3`, so it **entered K-5's set** — measured, not predicted: CI job `94221023796` printed `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`, taking K-5 from `21 / 23` to `22 / 23`. | was 1 route | **FIXED** | A-1 still applies: is the page title announced on load? The fix changed the level, not the announcement. |
+| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is now — with K-2 and K-4 fixed — the highest-reach observation left in the set. **`/market-data` skips two levels** (`h1 → h4`) and `/packages/library` carries a second skip (`h2 "Import package" → h5 "Recent imports"`). | **22 / 23 routes** — re-measured 2026-08-12 (ADIM 48, CI job `94221023796`); was `21 / 23`. **The +1 is `/user-manual`**, which K-4's fix moved into this set (`h1 "User Manual" → h3 "ENTROPIA USER MANUAL"`) — a known, accepted cost, not a discovery. Only `/` is now outside the set. ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 22 pages' outlines — the measured cost of doing so is **204 headings across ~40 files**, plus five tag-scoped CSS rules (`.card h3`, `.card h4`, `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) that silently drop a heading to the UA default if a tag moves without them. |
 | K-6 | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7 / 1.4.11. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. |
+| K-4 | **`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`) — a divergence already recorded in `frontend/e2e/utils/pageTruth.ts:15`. Every other route uses `<h1>`. | 1 route | Open — reported, not gated | A-1: is the page title announced on load? |
+| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **21 / 23 routes** — re-derived 2026-08-12, **unchanged**; ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 21 pages' outlines. |
+| K-6a | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. **A-08 settles this one; nothing else does.** |
+| K-6b | **Focus-ring contrast below WCAG 1.4.11 Non-text Contrast (AA).** `global.css :focus-visible` painted `2px solid var(--accent)`, and **#00a9e8 measures 2.68:1 on white / 2.46:1 on #f5f5f5** — a focus indicator is a non-text UI component and owes **3:1**. Nothing in the repo measured this: axe does not run a focus-ring contrast rule, and the green ratchet was never evidence. **Separate criterion from K-1/D-10**, which is the 1.4.3 *text* axis. | every focusable node, 23 / 23 routes | **CLOSED 2026-08-12** — ring re-pointed to `var(--text)` (`#222222`) | Nothing. **Measured after the change:** 15.91:1 on white, 14.59:1 on #f5f5f5, 12.98:1 on the #e8e8e8 title bar, 5.94:1 on the #00a9e8 `dropdown-blue` panel, 4.92:1 on the #8f8f8f dropdown panel, and **4.50:1 on the #0092c8 menu-blue hover — the worst surface in the app**. All ≥ 3:1. `--accent` itself was not touched. |
 | **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
 
-K-3 through K-7 are **reported rather than gated on purpose.** Each one's fix is
-a product decision — add a footer? re-cut 22 pages' outlines? mount a persistent
-status region? — that an audit-preparation change has no mandate to make, and
-turning any of them into a red CI gate would be making that decision by omission.
-They stay visible in every precheck run's `::warning::` output and in
-`a11y-report/precheck-results.json` until a human resolves them.
-
-**K-2 and K-4 left that set the only way an observation is allowed to: a human
-made the decision.** The PO ruled on 2026-08-12 that both were to be fixed (and
-that K-3 was out of scope, and that K-5/K-6 wait for the audit itself), and
-ADIM 48 implemented exactly that ruling and no more. The two fixes are now
-pinned by unit gates that run in the ordinary `npm test` suite — which is a
-stronger position than the precheck ever held, since the precheck is advisory
-and cannot fail a build. Their precheck advisories were **kept**, re-purposed as
-regression detectors: a route reporting `skip link` or `page has no <h1>` again
-is a defect, not an open question.
-
-**None of this moves A-08.** Two structural preconditions improved and one got
-marginally worse. Nobody has heard any of it. A-08 stays HUMAN-BLOCKED (#514),
-the ledger in §1/§2 is still empty, and all four exit criteria are still ☐.
+K-2 through K-7 are **reported rather than gated on purpose** — with **K-6b as the
+one exception**, and the exception is instructive about where the line is. Each of
+the others' fixes is a product decision — add a footer? promote a heading and
+re-cut 21 pages' outlines? mount a persistent status region? — that an
+audit-preparation change has no mandate to make, and turning any of them into a
+red CI gate would be making that decision by omission. K-6b was not a product
+decision: 3:1 is a numeric AA threshold, the ring colour is not described by the
+v18 mockup (which has no focus state at all), and the fix is one declaration that
+changes no layout. That is why it could be closed here while K-6a — *can a person
+see it?* — stays open for A-08. They stay visible in every precheck run's `::warning::`
+output and in `a11y-report/precheck-results.json` until a human resolves them.
 
 ### How these counts were obtained — and why two of them are a range
 
@@ -415,31 +409,18 @@ stack as Admin. The instruction that used to stand here — *"re-run it before t
 audit; a stale count is worse than none"* — was **necessary but not sufficient**,
 and running it five times in a row is what showed why:
 
-The runs below are all at the **ADIM 44 commit**, i.e. **before** ADIM 48 fixed
-K-2 and K-4. The last column carries the post-fix figure forward so the two are
-never confused; it is derived, and it is the one to replace with a measurement.
+| Class | run 1 | run 2 | run 3 | run 4 | run 5 | Verdict |
+|---|---:|---:|---:|---:|---:|---|
+| skip link (K-2) | 23 | 23 | 23 | 23 | 23 | **stable** |
+| `contentinfo` (K-3) | 23 | 23 | 23 | 23 | 23 | **stable** |
+| no `<h1>` (K-4) | 1 | 1 | 1 | 1 | 1 | **stable** |
+| focus indicator (K-6a) | 1 | 1 | 1 | 1 | 1 | **stable** |
+| heading outline (K-5) | 18 | 21 | 20 | 21 | 21 | ⚠ **converges to 21** |
+| `aria-live` (K-7) | 10 | 20 | 20 | 21 | 21 | ⚠ **converges to 21** |
+| **total advisories** | 76 | 89 | 88 | 90 | 90 | ⚠ **converges to 90** |
 
-| Class | run 1 | run 2 | run 3 | run 4 | run 5 | Verdict | post-ADIM 48 (derived) |
-|---|---:|---:|---:|---:|---:|---|---:|
-| skip link (K-2) | 23 | 23 | 23 | 23 | 23 | **stable** | **0** — fixed |
-| `contentinfo` (K-3) | 23 | 23 | 23 | 23 | 23 | **stable** | 23 — untouched |
-| no `<h1>` (K-4) | 1 | 1 | 1 | 1 | 1 | **stable** | **0** — fixed |
-| focus indicator (K-6) | 1 | 1 | 1 | 1 | 1 | **stable** | 1 — untouched |
-| heading outline (K-5) | 18 | 21 | 20 | 21 | 21 | ⚠ **converges to 21** | **22** — +1, K-4's side effect |
-| `aria-live` (K-7) | 10 | 20 | 20 | 21 | 21 | ⚠ **converges to 21** | 21 — untouched |
-| **total advisories** | 76 | 89 | 88 | 90 | 90 | ⚠ **converges to 90** | **67** |
-
-The last column is **measured**, not projected, and it is now **two** cold CI runs
-(`31626856387` and `31627736544`) that agree on the identical set of (route, class)
-pairs — plus an independently published derivation that predicted all six classes
-before either ran. Rule 1 below still says to discard a cold run, and that rule is
-about a *single* one: two cold runs from separate stack bring-ups agreeing exactly,
-including on all three known-flaky routes, is a different piece of evidence. Read
-it as: K-2/K-4 settled, K-5 = 22 with high confidence and a residual warm-run
-caveat.
-
-Runs 1–5: same commit, same stack, same seed, same Admin. Two rules follow, and
-both matter more than the numbers themselves:
+Same commit, same stack, same seed, same Admin. Two rules follow, and both matter
+more than the numbers themselves:
 
 1. **Discard the first run after `scripts/a11y-audit-stack.sh up`.** It is cold and
    it *under-reports* — run 1 claimed 18 routes for K-5 where the settled answer is

@@ -120,15 +120,6 @@ your answer: **K-5** (does the `h1 → h3` jump actually mislead rotor navigatio
 **K-6** (can you see where focus is?) and **K-7** (do the Ready Check verdict, the RUN
 state change and a 409 conflict get announced at all?).
 
-**Two of the six are now FIXED — K-2 and K-4** (PO decision, 2026-08-12; ADIM 48). The
-shell renders a real skip link as its first tabbable node, and `/user-manual` names
-itself with an `<h1>`. That the markup is right is all a machine established, so both
-are still worth **one** listen each: does the skip link announce and actually land you
-in the workspace, and is the User Manual's title spoken on load? Note the K-4 fix made
-**K-5 reach one route wider** (`/user-manual` now jumps `h1 → h3` like the other 21) —
-that was accepted deliberately rather than re-cutting a single page's outline ahead of
-your verdict.
-
 **If you re-run the prechecks yourself, run them twice and use the second result.** The
 probe races the pages' first data render, so the first run after `up` under-reports —
 by three routes on K-5 and eleven on K-7 in the measured case. The worksheet's
@@ -164,13 +155,13 @@ An axe-core violation is not a screen-reader finding — file those as ordinary 
    permanent deviation (D-10, 2026-07-30) on the *low-vision* axis. Record anything
    **new** you hit, not that.
 3. **Do not touch GitHub #514.** It carries the `human-only` label. It is currently
-   closed while the worksheet is empty — that divergence is recorded, not resolved,
-   and resolving it is a product-owner decision.
-4. **Do not fix K-3, K-5 or K-6 on the way past.** Each one's remedy is a product
-   decision (add a footer? re-cut 22 pages' heading outlines?) and K-5/K-6 are
-   precisely what your session is meant to answer first. K-2 and K-4 were fixed
-   ahead of your session — by a PO decision, not by an auditor in passing, which is
-   the distinction this rule is protecting.
+   **open** — a human re-opened it on `2026-08-12T11:08:58Z` to run this audit, which
+   resolved the earlier closure/evidence divergence. Closing it again is a
+   product-owner decision and belongs after the four exit criteria are `☑`, never
+   before; an agent may neither close nor re-open it.
+4. **Do not fix K-2…K-6 on the way past.** Each one's remedy is a product decision
+   (add a footer? re-cut 21 pages' heading outlines?) and K-5/K-6 are precisely what
+   your session is meant to answer first.
 
 ## 7. When you stop
 

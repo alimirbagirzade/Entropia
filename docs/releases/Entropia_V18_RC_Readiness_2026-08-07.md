@@ -491,7 +491,7 @@ hiyerarşisi atlıyor · `/user-manual`'da `<h1>` yok · +1 odak göstergesi gö
 
 | Ölçüm | Komut | Sonuç |
 |---|---|---|
-| #514 durumu | `gh issue view 514 --json state,closedAt,stateReason,labels` | **CLOSED** · `closedAt 2026-08-07T03:52:03Z` · `stateReason COMPLETED` · label `human-only` |
+| #514 durumu | `gh issue view 514 --json state,stateReason,updatedAt,labels` | **OPEN** · yeniden açıldı `2026-08-12T11:08:58Z` · `stateReason REOPENED` · label `human-only` — *(2026-08-07 ölçümü **CLOSED/COMPLETED** idi; ayrışma §6.1'de kapandı)* |
 | Denetim defteri §0 | okuma (346 satır) | denetçi `—`, tarih `—`, SR sürümü `—`, tarayıcı `—`, stack commit `—`, kayıt yolu `—` — **iki blokta da tek dolu alan yok** |
 | Defter §1 (Section A) | okuma | **SR-1: 0/23 rota · SR-2: 0/23 rota** (46 koşunun 46'sı `—`) |
 | Defter §2 (Section B) | okuma | **SR-1: 0/10 akış · SR-2: 0/10 akış** (20 koşunun 20'si `—`) |
@@ -599,7 +599,7 @@ kırar).
 | D-10 neyi kapsar | D-10 neyi KAPSAMAZ |
 |---|---|
 | WCAG 2.2 AA **1.4.3 (Contrast — Minimum)**, düşük-görüş ekseni | **A-08** (ekran okuyucu ekseni) — defter §329: *"It is a low-vision axis, not a screen-reader one."* |
-| 45 düğümlük donmuş küme, iki renk çifti | K-3 / K-5 / K-6 (`contentinfo`, başlık hiyerarşisi, odak göstergesi) — **K-2 ve K-4 ADIM 48'de KAPANDI**, §6.5 |
+| 45 düğümlük donmuş küme, iki renk çifti | K-2..K-6 (skip link, `contentinfo`, `<h1>`, başlık hiyerarşisi, odak göstergesi) — **özellikle K-6b**: odak halkasının kontrastı **1.4.11** ölçütüdür, D-10'un 1.4.3 imzası onu **kapsamaz** (`#688`'de ayrıca kapatıldı) |
 | | Alertmanager boşluğu, P5/P6 kabul akışları, react-router advisory'si |
 
 **Ürün WCAG 2.2 AA 1.4.3 için UYUMLU DEĞİLDİR** ve hiçbir belge/pazarlama metni ürünü
@@ -629,14 +629,16 @@ değildir.
 
 > **2026-08-12 / ADIM 44 — denetim KOŞULABİLİR hâle geldi. Blocker KAPANMADI.**
 > Aşağıdaki blok **olduğu gibi geçerlidir**: dört çıkış kriteri de ☐, defterin §1/§2/§3'ü
-> boş, #514 hâlâ kanıtsız kapalı. Değişen tek şey, (A) yolunun önündeki **hazırlık**
-> engellerinin kalkması:
+> boş. Değişen tek şey, (A) yolunun önündeki **hazırlık** engellerinin kalkması:
+>
+> *(**2026-08-12 / ADIM 48 düzeltmesi.** Bu bloğun *"#514 hâlâ kanıtsız kapalı"* ifadesi
+> **bayattır** — issue aynı gün `11:08:58Z`'de bir insan tarafından yeniden AÇILDI. Blocker
+> bundan etkilenmez; ayrıntı aşağıdaki `İzleme` satırında.)*
 >
 > * **Yığın güncel main'de yeniden doğrulandı — `9 passed / 0 failed`.** Önceki doğrulama
 >   `1f4b88b`'deydi; main o zamandan beri ADIM 30–43 ile dokuz slice ilerledi. Ölçüldü,
 >   varsayılmadı; **hiçbir şeyin onarılması gerekmedi**.
-> * **Precheck sayıları tazelendi — ve biri yerinde durmadı.** (ADIM 44 ölçümü; **K-2 ve
->   K-4 ADIM 48'de KAPANDI**, güncel profil §6.5.) Beş ardışık koşu: K-2/K-3
+> * **Precheck sayıları tazelendi — ve biri yerinde durmadı.** Beş ardışık koşu: K-2/K-3
 >   `23/23`, K-4 `1`, K-6 `1` **kararlı**; K-5 ve yeni **K-7** `21/23`'e **yakınsıyor**,
 >   toplam advisory `90`. **İlk koşu soğuktur ve EKSİK raporlar** (K-5'i `18` gösterdi) —
 >   yani defterin kendi *"re-run it before the audit"* talimatı tek koşuyla uygulansaydı
@@ -660,15 +662,19 @@ Eksen   : Erişilebilirlik — insan ekran okuyucu kabul denetimi (A-08)
 Durum   : BLOCKED
 Ölçüm   : çıkış kriterleri 0 / 4 (defter §5) · 0 / 46 rota · 0 / 20 akış ·
           0 doldurulmuş SR-BULGU kaydı · A-08 için imzalı kalıcı sapma YOK
-İzleme  : GitHub #514 — CLOSED 2026-08-07T03:52:03Z (COMPLETED), label human-only.
-          İkinci kanıtsız kapatma; ilki 2026-07-30, 2026-08-03'te geri alınmıştı.
+İzleme  : GitHub #514 — OPEN, yeniden açıldı 2026-08-12T11:08:58Z (REOPENED),
+          label human-only. İki kanıtsız kapatmanın (2026-07-30, 2026-08-07)
+          ikisi de geri alındı (2026-08-03, 2026-08-12). İş açık, izleme AÇIK.
 Etki    : Hiçbir belge A-08'i Complete / PASS / Done gösteremez (defter §5:293-294).
 ```
 
-**#514 kanıtsız kapalıdır.** `stateReason: COMPLETED` bir **iddiadır, kanıt değildir**:
-kapatma issue'nun durumunu değiştirdi, defterin içeriğini değil — ne denetçi adı, ne sürüm
-dizesi, ne bulgu ekledi. Defterin kendi cümlesi: *"Closing the tracking issue satisfies
-none of the four."*
+**#514 iki kez kanıtsız kapatıldı, ikisi de geri alındı.** `stateReason: COMPLETED` bir
+**iddiadır, kanıt değildir**: kapatma issue'nun durumunu değiştirdi, defterin içeriğini
+değil — ne denetçi adı, ne sürüm dizesi, ne bulgu ekledi. **Yeniden açma da aynı ölçüde
+kanıt değildir** ve bu belge onu bir ilerleme olarak saymaz: `2026-08-12T11:08:58Z`'de
+issue AÇILDI, defter aynı gün hâlâ `0 / 4`. Değişen tek şey, açık işin artık açık bir
+kaydı olması. Defterin kendi cümlesi: *"The tracking issue's state satisfies none of the
+four — in either direction."*
 
 **P11'in üç yeşil katmanının hiçbiri A-08 değildir.** axe koşusunun kendi çıktısı bunu
 satır olarak basıyor:
@@ -680,9 +686,20 @@ REMINDER: A-08 is HUMAN-BLOCKED. Nothing above counts as a screen-reader PASS.
 Otomatik tarama duyuru sırasını, okunan adı, rol/durum telaffuzunu, canlı bölge kesintisini
 ölçmez. **İki çözüm yolu vardır, ikisi de insan işidir:** (A) denetimi koştur (iki
 kombinasyon: NVDA/Firefox/Windows **ve** VoiceOver/Safari/macOS — tek kombinasyon A-08'i
-karşılamaz) → dört kriter ☑ olunca insan #514'ü kapatır, ki (A) seçilirse #514'ün önce
-**yeniden açılması** gerekir; (B) D-10 biçiminde imzalı kalıcı sapma. **Üçüncü yol yok** —
-#514'ü kapalı bırakmak bir çözüm değildir, ayrışmayı yalnız görünmez kılar.
+karşılamaz) → dört kriter ☑ olunca insan #514'ü kapatır; (B) D-10 biçiminde imzalı kalıcı
+sapma. **Üçüncü yol yok** — #514'ü kapalı bırakmak bir çözüm değildir, ayrışmayı yalnız
+görünmez kılar.
+
+> **2026-08-12: (A) yolu seçildi — ama yalnızca ön koşulu tamamlandı.** Bu paragrafın
+> *"(A) seçilirse #514'ün önce **yeniden açılması** gerekir"* şartı **yerine getirildi**:
+> issue `11:08:58Z`'de yeniden açıldı ve gerekçesi *"to run path (A) of the RC readiness
+> report §6.1"* olarak issue'ya yazıldı. Geriye kalan **denetimin kendisidir** — issue'nun
+> kendi ifadesiyle *"auditor assignment is the remaining human step"*. **Bir yolu seçmek o
+> yolu yürümek değildir:** blocker açık, kriterler `0 / 4`, verdict **BLOCKED**.
+>
+> *(Harf karışıklığına dikkat: bu bölümün **(A)** = denetimi koştur, **(B)** = imzalı sapma.
+> Defterin kendi tablosunda harfler **terstir** — orada (A) = imzalı kabul, (B) = hatalı
+> kapatmanın geri alınması. Aynı iki sonuç, iki farklı numaralandırma.)*
 
 **Yan bulgu P12-B1 (düzeltilmedi):** defter iki yerde (`:50`, `:258-259`) imzalı sapmanın
 `v18_visual_deviations.md`'de *"D-10 gibi"* kaydedildiğini söylüyor, ama **D-10 o dosyada
@@ -1019,60 +1036,60 @@ downgrade yapılmadı.
 > bu repoda bir freeze'in en olası sonu, gerekçesinin bayatlamasıdır. `expires` alanı
 > tam olarak bunun için var.
 
-### 6.5 K-2..K-6 — **K-2 ve K-4 KAPANDI (ADIM 48)**, kalan üçü hâlâ gate DIŞI
+### 6.5 K-2..K-6 — ÜÇÜ KAPANDI (ADIM 50 + #688), üçü açık
 
-`docs/audit/a11y_screen_reader_audit_results.md` §6. **PO kararı (2026-08-12): K-2 ve K-4
-FIX; K-3 kapsam dışı; K-5/K-6 A-08'i bekler.** ADIM 48 tam olarak bu kararı uyguladı —
-fazlasını değil. Kalan üçü **"Open — reported, not gated"** statüsünde; hiçbiri CI'ı
-kırmaz, hiçbiri imzalı sapmaya bağlanmış değildir.
+`docs/audit/a11y_screen_reader_audit_results.md` §6.
+**2026-08-12, iki slice:** **ADIM 50** (PR #685) PO'nun K-2 + K-4 kararını sevk etti;
+**`#688`** (main'de ADIM 48 adıyla kayıtlı) K-6b'yi kapattı. **Kalan üçün durumu tek tip DEĞİL, karışmasın:**
+**K-3** bir ürün/checklist kararı bekliyor (A-08'e bağımlı **değil**), **K-5 ve K-6a**
+A-08 denetimine **bağımlıdır**.
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Bu kalemlerin hiçbiri
+blocker değildi; kapanmaları A-08'i ilerletmez.
+
+**K-6 İKİYE ayrıldı** (`K-6a` / `K-6b`): ölçülebilir kontrast yarısı **kapandı**,
+insan-gözü yarısı **açık kaldı**.
 
 | # | Bulgu | Kapsam | WCAG | Statü |
 |---|---|---|---|---|
-| **K-2** | ~~**Skip link yok** — her route'ta ilk tabbable öğe shell'in `Log out` butonu~~ → **KAPANDI (ADIM 48):** `Layout.tsx::.skip-link` → `#main-content`, shell'in ilk tabbable düğümü; `<main>` `id` + `tabIndex={-1}` taşıyor | 23 / 23 → **0 / 23** (**ÖLÇÜLDÜ**, CI `31626856387`) | 2.4.1 | **Fixed** — `frontend/src/test/a11ySkipLink.test.tsx` ile **gate**; precheck advisory'si regresyon dedektörü olarak KALDI |
-| **K-3** | **`contentinfo` landmark yok** — shell hiç `<footer>` render etmiyor; checklist A-2 dört landmark bekliyor, üç var | **23 / 23 route** | 1.3.1 / 2.4.1 | Open — **kapsam dışı (PO)** |
-| **K-4** | ~~**`/user-manual`'da `<h1>` yok** — kendini `<h2 class="page-title">` ile adlandırıyor~~ → **KAPANDI (ADIM 48):** `<h1 className="page-title">`. `.page-title` **sınıf tabanlı** (margin/font-size/font-weight/color `global.css`'te açıkça yazılı) → hesaplanmış stil DEĞİŞMEDİ | 1 → **0 route** | 1.3.1 / 2.4.6 | **Fixed** — `userManual.test.tsx` seviye-1 assert'i ile gate |
-| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan; setin **en yüksek erişimli** yapısal gözlemi. **K-4'ün fix'i bunu BİR ROUTE genişletti**: `/user-manual` `h2→h3` iken artık `h1→h3` | 21 → **22 / 23 route** (**ÖLÇÜLDÜ**, CI `31626856387`) | 1.3.1 (A-3) | Open — **bir arttı, bilerek** |
-| **K-6** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 / 1.4.11 | Open — **insan gözü gerekiyor** |
+| **K-2** | ~~**Skip link yok**~~ → **2026-08-12 (ADIM 50, PR #685) KAPANDI.** `Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş `Skip to main content` linki render ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. **Fixle birlikte kayda geçen düzeltme:** 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu** — axe `bypass` bu yüzden hep yeşildi — yani bu bir **uygunluk** değil **ergonomi** düzeltmesiydi; §6.5'in ilk yazımı bunu "WCAG 2.4.1" diye etiketleyerek olduğundan ağır göstermişti | was 23 / 23 | 2.4.1 | **FIXED** |
+| **K-3** | **`contentinfo` landmark yok** — shell hiç `<footer>` render etmiyor; checklist A-2 dört landmark bekliyor, üç var | **23 / 23 route** | 1.3.1 / 2.4.1 | Open — reported, not gated |
+| **K-4** | ~~**`/user-manual`'da `<h1>` yok**~~ → **2026-08-12 (ADIM 50, PR #685) KAPANDI.** Sayfa artık `<h1 class="page-title">` kullanıyor; `.page-title` sınıf tabanlı olduğu için değişiklik **yalnız semantik** — ve bu bir çıkarım değil **ölçüm**: görsel kapı (`@visual`, job `94223919309`) **23/23 passed**, tek bir baseline yeniden üretilmedi. Regresyon pini `specs/17-page-coverage.spec.ts` `level: 1` — eksik `<h1>`'i **BLOCKING** yapmak değerlendirildi ve **bilerek yapılmadı** (sonda ilk DOM'u okur, sayfaların veri render'ıyla yarışır; çırpınan kapı kapısızlıktan kötüdür). **YAN ETKİ:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu → **K-5'in kümesine girdi**, K-5 satırına bak | was 1 route | 1.3.1 / 2.4.6 | **FIXED** |
+| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); K-2 ve K-4 kapandıktan sonra setin **en yüksek erişimli** gözlemi. `/market-data` **iki seviye** atlıyor (`h1 → h4`) | **22 / 23 route** — ADIM 50'de yeniden ölçüldü (CI job `94221023796`); önceki `21 / 23`. **+1 = `/user-manual`**, K-4'ün fix'i onu bu kümeye **soktu** (bilinen ve kabul edilen bedel). Set dışında yalnız `/` kaldı | 1.3.1 (A-3) | Open — reported, not gated |
+| **K-6a** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 | Open — **insan gözü gerekiyor** |
+| **K-6b** | **Odak halkasının kontrastı 3:1'in altında** — `:focus-visible` halkası `var(--accent)` (`#00a9e8`) idi: beyazda **2.68:1**, `#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1**; uygulamadaki **15 zeminin hiçbirinde** eşiği geçmiyordu | her odaklanabilir düğüm, **23 / 23 route** | **1.4.11** | **KAPANDI (`#688`, 2026-08-12)** — halka `var(--text)`; beyaz **15.91:1**, en kötü zemin `#0092c8` **4.50:1** |
 
-**K-5 ve K-6 doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
-yanıltıyor mu) **22 sayfanın outline'ını yeniden kesmeyi önermeden ÖNCE** verilmelidir;
-K-6 tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
+**K-5 ve K-6a doğrudan A-08'e bağlıdır:** K-5'in cevabı (rotor başlık gezinmesi gerçekten
+yanıltıyor mu) **sayfaların outline'ını yeniden kesmeyi önermeden ÖNCE** verilmelidir;
+K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
 **cevapsızdır**.
 
-> **K-5'in bir artması gizlenmedi, seçildi.** `/user-manual`'ın başlığını `<h1>` yapmak
-> outline'ını `h2→h3`'ten `h1→h3`'e çevirir, yani sayfa K-5'in setine **girer** ve tek
-> istisna olarak `/` kalır. Alternatif — o sayfanın `h3` bölümlerini `h2`'ye çekmek —
-> K-5'in **22 route'un tamamında aynı olan** çaresini tek sayfada, denetimin verdicti
-> gelmeden uygulamak olurdu. ADIM 48 bunu yapmadı.
->
-> **Bu sayılar CI'da ÖLÇÜLDÜ** (run `31626856387`, job `94215349370`, commit `2b13e41`,
-> **SUCCESS**). Job'ın kendi özet satırı: *"23 route(s) inspected, **67** advisory
-> observation(s)"* — 90'dan düştü. 67 satırın içinde `skip link` ve `page has no <h1>`
-> **bir kez bile geçmiyor**; advisory blokları spec'te **bilerek bırakıldığı** için bu
-> sessizlik bir ölçümdür, silme değil. Ham sayım:
-> `docs/releases/evidence/2026-08-12/adim48_ci_a11y_measured.txt`.
->
-> **Sayılar önce TÜRETİLDİ, sonra ölçüldü — ve altı sınıfın altısı da tuttu.** Türetme
-> koşudan ÖNCE yayımlanmıştı (`adim48_k2_k4_precheck_derivation.txt`); gerekliydi çünkü
-> ADIM 48 oturumunun container'ında audit stack ayağa kalkmadı (Docker Hub manifest
-> `429`, blob CDN `403 Forbidden`, beş deneme).
->
-> **SONRA İKİNCİ KEZ KOŞTU.** Docs-only follow-up commit'i (`e3d5a2a`, frontend bundle'ı
-> birebir aynı) kapıları yeniden tetikledi: run `31627736544`, job `94218440525`, **SUCCESS**,
-> yine **67**. İki koşu **(route, sınıf) çiftlerinin KÜMESİ** olarak karşılaştırıldı, yalnız
-> toplam olarak değil: **simetrik fark BOŞ** — her sınıfta aynı rotalar, ADIM 44'ün kararsız
-> bulduğu üç rota (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) dahil.
->
-> **K-2/K-4 KAPANDI** (kararlı sınıflar + her commit'te koşan unit kapılar) ve **K-5 = 22
-> artık TEK değil İKİ bağımsız örnekle destekleniyor.** Çekince küçüldü ama sıfırlanmadı:
-> **iki koşu da SOĞUK** (her job'da taze Compose stack, hemen problanıyor), yani ılık bir
-> koşunun taşımayacağı ortak bir sistematik sapmayı dışlayamazlar. 22'yi **yüksek güvenle
-> çalışma değeri** say; ±1'i ancak **ılık, ≥2 koşu** emekliye ayırır. Bunun için ayrı bir
-> slice harcama — `h1 → h3` atlamasının önemli olup olmadığı **A-3'ün sorusudur** ve sayı
-> onu yalnız boyutlandırır.
->
-> **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** K-2/K-4 hiçbir zaman
-> blocker değildi; A-08'in defteri hâlâ boş (0/4) ve hiçbir şey duyulmuş değil.
+**ADIM 50'nin K-5 hakkında ölçtüğü iki şey — ikisi de "düzelt" demiyor:**
+
+1. **Maliyet artık tahmin değil, sayı.** Merdiveni bir basamak kaydırmak
+   (`h3→h2, h4→h3, …`) **204 başlık / ~40 dosya** demek (`<h3>` 98/36, `<h4>` 76/23,
+   `<h5>` 28/6, `<h6>` 2/1). Asıl tuzak CSS'te: başlık stilleri **tag-scoped descendant
+   selector**'larla yazılmış (`global.css` `.card h3`, `.card h4`, `.ready-report-card h3`,
+   `.state h3`, `.manual-drawer-header h3`) → tag değişip selector unutulan her yerde
+   başlık UA varsayılanına düşer ve v18 stili bozulur.
+2. **K-4'ün fix'i K-5'i BÜYÜTTÜ — ölçüldü, tahmin edilmedi.** CI job `94221023796` satırı
+   birebir bastı: `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA
+   USER MANUAL"` → **K-5 21 → 22**. Bilinen ve kabul edilen bedel. Toplam advisory
+   **90 → 67** (−23 skip link, −1 `<h1>`, +1 heading); tam döküm audit §6.
+   **Sınır:** tek **soğuk** koşu → `22` bir **taban**, yerleşmiş değer değil.
+
+**K-6a — halka görünüyor mu (2.4.7): A-08 bekliyor.** Sondanın çıktısı bu soruya dair
+**kanıt taşımıyor**: `specs/20-a11y-prechecks.spec.ts` programatik `el.focus()` kullanıyor,
+tarayıcılar `:focus-visible`'ı programatik odakta eşleştirmez → `before === after`
+**beklenen bir ölçüm artefaktıdır**. Halka `global.css`'te **yazılıdır**; §6.5'in ilk
+yazımındaki *"UA varsayılan halkası boyanıyor olabilir"* tahmini gereksizdi.
+
+**K-6b neden kapatılabildi, diğerleri neden hayır.** 3:1 **sayısal bir AA eşiğidir**, halka
+rengi v18 mockup'ında **hiç tarif edilmemiştir** (kanonda odak durumu yok → sapma değil), ve
+düzeltme hiçbir yerleşimi değiştirmeyen **tek bir deklarasyondur**. Diğerlerinin çaresi
+(footer eklemek, 22 sayfanın başlık ağacını yeniden kesmek) **ürün kararıdır**. **Bu kalem
+D-10 DEĞİLDİR:** D-10 **1.4.3** (metin) ekseninde imzalı kalıcı sapmadır; K-6b **1.4.11**
+(metin-dışı) ölçütüdür — ayrı ölçüt, ayrı eşik, ve `--accent` token'ına **dokunulmadı**.
+**axe bu kuralı koşmuyordu** — a11y ratchet'inin yeşil olması bu soru için kanıt değildi.
 
 ### 6.6 İzleme kaydı ↔ kod ayrışması — tekrarlayan desen (P8 §4.3, P10 §3.3)
 
@@ -2172,6 +2189,9 @@ Ek olarak: `SHARED_ALLOCATION_STATUS` **`future_dev`** (containment KAPALI, §4)
 > (yığın güncel main'de yeniden doğrulandı, precheck sayıları tazelendi, denetçi
 > runbook'u yazıldı). Bu blocker'ı **kapatmaz** — dört çıkış kriteri de hâlâ ☐, defterin
 > §1/§2/§3'ü hâlâ boş, #514 hâlâ kanıtsız kapalı. Hazırlık denetim değildir.
+> *(**ADIM 48 düzeltmesi:** bu cümlenin son ifadesi **bayattır** — #514 aynı gün
+> `11:08:58Z`'de yeniden AÇILDI. Cümlenin hükmü değişmez: hazırlık hâlâ denetim değildir
+> ve blocker hâlâ açıktır.)*
 >
 > **Eski blocker (4) — react-router `GHSA-qwww-vcr4-c8h2` — 2026-08-12'de (ADIM 44)
 > KAPANDI** (§6.4), ve **imzayla değil, kaldırmayla**: advisory 2026-08-07T18:16:54Z'de
@@ -2222,21 +2242,6 @@ COMPLETED kapalıdır (§6.6). Yeniden açmak insan işidir.
 ---
 
 ## 9. Kanıt dizini
-
-### 9.0-f 2026-08-12 (ADIM 48) — §6.5'in iki PO kalemi (K-2 + K-4)
-
-Tüm ham çıktılar: **`docs/releases/evidence/2026-08-12/`**
-
-| Adım | Belge / dosya | Verdict |
-|---|---|---|
-| §6.5 / K-2 | `frontend/src/app/Layout.tsx` · `frontend/src/styles/global.css` | **KAPANDI** — `.skip-link` → `#main-content` shell'in **ilk tabbable** düğümü; `<main id tabIndex={-1}>` odağı alıyor |
-| §6.5 / K-4 | `frontend/src/pages/UserManual.tsx` | **KAPANDI** — `<h2 class="page-title">` → `<h1 class="page-title">`; sınıf değişmedi, hesaplanmış stil değişmedi |
-| — | `frontend/src/test/a11ySkipLink.test.tsx` (YENİ) · `userManual.test.tsx` | **kapı** (advisory değil): 3 + 1 assert, **negatifi kanıtlı** — her iki regresyon da kırmızıya çevirdi |
-| — | `adim48_ci_a11y_measured.txt` | **İKİ CI koşusunda ÖLÇÜLDÜ, simetrik fark BOŞ** (`31626856387` + `31627736544`): skip link **0**, no-`<h1>` **0**, heading outline **22**, `contentinfo` 23, `aria-live` 21, focus indicator 1 → toplam **67** (90'dan). axe ratchet **45/45 — değişmedi** |
-| — | `adim48_k2_k4_precheck_derivation.txt` | Koşudan ÖNCE yayımlanan türetme; **altı sınıfın altısı da ölçümle birebir tuttu**. Kaynak: ADIM 44 run-5 kayıtları |
-| — | `adim48_local_gate_runs.txt` | `lint` / `typecheck` / `coverage` **exit 0** (+ `e2e` tsc exit 0) — 71 dosya, **725 passed**, line **%84.9** (kapı ≥%83) |
-| — | `adim48_ci_visual_measured.txt` | **görsel kapı ÖLÇÜLDÜ: 23/23 passed, SIFIR baseline diff** (job `94215349503`, step 11). `visual: user-manual` dahil — markup'ı değişen rota da kaymadı. Aynı job'da E2E suite **39 passed / 1 skipped**, hizalanan `17-page-coverage` `/user-manual` satırı gerçek DOM'da yeşil |
-| — | `adim48_stack_unavailable.txt` | `a11y` / `visual` **YERELDE KOŞMADI** — Docker Hub `429` + blob CDN `403 Forbidden`, 5× tekrarlandı. **Otorite PR'ın CI koşusu oldu ve ikisi de yeşil geldi** |
 
 ### 9.0-e 2026-08-12 (ADIM 44) — blocker 4 kapanışı + blocker 1 hazırlığı
 

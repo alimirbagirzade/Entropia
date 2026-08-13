@@ -5768,6 +5768,39 @@ prompt `docs/ADIM50_KICKOFF.md` §P-2 (K-3). **K-6b `#688`'de KAPANDI.** **K-5 +
 **A-08'e dokunulmadı:** defter boş (0/4), `#514` kapalı, **blocker sayısı 1**, verdict
 **BLOCKED**.
 
+## Stage — ADIM 52: kabul borcu sınıf B, parti 02 (dış work object run provenance'ı)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** **Ürün kodu
+DEĞİŞMEDİ** (tek satır bile) · migration yok · `ENGINE_VERSION` sabit · OpenAPI sabit.
+
+**Kapanan beş kriter:** `TL-12` (c2+c3) · `TL-20` (c3) · `TS-11` (c3) · `TS-21` (c1) ·
+`AOS-21` (c1) — hepsi tek yeni modülde
+(`tests/integration/test_external_object_run_provenance.py`).
+
+**Eksik olan tek şey bir harness'tı:** *dış work object içeren kompozisyon üzerinde
+TAMAMLANMIŞ bir Backtest Run*. Repoda yoktu. Sıfırdan yazılmadı — `_ready_composition`,
+`_e2e_bars` ve `_attach_trading_signal` aynen kullanıldı; yalnız `_attach_trade_log`
+eklendi (gerçek boru hattı: upload → import worker → Save & Add).
+
+**Ratchet — yalnız AŞAĞI:** `partial` **118 → 113**, `debt_class.B` **87 → 82**.
+`uncovered`/A/C/**D** tavanları el değmedi, `total_criteria` **383 sabit**. Yapısal
+diff: 6 kayıt değişti, hiçbiri silinmedi, clause **1175 → 1175**.
+
+**BULGU — `TL-11.c3` KAPATILAMAZ ve ADIM 48'in önerisi YANLIŞTI.** Kriter
+*allocation-enabled* bir run istiyor; shared allocation bu build'de **admission'da
+fail-closed** (`SHARED_ALLOCATION_STATUS = "future_dev"` →
+`ALLOCATION_SHARED_MODE_NOT_IN_BUILD`, run/manifest/job yaratılmadan). Sınıfı **C**
+görünüyor; **yeniden sınıflandırılmadı** çünkü **C tavanını yükseltirdi**. Artık ÜÇ
+açık bulgu var: `TL-11.c3`, `TL-16`, `TL-01.c4` — üçü de insan/PO kararı.
+
+**Ad çakışması onarıldı:** iki bağımsız slice kendini "ADIM 48" olarak adlandırıp aynı
+kickoff dosyasına yazmıştı. Numaralar **yeniden atanmadı**, ayrım **başlık ekiyle**
+yapıldı: `ADIM 48 (K-6b)` (#688) · `ADIM 48 (kabul borcu B-01)` (#686). İçerik
+silinmedi. `repository_facts --check` bunu yakalamıyor (kuralı dosya başına bakar).
+
+**P1-Gate3 KAPANMADI** — kalan borç A=1 · B=82 · C=6 · D=32 (açık toplam **121**).
+Tam kayıt: `PROJECT_HISTORY.md` §ADIM 52 · kickoff: `docs/ADIM52_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge

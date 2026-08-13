@@ -8037,3 +8037,125 @@ numaralandırılmadı** — ikisi de başka yerlerden kimlikle anılıyor.
   çözüldü. **Bir satırı yeniden sararken kapının davranışını değiştirdiğini bil.**
 ---
 
+---
+
+> **NUMARA — bu slice DÖRT KEZ taşındı.** Dal ADIM 49 olarak açıldı; ben
+> çalışırken `#691` **ADIM 49**'u, `#685` **ADIM 50**'yi ve `#687` **ADIM 51**'i
+> merge edilmiş adlarla aldı. Kural: **numaralar yeniden atanmaz, merge edilmiş ad
+> kazanır** — taşınan taraf hep merge edilmemiş olandır, yani bu slice → **ADIM 52**.
+> Branch adı ve commit mesajları `acceptance-debt` / `stage-49` yazar; bu bir
+> tutarsızlık değil, kuralın kendisidir.
+
+## ADIM 52 — kabul borcu sınıf B, parti 02 (dış work object'in run provenance'ı, docs 03/04/05)
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** ADIM 48 (kabul borcu
+B-01)'in devamı. **Ürün kodu DEĞİŞMEDİ** — tek satır bile. Migration yok,
+`ENGINE_VERSION` sabit, OpenAPI sabit, OCC/Idempotency/route yolları sabit.
+
+### Eksik olan tek şey bir harness'tı
+
+Beş kriterin beşi de aynı makineye dayanıyordu: **dış work object içeren bir
+kompozisyon üzerinde TAMAMLANMIŞ bir Backtest Run**. Repoda yoktu — hiçbir test bir
+`trade_log`'u run kompozisyonuna sokmuyordu, Trading Signal tarafı ise admission'da
+duruyordu (`test_manifest_carries_all_seven_field_groups` manifest'i okuyup run'ı
+tamamlıyordu ama revizyon-sonrası değişmezliği hiç sınamıyordu). Bu yüzden *"revizyon
+N+1 biten bir run'ı bozmaz"* ve *"tarihsel bir Result kendi provenance'ını hâlâ
+çözer"* **birer argümandı, assertion değil**.
+
+Harness sıfırdan yazılmadı: `_ready_composition`, `_e2e_bars` ve
+`_attach_trading_signal` **aynen** yeniden kullanıldı; yalnız Trade Log karşılığı
+(`_attach_trade_log`) yoktu ve o eklendi — gerçek dayanıklı boru hattını koşturur
+(upload → import worker → Save & Add), elle yazılmış satır değil.
+
+| ID | Doc | Kapanan clause | Kapatan test |
+|---|---|---|---|
+| `TL-12` | 05 | c2 + c3 | `test_trade_log_revision_n_survives_n_plus_one_byte_for_byte` · `test_completed_run_manifest_keeps_the_trade_log_revision_it_pinned` |
+| `TL-20` | 05 | c3 | `test_soft_deleted_trade_log_still_resolves_from_the_historical_manifest` |
+| `TS-11` | 04 | c3 | `test_completed_run_manifest_is_unchanged_by_a_new_signal_revision` |
+| `TS-21` | 04 | c1 | `test_signal_import_save_and_export_create_no_backtest_result` |
+| `AOS-21` | 03 | c1 | `test_saving_an_external_object_creates_no_backtest_result` |
+
+Hepsi tek yeni modülde: `tests/integration/test_external_object_run_provenance.py`.
+
+### Ölçüm — tavanlar DÜŞTÜ
+
+**`partial` 118 → 113**, **`debt_class.B` 87 → 82**. `uncovered` (8), **A** (1),
+**C** (6) ve **D** (32) tavanları **el değmedi**; `total_criteria` **383 sabit**.
+Yapısal diff: **6 kayıt değişti** (5 kapanan + `TL-11`'in yalnız `notes`'u), hiçbiri
+eklenmedi/silinmedi, clause sayısı **1175 → 1175**. Ratchet hâlâ ısırıyor (tavan elle
+81'e çekilince `exit 1`).
+
+### "İşaretlemek ≠ kapsamak" — negatif kontroller
+
+* `TL-12.c2` — assertion yeni revizyona çevrilince **düşüyor**. Test ayrıca
+  `session.expire_all()` ile önce identity map'i boşaltır: aksi halde "değişmedi"
+  iddiasını veritabanı değil ORM önbelleği cevaplardı.
+* `TL-12.c3` — manifest'in head'i takip etmesi beklenince **düşüyor**. Manifest girdisi
+  **bütün olarak** karşılaştırılır (yalnız id alanı değil) ve run'ın `manifest_hash`'i
+  yeniden doğrulanır → yeniden yazılmış bir manifest geçemez.
+* `TL-20.c3` — yanlış `source_asset_id` ile **düşüyor**.
+* `TS-11.c3` — manifest'in yeni revizyonu göstermesi beklenince **düşüyor**.
+* `TS-21.c1` / `AOS-21.c1` — sıfır-assertion'lar **kendi kendini korur**: aynı sayaç
+  run'dan sonra **1**'e ulaşır, yani sıfırlar bozuk bir sorgu ya da boş bir veritabanı
+  olamaz.
+
+`TL-20.c3` özellikle ayırt edicidir: Trade Log kökü **soft-delete edilir**, aktif
+projeksiyondan düştüğü ayrıca assert edilir, sonra biten run'ın manifest'i yeniden
+okunur ve hâlâ orijinal `work_object_revision_id`'yi, source asset'i, record batch
+id'sini ve o batch'in kendi `content_hash`/`accepted_count`'unu adlandırır.
+Provenance'ı canlı kompozisyondan join eden bir Result burada **boşalırdı**.
+
+### BULGU — `TL-11.c3` KAPATILAMAZ, ve ADIM 48'in önerisi YANLIŞTI
+
+ADIM 48 (kabul borcu B-01) kickoff'u *"en yüksek değerli üçlü"* olarak
+`TL-11.c3` + `TL-12.c3` + `TL-20.c3` önermişti. **`TL-11.c3` yanlış bir öneriydi.**
+
+Kriter *"allocation-enabled bir kompozisyon üzerinde aktif bir run"* diyor. Bu build'de
+paylaşımlı sermaye tahsisi **admission'da fail-closed**:
+`domain/allocation/capability.py::SHARED_ALLOCATION_STATUS = "future_dev"` ve
+`commands/backtest_run.py:542` **run, manifest ya da job yaratılmadan**
+`ALLOCATION_SHARED_MODE_NOT_IN_BUILD` fırlatıyor
+(`test_shared_allocation_run_is_refused_and_leaves_nothing_behind` bunu zaten pinliyor).
+Yani clause'un tarif ettiği run **admit edilemez** ve **hiçbir test onu kuramaz** —
+bu, sınıf **C** tanımıdır ("bilerek kapatılmış V1 özelliği"), sınıf B değil.
+
+**Yeniden sınıflandırılmadı, bilerek:** B→C geçişi **C tavanını YÜKSELTİRDİ**, bu bir
+adjudication'dır ve bir test slice'ının kararı değildir. Bulgu `TL-11`'in `notes`'una
+ve `acceptance_coverage_baseline.json` §`adjudication`'a yazıldı; **sınıfı ve statüsü
+el değmeden** kaldı.
+
+Artık **iki** böyle açık bulgu var: bu ve `TL-16` (c4'ün istediği 409 alanı üretimde
+yok → sınıf D görünüyor). İkisi de insan/PO kararı.
+
+### Ad çakışması onarıldı (veri kaybı YOK)
+
+**İki bağımsız slice kendini "ADIM 48" olarak adlandırdı** ve aynı kickoff dosyasına
+yazdı; git ikisini çakışmasız birleştirdi ve dosya sessizce kendi içinde çelişir hale
+geldi (*"tek bir CSS deklarasyonu sevk etti"* + *"sekiz sınıf-B kriteri kapandı"*).
+`repository_facts --check` bunu **yakalamadı**: kuralı *"birden fazla DOSYA
+`doc-status: current` olmasın"*, ikisi aynı dosyadaydı.
+
+`CLAUDE.md`'nin yazılı kuralı uygulandı — **numaralar yeniden atanmadı** (merge edilmiş
+PR başlıkları ve commit mesajları değiştirilemez), ayrım **başlık ekiyle** yapıldı:
+**`ADIM 48 (K-6b)`** (#688) · **`ADIM 48 (kabul borcu B-01)`** (#686). Aynı ayrım
+`PROJECT_HISTORY.md`'nin iki `## ADIM 48` bölümüne de uygulandı. **Hiçbir içerik
+silinmedi**; #688 de hiçbir tarihçe başlığı silmemişti (doğrulandı).
+
+### Dürüst sınırlar
+
+- **Ürün kusuru bulunmadı.** Beş kriterin beşi de **ilk koşuda geçti** — bunlar gerçek
+  davranışın kilitlenmesidir, kusur onarımı değil. Yeni issue açılmadı.
+- **`TS-11.c3`'te "provider/mapping değişikliği" ikinci bir Signal revizyonu ile
+  temsil edildi.** Clause'un koruduğu şey **biten manifest**tir, düzenleme yolu değil;
+  yine de bu bir vekildir ve öyle kaydedilmiştir.
+- **`TL-11.c3` AÇIK ve sınıfı şüpheli** (yukarıya bakınız) — bu parti onu kapatmadı.
+- **Memory checkpoint YAZILAMADI (ritüel madde 4)** — ve #690 bu boşluğun **sebebini
+  yapısal olarak saptadı:** iş remote container'da yürüyor, orada `ecc`/`claude-mem`
+  **kayıtlı değil**, yani borç **bu ortamdan kapatılamaz**. #690 iki slice'ın checkpoint
+  metnini `docs/memory/PENDING_CHECKPOINTS.md`'ye hazır hâlde yazdı. **ADIM 49 aynı
+  duvara çarptı** (ToolSearch'te ikisi de yok) → o dosyaya **ADIM 52 girdisi de
+  eklenmelidir**; borç artık **ÜÇ slice** (ADIM 47, ADIM 48 ×2, ADIM 52) ve bağlı bir
+  ortamda toplu yazılmalı.
+- **Codemap tazelemesi gerekmedi** — yeni endpoint/tablo/sayfa/job/aktör yok;
+  `backend/src`, `alembic`, `frontend/src` diff'i **boş**.
+- **`P1-Gate3` KAPANMADI** — kalan borç **A=1 · B=82 · C=6 · D=32**, açık toplam **121**.

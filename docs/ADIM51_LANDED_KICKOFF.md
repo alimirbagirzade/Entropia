@@ -1,4 +1,8 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 52 (2026-08-12).** Canlı kickoff artık
+> `docs/ADIM52_LANDED_KICKOFF.md` (kabul borcu sınıf B, parti 02). Aşağısı ADIM 51
+> kapanışındaki durumu kaydeder. **Değişmeyen:** blocker sayısı 1 (yalnız A-08),
+> verdict BLOCKED.
 # ADIM 51 LANDED — #514 izleme ayrışması kapandı (A-08 blocker AÇIK) · sıradaki slice için kickoff
 
 > **Bu belge ADIM 51 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →

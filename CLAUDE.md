@@ -189,7 +189,27 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `ce823a8`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `108f16b`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **Son dalga — ADIM 52 (kabul borcu sınıf B, parti 02 — dış work object run
+> provenance'ı, docs 03/04/05): 5 kriter KAPANDI, `partial` 118 → 113,
+> `debt_class.B` 87 → 82. BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict
+> BLOCKED.** Kapananlar: `TL-12` `TL-20` `TS-11` `TS-21` `AOS-21`. **Ürün kodu
+> DEĞİŞMEDİ.** Eksik olan tek şey bir harness'tı — *dış work object içeren
+> kompozisyonda TAMAMLANMIŞ Backtest Run*; yeni
+> `tests/integration/test_external_object_run_provenance.py::_attach_trade_log` +
+> `::_completed_run`, diğer builder'lar **aynen** yeniden kullanıldı.
+> **ÜÇ AÇIK BULGU (insan/PO):** `TL-11.c3` **KAPATILAMAZ** — allocation-enabled run
+> bu build'de **admission'da fail-closed** (`SHARED_ALLOCATION_STATUS=future_dev`),
+> sınıfı **C** görünüyor ve **ADIM 48 (B-01)'in "kapatılabilir" önerisi YANLIŞTI**;
+> `TL-16` D görünüyor; `TL-01.c4` yol sapması. **Hiçbiri yeniden sınıflandırılmadı —
+> o tavanı YÜKSELTİRDİ.** **Parti seçmeden ÖNCE ÖLÇ:** kriterin adlandırdığı davranış
+> `backend/src`'te sevk edilmemişse sınıfı yanlıştır. **NUMARA: bu slice DÖRT KEZ
+> taşındı** (49→#691, 50→#685, 51→#687 merge edilmiş adlarla aldı) → **ADIM 52**;
+> branch/commit `stage-49` yazar. **P1-Gate3 KAPANMADI** (A=1 · B=82 · C=6 · D=32,
+> açık **121**). `PROJECT_HISTORY.md` §ADIM 52 · `docs/ADIM52_LANDED_KICKOFF.md`.
+>
+> Öncesinde **ADIM 51 — HEAD `ce823a8`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 51 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
 > KOD DEĞİŞMEDİ.**

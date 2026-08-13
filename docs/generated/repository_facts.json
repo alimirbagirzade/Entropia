@@ -981,8 +981,8 @@
     "collection_method": "static ast/regex walk of the test tree — no suite is executed, so these are COLLECTED counts and never pass counts. They are also LOWER than a runner's count, because one parametrized site expands into many cases at run time: `npx vitest list` reports 721 cases over the same 70 files this walk sees as 711 call sites, and pytest expands `@pytest.mark.parametrize` the same way. Compare file counts across the two, never case counts.",
     "e2e_spec_files": 22,
     "e2e_test_call_sites": 84,
-    "frontend_unit_test_call_sites": 712,
-    "frontend_unit_test_files": 71
+    "frontend_unit_test_call_sites": 716,
+    "frontend_unit_test_files": 72
   },
   "visual_baselines": {
     "a11y_frozen_pages": 23,

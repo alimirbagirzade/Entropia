@@ -111,6 +111,27 @@ korunur* (ilk bağlantı, resync ve replay penceresini aşan boşluk için) — 
 
 ---
 
+## Shell iskeleti — `app/Layout.tsx` (her rotanın etrafını saran sabit yapı)
+
+Tek `Layout` her rotayı sarar; sayfalar `<Outlet />` içine düşer. Sırası **anlamlıdır**:
+
+| Sıra | Düğüm | Neden bu sırada |
+|---|---|---|
+| 1 | `<a class="skip-link" href="#main-content">` | **Shell'in ilk tabbable düğümü** olmak zorunda (K-2 / WCAG 2.4.1). Önüne tabbable bir şey koyarsan kapı kırılır: `src/test/a11ySkipLink.test.tsx`. CSS'te **iki durumda da `position:absolute`** — akıştan çıkmadığı an 23 görsel baseline kayar; `position:fixed` yaparsan `offsetParent` null olur ve precheck probu linki hiç görmez |
+| 2 | `<header class="top-title">` | `AuthControl` (eski ilk tabbable: "Log out"), marka, `topbar-status` rozetleri |
+| 3 | `<nav class="menu-bar" aria-label="Primary">` | `MENU_BAR` grupları; `aria-label` precheck'te **bloklayıcı** (adsız nav = kırmızı) |
+| 4 | `.backend-banner` (koşullu) | `role="alert"` — backend erişilemezken |
+| 5 | `<main id="main-content" class="workspace" tabIndex={-1}>` | Skip link'in hedefi. `id` olmadan link hiçbir yere gitmez; `tabIndex={-1}` olmadan odak linkte kalır ve sonraki Tab menü çubuğuna geri girer. **-1**, 0 değil: `<main>` kendisi tab durağı olmamalı |
+
+Sayfa başlığı deseni: her rota kendini **`<h1 class="page-title">`** ile adlandırır
+(ADIM 48'den beri istisnasız — `/user-manual` son sapmaydı). `.page-title` sınıf tabanlıdır
+(margin / font-size / font-weight / color `global.css`'te açıkça yazılı), yani **etiket
+değişimi hesaplanmış stili değiştirmez**; tersi de doğru — sınıfı düşürürsen görünüm bozulur.
+`e2e/utils/pageTruth.ts::PageContract.level` kaçış kapağı **bugün hiçbir contract tarafından
+kullanılmıyor**.
+
+---
+
 ## Doğrulanmamış noktalar (`?`)
 
 - Sayfa başına "backend endpoint grubu" sütunu, sayfanın import ettiği `lib` modülünden türetildi;

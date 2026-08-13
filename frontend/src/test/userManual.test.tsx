@@ -269,6 +269,20 @@ describe("User Manual page", () => {
     delete (Element.prototype as unknown as ScrollHost).scrollIntoView;
   });
 
+  // A-08 precheck K-4: this page was the ONLY route that named itself with an
+  // <h2>, so it was the only one a rotor could not reach by "top-level heading".
+  // ADIM 48 promoted it. The level is the assertion — `.page-title` is unchanged
+  // and carries the whole computed style, so a silent revert to <h2> would look
+  // identical on screen and only a level check catches it.
+  it("names itself with a level-1 heading (K-4)", async () => {
+    stubRoutes();
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", { name: "User Manual", level: 1 }),
+    ).toHaveClass("page-title");
+  });
+
   it("renders the published stream: baseline first, canonical blocks, one snapshot version", async () => {
     stubRoutes();
     renderPage();

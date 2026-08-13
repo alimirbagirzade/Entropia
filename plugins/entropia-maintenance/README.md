@@ -108,10 +108,26 @@ yakalar: hiçbir CI kapısı `docs/` okumadığı için bu tek otomatik savunmad
   `CLAUDE.md` ona `.claude/skills/ponytail-entropia/SKILL.md` **yoluyla** atıf
   yapıyor; taşımak o atfı kırardı ve plugin kurulmamış bir çekoutta merdiveni
   yok ederdi. Ajanlar ona **adıyla** atıf yapar, yükleme yeri değişmedi.
-- **MCP eklenmedi.** `codebase-memory-mcp` kullanıcı düzeyinde ve makineye özel
-  mutlak bir yolla tanımlı; repoya `.mcp.json` koymak o yolu herkese dayatırdı.
-  Taşınabilir bir çalıştırma biçimi (paket adı / `npx` / `uvx`) belirlenirse
-  plugin köküne `.mcp.json` eklenebilir.
+- **MCP kısmen eklendi (2026-08-12).** Eski gerekçe — `codebase-memory-mcp`
+  makineye özel mutlak bir yolla tanımlıydı, repoya koymak o yolu herkese
+  dayatırdı — ve konulan koşul: *"taşınabilir bir çalıştırma biçimi belirlenirse
+  eklenebilir."* **Koşul karşılandı:** paket npm'de yayımlanmış ve çıplak çağrısı
+  MCP'yi stdio'da başlatıyor (`npx -y codebase-memory-mcp@0.10.2`; initialize
+  handshake'i bu argümanlarla doğrulandı). Sürüm **sabitlenmiştir** — `@latest`
+  yazmak, deponun action'ları SHA'ya pinleyen tedarik-zinciri duruşuyla çelişirdi.
+  `--ui=false` bilinçlidir: sunucunun HTTP graph görselleştirmesi bir port dinler,
+  CI/remote'ta istemiyoruz.
+  **Dosya plugin köküne değil DEPO KÖKÜNE kondu** (bu maddenin önerdiği yer plugin
+  köküydü): asıl ihtiyaç remote container'da doğuyor, orası depoyu klonluyor ama
+  plugin'i kurmuyor — plugin kökündeki bir dosya o oturuma hiç ulaşmazdı.
+- **`claude-mem` ve `ecc` bu yolla EKLENEMEZ — ölçüldü, tahmin değil.**
+  `claude-mem` bir MCP stdio sunucusu değil, **kurulum aracı**: `npx claude-mem
+  install` bir plugin + Bun tabanlı worker servisi (ya da Docker pg+redis'li server
+  runtime) kurar ve IDE'nin MCP config'ini **kendisi** enjekte eder; `.mcp.json`'a
+  yazılırsa sunucu değil installer çağrılmış olur. `ecc` ise npm'de yok — araç
+  öneki `mcp__plugin_ecc_memory__*` (bkz. `docs/ADIM8_LANDED_KICKOFF.md`), yani
+  marketplace'ten kurulan bir **plugin**. İkisi de kapanış ritüeli md. 4'ün
+  dayandığı sunuculardır → **memory checkpoint borcu bu değişiklikle KAPANMADI.**
 
 ## Sürüm
 

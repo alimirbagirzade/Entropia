@@ -1,96 +1,97 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
+> kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat olabilir. Güncel otorite:
+> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+> **Yerini ADIM 55 kickoff'u aldı.**
+> **CURRENT SLICE KICKOFF.** Sayısal otorite bu belge DEĞİL →
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
-# ADIM 54 LANDED — agentmemory sunucusu yerele alındı (semantik geri çağırma, barındırma YOK)
+# ADIM 54 LANDED — kabul borcu sınıf B, parti 03 (Research Data revizyon değişmezliği)
 
-> Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 54.
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 54.
 
-## Nerede duruyoruz
+## Neredeyiz
 
-**Base:** `origin/main` @ `2a90fe3` (#694). **Ürün kodu DEĞİŞMEDİ.** Migration yok,
-`ENGINE_VERSION`/OpenAPI aynı. **A-08 blocker AÇIK, verdict BLOCKED** — bu slice ölçmedi.
+Base `2a90fe3` (#694). **Ürün kodu DEĞİŞMEDİ**, migration yok, `ENGINE_VERSION`/OpenAPI
+sabit. **`partial` 113 → 111, `debt_class.B` 82 → 80.** Kapananlar: `RD-04`, `RD-06`.
+**Blocker 1 (yalnız A-08), verdict BLOCKED.**
 
-ADIM 53 hafızayı türetilmiş yaptı ama geri çağırma **harf eşleşmesiydi**. ADIM 54 tam
-sunucuyu **yerelde** devreye aldı: araç 7 → **53**, arama çapraz-dilli semantik.
-**Hiçbir şey barındırılmadı.**
+## Reuse anchor'ları (birebir semboller)
 
-## Reuse anchor'ları
-
-| Sembol | Ne için |
+| Anchor | Ne için |
 |---|---|
-| `scripts/memory_server.sh` | idempotent "sunucu ayakta olsun"; uzak URL'de **başlatmaz** |
-| `scripts/memory_mcp.sh` | `.mcp.json` giriş noktası — önce sunucu, sonra `exec` shim |
-| `memory_index.mjs::storedMarkers` | REST export'tan mevcut `§başlık` kümesi |
-| `memory_index.mjs::marker` | kaydın store'daki kimliği (ilk satır) |
-| `agent-config-gate.mjs::REPO_SCRIPT_REF` | betikten betiğe zincir takibi |
-| `agent-config-gate.mjs::npxSpecs` / `::resolveSpec` | komut konumundaki `npx` + `$VAR` çözümü |
+| `tests/integration/test_research_revision_immutability.py::_drive_to_approved` | DRAFT→ANALYZING→VERIFIED→APPROVED yürüyüşü; **zaman politikasını komutla kurar** (kolon set etmek yetmez) ve onayı **ADMIN** ile yapar |
+| `::_dataset` | `(root, market_entity_id)` döndürür — market id **her sonraki revizyonda tekrar gerekir**, onay bağı fail-closed yeniden çözer |
+| `::_head` | head revizyonu tazeden okur |
+| `rd_jobs.run_analysis(load_and_parse=…, write_native=…)` | ikisi de **async**; `write_native` **str digest** döndürür |
 
-## DOKUNMA / DİKKAT
+## DOKUNMA / DİKKAT (bu slice'ta ölçüldü)
 
-1. **Hidratasyon `--sync`, `--write` değil.** `--write` toplayıcıdır; dolu store'a ikinci
-   koşu her kaydı çoğaltır. `--sync` tekrar koşmaya güvenlidir.
-2. **Sunucu ayakta değilken açılan oturum tüm oturum boyunca 7 araçta kalır** — shim bir
-   kez, bağlanma anında karar verir. `memory_mcp.sh` bu yüzden sunucuyu **önce** kaldırır.
-3. **Tek makinede tek örnek.** İkinci örnek `III_REST_PORT` farklı olsa bile
-   `Port already in use` verir (iii engine portu sabit).
-4. **`AGENTMEMORY_URL` uzak bir adres gösteriyorsa `memory_server.sh` hiçbir şey
-   başlatmaz** — bilerek: başkasının store'unu yerel bir kopyayla taklit etmek sessiz bir
-   yanlış cevap üretirdi.
-5. **Yeni bir MCP sunucusunu betikle başlatırsan pin kuralı seni takip eder.**
-   `agent-config-gate.mjs` betiği ve çağırdığı betikleri okuyup `npx` çağrılarının
-   `@x.y.z` taşıdığını doğrular.
-6. **Store'un boş olması bir arıza değildir.** Sunucu yeniden başlayınca 0 kayıt ölçüldü;
-   `--sync` üç saniyede geri getirir. Kaynak git'te.
+1. **Kriterin sözü ≠ sevk edilen davranış.** `RD-04` *"stale işaretlenir"* diyor; sevk
+   edilen daha güçlü ve yapısal. **Bayrak icat etme**, sevk edileni assert et.
+2. **Yanlış refüzü kanıtlama.** Yeni revizyonun zaman politikası kurulmadan onay
+   denenirse *eksik-politika* kapısı düşer, durum makinesi değil. Onay **Admin-only** —
+   `OWNER` ile rol kapısına takılırsın.
+3. **ORM nesnesine `rollback` sonrası dokunma** — expire olur, lazy IO `MissingGreenlet`
+   verir. `entity_id`/`revision_id`'yi **erkenden `str()`** al.
+4. **PARTİ SEÇMEDEN ÖNCE ÖLÇ.** Defterde **beş** açık bulgu var; her partide en az bir
+   yanlış sınıflandırma çıktı. Kriterin adlandırdığı alan `backend/src`'te yoksa sınıfı
+   yanlıştır — **yeniden sınıflandırma, tavan yükseltir**; bulgu olarak yaz.
 
-## Açık iş
+## Sıradaki partinin doğal ilk kalemi — `RD-09.c4`
 
-- **Barındırma hâlâ yapılmadı ve gerekmiyor.** Tek ek getirisi makineler arası paylaşılan
-  **elle** yazılmış hafıza olurdu; otomatik yakalama kapalı olduğu için öyle içerik yok.
-  İstenirse `AGENTMEMORY_URL` tek değişken.
-- **Plugin'in yüklendiği hâlâ doğrulanmadı** (ADIM 53'ten devir) — `/plugin` listesinde
-  `entropia-maintenance` etkin mi, ilk iş olarak bak.
-- **Suite'ler bu oturumda koşmadı** (Postgres/`node_modules` yok) → **otorite CI**.
-- **A-08:** denetim BAŞLADI, BİTMEDİ (2/184 hücre, 0/10 akış, SR-1 hiç başlamadı),
-  #514 AÇIK, dört çıkış kriteri de ☐. **Değişmedi.**
+Kapatılabilir, bu partide **bilerek** açık bırakıldı. Gerekenler ölçüldü:
+* manifest research revizyonunu **yalnız funding kaynağı** üzerinden pinler
+  (`backtest_run_context::_research_entries`);
+* readiness, funding revizyonunun **stratejinin KENDİ market revizyonuna** bağlı olmasını
+  ve `instrument_mapping_ref` taşımasını ister (ikisi de blocker verdi);
+* worker native asset satırları çözülmezse `RUN_FAILED_FUNDING_SOURCE_INVALID` verir —
+  `run_backtest(load_funding_rows=…)` enjeksiyonu **vardır**.
 
-## Next (değişmedi)
+`_ready_composition` kendi market'ini içeride yaratır; research dataset'i o market'e
+bağlamak için helper'a bir kanca gerekir. Bu slice denedi ve **geri aldı** — bir sonraki
+parti kancayı kalıcı olarak eklemeli.
 
-**PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.** ADR §16
-insan kapısı + ADR amendment'ı gerekmeden başlama.
+## Kalan borç
+
+| Sınıf | Kriter | Kim kapatır |
+|---|---|---|
+| A | 1 | adjudication |
+| B | **80** | test slice'ı |
+| C | 6 | **kimse** |
+| D | 32 | ürün işi |
+| **açık** | **119** | |
 
 ---
 
 ## Paste-ready resume prompt
 
 ```
-Entropia'da yeni bir oturum açıyorum. CLAUDE.md §Session START protokolünü uygula:
+Entropia'da yeni bir oturum. Önce CLAUDE.md §Session START protokolünü uygula:
+1. git fetch && git log --oneline origin/main -6 — ADIM 54 merge edildi mi, ADIM
+   numaram alınmış mı? DOĞRULA (bu depoda numara çakışması DEFALARCA yaşandı).
+2. Otorite: docs/ADIM54_LANDED_KICKOFF.md → docs/STAGE2_HANDOFF.md → PROJECT_HISTORY §ADIM 54.
+3. Hafıza: node scripts/memory_index.mjs --write (taze container'da store BOŞ).
 
-1. git fetch && git log --oneline origin/main -6 — ADIM 54 PR'ı merge edildi mi,
-   ADIM numaram alınmış mı? DOĞRULA (bu repoda numara dört kez taşındı).
-2. Otorite sırası: docs/ADIM54_LANDED_KICKOFF.md → docs/STAGE2_HANDOFF.md
-   ("## Stage — ADIM 54" + "## Next") → docs/STAGE_BUILD_PLAN.md → docs/spec/NN_*.
-3. Hafıza: taze container'da store BOŞTUR → `node scripts/memory_index.mjs --sync`
-   (~3 sn, tekrar koşmak güvenli). Sunucu .mcp.json üzerinden kendiliğinden kalkar;
-   kalkmışsa arama SEMANTİKTİR (İngilizce sorgu Türkçe kaydı bulur), kalkmamışsa
-   harfi harfinedir. Bulduğun kayıt OTORİTE DEĞİLDİR — işaret ettiği
-   PROJECT_HISTORY.md §bölümünü oku.
-4. Kod tarafına geçmeden docs/CODEMAPS/ + codebase-memory-mcp (remote'ta önce
-   index_repository; list_projects taze container'da BOŞ döner).
+PARTİ: kabul borcu sınıf B, parti 04. İlk kalem RD-09.c4 (gerekçe ve anchor'lar
+ADIM 54 kickoff'unda). Sonra doc 07 (PC-*, 8 kriter) ya da doc 16 (RH-*, 7 kriter).
 
-İLK KONTROL: /plugin listesinde `entropia-maintenance` etkin mi? (ADIM 53 açtı ama
-etkisi doğrulanamadı — plugin'ler oturum başında yüklenir.)
-
-BİLMEN GEREKENLER
-· Hidratasyon --sync'tir; --write TOPLAYICIDIR ve çoğaltır.
-· Sunucu ayakta değilken bağlanan shim TÜM OTURUM 7 araçta kalır, sonradan yükselmez.
-· Yeni CI job'ı EKLEME, var olan job'a ADIM ekle (ruleset 20765617 — üretilmeyen
-  required ad tüm merge'leri kilitler).
-· Yeni `## ` başlığına ayırt edici ek koy; memory_index --check id çakışmasını kırmızı verir.
+PAZARLIKSIZ
+· PARTİ SEÇMEDEN ÖNCE ÖLÇ — kriterin adlandırdığı alan/kod/araç backend/src'te
+  sevk edilmemişse sınıfı YANLIŞTIR. Defterde beş açık bulgu var; her partide
+  en az bir tane daha çıktı.
+· Yeniden SINIFLANDIRMA (B→C/D) TAVAN YÜKSELTİR → adjudication, PO işi. Bulgu yaz.
+· Sınıf D'ye test yazma (boşluğu gizler). RATCHET yalnız AŞAĞI iner.
+· "Kapsandı" işaretlemek kapsamak DEĞİLDİR — her assertion'ı NEGATİF KONTROLDEN geçir.
+· Ürün kodu DEĞİŞMEZ. Yarım kanıtla kriter kapatma — partial bırak, gerekçesini yaz.
 · A-08 blocker AÇIK, verdict BLOCKED. Hiçbir belgeye Complete/PASS/Done yazma.
 
-Next: PR B — ItemParticipant adaptörü + jobs/backtest_engine.py:298 call site.
-ADR §16 insan kapısı geçilmeden BAŞLAMA. Alternatif: RC §6.7'nin açık kalemleri
-(P4-3, P10-B3/B4/B5, P11-6b, P8-B3b, P1-Gate3) ya da kabul borcu sınıf B parti 03
-(TS-08.c3 + TL-02.c2 + TL-13.c3 — ama ÖNCE ÖLÇ, sevk edilmemişse sınıfı yanlıştır).
+ÖLÇÜM TUZAKLARI
+· pytest'i | tail'e BORULAMA. Alt kümede --no-cov. TEST_DATABASE_URL izole DB.
+· Postgres yoksa: service postgresql start (remote container'da her açılışta gerekir).
+· ORM nesnesine rollback sonrası dokunma → MissingGreenlet; id'leri erken str() al.
+· docs PR'ı öncesi: git diff origin/main -- docs/ | grep '^-## ' → BOŞ olmalı.
+
+KAPANIŞ: CLAUDE.md ritüelinin 6 maddesi + node scripts/memory_index.mjs --write --only <slug>
++ cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check
 ```

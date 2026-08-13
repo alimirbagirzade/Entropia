@@ -1,4 +1,6 @@
-<!-- doc-status: historical -->
+<!-- doc-status: current -->
+> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 56 landed — A-08 denetimi BAŞLADI (SR-2 oturum 1), sıradaki oturum
 

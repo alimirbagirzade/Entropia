@@ -1,5 +1,8 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 56 (2026-08-13).** Canlı kickoff artık
+> `docs/ADIM56_LANDED_KICKOFF.md` (A-08 denetimi BAŞLADI, SR-2 oturum 1). Aşağısı
+> ADIM 55 kapanışındaki durumu kaydeder; **"nerede duruyoruz" ve "sıradaki oturum"
+> maddeleri BAYAT.** Sayısal gerçekler için otorite bu belge DEĞİL:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 55 LANDED — agentmemory sunucusu yerele alındı (semantik geri çağırma, barındırma YOK)

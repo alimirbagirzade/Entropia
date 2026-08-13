@@ -1,0 +1,49 @@
+ADIM 48 — local frontend gate runs (2026-08-12)
+==============================================
+
+$ cd frontend && npm run lint
+> eslint .
+  exit 0 — no errors, no warnings.
+  (Run it with a stale coverage/lcov-report/ present and eslint reports 3
+   warnings on the GENERATED report files, not on source. CI lints before it
+   builds coverage, so it never sees them.)
+
+$ cd frontend && npm run typecheck
+> entropia-web@0.1.0 typecheck
+> tsc -b --noEmit
+
+  exit 0
+
+$ cd frontend && npm test -- --no-file-parallelism   (then: npm run coverage)
+ Test Files  71 passed (71)
+      Tests  725 passed (725)
+=============================== Coverage summary ===============================
+Statements   : 82.6% ( 5238/6341 )
+Branches     : 72.84% ( 4803/6593 )
+Functions    : 75.23% ( 1972/2621 )
+Lines        : 84.9% ( 4906/5778 )
+================================================================================
+  exit 0 — coverage is a GATE (thresholds in frontend/vite.config.ts), not a report.
+  Baseline before this slice: 70 files / 721 tests / 84.92% line (ADIM 25).
+  After:                      71 files / 725 tests / 84.9%  line.
+  The four new tests are the K-2 (3) and K-4 (1) pins.
+
+NEGATIVE PROOF — both new gates were shown to actually go red
+-------------------------------------------------------------
+Regression A: the skip link moved to AFTER </header> (still present, no
+              longer first). Regression B: <h1 class="page-title"> reverted
+              to <h2>. Both applied at once, then reverted.
+
+  npx vitest run --no-file-parallelism --no-coverage \
+      src/test/a11ySkipLink.test.tsx src/test/userManual.test.tsx
+  -> exit 1
+     x names itself with a level-1 heading (K-4)
+     x is the FIRST tabbable node in the shell, ahead of the auth control
+       and the menu bar
+     Test Files  2 failed (2) | Tests  2 failed | 18 passed (20)
+
+  A gate that has never been observed failing is not known to be a gate.
+
+$ cd frontend/e2e && npx tsc --noEmit -p tsconfig.json
+  exit 0 — the three realigned e2e files compile (17-page-coverage.spec.ts,
+  20-a11y-prechecks.spec.ts, utils/pageTruth.ts).

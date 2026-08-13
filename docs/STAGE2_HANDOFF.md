@@ -71,6 +71,7 @@ Reuses the shared **Package** model (2c `create_package`, async/FK-safe) + the E
 
 The catalog/discovery surface over the existing package schema — **read-only: no new migration, model, or command.** Reuses the shared **Package** model (2c), the 2d rationale snapshot, and 2e `package_request`/`dependency_scan` provenance. `domain/package/catalog.py` (filter parse/validate — CR-01 type guard, facet enums, lifecycle set, query cap) + `permissions.py` (the 10-flag projection, CR-02 Admin-only publish). `application/queries/library.py`: role-aware `list_packages` + `get_package_detail`; **visibility pushed into SQL** (ARCHITECTURE §9.5) — admin=all, else `published`/`system`/`explicitly_shared` OR owner — so `has_more`/cursor count the authorized set (fixed the market/research/esp under-fill pattern). Cursor newest-first by `entity_id`; facet filters (type/lifecycle/validation/approval/visibility/rationale-family+`unassigned`) + name ILIKE search. Detail = full contracts + dependency snapshot + **live** family name + 2e provenance + revision history; re-runs `can_view` (soft-deleted→404, foreign-private→403). Guests rejected (doc 08 §2); non-Strategy perf metrics N/A, never 0 (L4). `routes/library.py` thin GET handlers (list + detail+ETag), wired in `main.py`; `+CatalogFilterInvalid` (422). **Adversarial 4-dimension review: zero production defects;** the 5 confirmed MEDIUM test-coverage findings were fixed pre-merge, plus one production hardening (explicit `CATALOG_LIFECYCLE_STATES` in the list SQL).
 
+
 ## Next: Stage 3 — Mainboard & External Work Objects (docs 01–05)
 
 Per `docs/STAGE_BUILD_PLAN.md` §"Stage 3" (M9–M10 + external-object subsystem, CR-01). Composition plane: **Mainboard (01)**, **Strategy Details (02)**, **Add Outsource Signal (03)**, **Trading Signal (04)**, **Trade Log (05)**. New entities: `mainboard_workspace`, `mainboard_working_item`, `work_object_root/revision`, `mainboard_composition_snapshot`, `strategy_root/editor_draft/revision/revision_references`, `trading_signal_root/revision`, `trade_log_root/revision`, `source_asset`, `import_job/report`, `normalized_signal_event_revision`, `canonical_trade_record_batch`.
@@ -5767,6 +5768,36 @@ coverage kapısı geçti (**line %84.90**). Backend'e dokunulmadı.
 prompt `docs/ADIM50_KICKOFF.md` §P-2 (K-3). **K-6b `#688`'de KAPANDI.** **K-5 + K-6a** → **A-08 bekliyor**.
 **A-08'e dokunulmadı:** defter boş (0/4), `#514` kapalı, **blocker sayısı 1**, verdict
 **BLOCKED**.
+
+## Stage — ADIM 52: hafıza türetilir oldu (agentmemory) + iki sessiz ajan kapısı (PR pending)
+
+**Ürün kodu değişmedi** — `backend/src`, `alembic`, `frontend/src` el değmedi; migration yok,
+`ENGINE_VERSION` ve OpenAPI değişmedi. **A-08 blocker AÇIK, verdict BLOCKED** (bu slice ölçmedi).
+
+* **Kapanış ritüeli md. 4 yeniden yazıldı (insan kararı, 2026-08-13).** Memory checkpoint artık
+  **elle yazılmıyor, türetiliyor**: `node scripts/memory_index.mjs --write --only <slug>`.
+  Tek doğruluk kaynağı `docs/PROJECT_HISTORY.md`; `agentmemory` onun **aranabilir indeksi**.
+  Efemer container artık borç doğurmuyor — `--write` altı saniyede hepsini yeniden üretir.
+  `docs/memory/PENDING_CHECKPOINTS.md` **silindi**; ADIM 47/48/49 borcu **kapandı**.
+* **Yeni dosyalar:** `scripts/memory_index.mjs` (`--emit` / `--check` / `--write` / `--only`),
+  `scripts/agent-config-gate.mjs` (4 kontrol, **dördünün de negatifi kanıtlı**).
+  `.mcp.json`'a **pinli** `@agentmemory/mcp@0.9.28` eklendi; otomatik yakalama **KAPALI**.
+* **YENİ BULGU — `.claude/settings.json` #651'den beri GEÇERSİZ JSON'du.** `docs-history-guard`
+  (#590/#604 docs regresyonuna karşı yazılan kapı) ve `ultrareview-advisor` aradaki **her
+  oturumda ölüydü**. Onarıldı; kapının çalıştığı iki yönlü kanıtlandı (silinen başlıkta exit 2).
+* **`plugins/entropia-maintenance` hiçbir yerde etkin değildi** → `settings.json`
+  `extraKnownMarketplaces` + `enabledPlugins`. Plugin `0.3.0` → `0.4.0`.
+  **Etkisi bu oturumda doğrulanamadı** (plugin'ler oturum başında yüklenir) — bir sonraki
+  oturumda görülecek.
+* **CI:** iki yeni **adım** (`Frontend` job'ının içinde, **yeni job DEĞİL** — ruleset `20765617`
+  adları başlıkla tanır, üretilmeyen ad tüm merge'leri kilitler): `agent-config-gate.mjs` ve
+  `memory_index.mjs --check`. Job adı değişmedi, ruleset'e dokunulmadı.
+* **Hiçbir skill/ajan silinmedi** — bayat çıkmadı; kusur *hiç yüklenmiyor olmalarıydı*.
+* **Dürüst sınır:** semantik geri çağırma **yok** (sunucusuz kip harf eşleşmesi; kalıcı sunucu
+  barındırmak insan kararı) · backend/frontend suite'leri bu oturumda **koşmadı** (Postgres ve
+  `node_modules` yok) → **otorite CI** · `--write` toplayıcıdır, upsert yok.
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 52 · `docs/ADIM52_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 

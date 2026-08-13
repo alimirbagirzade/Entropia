@@ -1,5 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "entropia": {
+      "source": {
+        "source": "github",
+        "repo": "alimirbagirzade/Entropia"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "entropia-maintenance@entropia": true
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -11,7 +22,10 @@
             "if": "Bash(git commit:*)",
             "timeout": 15,
             "statusMessage": "docs history guard"
-  "hooks": {
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

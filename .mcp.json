@@ -3,6 +3,15 @@
     "codebase-memory-mcp": {
       "command": "npx",
       "args": ["-y", "codebase-memory-mcp@0.10.2", "--ui=false"]
+    },
+    "agentmemory": {
+      "command": "npx",
+      "args": ["-y", "@agentmemory/mcp@0.9.28"],
+      "env": {
+        "AGENTMEMORY_URL": "${AGENTMEMORY_URL:-http://localhost:3111}",
+        "AGENTMEMORY_AUTO_COMPRESS": "false",
+        "GRAPH_EXTRACTION_ENABLED": "false"
+      }
     }
   }
 }

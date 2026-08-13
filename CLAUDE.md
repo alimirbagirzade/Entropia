@@ -17,7 +17,14 @@ with a **paste-ready resume prompt** at the bottom.
 2. **Read in authority order:** (1) latest `docs/STAGE<next>_KICKOFF.md` (this slice's
    full handoff), (2) `docs/STAGE2_HANDOFF.md` ("... landed" + "Next"), (3)
    `docs/STAGE_BUILD_PLAN.md` (stage table + acceptance), (4) `docs/spec/NN_*` (extract
-   the spec FULLY), (5) memory checkpoints for the prior stage (ecc graph + claude-mem).
+   the spec FULLY), (5) önceki slice'ların hafıza indeksi — `agentmemory` MCP'si
+   (`memory_recall` / `memory_smart_search`). **Taze bir container'da store BOŞTUR**;
+   `node scripts/memory_index.mjs --write` (~6 sn, her `## ` bölümü için bir kayıt —
+   ADIM 52'de 67) `docs/PROJECT_HISTORY.md`'den
+   yeniden üretir. **Sunucusuz kip harfi harfine eşleşir** — Türkçe yazımı birebir yaz,
+   İngilizce parafraz **hiçbir şey bulmaz**; semantik geri çağırma kalıcı sunucu ister
+   (§Hafıza). İndeks kaydı **otorite DEĞİLDİR**, işaret ettiği `PROJECT_HISTORY.md`
+   §bölümü otoritedir.
 3. The **paste-ready resume prompt** at the bottom of the kickoff doc is your
    continuation seed — that is what gets pasted into a fresh session.
 4. **Kod tarafına geçmeden:** dokunacağın alanın `docs/CODEMAPS/` haritasını oku, sonra
@@ -43,10 +50,21 @@ Before stopping a working session, produce **ALL** of the following:
    - **`CLAUDE.md` §Current position** → SADECE 5–6 satırlık özet güncellenir (HEAD sha,
      alembic head, test sayıları, son dalga, Next). **Buraya slice anlatısı YAZMA** —
      CLAUDE.md her oturumda tamamı context'e yüklenir, ince kalmak zorunda.
-4. **Memory checkpoint — write BOTH systems:**
-   - **ecc knowledge graph** — an entity `Entropia Stage <x> — <title>` with rich factual
-     observations + a relation to the next stage (`unblocks`).
-   - **claude-mem** — a checkpoint observation for the slice (searchable via `mem-search`).
+4. **Memory checkpoint — TÜRETİLİR, elle yazılmaz (ADIM 52'de değişti).** Slice kaydını
+   md. 3'te `docs/PROJECT_HISTORY.md`'ye yazdıktan **sonra** tek komut:
+   `node scripts/memory_index.mjs --write --only <slice-slug>`. Tek doğruluk kaynağı
+   **git'teki belge**; agentmemory onun **aranabilir indeksidir**, rakibi değil — bu yüzden
+   efemer bir container'da kaybolması bir borç doğurmaz, `--write` (argümansız) baştan
+   üretir. **Kayıt kendi otoritesini adıyla taşır** (`§<başlık>` + satır no) ve char
+   bütçesinde kesilir: bu repoda bir cümlenin düşmesi anlamı tersine çevirir (O-30'un iki
+   adı, `ADIM 16 (sevk edilen)`/`(ADR §12)` ekleri, K-6a/K-6b bölünmesi) — indeks o metne
+   **işaret eder**, yerini almaz. `--check` CI'da (`Frontend` job'ının adımı) her `## `
+   kaydının tekil id türettiğini doğrular; **id çakışması = başlıkta ayırt edici ek yok**.
+   > **Neden değişti (insan kararı, 2026-08-13):** `ecc` + `claude-mem` ikilisi remote
+   > container'da **kayıtlı değil** ve elle yazılan checkpoint efemer store'la birlikte
+   > ölüyordu → md. 4 ADIM 47/48/49'da **üst üste üç kez** düştü. `docs/memory/PENDING_CHECKPOINTS.md`
+   > *"üçüncü bir seçenek yok"* diyordu; vardı — **bağımlılığı ters çevirmek**. İkisi
+   > yerelde bağlıysa yazmak serbest, ama **artık zorunlu değil**.
 5. **Codemap tazeleme** — slice yeni endpoint / tablo / sayfa / job eklediyse
    `docs/CODEMAPS/` içindeki ilgili haritayı güncelle (veya `ecc:update-codemaps`).
 6. **Commit -> PR -> await merge** — commit on branch `docs/stage-<x>-landed` (conventional
@@ -189,9 +207,25 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `ce823a8`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `8fa0767`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 51 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
+> **Son dalga — ADIM 52 (hafıza türetilir oldu + iki sessiz ajan kapısı, 2026-08-13):
+> ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> Kapanış ritüeli **md. 4 yeniden yazıldı (insan kararı)**: memory checkpoint elle yazılmaz,
+> `docs/PROJECT_HISTORY.md`'den **türetilir** (`scripts/memory_index.mjs --write --only <slug>`)
+> ve pinli `@agentmemory/mcp@0.9.28`'e yazılır → efemer container artık **borç doğurmaz**;
+> `PENDING_CHECKPOINTS.md` **silindi**, ADIM 47/48/49 borcu **kapandı**. Ürünün **otomatik
+> yakalama yarısı bilerek bağlanmadı** (özet enjeksiyonu §Session START md. 1'in tersi).
+> **YENİ BULGU:** `.claude/settings.json` **#651'den beri geçersiz JSON'du** → `docs-history-guard`
+> ve `ultrareview-advisor` aradaki her oturumda **ölüydü**; `plugins/entropia-maintenance` de
+> **hiç etkin değildi**. İkisi de onarıldı, `scripts/agent-config-gate.mjs` (4 kontrol, dördünün
+> negatifi kanıtlı) `Frontend` job'ına **adım** olarak bağlandı — **yeni job DEĞİL** (ruleset
+> `20765617`). **Doğrulanmadı:** plugin'in yüklendiği (oturum başında yüklenir) · semantik
+> geri çağırma yok (sunucusuz kip **harf eşleşmesi**; kalıcı sunucu **insan kararı**) ·
+> suite'ler koşmadı (Postgres/`node_modules` yok) → **otorite CI**.
+> `PROJECT_HISTORY.md` §ADIM 52 · `docs/ADIM52_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
+>
+> Öncesinde **ADIM 51 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
 > KOD DEĞİŞMEDİ.**
 > #514 `11:08:58Z`'de **insan eliyle yeniden AÇILDI** → ADIM 29'un kaydettiği "kapalı issue
 > ↔ boş defter" ayrışması kapandı; 8 belge uzlaştırıldı (RC raporu **kendi içinde
@@ -528,3 +562,33 @@ Düzenlemeden önce **her zaman** Read (Edit bunu zaten zorunlu kılar).
 
 Bir alana **ilk kez** dokunuyorsan ilgili codemap'i oku — kod taramaya oradan başla.
 Codemap'ler türetilmiş dosyadır: mimari değişince `ecc:update-codemaps` ile tazele.
+
+---
+
+## Hafıza — `agentmemory` (ADIM 52)
+
+Slice hafızası `.mcp.json`'daki **`agentmemory`** sunucusunda yaşar (`@agentmemory/mcp@0.9.28`,
+pinli). İçeriği **türetilmiştir**: `docs/PROJECT_HISTORY.md`'nin her `## ` kaydı bir memory
+kaydına karşılık gelir.
+
+| Komut | Ne yapar |
+|---|---|
+| `node scripts/memory_index.mjs --write` | store'u sıfırdan doldurur (~6 sn, ADIM 52'de 67 kayıt) |
+| `… --write --only <slug>` | tek slice yazar (kapanış ritüeli md. 4) |
+| `… --emit` | kayıtları JSON basar (ağ yok) |
+| `… --check` | CI kapısı: her kayıt indekslenir, id'ler tekil (ağ yok) |
+
+**Pazarlıksız sınırlar:**
+- **Kayıt otorite değildir.** Her kayıt `§<başlık> (satır n)` işaretini taşır; karar
+  vermeden önce `PROJECT_HISTORY.md`'nin o bölümünü **oku**. Kayıtların üçte ikisi char
+  bütçesinde kesilmiştir (ADIM 52'de 46/67).
+- **Sunucusuz kip = harfi harfine arama.** Ölçüldü: `odak halkası kontrast` bulur,
+  `focus ring contrast` **bulmaz**. Hibrit/semantik geri çağırma tam sunucu ister
+  (`npx @agentmemory/agentmemory` + `AGENTMEMORY_URL`) — barındırma **insan kararı**.
+- **Otomatik yakalama KAPALI** (`AGENTMEMORY_AUTO_COMPRESS` / `GRAPH_EXTRACTION_ENABLED`
+  `false`, LLM anahtarı verilmedi). Ürünün 12 lifecycle hook'u ve konsolidasyon katmanı
+  **bilerek bağlanmadı**: sıkıştırılmış bir önceki-oturum özetini otoritemiş gibi enjekte
+  etmek §Session START md. 1'in (*STALE-BY-DEFAULT*) tersidir ve adjudicated ifadeleri
+  sessizce yeniden yazar. `--write` insanın yazdığı, review'dan geçmiş metni indeksler.
+- **`--write` toplayıcıdır (upsert yok).** Dolu bir store'a ikinci kez tam `--write`
+  koşmak kayıtları çoğaltır; taze container'da doldur, kapanışta `--only` ile tek kayıt ekle.

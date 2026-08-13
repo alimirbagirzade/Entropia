@@ -18,6 +18,13 @@ oturumu yeniden başlat.
 hem plugin üzerinden yüklemek çift kayıt üretirdi, o yüzden `.claude/` altında
 kopya bırakılmadı.
 
+**ADIM 52'den beri elle kurmak gerekmiyor:** `.claude/settings.json`
+`extraKnownMarketplaces.entropia` + `enabledPlugins["entropia-maintenance@entropia"]`
+ile bu plugin depoya güvenen her oturumda önerilir/etkinleşir. Buradaki hook'lar
+(özellikle `guard-git.sh`'in docs-regresyon kapısı) **kurulmadığı sürece hiç
+koşmuyordu** — remote container plugin kurmaz. Adın doğru çözüldüğünü
+`scripts/agent-config-gate.mjs` doğrular.
+
 ## İçerik
 
 ```
@@ -63,7 +70,7 @@ oturum yaşam döngüsünü kapsar: **session-start → verify → merge-check �
 | `/entropia-maintenance:session-start` | `git fetch` + `origin/main` + `gh pr list` çıktısını **koşturarak** enjekte eder, sonra otorite sırasıyla (kickoff → handoff → build plan → spec → repository_facts) okutur. Belge ile gerçek arasındaki farkı raporlar. |
 | `/entropia-maintenance:verify [backend\|frontend\|all]` | Yerel kapıları doğru komutlarla koşturur; `\| tail` yasağı, `--no-cov` alt-küme kuralı, `TEST_DATABASE_URL` izolasyonu ve "eşik düşürme yasak" kuralı komutun içinde yazılı. |
 | `/entropia-maintenance:merge-check <PR\|sha>` | Merge öncesi beş kapı: docs kayıt silme (`git show … \| grep '^-## '`), base tazeliği, drift guard'ları, **0-job'lı sahte yeşil CI**, "landed/closed" iddialarının kanıtı. |
-| `/entropia-maintenance:close-session <slice>` | `CLAUDE.md` kapanış ritüelinin altı çıktısı: handoff · kickoff+resume prompt · PROJECT_HISTORY (tam) + CLAUDE.md (5–6 satır) · memory checkpoint (**iki sistem**) · codemap · commit→PR→merge bekle. |
+| `/entropia-maintenance:close-session <slice>` | `CLAUDE.md` kapanış ritüelinin altı çıktısı: handoff · kickoff+resume prompt · PROJECT_HISTORY (tam) + CLAUDE.md (5–6 satır) · memory checkpoint (**türetilir**: `memory_index.mjs --write --only <slug>`) · codemap · commit→PR→merge bekle. |
 
 `session-start` ve `merge-check` frontmatter'ında `allowed-tools` ile sınırlıdır
 (`git`, `gh`, okuma araçları) ve `!` ile **komut çağrılırken** taze git durumunu
@@ -128,9 +135,16 @@ yakalar: hiçbir CI kapısı `docs/` okumadığı için bu tek otomatik savunmad
   öneki `mcp__plugin_ecc_memory__*` (bkz. `docs/ADIM8_LANDED_KICKOFF.md`), yani
   marketplace'ten kurulan bir **plugin**. İkisi de kapanış ritüeli md. 4'ün
   dayandığı sunuculardır → **memory checkpoint borcu bu değişiklikle KAPANMADI.**
+  **GÜNCELLEME (ADIM 52, 2026-08-13): borç KAPANDI — ama bu iki sunucu eklenerek
+  değil, md. 4'ün bağımlılığı ters çevrilerek.** Hafıza artık
+  `docs/PROJECT_HISTORY.md`'den **türetiliyor** (`scripts/memory_index.mjs`) ve
+  `.mcp.json`'daki pinli `@agentmemory/mcp` sunucusuna yazılıyor; efemer store
+  bir borç doğurmuyor çünkü kaynak git'te. Yukarıdaki ölçüm **hâlâ doğrudur** —
+  `claude-mem`/`ecc` bu yolla eklenemez, sadece artık gerekmiyorlar.
+  Bkz. `CLAUDE.md` §Hafıza.
 
 ## Sürüm
 
-`0.3.0` — otomatik git guard'ı + proaktif ajan tetikleme.
-(`0.2.0` — slash command'lar · `0.1.0` — ilk paketleme.) Sürüm iki yerde tutulur ve **birlikte** güncellenir:
+`0.4.0` — kapanış ritüeli md. 4 türetilmiş hafızaya geçti (`close-session` §4).
+(`0.3.0` — otomatik git guard'ı + proaktif ajan tetikleme · `0.2.0` — slash command'lar · `0.1.0` — ilk paketleme.) Sürüm iki yerde tutulur ve **birlikte** güncellenir:
 `.claude-plugin/plugin.json` ve deponun kökündeki `.claude-plugin/marketplace.json`.

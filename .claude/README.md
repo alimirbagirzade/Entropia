@@ -13,6 +13,11 @@ skill'ler (`entropia-canonical-rules`, `entropia-testing`,
 `entropia-regression-check`, `entropia-frontend-parity`) ve hook'lar **aktif olmaz**.
 Kopya bırakılmadı — aynı isim iki kez yüklenmesin diye.
 
+**ADIM 52:** artık elle kurmak gerekmiyor — `settings.json` `extraKnownMarketplaces` +
+`enabledPlugins` ile depoya güvenen oturumda önerilir. Aynı slice `settings.json`'ı
+**onarmıştı**: dosya #651'den beri geçersiz JSON'du, yani buradaki `docs-history-guard`
+ve `ultrareview-advisor` hook'ları hiç koşmuyordu (`scripts/agent-config-gate.mjs`).
+
 Burada kalan tek şey `skills/ponytail-entropia/`: bu çalışmadan önce vardı ve
 `CLAUDE.md` ona **yoluyla** atıf yapıyor, o yüzden yeri değişmedi.
 

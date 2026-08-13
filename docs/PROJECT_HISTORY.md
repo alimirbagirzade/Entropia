@@ -7432,6 +7432,8 @@ bir deklarasyondur** — `frontend/src/styles/global.css` `:focus-visible` kural
 `outline: 2px solid var(--accent)` → `var(--text)`. Migration yok, `ENGINE_VERSION`
 değişmedi, OpenAPI değişmedi. Route path, react-query key, OCC token, Idempotency-Key,
 hook, SSE taksonomisi, `lib/*.ts`, `app/nav.ts` **hiç dokunulmadı**. Base `7dd1dfe` (#682).
+**Merge:** PR #688, `main` üzerinde `04c6a9c` (2026-08-12) — bu satır kayıt kapatılırken
+henüz merge edilmemiş olduğu için sonradan (ADIM 52) eklendi.
 
 ### Neden — ve iddia sıfırdan yeniden ölçüldü
 
@@ -8037,3 +8039,141 @@ numaralandırılmadı** — ikisi de başka yerlerden kimlikle anılıyor.
   çözüldü. **Bir satırı yeniden sararken kapının davranışını değiştirdiğini bil.**
 ---
 
+
+## ADIM 52 — hafıza türetilir oldu (agentmemory) + iki sessiz ajan kapısı onarıldı
+
+**Tarih:** 2026-08-13 · **Base:** `origin/main` @ `8fa0767` (#693) · **Branch:**
+`claude/agentmemory-integration-sdnfpi` · **Ürün kodu DEĞİŞMEDİ:** `backend/src`,
+`alembic`, `frontend/src` ağaçlarına hiç dokunulmadı. Migration yok, `ENGINE_VERSION`
+değişmedi, OpenAPI değişmedi, OCC / Idempotency / route / react-query key / SSE
+taksonomisi el değmedi. **A-08 blocker AÇIK, verdict BLOCKED — bu slice onu ölçmedi.**
+
+### 0. Neyle başladı
+
+Kullanıcı `github.com/rohitg00/agentmemory`'yi getirdi: *"işimize yarar mı, nasıl
+entegre ederiz, nasıl otomatik entegre edebiliriz"*. Değerlendirme okumayla değil
+**bu container'da koşturarak** yapıldı; sonra tam yetki verildi (*"kullanalım,
+çakışan veya eskiyen skill/ajan varsa silebilirsin"*).
+
+### 1. Ölçüm — iddia değil
+
+| Ölçülen | Sonuç |
+|---|---|
+| `npx -y @agentmemory/mcp@0.9.28` handshake | **çalışıyor** (`serverInfo` `agentmemory 0.9.28`) |
+| sunucusuz `tools/list` | **7 araç** (tam sunucuda 53/54) |
+| `memory_save` + `memory_recall` roundtrip | **çalışıyor** |
+| sunucusuz depolama yeri | `~/.agentmemory/standalone.json` — **düz JSON, container-yerel, embedding YOK** |
+| 66 kaydın tam yazımı | **6 saniye**, 412 KB |
+| geri çağırma kipi | **harfi harfine** — `odak halkası kontrast` bulur, `focus ring contrast` **BULMAZ** |
+| npx cache maliyeti | ilk çekimde ~1.1 GB (native addon zinciri) |
+
+README'nin **kendi** iddiaları (LongMemEval-S %95.2 R@5, "%92 daha az token", 14 ms p50)
+**doğrulanmadı ve kabul edilmedi** — hiçbiri bu slice'ta ölçülmedi.
+
+### 2. Asıl karar — bağımlılığın ters çevrilmesi
+
+`docs/memory/PENDING_CHECKPOINTS.md` üç kez düşen ritüel md. 4'ü kaydetmiş ve
+*"**Üçüncü bir seçenek yok**: ya `ecc`/`claude-mem` remote'a kaydedilir, ya md. 4 muaf
+sayılır"* demişti. **Vardı.** O ikilem, checkpoint'in **elle yazılan bir birincil kayıt**
+olduğunu varsayıyordu; efemer bir store'a elle yazmak yapısal olarak kaybediyordu.
+Bağımlılık ters çevrildi:
+
+> **Tek doğruluk kaynağı `docs/PROJECT_HISTORY.md` (git'te, review'lı, kapılı).
+> agentmemory onun TÜRETİLMİŞ indeksidir.** Store kaybolursa borç doğmaz —
+> `node scripts/memory_index.mjs --write` altı saniyede yeniden üretir.
+
+Bu, codemap'lerin ("türetilmiş dosya") desenidir; yeni bir kavram değil.
+
+### 3. Ne eklendi
+
+- **`scripts/memory_index.mjs`** — `PROJECT_HISTORY.md`'nin her `## ` bölümünü bir memory
+  kaydına çevirir. `--emit` (JSON, ağ yok) · `--check` (**CI kapısı**, ağ yok) · `--write`
+  (MCP stdio üzerinden `memory_save`) · `--only <substr>` (kapanışta tek kayıt).
+  Kayıt `project=entropia`, `concepts` başlıktan, `files` gövdedeki backtick'li yollardan.
+- **`.mcp.json`** — `agentmemory` sunucusu **pinli** (`@agentmemory/mcp@0.9.28`),
+  `AGENTMEMORY_URL` env'den (`${AGENTMEMORY_URL:-http://localhost:3111}`) → kalıcı sunucuya
+  geçmek **tek değişken**. `AGENTMEMORY_AUTO_COMPRESS` ve `GRAPH_EXTRACTION_ENABLED`
+  **`false`**.
+- **`CLAUDE.md`** — §Session START md. 2(5) ve §Session CLOSING md. 4 yeniden yazıldı;
+  yeni **§Hafıza** bölümü (komut tablosu + pazarlıksız sınırlar).
+- **Plugin `0.3.0` → `0.4.0`** — `close-session.md` §4 iki-sistem checkpoint'i yerine tek
+  komuta indi.
+
+### 4. Ürünün otomasyon yarısı BİLEREK bağlanmadı
+
+agentmemory'nin 12 lifecycle hook'u, konsolidasyon katmanı ve oturum-başı enjeksiyonu
+**kurulmadı**. Gerekçe kayda geçsin: bu ürünün ana değer önerisi *"sıkıştırılmış önceki
+oturum özetini oturum başında enjekte etmek"*tir ve bu, `CLAUDE.md` §Session START'ın
+**birinci** kuralının (*handoff/summary **STALE-BY-DEFAULT***) tam tersidir. Dahası bu
+repoda tek bir cümlenin düşmesi anlamı tersine çevirir — O-30'un iki anahtar adı,
+`ADIM 16 (sevk edilen)` / `(ADR §12)` ekleri, K-6a/K-6b bölünmesi, *"yeniden açma bir
+SONUÇ DEĞİLDİR"*. `auto-forget` + `contradiction detection` bunları **sessizce** yeniden
+yazardı ve enjekte edilen metni **hiçbir CI kapısı okumaz**, oysa `docs/` okur.
+Bu yüzden indekslenen şey **insanın yazdığı, review'dan geçmiş metindir**; her kayıt
+`§<başlık> (satır n)` işaretini taşır ve char bütçesinde kesilir (66 kaydın 45'i kesildi)
+— **indeks otoritenin yerine geçmez, ona işaret eder**.
+
+### 5. YENİ BULGU — iki ajan kapısı sessizce ölüydü
+
+Bu slice'ın en pahalı bulgusu agentmemory değil:
+
+- **`.claude/settings.json` #651'den (2026-08-10) beri GEÇERSİZ JSON'du.** Eklenen
+  `PreToolUse` nesnesi hiç kapatılmamış (`line 14 column 3`). Claude Code bu dosyayı
+  **sessizce** ayrıştırır → hem `docs-history-guard.py` (üç kez yaşanan #590/#604 docs
+  regresyonunu durdurmak için yazılan kapı) hem `ultrareview-advisor.sh` aradaki **her
+  oturumda ölüydü**. Onarıldı ve kapının **çalıştığı kanıtlandı**: negatif kontrol exit 0,
+  `## ADIM 51` başlığı silinince exit **2** + doğru mesaj.
+- **`plugins/entropia-maintenance/` hiçbir yerde etkin değildi.** Plugin elle kurulum
+  ister; remote container depoyu klonlar ama plugin kurmaz → `guard-generated.sh`,
+  `guard-git.sh` (self-merge + docs-regresyon + force-push kapısı), `post-edit-lint.sh`,
+  `vendor-react-rules.sh`, `session-brief.sh` ve dört skill/üç ajan **hiç yüklenmiyordu**.
+  `settings.json`'a `extraKnownMarketplaces.entropia` + `enabledPlugins` eklendi.
+  **Dürüst sınır: bu oturumda etkisi DOĞRULANAMADI** — plugin'ler oturum başında yüklenir,
+  bu oturum zaten başlamıştı. Adın çözüldüğü kapıyla doğrulanır, yüklendiği **bir sonraki
+  oturumda** görülecek.
+
+### 6. `scripts/agent-config-gate.mjs` — eksik olan okuyucu
+
+Hiçbir CI job'ı `.claude/` okumuyordu. Dört kontrol, **dördünün de negatifi kanıtlandı**:
+
+| Kontrol | Negatif kontrol |
+|---|---|
+| 5 yapılandırma JSON olarak ayrışıyor | **gerçek #651 dosyası** replay edildi → exit 1 |
+| hook `command`'ları var olan, çalıştırılabilir betiği gösteriyor | `ultrareview-advisor.sh` geçici taşındı → exit 1 |
+| `.mcp.json`'daki `npx` sunucuları **sürüm pinliyor** | `@agentmemory/mcp` pinsiz yazıldı → exit 1 |
+| `enabledPlugins` marketplace'te **çözülüyor** | `entropia-maintenanc@entropia` → exit 1 |
+
+**Yeni job DEĞİL, `Frontend` job'ının adımı** — required status check ruleset'i (`20765617`)
+adları başlıkla tanır ve üretilmeyen bir ad **tüm merge'leri kilitler** (ADIM 49). Job
+adı değişmedi, ruleset'e dokunulmadı. `memory_index.mjs --check` de aynı yere kondu.
+
+### 7. Silinen / silinmeyen
+
+- **Silindi:** `docs/memory/PENDING_CHECKPOINTS.md` — üç checkpoint'in içeriği
+  `PROJECT_HISTORY.md` §ADIM 47/48/49'da **zaten vardı** (programatik doğrulandı: on olgu
+  işaretinden dokuzu birebir mevcut). Tek eksik `04c6a9c` (ADIM 48'in merge SHA'sı,
+  kayıt merge'den önce yazılmıştı) → o bölüme **taşındı**, sonra dosya kaldırıldı.
+- **Silinmedi — hiçbir skill/ajan bayat çıkmadı.** `vercel-*` skill'leri `skills-lock.json`
+  ile yönetilen, `.claude/README.md`'de kural-ailesi bazında geçerlilik tablosu olan
+  **bilinçli** bir vendor kararıdır (Next.js/RSC aileleri zaten GEÇERSİZ işaretli).
+  `ponytail-*` CLAUDE.md'den yolla atıf alır. Plugin'in üç ajanı ve dört skill'i
+  tutarlıdır. **Kusur bayatlık değildi — hiç yüklenmiyor olmalarıydı**, o düzeltildi.
+- **Tarihsel kayıtlar yeniden yazılmadı.** `PENDING_CHECKPOINTS.md`'nin "Yazdıktan sonra"
+  md. 3'ü ADIM 47/48/49 kickoff'larından ve handoff'tan borç cümlelerinin silinmesini
+  istiyordu; **yapılmadı**: onlar `doc-status: historical` kayıtlardır ve *"o slice md. 4'ü
+  kaçırdı"* **doğrudur**. Borcun kapandığını güncel belgeler (CLAUDE.md §Hafıza, bu kayıt,
+  ADIM 52 kickoff'u) söyler.
+
+### 8. Dürüst sınırlar
+
+- **Semantik geri çağırma YOK.** Sunucusuz kip harf eşleşmesidir; hibrit BM25+vektör+graph
+  için kalıcı bir sunucu (`npx @agentmemory/agentmemory`, :3111) barındırmak gerekir —
+  **insan kararı** (host + secret). Bu slice o hattı geçmedi.
+- **`--write` toplayıcıdır**, upsert yok: dolu store'a ikinci tam `--write` kayıtları çoğaltır.
+- **Backend ve frontend test paketleri bu oturumda KOŞTURULMADI** — container'da Postgres
+  yok, `frontend/node_modules` kurulu değil. Ürün kodu değişmediği için beklenen etki yok;
+  **otorite CI**. Koşturulan ve yeşil olanlar: `agent-config-gate` (4 negatif kontrolle),
+  `memory_index --check`, doc-status sınıflandırma kapısı, `docs-history-guard` (iki yönlü),
+  `ci.yml` YAML ayrıştırması.
+- **`generate_repository_facts.py --check` yerelde koşmadı** (backend bağımlılıkları yok);
+  yalnız `check_classification` bölümü ayrıca koşturuldu → yeşil.

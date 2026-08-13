@@ -37,13 +37,14 @@ birebir metin).
 Md. 3'teki `PROJECT_HISTORY.md` kaydını yazdıktan **sonra**:
 
 ```bash
-node scripts/memory_index.mjs --write --only <slice-slug>
+node scripts/memory_index.mjs --sync --only <slice-slug>
 ```
 
 `<slice-slug>` = başlığın slug'ı (`node scripts/memory_index.mjs --emit` ile gör).
 Tek doğruluk kaynağı git'teki belgedir; `agentmemory` onun **aranabilir
 indeksidir**. Store efemer bir container'da kaybolursa borç doğmaz —
-`--write` (argümansız) hepsini yeniden üretir. Ayrıntı + sınırlar:
+`--sync` (argümansız) hepsini yeniden üretir; sunucu `.mcp.json` üzerinden
+kendiliğinden kalkar. Ayrıntı + sınırlar:
 `CLAUDE.md` §Hafıza. **`ecc` / `claude-mem` artık zorunlu değil** (yerelde
 bağlıysa yazmak serbest).
 

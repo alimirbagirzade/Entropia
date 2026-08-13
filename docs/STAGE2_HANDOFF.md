@@ -5832,6 +5832,32 @@ Tam kayıt: `PROJECT_HISTORY.md` §ADIM 52 · kickoff: `docs/ADIM52_LANDED_KICKO
 
 Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 53 · `docs/ADIM53_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
 
+## Stage — ADIM 54: agentmemory sunucusu yerele alındı, semantik geri çağırma (PR pending)
+
+**Ürün kodu değişmedi.** Migration yok, `ENGINE_VERSION`/OpenAPI aynı. **A-08 blocker AÇIK,
+verdict BLOCKED** (bu slice ölçmedi).
+
+* **Barındırma GEREKMEDİ.** Sunucunun kazandırdığı şey kalıcılık değil **geri çağırma
+  kalitesi**; kalıcılık ADIM 53'te indeks türetilerek çözülmüştü. `.mcp.json` artık
+  `scripts/memory_mcp.sh`'ı çağırıyor: **önce sunucuyu yerelde kaldır, sonra shim'e dön**.
+* **Ölçülen:** araç 7 → **53** · soğuk kalkış **33 sn** (npx cache sıcakken 4 sn) ·
+  **LLM anahtarı gerekmiyor** (`zero-LLM: BM25 + on-device embeddings`) · İngilizce
+  `focus ring contrast accessibility` sorgusu sunucusuz **boş**, sunucuyla Türkçe
+  **§ADIM 48** kaydını buluyor (çapraz-dilli).
+* **`memory_index.mjs --sync`** — ADIM 53'ün *"`--write` toplayıcıdır"* tuzağını kapatır:
+  REST export'tan mevcut `§başlık` işaretlerini okuyup yalnız eksikleri yazar. Sunucu
+  yoksa çoğaltmak yerine exit 1 verir.
+* **İki kusuru kendi negatif kontrolüm yakaladı:** (a) sunucu `III_REST_PORT`'a bağlanır,
+  URL'deki porta değil → port türetiliyor; **tek makinede tek örnek** koşabilir (iii
+  engine portu sabit). (b) `agent-config-gate.mjs` MCP komutu `npx` değilse pin
+  kontrolünü **atlıyordu** ve zincir takibi `"$ROOT/..."` yüzünden hiç çalışmıyordu →
+  **gate kendi negatifini geçmişti**, düzeltildi.
+* **Dürüst sınır:** soğuk container'da ilk MCP bağlantısı ~33 sn gecikir (oturumu
+  bloklamaz) · suite'ler koşmadı → **otorite CI** · otomatik yakalama hâlâ KAPALI.
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 54 · `docs/ADIM54_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge

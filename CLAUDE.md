@@ -19,12 +19,11 @@ with a **paste-ready resume prompt** at the bottom.
    `docs/STAGE_BUILD_PLAN.md` (stage table + acceptance), (4) `docs/spec/NN_*` (extract
    the spec FULLY), (5) önceki slice'ların hafıza indeksi — `agentmemory` MCP'si
    (`memory_recall` / `memory_smart_search`). **Taze bir container'da store BOŞTUR**;
-   `node scripts/memory_index.mjs --write` (~6 sn, her `## ` bölümü için bir kayıt —
-   ADIM 53'te 68) `docs/PROJECT_HISTORY.md`'den
-   yeniden üretir. **Sunucusuz kip harfi harfine eşleşir** — Türkçe yazımı birebir yaz,
-   İngilizce parafraz **hiçbir şey bulmaz**; semantik geri çağırma kalıcı sunucu ister
-   (§Hafıza). İndeks kaydı **otorite DEĞİLDİR**, işaret ettiği `PROJECT_HISTORY.md`
-   §bölümü otoritedir.
+   `node scripts/memory_index.mjs --sync` (~3 sn) `docs/PROJECT_HISTORY.md`'den yeniden
+   üretir — tekrar koşmak güvenlidir. Sunucu `.mcp.json` üzerinden **kendiliğinden**
+   kalkar (`scripts/memory_mcp.sh`); kalkmışsa arama semantiktir, kalkmamışsa **harfi
+   harfine** olur ve İngilizce parafraz hiçbir şey bulmaz (§Hafıza). İndeks kaydı
+   **otorite DEĞİLDİR**, işaret ettiği `PROJECT_HISTORY.md` §bölümü otoritedir.
 3. The **paste-ready resume prompt** at the bottom of the kickoff doc is your
    continuation seed — that is what gets pasted into a fresh session.
 4. **Kod tarafına geçmeden:** dokunacağın alanın `docs/CODEMAPS/` haritasını oku, sonra
@@ -52,9 +51,9 @@ Before stopping a working session, produce **ALL** of the following:
      CLAUDE.md her oturumda tamamı context'e yüklenir, ince kalmak zorunda.
 4. **Memory checkpoint — TÜRETİLİR, elle yazılmaz (ADIM 53'te değişti).** Slice kaydını
    md. 3'te `docs/PROJECT_HISTORY.md`'ye yazdıktan **sonra** tek komut:
-   `node scripts/memory_index.mjs --write --only <slice-slug>`. Tek doğruluk kaynağı
+   `node scripts/memory_index.mjs --sync --only <slice-slug>`. Tek doğruluk kaynağı
    **git'teki belge**; agentmemory onun **aranabilir indeksidir**, rakibi değil — bu yüzden
-   efemer bir container'da kaybolması bir borç doğurmaz, `--write` (argümansız) baştan
+   efemer bir container'da kaybolması bir borç doğurmaz, `--sync` (argümansız) baştan
    üretir. **Kayıt kendi otoritesini adıyla taşır** (`§<başlık>` + satır no) ve char
    bütçesinde kesilir: bu repoda bir cümlenin düşmesi anlamı tersine çevirir (O-30'un iki
    adı, `ADIM 16 (sevk edilen)`/`(ADR §12)` ekleri, K-6a/K-6b bölünmesi) — indeks o metne
@@ -207,7 +206,24 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `e2fa521`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `2a90fe3`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **Son dalga — ADIM 54 (agentmemory sunucusu YERELE alındı, 2026-08-13): ÜRÜN KODU
+> DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> ADIM 53'ün açık bıraktığı semantik geri çağırma kapandı — **hiçbir şey barındırmadan**:
+> `.mcp.json` artık `scripts/memory_mcp.sh`'ı çağırıyor, o da tam sunucuyu **yerelde**
+> kaldırıp shim'e dönüyor. **Ölçüldü:** araç **7 → 53** · soğuk kalkış **33 sn** (cache
+> sıcakken 4 sn) · **LLM anahtarı GEREKMİYOR** (`zero-LLM: BM25 + on-device embeddings`) ·
+> İngilizce `focus ring contrast accessibility` sunucusuz **boş**, sunucuyla Türkçe
+> **§ADIM 48**'i buluyor. `--sync` ADIM 53'ün *"`--write` çoğaltır"* tuzağını kapattı.
+> **İki kusuru kendi negatif kontrolüm yakaladı:** sunucu URL'deki porta değil
+> `III_REST_PORT`'a bağlanıyordu (tek makinede **tek örnek** koşar), ve
+> `agent-config-gate.mjs` MCP komutu `npx` değilse pin kontrolünü **atlıyordu** →
+> **kapı kendi negatifini geçmişti**, düzeltildi. **Barındırma hâlâ GEREKMİYOR** — tek ek
+> getirisi makineler arası elle yazılmış hafıza, o da otomatik yakalama kapalı olduğu için
+> üretilmiyor. `PROJECT_HISTORY.md` §ADIM 54 · `docs/ADIM54_LANDED_KICKOFF.md` · §Hafıza.
+>
+> Öncesinde **HEAD `e2fa521`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 53 (hafıza türetilir oldu + iki sessiz ajan kapısı, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
@@ -586,30 +602,39 @@ Codemap'ler türetilmiş dosyadır: mimari değişince `ecc:update-codemaps` ile
 
 ---
 
-## Hafıza — `agentmemory` (ADIM 53)
+## Hafıza — `agentmemory` (ADIM 53, sunucu ADIM 54)
 
-Slice hafızası `.mcp.json`'daki **`agentmemory`** sunucusunda yaşar (`@agentmemory/mcp@0.9.28`,
-pinli). İçeriği **türetilmiştir**: `docs/PROJECT_HISTORY.md`'nin her `## ` kaydı bir memory
-kaydına karşılık gelir.
+Slice hafızası `.mcp.json`'daki **`agentmemory`** sunucusunda yaşar. İçeriği
+**türetilmiştir**: `docs/PROJECT_HISTORY.md`'nin her `## ` kaydı bir memory kaydına karşılık
+gelir. **Barındırılan hiçbir şey yok** — `.mcp.json` `scripts/memory_mcp.sh`'ı çağırır, o da
+tam sunucuyu **yerelde** ayağa kaldırır (`localhost:3111`) ve sonra shim'e dönüşür.
 
 | Komut | Ne yapar |
 |---|---|
-| `node scripts/memory_index.mjs --write` | store'u sıfırdan doldurur (~6 sn, ADIM 53'te 68 kayıt) |
-| `… --write --only <slug>` | tek slice yazar (kapanış ritüeli md. 4) |
-| `… --emit` | kayıtları JSON basar (ağ yok) |
-| `… --check` | CI kapısı: her kayıt indekslenir, id'ler tekil (ağ yok) |
+| `node scripts/memory_index.mjs --sync` | **hidratasyon budur**: store'da eksik olanları yazar (tekrar koşmak güvenli) |
+| `… --sync --only <slug>` | tek slice yazar (kapanış ritüeli md. 4) |
+| `… --write` | **TOPLAYICI** — yalnız sunucusuz kipte (export yok); ikinci koşu çoğaltır |
+| `… --emit` / `--check` | JSON bas / CI kapısı (ikisi de ağsız) |
+| `scripts/memory_server.sh` | sunucuyu idempotent ayağa kaldırır; canlıysa hiçbir şey yapmaz |
 
 **Pazarlıksız sınırlar:**
 - **Kayıt otorite değildir.** Her kayıt `§<başlık> (satır n)` işaretini taşır; karar
   vermeden önce `PROJECT_HISTORY.md`'nin o bölümünü **oku**. Kayıtların üçte ikisi char
-  bütçesinde kesilmiştir (ADIM 53'te 47/68).
-- **Sunucusuz kip = harfi harfine arama.** Ölçüldü: `odak halkası kontrast` bulur,
-  `focus ring contrast` **bulmaz**. Hibrit/semantik geri çağırma tam sunucu ister
-  (`npx @agentmemory/agentmemory` + `AGENTMEMORY_URL`) — barındırma **insan kararı**.
+  bütçesinde kesilmiştir.
+- **Sunucu VARSA semantik, YOKSA harfi harfine.** Ölçüldü: sunucusuz kipte
+  `focus ring contrast accessibility` **hiçbir şey bulmaz**; sunucu ayaktayken aynı
+  İngilizce sorgu Türkçe `§ADIM 48` kaydını bulur (çapraz-dilli, cihaz-üstü embedding,
+  **API anahtarı gerekmez**). Araç sayısı da 7 → **53** olur.
+- **Tek makinede TEK örnek koşar.** İkinci bir örnek `III_REST_PORT` farklı olsa bile
+  `Port already in use` verir — iii engine portu sabittir (ölçüldü). `memory_server.sh`
+  bu yüzden önce `livez` sorar.
+- **Sunucunun deposu da kalıcı değil** (yeniden başlatma sonrası 0 kayıt ölçüldü) — ve bu
+  bir sorun DEĞİL: indeks türetilmiş, `--sync` üç saniyede geri getirir. Kalıcılık için
+  bir yere sunucu **barındırmak gerekmez**; barındırmanın tek ek getirisi makineler arası
+  paylaşılan **elle** yazılmış hafızadır ve otomatik yakalama kapalı olduğu için öyle bir
+  içerik üretilmiyor.
 - **Otomatik yakalama KAPALI** (`AGENTMEMORY_AUTO_COMPRESS` / `GRAPH_EXTRACTION_ENABLED`
   `false`, LLM anahtarı verilmedi). Ürünün 12 lifecycle hook'u ve konsolidasyon katmanı
   **bilerek bağlanmadı**: sıkıştırılmış bir önceki-oturum özetini otoritemiş gibi enjekte
   etmek §Session START md. 1'in (*STALE-BY-DEFAULT*) tersidir ve adjudicated ifadeleri
-  sessizce yeniden yazar. `--write` insanın yazdığı, review'dan geçmiş metni indeksler.
-- **`--write` toplayıcıdır (upsert yok).** Dolu bir store'a ikinci kez tam `--write`
-  koşmak kayıtları çoğaltır; taze container'da doldur, kapanışta `--only` ile tek kayıt ekle.
+  sessizce yeniden yazar. İndekslenen şey insanın yazdığı, review'dan geçmiş metindir.

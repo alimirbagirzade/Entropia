@@ -23,10 +23,16 @@
  *   --emit    print the derived records as JSON (deterministic, no network)
  *   --check   CI gate: every section indexed, ids unique and stable (no network)
  *   --write   push the records into agentmemory over the MCP stdio shim
+ *   --sync    the same, minus the records the store already holds
  *
  * Flags:
  *   --only <substr>   restrict to records whose id contains <substr>
  *   --budget <n>      per-record char budget (default 6000)
+ *
+ * Prefer --sync for hydration. `memory_save` has no upsert, so a second full
+ * --write duplicates every record; --sync asks the server what it already has
+ * (via the REST export) and writes only what is missing. --write stays for the
+ * server-less fallback, where there is no export endpoint to ask.
  */
 
 import { readFileSync } from 'node:fs'
@@ -209,11 +215,36 @@ async function write(records) {
   return written
 }
 
+/** The `[Entropia · … §heading]` line every record opens with — its identity in the store. */
+function marker(content) {
+  return content.split('\n', 1)[0].trim()
+}
+
+/**
+ * Markers the store already holds, read from the full server's REST export.
+ * Returns null when no server answers — the caller must not silently treat that
+ * as "the store is empty", or --sync would duplicate everything it was written
+ * to avoid.
+ */
+async function storedMarkers(url) {
+  let response
+  try {
+    response = await fetch(`${url}/agentmemory/export`, { signal: AbortSignal.timeout(30_000) })
+  } catch {
+    return null
+  }
+  if (!response.ok) return null
+  const payload = await response.json()
+  return new Set((payload.memories ?? []).map((memory) => marker(memory.content ?? '')))
+}
+
 async function main() {
   const argv = process.argv.slice(2)
-  const mode = argv.find((arg) => ['--emit', '--check', '--write'].includes(arg))
+  const mode = argv.find((arg) => ['--emit', '--check', '--write', '--sync'].includes(arg))
   if (!mode) {
-    process.stderr.write('kullanım: node scripts/memory_index.mjs <--emit|--check|--write> [--only <substr>] [--budget <n>]\n')
+    process.stderr.write(
+      'kullanım: node scripts/memory_index.mjs <--emit|--check|--write|--sync> [--only <substr>] [--budget <n>]\n',
+    )
     return 2
   }
   const only = argv.includes('--only') ? argv[argv.indexOf('--only') + 1] : null
@@ -242,7 +273,23 @@ async function main() {
     return 0
   }
 
-  const written = await write(records)
+  let pending = records
+  if (mode === '--sync') {
+    const url = process.env.AGENTMEMORY_URL ?? 'http://localhost:3111'
+    const stored = await storedMarkers(url)
+    if (stored === null) {
+      process.stderr.write(
+        `agentmemory: ${url} export vermiyor — sunucu ayakta mı? (scripts/memory_server.sh)\n` +
+          'Sunucusuz kipte export yok; o durumda --write kullan (TOPLAYICI: ikinci koşu çoğaltır).\n',
+      )
+      return 1
+    }
+    pending = records.filter((record) => !stored.has(marker(record.content)))
+    process.stdout.write(`agentmemory: store'da ${stored.size} kayıt var, ${pending.length} eksik\n`)
+    if (pending.length === 0) return 0
+  }
+
+  const written = await write(pending)
   process.stdout.write(`agentmemory: ${written} kayıt yazıldı (kaynak ${SOURCE})\n`)
   return 0
 }

@@ -18,43 +18,64 @@
 > automated prechecks added alongside this file — may be transcribed into these
 > tables as a screen-reader result.
 >
-> **The tracking issue is CLOSED while this worksheet is still empty.** Read the
-> divergence block below before citing **GitHub #514** as tracking anything.
-> `#514` carries the `human-only` label; an agent or automated scan must not
-> close it — nor re-open it.
+> **The tracking issue is OPEN again.** A human re-opened **GitHub #514** on
+> `2026-08-12T11:08:58Z` (`state_reason: reopened`) expressly to run this audit.
+> The closure/evidence divergence this file used to carry is therefore
+> **RESOLVED — by reading (B)**; the record of it is kept below as history, not
+> as a live conflict. **This changes the tracking state and nothing else:** the
+> worksheet is still empty, the four exit criteria are still `0 / 4`, and A-08 is
+> still `HUMAN-BLOCKED`. `#514` carries the `human-only` label; an agent or
+> automated scan must not close it — nor re-open it.
 >
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.
 
-### Tracking-issue state — closure/evidence divergence (recorded 2026-08-07)
+### Tracking-issue state — divergence RESOLVED 2026-08-12 (recorded 2026-08-07)
 
-This block is the **canonical record** of the divergence. Every other document
-points here instead of restating it.
+This block is the **canonical record** of the tracking-issue state. Every other
+document points here instead of restating it.
 
 | Fact | Value | How to re-derive |
 |---|---|---|
-| GitHub **#514** state | **CLOSED** — `2026-08-07T03:52:03Z`, `state_reason: completed` | `gh issue view 514 --json state,closedAt,stateReason` |
+| GitHub **#514** state | **OPEN** — re-opened `2026-08-12T11:08:58Z`, `state_reason: reopened` | `gh issue view 514 --json state,stateReason,updatedAt` |
 | Issue label | `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"* | `gh issue view 514 --json labels` |
 | Audit performed? | **NO** — every result cell is `—` | §1, §2 below |
 | Exit criteria met? | **0 / 4** — all four still `☐` | §5 below |
 | Findings committed? | **NO** — the register holds only its placeholder row | §3 below |
 
-**A closed issue is not evidence of a completed audit.** These facts are in
-conflict, and this file records the conflict rather than resolving it. Both
-readings below stay open: choosing between them is a **human** decision an agent
-may neither make nor enact, because each one either changes the issue's state or
-adds a signature.
+**The divergence is closed; the blocker is not.** From 2026-08-07 to 2026-08-12
+this file recorded a conflict — the issue said `COMPLETED` while this worksheet
+was empty. On `2026-08-12T11:08:58Z` a human resolved it by taking **reading
+(B)**: re-opening #514 with the reason recorded on the issue itself —
 
-| Reading | What it would mean | What it requires — human action |
+> *"Reopened 2026-08-12 to run path (A) of the RC readiness report §6.1 … The
+> 2026-08-07T03:52:03Z closure carried stateReason=COMPLETED while the worksheet
+> was empty — 0/4 exit criteria, 0/46 routes, 0/20 flows, 0 recorded SR-BULGU.
+> No signed permanent deviation exists for A-08. The audit stack is prepared and
+> validated; auditor assignment is the remaining human step."*
+
+**Only the tracking state moved.** Re-opening the issue is not a result any more
+than closing it was: it added no auditor, no version string and no finding. The
+gate is §5's four criteria, which are still `0 / 4`.
+
+> **Mind the lettering — the two documents number their options in opposite
+> directions.** In *this* file's table below, **(A)** = signed acceptance and
+> **(B)** = the erroneous closure being reverted. In the readiness report
+> ([`Entropia_V18_RC_Readiness_2026-08-07.md`](../releases/Entropia_V18_RC_Readiness_2026-08-07.md)
+> §6.1), **(A)** = run the audit and **(B)** = signed deviation. The issue comment
+> quoted above says *"path (A)"* in the **report's** sense — run the audit. Same
+> two outcomes, two numberings; neither file was renumbered, because both are
+> cited by ID elsewhere.
+
+| Reading | Status | What it meant |
 |---|---|---|
-| **(A) Deliberate acceptance** | The product owner knowingly accepted shipping without the audit | A **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — recorded in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). **No signer has been supplied, so no such record exists**, and none may be written on an agent's initiative. |
-| **(B) Closed in error** | The tracking issue was closed by mistake | A human **re-opens #514**. That would make it the **second** evidence-free closure to be reverted — the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
+| **(A) Deliberate acceptance** | **NOT TAKEN** | Would have required a **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). No signer was ever supplied, so **no such record exists**; none may be written on an agent's initiative. |
+| **(B) Closed in error** | **TAKEN — 2026-08-12** | A human re-opened #514. This is the **second** evidence-free closure to be reverted; the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
 
-Neither reading lets A-08 be reported as done. Under **(A)** what is accepted is
-the *absence* of the audit, not a result; under **(B)** the audit is simply still
-outstanding. The recurrence is itself the finding: **#514 has now been closed
-twice without a single committed result**, which is why §5's exit criteria — not
-the issue's state — are the gate.
+The recurrence stands as the finding: **#514 was closed twice without a single
+committed result, and both closures had to be reverted.** That is why §5's exit
+criteria — not the issue's state — are the gate. Under (B) the audit is simply
+still outstanding, which is exactly where A-08 sits today.
 
 ---
 
@@ -293,10 +314,11 @@ Copied from the checklist so this file can be read alone:
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.
 
-**Closing the tracking issue satisfies none of the four.** GitHub #514 was closed
-on `2026-08-07T03:52:03Z` with this table still at `0 / 4`; the closure changed
-the issue's state, not this file's contents, and it added no auditor, no version
-string and no finding. The gate is this table. See the divergence block in the
+**The tracking issue's state satisfies none of the four — in either direction.**
+GitHub #514 was closed on `2026-08-07T03:52:03Z` and re-opened on
+`2026-08-12T11:08:58Z` with this table at `0 / 4` both times. Each move changed
+the issue's state, not this file's contents; neither added an auditor, a version
+string or a finding. The gate is this table. See the tracking-issue block in the
 STATUS banner above.
 
 ---
@@ -328,6 +350,28 @@ screen-reader user is actually impeded. They are where to look first.
 observations** once the numbers settle. The figure previously recorded here was
 `85`, from the ADIM 28 preparation run.
 
+**Re-measured again 2026-08-12 (ADIM 48, after K-2 + K-4 landed)** — CI job
+`94221023796`, a **single cold run** on a fresh stack: 23 routes, **0 blocking
+failures**, **67 advisory observations**. The drop is fully accounted for and
+nothing was suppressed:
+
+| Class | ADIM 44 (settled) | ADIM 48 (CI) | Why |
+|---|---:|---:|---|
+| skip link (K-2) | 23 | **0** | fixed — the class no longer fires on any route |
+| no `<h1>` (K-4) | 1 | **0** | fixed |
+| heading outline (K-5) | 21 | **22** | **+1: `/user-manual`**, moved in by K-4's fix |
+| `contentinfo` (K-3) | 23 | 23 | untouched |
+| `aria-live` (K-7) | 21 | 21 | untouched |
+| focus indicator (K-6) | 1 | 1 | untouched |
+| **total** | **90** | **67** | −23 −1 +1 |
+
+**Two caveats that keep this honest.** (1) This is **one cold run**, and rule 1 below
+says a cold run *under-reports* — so `22` for K-5 is a **floor**, not a settled figure;
+the three flaky routes (`/analysis-lab`, `/backtest/history`, `/backtest/metrics`) all
+happened to report in this run. (2) The `/user-manual` line is not an inference from
+the count: the run printed the skip verbatim, which is what makes K-4's side effect a
+**measurement** rather than a prediction.
+
 > **Read the count caveat below before trusting any reach number in this table.**
 > Two of the six classes are **not reproducible run to run**; four are rock-stable
 > and can be taken at face value. The methodology note under the table says which.
@@ -335,8 +379,11 @@ observations** once the numbers settle. The figure previously recorded here was
 | # | Observation | Reach | Status | What the audit should settle |
 |---|---|---|---|---|
 | K-1 | **D-10 — 45 accent-blue low-contrast nodes.** PO-signed permanent deviation dated 2026-07-30. WCAG 2.2 AA **1.4.3 is not met**; the product is not compliant for that criterion. | — | Adjudicated — **do not re-file** | Nothing. It is a *low-vision* axis, not a screen-reader one. Record anything **new** you hit. |
-| K-2 | **No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1. | 23 / 23 routes | Open — reported, not gated | Whether the rotor makes this a non-issue in practice, or whether it really costs a jump per page. |
+| K-2 | ~~**No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1.~~ → **FIXED 2026-08-12 (PO decision, PR #685).** `Layout.tsx` renders a clipped `Skip to main content` link as the shell's first child; `<main>` carries `id="main-content"` + `tabIndex={-1}`. **Recorded with the fix:** 2.4.1 was **already met** through the banner/navigation/main landmarks (technique ARIA11) — which is why axe's `bypass` rule stayed green throughout — so this was an **ergonomics** fix for keyboard users, not a conformance one. | was 23 / 23 routes | **FIXED** | Nothing structural. If the link is announced misleadingly (wrong name, wrong destination), file it as a **new** finding. |
 | K-3 | **No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist. | 23 / 23 routes | Open — reported, not gated | Whether the absence is felt during landmark navigation, or is cosmetic. |
+| K-4 | ~~**`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`).~~ → **FIXED 2026-08-12 (PO decision, PR #685).** The page now uses `<h1 class="page-title">` like the other 22 routes; `.page-title` is class-based, so the change is semantic only. Regression pin: `specs/17-page-coverage.spec.ts` declares `level: 1` (a *blocking* precheck for a missing `<h1>` was considered and **deliberately not added** — that probe races each page's first data render, and a flapping gate is worse than none). **Side effect, not hidden:** this page's outline is now `h1 → h3` where it was `h2 → h3`, so it **entered K-5's set** — measured, not predicted: CI job `94221023796` printed `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`, taking K-5 from `21 / 23` to `22 / 23`. | was 1 route | **FIXED** | A-1 still applies: is the page title announced on load? The fix changed the level, not the announcement. |
+| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is now — with K-2 and K-4 fixed — the highest-reach observation left in the set. **`/market-data` skips two levels** (`h1 → h4`) and `/packages/library` carries a second skip (`h2 "Import package" → h5 "Recent imports"`). | **22 / 23 routes** — re-measured 2026-08-12 (ADIM 48, CI job `94221023796`); was `21 / 23`. **The +1 is `/user-manual`**, which K-4's fix moved into this set (`h1 "User Manual" → h3 "ENTROPIA USER MANUAL"`) — a known, accepted cost, not a discovery. Only `/` is now outside the set. ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 22 pages' outlines — the measured cost of doing so is **204 headings across ~40 files**, plus five tag-scoped CSS rules (`.card h3`, `.card h4`, `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3`) that silently drop a heading to the UA default if a tag moves without them. |
+| K-6 | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7 / 1.4.11. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. |
 | K-4 | **`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`) — a divergence already recorded in `frontend/e2e/utils/pageTruth.ts:15`. Every other route uses `<h1>`. | 1 route | Open — reported, not gated | A-1: is the page title announced on load? |
 | K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is the highest-reach structural observation in the set. | **21 / 23 routes** — re-derived 2026-08-12, **unchanged**; ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? Answer this **before** anyone proposes re-cutting 21 pages' outlines. |
 | K-6a | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. **A-08 settles this one; nothing else does.** |

@@ -1,18 +1,9 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — ADIM 49 (2026-08-12).** Canlı kickoff artık
-> `docs/ADIM49_LANDED_KICKOFF.md`.
->
-> **DİKKAT — İKİ AYRI SLICE AYNI NUMARAYI KULLANDI.** İki bağımsız dal kendini
-> *"ADIM 48"* olarak adlandırdı ve **bu tek dosyaya** yazdı; git ikisini çakışmasız
-> birleştirdi, sonuç sessizce iki belge oldu. Merge edilmiş PR başlıkları ve commit
-> mesajları değiştirilemeyeceği için **numaralar yeniden atanmadı** — ayrım
-> `CLAUDE.md`'nin kuralı gereği **başlık ekiyle** yapılır:
-> **`ADIM 48 (K-6b)`** = odak halkası kontrastı (#688) ·
-> **`ADIM 48 (kabul borcu B-01)`** = sınıf-B kabul borcu parti 01 (#686).
-> Aynı ayrım `docs/PROJECT_HISTORY.md`'de de uygulandı. Aşağıdaki iki bölüm
-> **ayrı slice'lardır**; birbirinin devamı değildir.
-
-# ADIM 48 (K-6b) LANDED — odak halkasının kontrastı (WCAG 1.4.11)
+> **HISTORICAL — ADIM 49 (P11-1 required status checks) bunu devraldı.**
+> Canlı kickoff: `docs/ADIM49_LANDED_KICKOFF.md`. Aşağıdaki iki H1, iki paralel
+> oturumun aynı dosyaya yazmasından kalmadır; **ayrıştırma insan kararıdır**.
+# ADIM 48 LANDED — K-6b: odak halkasının kontrastı (WCAG 1.4.11) · sıradaki slice için kickoff
+# ADIM 48 LANDED — kabul borcu sınıf B, parti 01 · sıradaki slice için kickoff
 
 > **Bu belge ADIM 48 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →
 > `docs/generated/repository_facts.md` (üretilmiş, CI'da `--check` bloklayıcı).
@@ -88,10 +79,8 @@ Bu slice **presentation-only** idi ve **tek bir CSS deklarasyonu** sevk etti.
 - **RC §6.7 kalanları** — P11-1 (branch protection, **insan kararı**), P11-6b, P11-3b,
   P8-B3b, P4-3, P10-B6, P1-Gate3, P10-B3/B4/B5.
 - **`POST /library/{id}/validation-runs` 201'de** — ADIM 47'nin açık bıraktığı ayrışma.
-# ADIM 48 (kabul borcu B-01) LANDED — sınıf-B kabul borcu, parti 01
-
-**Blocker sayısı 1 (yalnız A-08), verdict BLOCKED.** ADIM 48 (kabul borcu B-01) bir
-blocker kalemi değildi: ADIM 42'nin ürettiği borç defterini **işlemeye başladı**. Doc 05 (Trade Log)
+**Blocker sayısı 1 (yalnız A-08), verdict BLOCKED.** ADIM 48 bir blocker kalemi
+değildi: ADIM 42'nin ürettiği borç defterini **işlemeye başladı**. Doc 05 (Trade Log)
 backend yüzeyinden **sekiz sınıf-B kriteri** kapandı → **partial 126 → 118**,
 **sınıf B 95 → 87**. **Ürün kodu değişmedi** (tek satır bile), migration yok,
 `ENGINE_VERSION` sabit, OpenAPI değişmedi.

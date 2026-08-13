@@ -118,6 +118,14 @@ A requirement is **Complete** only with working end-to-end behavior + passing ac
 > > izleyen açık bir issue'nun **bulunmamasıdır**. Kapalı issue tamamlanma kanıtı değildir.
 > > Ayrışmanın kanonik kaydı ve açık duran iki insan çözüm yolu:
 > > [`docs/audit/a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
+> >
+> > **GÜNCELLEME (2026-08-12) — izleme yeniden AÇIK, ayrışma KAPANDI.** Yukarıdaki
+> > 2026-08-07 güncellemesinin *"artık bunu izleyen açık bir issue'nun bulunmaması"*
+> > tespiti **bayattır**: #514 `2026-08-12T11:08:58Z`'de bir **insan** tarafından yeniden
+> > açıldı (`state_reason: reopened`), gerekçesi issue'ya yazıldı ve atamanın *"the
+> > remaining human step"* olduğu belirtildi. **Bu bloğun "A-08 hâlâ açıktır" hükmü YİNE
+> > değişmedi** — defter hâlâ boş, dört çıkış kriteri hâlâ ☐. Değişen tek şey, açık işin
+> > artık açık bir izlemesi olması. **Yeniden açma da tamamlanma kanıtı değildir.**
 > > §STATUS ▸ *Tracking-issue state*.
 >
 > Kapanış anında Complete'e çekilen satırların kanıt tablosu: **§"R2 kapanış — satır bazında

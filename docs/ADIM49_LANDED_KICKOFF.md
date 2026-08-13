@@ -1,155 +1,124 @@
-<!-- doc-status: current -->
-# ADIM 49 LANDED — kabul borcu sınıf B, parti 02 · sıradaki slice için kickoff
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 50 (2026-08-12).** Canlı kickoff artık `docs/ADIM50_KICKOFF.md`
+> (RC §6.5 / K-2..K-6 karar promptları; K-2 + K-4 landed, K-3 hâlâ PO'da). Aşağısı
+> ADIM 49 kapanışındaki durumu kaydeder. **Değişmeyen:** blocker sayısı 1 (yalnız A-08),
+> verdict BLOCKED.
 
-> **Bu belge ADIM 49 kapanışında yazıldı.** Sayısal otorite bu belge DEĞİL →
-> `docs/generated/repository_facts.md` (üretilmiş, CI'da `--check` bloklayıcı).
-> Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 49.
+> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+
+# ADIM 49 LANDED — P11-1: main'de required status check ruleset'i · sıradaki slice için kickoff
 
 ## Neredeyiz
 
-**Blocker sayısı 1 (yalnız A-08), verdict BLOCKED.** ADIM 49 borç defterinin ikinci
-partisiydi: dış work object'in **run provenance**'ı. **Beş kriter kapandı** →
-**partial 118 → 113**, **sınıf B 87 → 82**. **Ürün kodu değişmedi** (tek satır bile).
+RC §6.7 tablosunun **repo dışı** tek kalemi kapandı. PR #683 (`74bbd70`) hazırlığı
+getirdi; **ayarı insan uyguladı** → ruleset `20765617`, `enforcement: active`,
+2026-08-12T23:14:40+03:00. Öncesi ölçülmüştü: `GET /rulesets` → `[]`,
+`GET /rules/branches/main` → `[]`, `branches/main` → `enforcement_level: "off"`.
 
-Kapanan beş: `TL-12` (c2+c3) · `TL-20` (c3) · `TS-11` (c3) · `TS-21` (c1) · `AOS-21` (c1).
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** P11-1 bir RC §6.7
+tablo kalemiydi, blocker değil. Bu slice A-08'e **dokunmadı**.
 
-## Bu slice'ın bıraktıkları (reuse anchor'ları — tam sembol adlarıyla)
+## Bu slice ne bıraktı (reuse anchor'ları, tam adlarıyla)
 
-| Anchor | Ne için |
+| Anchor | Ne yapar |
 |---|---|
-| `tests/integration/test_external_object_run_provenance.py::_attach_trade_log` | **Eksik olan parça.** Bir Trade Log'u run kompozisyonuna sokar; gerçek boru hattını koşturur (upload → import worker → Save & Add). Elle satır yazma, bunu çağır |
-| `::_completed_run` | Admit + `run_backtest` → SUCCEEDED, tek çağrı. `run_id` + `result_id` + `manifest_hash` döner |
-| `::_external_entry(manifest, item_kind)` | Manifest'ten dış nesne girdisini çeker |
-| `test_backtest_manifest_pinning.py::_attach_trading_signal` | Signal karşılığı — **zaten vardı**, yeniden yazma |
-| `test_backtest_persistence.py::_ready_composition` · `::_e2e_bars` · `::_count` | Strateji kompozisyonu + determinist barlar + satır sayacı |
+| `.github/rulesets/main-required-status-checks.json` | Ruleset gövdesi. 16 context, hepsi `integration_id: 15368`. **GitHub bu yolu otomatik OKUMAZ** — dosya istek gövdesi + ayarın versiyonlanmış kaydıdır. |
+| `scripts/required-checks-preflight.sh` | POST öncesi **zorunlu** salt-okuma kapısı. Payload'ı GitHub'ın **ürettiği** check adlarıyla diff'ler; göremediği veya **iki workflow'dan gelen** adı `FATAL` + `exit 1` yapar. `<pr-no>` argümanı alır. |
+| `docs/implementation/required_status_checks_setup.md` | Runbook: §2 sınıflandırma · **§2.1 Lighthouse kararı** · §3 komut (alan alan) · §4 arayüz · §5 uyarılar · §6 geri alma · §7 bakım sırası. |
 
 ## Tavizsiz kurallar (bu slice'ta kanıtlandı)
 
-1. **Manifest girdisini BÜTÜN olarak karşılaştır**, yalnız id alanını değil — ve run'ın
-   `manifest_hash`'ini yeniden doğrula. Tek alan assert etmek yeniden yazılmış bir
-   manifest'i geçirir.
-2. **"Değişmedi" iddiasından önce `session.expire_all()`.** Aksi halde soruyu
-   veritabanı değil ORM identity map'i cevaplar ve test hiçbir şey kanıtlamaz.
-3. **Sıfır-assertion kendi kendini korumalı.** `== 0` yazıyorsan, aynı sayacın aynı
-   testte **1**'e ulaştığını da göster; yoksa bozuk bir sorgu ya da boş bir veritabanı
-   testi yeşil tutar.
-4. **RATCHET YALNIZ AŞAĞI İNER**; `total_criteria` bir **TABANDIR**.
-5. **Sınıflar AYRI ratchet'lenir** → B'den C/D'ye taşımak o tavanı **YÜKSELTİR**,
-   bu bir adjudication'dır.
+1. **Required check adını ELLE YAZMA.** Ada göre eşleşir ve GitHub adın bir karşılığı
+   olduğunu **doğrulamaz**. Karşılığı yoksa check hiç oluşmaz → PR
+   `Expected — Waiting for status to be reported` üzerinde **sonsuza kadar** asılı kalır.
+   Bu repodaki adlar em dash (`—`), `§`, parantez ve matrix açılımı taşıyor.
+   **Payload ölçümden üretilir, `required-checks-preflight.sh` POST'tan önce koşar.**
+   Negatifi kanıtlı: em dash yerine tire → `FATAL`; çift üretilen ad → `FATAL`.
+2. **`skipped` ≠ "hiç oluşmadı".** `if:` ile atlanan job yine de `skipped` check **yazar**
+   (5 nightly/manual job yazdı). Ölümcül olan check'in **hiç oluşmaması**dır: yanlış ad
+   ya da PR'da tetiklenmeyen workflow. **Yeni workflow'a `paths:` filtresi eklersen o
+   check required listesine GİRMEMELİ** — filtreye uymayan PR'da hiç üretilmez ve kilitler.
+   Bugün beş workflow'un hiçbirinde `paths:` yok; kurulumun güvenli olmasının koşulu bu.
+3. **Yeni kapı eklerken sıra: önce merge, sonra required.** Adın en az bir kez
+   **gerçekten üretildiğini** gör, sonra payload'a ekle ve `PUT …/rulesets/20765617`.
+   Ters sıra kilitler. `name:` değiştirirken de aynı sıra — `name:` değişimi **kapıyı
+   sessizce açar**.
+4. **Lighthouse çırpınırsa taban İNDİRİLMEZ.** Skor `LH_REPEATS` geçişin **medyanı**
+   (varsayılan 3) → ilaç **tekrar sayısı**. **`armed: false` + boş `floors` spec'i
+   GEÇİRİR** — required olduktan sonra bu bayrak kapının **sessiz kapatma düğmesidir**;
+   bir PR'da `false`'a dönüyorsa o bir düzeltme değil, kapının kaldırılmasıdır.
+   Tabansız rota (`TARGET_PAGES`'te var, `floors`'ta yok) **FAIL** verir.
+5. **`pull_request` kuralı taşıyıcıdır, süs değil.** Required status check'ler yalnız
+   **PR merge'ini** kapsar; o kural olmasa `git push origin main` on altısını da atlardı.
+   `required_approving_review_count: 0` bilinçli — tek kişilik repoda `1` kalıcı kilittir.
 
-## ÜÇ AÇIK BULGU (karar insan/PO'da — agent kapatamaz)
+## Kapatılmayan, kapatıldığı iddia EDİLMEYEN
 
-* **`TL-11.c3` KAPATILAMAZ; sınıfı B değil, C görünüyor.** Kriter *allocation-enabled*
-  bir run istiyor; bu build'de shared allocation **admission'da fail-closed**
-  (`SHARED_ALLOCATION_STATUS = "future_dev"` → `ALLOCATION_SHARED_MODE_NOT_IN_BUILD`,
-  run/manifest/job yaratılmadan). **ADIM 48'in kickoff'u bunu kapatılabilir sandı —
-  o öneri YANLIŞTI.** Yeniden sınıflandırılmadı: **C tavanını yükseltirdi.**
-* **`TL-16` sınıfı ŞÜPHELİ (B yazıyor, D görünüyor).** `c4`'ün istediği "409 kanonik
-  durum" alanı yok — `WorkObjectRevisionConflictError` `details` taşımıyor.
-* **`TL-01.c4` yol sapması.** Kriter `GET /packages`, sevk edilen `GET /library`.
+- **A-08** — ekran okuyucu denetimi yapılmadı, defter **boş (0/4)**, #514 kapalı.
+  Buradaki hiçbir check A-08 kanıtı **değildir**. Blocker 1, verdict **BLOCKED**.
+- **Ruleset drift kapısı YAZILMADI.** Ruleset **repoda değil**; silinirse ya da
+  `Disabled` yapılırsa **hiçbir CI kapısı fark etmez**. Tek iz `PROJECT_HISTORY` §ADIM 49.
+  Canlı ruleset'i `.github/rulesets/*.json` ile karşılaştıran bir job **açık iştir**
+  (`required-checks-preflight.sh` bunun yarısını zaten yapıyor; eksik olan canlı
+  ruleset'i çekip diff'leyen bir CI adımı — ama admin token ister, bu da ayrı bir karar).
+- **`bypass_actors` bağımsız doğrulanamadı** — GET yanıtı salt-okuma token'ına bu alanı
+  vermiyor. Kanıt POST yanıtındaki `[]` + `current_user_can_bypass: "never"`.
+- **Çıplak `CodeQL` required DEĞİL** (Tier 2). Farklı app (`57789`), PR-only, alert
+  triage semantiği. Deterministik kapı isteniyorsa ayrı bir karar gerekir.
+- **RC §6.7'de kalanlar:** P11-6b · P11-3b · P8-B3b · P4-3 · P10-B6 · P1-Gate3 ·
+  P10-B3/B4/B5. **P11 hâlâ KAPANMADI** — P11-1 kapandı, P11-6b ve P11-3b açık.
+- **Memory checkpoint YAZILAMADI** — `ecc`/`claude-mem` remote ortamda **kayıtlı değil**
+  (#690 ölçtü; sorun oturum değil **ortam**). Borç **ADIM 47 + 48 + 49**, üç oturum.
+  **İçerik hazır bekliyor:** `docs/memory/PENDING_CHECKPOINTS.md` — üç entity + üç
+  observation, yapıştırmak yeterli, yeniden türetme. O dosya **kendini tüketir**:
+  yazıldığında silinir. Kalıcı çözüm **insan kararı** (bkz. o dosyanın son maddesi).
+- **`ADIM 48` numarası iki slice tarafından kullanıldı** (K-6b odak halkası **ve** kabul
+  borcu sınıf B parti 01). `ADIM48_LANDED_KICKOFF.md` içinde iki H1 yan yana; CLAUDE.md'de
+  iki "Son dalga — ADIM 48" bloğu; `STAGE2_HANDOFF.md` Next bloğunda tekrarlanmış bir satır.
+  Bu slice **49** alarak çakışmayı büyütmedi. **Ayrıştırma insan kararıdır** — CLAUDE.md'nin
+  kuralı: numaralar yeniden atanmaz, **başlık ekiyle** ayrılır.
 
-## Bir sonraki parti — öneri (ve bu kez ÖNCE ÖLÇ)
+## Bu slice'tan sonra çalışma şekli DEĞİŞTİ
 
-`TS-08.c3` *("düzeltilmiş mapping YENİ bir import revizyonu yaratır, eski rapor
-tarihsel olarak okunabilir kalır")* — aynı doc 04 hattı, harness'ın yarısı hazır.
-Yanına doc 05'ten `TL-02.c2` ve `TL-13.c3` bakılabilir.
-
-**Ama önce ölç.** ADIM 48'in önerisi ölçülmediği için yanlıştı. Bir kriteri partiye
-almadan önce **adlandırdığı davranışın gerçekten sevk edildiğini** `backend/src`'te
-doğrula; sevk edilmemişse **sınıfı yanlıştır** ve test yazmak boşluğu gizler.
-
-## Kalan borç (bu koşunun ölçümü)
-
-| Sınıf | Kriter | Kim kapatır |
-|---|---|---|
-| A | 1 | adjudication + tek satır pin |
-| B | **82** | test slice'ı (**tek sahibi bu**) |
-| C | 6 | **kimse** — gerekçelenir, kapatılmaz |
-| D | 32 | **ürün işi** |
-| **açık toplam** | **121** | |
-
-## Devralınan ritüel borcu
-
-**Memory checkpoint ÜÇ slice'tır yazılamadı** (ADIM 47, ADIM 48 ×2, ADIM 49). Sebep
-**ölçüldü ve yapısaldır** (#690): bu iş remote container'da yürüyor ve orada `ecc` /
-`claude-mem` **kayıtlı değil** — yani borç **bu ortamdan kapatılamaz**, tekrar denemek
-zaman kaybıdır.
-
-İçerik hazır: **`docs/memory/PENDING_CHECKPOINTS.md`** (ADIM 47 + ADIM 48 metinleri
-tam hâlde). **ADIM 49 girdisi oraya EKLENMELİDİR.** Bağlı bir ortamın ilk işi: üçünü
-birden yaz, sonra o dosyayı **SİL** — kendini tüketen bir belgedir.
-
----
+- **main'e doğrudan push kapalı.** Docs PR'ları dâhil her şey PR'dan geçer.
+- **Her PR 16 yeşil check ister**, `strict: true` yüzünden dal main ile güncel olmalı.
+  `Backend — lint, type, test` **~48 dakika** (ölçüldü) → seri merge pahalı. Bu bilinçli
+  bir bedel; gerekçesi (üç kez yaşanan bayat-base docs regresyonu) ve tek alanı çeviren
+  komut runbook §3'te. **Dürüst sınır:** `strict` o regresyonu tek başına yakalamaz —
+  hiçbir kapı `docs/` okumaz, `git show <sha> -- docs/ | grep '^-## '` kuralı yürürlükte.
+- **Muafiyet yok, sahibi dâhil.** Kurtarma bypass aramak değil: ruleset `20765617` →
+  `Disabled` ya da sil.
 
 ## Paste-ready resume prompt
 
 ```
-ENTROPIA V18 — ADIM 50: kabul kriteri borç defteri, sınıf B parti 03
+ENTROPIA V18 — sıradaki slice.
 
-[[ Kendi ROL / OTURUM BAŞLANGICI / CANONICAL KAYNAK / TAVİZ VERİLEMEZ /
-   PR DİSİPLİNİ bloklarınızı buraya aynen yapıştırın ]]
+Session START protokolünü uygula: önce `git fetch` + `git log --oneline origin/main -6`
+ile NE LANDED olduğunu doğrula (handoff STALE-BY-DEFAULT). Sonra sırayla oku:
+docs/ADIM49_LANDED_KICKOFF.md (bu dosya) → docs/STAGE2_HANDOFF.md (§ADIM 49 + Next) →
+docs/STAGE_BUILD_PLAN.md → ilgili docs/spec/NN_*.
 
-BASE: origin/main (DOĞRULA — `git fetch && git log --oneline origin/main -6`)
-ADIM 49 landed: dış work object run provenance'ından 5 sınıf-B kriteri kapandı
-(TL-12, TL-20, TS-11, TS-21, AOS-21). partial 118 → 113, sınıf B 87 → 82.
+DURUM: P11-1 ADIM 49'da KAPANDI — main'de ruleset 20765617 aktif, 16 required check.
+Blocker sayısı 1 (yalnız A-08), verdict BLOCKED. RC §6.7'de kalanlar: P11-6b, P11-3b,
+P8-B3b, P4-3, P10-B6, P1-Gate3, P10-B3/B4/B5.
 
-ÖNCE OKU (otorite sırası)
-  1. docs/ADIM49_LANDED_KICKOFF.md (bu belge)
-  2. docs/STAGE2_HANDOFF.md → "## Stage — ADIM 49" + "## Next"
-  3. docs/PROJECT_HISTORY.md §ADIM 49
-  4. docs/audit/acceptance_coverage_debt_ledger.md (ÜRETİLMİŞ defter)
-  5. docs/generated/repository_facts.md (SAYISAL OTORİTE)
+ÇALIŞMA ŞEKLİ ARTIK FARKLI — bunu bilerek başla:
+- main'e doğrudan push YOK. Her şey PR'dan geçer.
+- Her PR 16 yeşil check ister ve dal main ile GÜNCEL olmalı (strict). Backend ~48 dk.
+- Yeni bir CI job'ı eklersen: önce merge et, adın gerçekten üretildiğini gör, SONRA
+  scripts/required-checks-preflight.sh <pr> koş ve
+  gh api --method PUT /repos/alimirbagirzade/Entropia/rulesets/20765617 --input <payload>.
+  TERS SIRA TÜM MERGE'LERİ KİLİTLER. Bir job'ın name: alanını değiştirmek de aynı sıra.
+- Yeni workflow'a paths: filtresi eklersen o check required listesine GİRMEMELİ.
 
-DURUM (doğrula, güvenme)
-  · Blocker sayısı 1 (yalnız A-08), verdict BLOCKED. "READY" YAZMA.
-  · Kalan borç: A=1 · B=82 · C=6 · D=32 (açık toplam 121).
-  · P1-Gate3 KAPANMADI ve bu partiyle de kapanmayacak.
+İLK İŞ (borç, üç oturumdur birikiyor): ecc + claude-mem bağlıysa ADIM 47, 48 ve 49 için
+memory checkpoint yaz. Bağlı değilse bunu YAZILAMADI diye kaydet, "atlandı" deme.
 
-PARTİYİ SEÇMEDEN ÖNCE ÖLÇ — PAZARLIKSIZ
-  ADIM 48'in kickoff'u TL-11.c3'ü "kapatılabilir" diye önerdi; YANLIŞTI (shared
-  allocation admission'da fail-closed → o run kurulamaz). Bir kriteri partiye
-  almadan önce adlandırdığı davranışın backend/src'te GERÇEKTEN sevk edildiğini
-  doğrula. Sevk edilmemişse sınıfı yanlıştır; test yazmak boşluğu GİZLER.
+Sonra sıradaki kalemi seç. Öneri: P11-6b veya P4-3 (ikisi de repo içi, ölçülebilir).
+A-08'i kapatmaya çalışma — ekran okuyucu denetimi insan işidir; agent #514'ü kapatamaz.
 
-ÖNERİLEN (yine de ölç): TS-08.c3 + TL-02.c2 + TL-13.c3
-
-REUSE (yeniden yazma)
-  · test_external_object_run_provenance.py::_attach_trade_log / ::_completed_run
-  · test_backtest_manifest_pinning.py::_attach_trading_signal
-  · test_backtest_persistence.py::_ready_composition / ::_e2e_bars / ::_count
-
-SINIF DİSİPLİNİ
-  · YALNIZ sınıf B. D'ye test YAZMA. C gerekçelidir.
-  · B'den C/D'ye taşımak o TAVANI YÜKSELTİR → adjudication, PO işi.
-  · RATCHET yalnız AŞAĞI iner. total_criteria bir TABANDIR — kriter SİLME.
-  · Ürün kodu DEĞİŞMEZ.
-
-DEVRALINAN ÜÇ AÇIK BULGU (kapatma, insan kararı)
-  · TL-11.c3 kapatılamaz — sınıfı C görünüyor (allocation admission'da fail-closed).
-  · TL-16 — c4'ün istediği 409 alanı yok → D görünüyor.
-  · TL-01.c4 — yol sapması (GET /packages ↔ GET /library).
-
-RİTÜEL BORCU — İLK İŞ
-  Memory checkpoint ÜÇ slice'tır yazılamadı (ADIM 47, ADIM 48 ×2, ADIM 49).
-  ecc + claude-mem BAĞLI MI diye ÖLÇ; bağlıysa önce o borcu kapat.
-
-ÖLÇÜM TUZAKLARI (bu repoda gerçekten yaşandı)
-  · pytest'i | tail'e BORULAMA — exit code tail'in olur.
-  · Alt küme koşarken --no-cov EKLE; tam suite TEK çağrıda, ortada öldürme.
-  · vitest: --no-file-parallelism ZORUNLU.
-  · TEST_DATABASE_URL ile izole DB; sürücü postgresql+asyncpg://
-  · Postgres yoksa DB testleri SESSİZCE SKIP olur. Remote container'da:
-    `service postgresql start` + entropia rolü + `alembic upgrade head`
-    (PYTHONIOENCODING=utf-8 LC_ALL=C.UTF-8, yoksa UnicodeDecodeError).
-  · "Değişmedi" assert etmeden önce session.expire_all().
-  · İKİ SLICE AYNI NUMARAYI ALABİLİR: kickoff dosyana yazmadan önce
-    `grep -n '^# ADIM' docs/ADIM<n>_LANDED_KICKOFF.md` ile çakışma var mı bak.
-    repository_facts --check bunu YAKALAMAZ (kuralı dosya başına bakar).
-
-KAPANIŞ
-  · Defteri (--write-ledger) ve baseline.json'u BU KOŞUNUN ölçümüyle tazele.
-  · Kalan borcu SINIF BAZINDA raporla.
-  · Blocker sayısı DEĞİŞMEZ (1: A-08). Verdict BLOCKED.
-  · CLAUDE.md §Session CLOSING ritüelinin 6 maddesi +
-    cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check
+Kod yazmadan önce: dokunacağın alanın docs/CODEMAPS/ haritasını oku, sonra
+codebase-memory-mcp ile sembolleri bul. Kapanışta ritüelin ALTI maddesini de yap.
 ```

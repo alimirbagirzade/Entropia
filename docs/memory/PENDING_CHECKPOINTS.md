@@ -1,7 +1,7 @@
 <!-- doc-status: current -->
-# YAZILMAMIŞ MEMORY CHECKPOINT'LERİ — ADIM 47 + ADIM 48
+# YAZILMAMIŞ MEMORY CHECKPOINT'LERİ — ADIM 47 + ADIM 48 + ADIM 49
 
-> **Bu belge kendini tüketir.** İçindeki iki checkpoint `ecc` ve `claude-mem`'e
+> **Bu belge kendini tüketir.** İçindeki üç checkpoint `ecc` ve `claude-mem`'e
 > yazıldığında **bu dosya SİLİNİR**. Silinmemişse borç hâlâ duruyor demektir.
 
 ## Neden var — ve neden "bir dahaki sefere" demek yetmedi
@@ -25,6 +25,12 @@ oturumda yazılmalı"* dedi; ikincisi geldiğinde koşul değişmemişti, çünk
 Sonuç: **bu borç remote oturumdan kapatılamaz.** Bu sunucuların yapılandırıldığı bir
 **yerel** oturum ister. Aynı ortamda açılan ADIM 49 da aynı şekilde başarısız olur —
 o yüzden aşağıdaki içerik **hazır** bırakıldı: yeniden türetmek değil, yapıştırmak yeterli.
+
+> **TAHMİN DOĞRULANDI (2026-08-12, ADIM 49).** Bu belge yazıldıktan sonra açılan ADIM 49
+> kapanışı **aynı ortamda** koştu ve `ecc`/`claude-mem` yine bulunamadı. Borç **ikiden üçe**
+> çıktı ve üçüncüsü (Entity C + üçüncü observation) aşağıya eklendi. Bu, maddenin
+> "unutulduğu" değil **ortamın yapısal olduğu** iddiasının üçüncü kanıtıdır — kalıcı
+> çözüm (§Yazdıktan sonra, madde 4) hâlâ insan kararı bekliyor.
 
 ---
 
@@ -109,13 +115,81 @@ o yüzden aşağıdaki içerik **hazır** bırakıldı: yeniden türetmek değil
   - Dürüst sınır: `npm run visual` / `npm run a11y` **yerelde koşturulamadı** — ortamın ağ
     politikası `production.cloudfront.docker.com`'a CONNECT'i 403 reddediyor,
     `registry-1.docker.io` 429 veriyor; docker daemon açıldı ama imaj çekilemedi.
-- **relations:** `unblocks` → `Entropia Stage ADIM 49` (henüz adlandırılmadı)
+- **relations:** `unblocks` → `Entropia Stage ADIM 49 — P11-1 required status checks`
+
+### Entity C
+
+- **name:** `Entropia Stage ADIM 49 — P11-1 required status checks`
+- **entityType:** `slice`
+- **observations:**
+  - PR #683, `main` üzerinde `74bbd70` olarak **squash** merge edildi (2026-08-12).
+    Kapanış belgeleri ayrı PR (#691).
+  - **Ürün kodu değişmedi:** `backend/src`, `alembic`, `frontend/src` ağaçlarına hiç
+    dokunulmadı. Migration yok, `ENGINE_VERSION` değişmedi, OpenAPI değişmedi.
+  - **Asıl teslimat repoda DEĞİL:** GitHub ruleset `20765617`, `enforcement: active`,
+    2026-08-12T23:14:40+03:00, **insan tarafından uygulandı**. Repodaki dosyalar
+    istek gövdesi ve kayıttır.
+  - Öncesi ölçüldü: `GET /rulesets` → `[]`, `GET /rules/branches/main` → `[]`,
+    `branches/main` → `enforcement_level: "off"`. `branches/main/protection` **403**
+    (token admin değil) — beklenen 404 alınamadı, ama `branches/main` gövdesi aynı
+    gerçeği doğrudan söyledi.
+  - **Token körlüğü çürütüldü:** probe ruleset'i canlıyken aynı salt-okuma token'ı onu
+    `count: 1` gördü → önceki `[]` **gerçek yokluktu**. Doğrulama yöntemi bu deneyle
+    kalibre edildi; probe (`20765470`) sonra silindi.
+  - **16 required check.** Kapıların çoğu ayrı check değil bir job'ın **adımı**:
+    23-rota görsel regresyon `npm run visual` olarak `E2E …(F-23)` **içinde**;
+    coverage/docs-truth/şema paritesi/OpenAPI drift/acceptance ratchet/pip-audit
+    `Backend — lint, type, test` adımları; frontend coverage + visual baseline platform
+    gate + npm-audit-gate `Frontend …` adımları.
+  - **Ayrılan (1):** çıplak `CodeQL` — farklı app (`github-advanced-security` / `57789`,
+    diğerleri `github-actions` / `15368`), **yalnız PR'da** var, semantiği alert triage.
+  - **Gürültü (5):** nightly/manual job'lar. `Nightly failure notice` **iki workflow'dan
+    aynı adla** gelir → tek-anlamlı required yapılamaz. **Dependabot gürültüsü YOK** —
+    Dependabot PR'ları aynı 22 check'i koşar, kendi job'ını üretmez.
+  - **Lighthouse insan kararıyla zorunlu** (ilk taslak ölçülmüş 98–100 varyansı
+    gerekçesiyle ayırmıştı). Çırpınırsa **taban indirilmez**: skor `LH_REPEATS`
+    geçişin **medyanı** (varsayılan 3). **`armed: false` + boş `floors` spec'i GEÇİRİR**
+    → required olduktan sonra bu bayrak kapının **sessiz kapatma düğmesidir**.
+  - Düzeltilen hata: ilk taslak Lighthouse tabanını "üç yerde pinli" sanmıştı; o
+    **loadgen gecikme bandı** (P10-7). Lighthouse tabanı tek dosyada:
+    `frontend/e2e/lighthouse-baseline.json`, rota+kategori bazında.
+  - Kurallar: `deletion` · `non_fast_forward` · `pull_request`
+    (`required_approving_review_count: 0` — tek kişilik repoda `1` kalıcı kilit) ·
+    `required_status_checks` (`strict: true`, 16 context, hepsi `integration_id: 15368`).
+    **`pull_request` taşıyıcıdır:** required check'ler yalnız PR merge'ini kapsar,
+    o kural olmasa `git push origin main` on altısını da atlardı.
+  - Reuse anchor'ları: `.github/rulesets/main-required-status-checks.json` (payload
+    **ölçümden üretildi, elle yazılmadı**; GitHub bu yolu otomatik OKUMAZ),
+    `scripts/required-checks-preflight.sh` (POST öncesi zorunlu; negatifi kanıtlı —
+    em dash yerine tire → `FATAL`, çift üretilen ad → `FATAL`),
+    `docs/implementation/required_status_checks_setup.md`.
+  - **Bakım sırası bağlayıcıdır:** yeni CI job'ı ya da `name:` değişiminde önce merge →
+    adın gerçekten üretildiğini gör → preflight → `PUT …/rulesets/20765617`.
+    **Ters sıra tüm merge'leri kilitler** (üretilmeyen required ad hiç çözülmez).
+    `paths:` filtreli bir workflow required listesine **girmemeli**.
+  - Doğrulama (canlı ↔ main'deki payload, programatik): 16 ad + `integration_id`
+    **sıra dâhil birebir**, `/rules/branches/main` 4 kuralı da etkin, `strict: true`,
+    `current_user_can_bypass: "never"`, **üretilmemiş ad YOK**. GitHub iki varsayılan
+    ekledi (`required_reviewers: []`, `allowed_merge_methods`) — sapma değil.
+  - **Sahte 422:** "422 alıyorum" teşhisi yanlıştı — `cd` belgedeki **yer tutucu** yola
+    yapılmış, komut ev dizininde koşup dosyayı bulamamış, **`exit=1`** vermişti. Gerçek
+    payload ilk denemede **201**. Ders: exit code ile gövdeyi ayrı oku.
+  - **Açık iş:** ruleset **repoda değil** — silinirse/`Disabled` yapılırsa hiçbir CI
+    kapısı fark etmez. Canlıyı `.github/rulesets/*.json` ile karşılaştıran drift kapısı
+    **yazılmadı** (admin token ister, ayrı karar).
+  - Dürüst sınır: `bypass_actors` salt-okuma token'ına **görünmüyor**; kanıt POST
+    yanıtındaki `[]` + `current_user_can_bypass: "never"`.
+  - **A-08 DEĞİŞMEDİ** — defter boş (0/4), #514 kapalı. Blocker **1**, verdict **BLOCKED**.
+    Bu ruleset'teki hiçbir check A-08 kanıtı değildir.
+  - `ADIM 48` numarası **iki slice** tarafından kullanılmıştı; bu slice **49** alarak
+    çakışmayı büyütmedi. 48'in ayrıştırılması **insan kararı**.
+- **relations:** `unblocks` → `Entropia Stage ADIM 50` (henüz adlandırılmadı)
 
 ---
 
 ## 2. claude-mem
 
-İki checkpoint observation (`mem-search` ile aranabilir olmalı):
+Üç checkpoint observation (`mem-search` ile aranabilir olmalı):
 
 > **ADIM 47 (PR #682, `7dd1dfe`)** — RC §6.7'nin iki PO kararı uygulandı.
 > `../validate` + `../baseline-parse` 200 → 202 (otorite PO kararı, kanonik sessiz;
@@ -132,15 +206,27 @@ o yüzden aşağıdaki içerik **hazır** bırakıldı: yeniden türetmek değil
 > K-6b kapandı, **K-6a açık (yalnız A-08)**. Görsel kapı iki tabanda 23/23, 0 diff.
 > Blocker 1 (A-08), BLOCKED.
 
+> **ADIM 49 (PR #683, `74bbd70`; kapanış #691)** — P11-1 kapandı: main'de ruleset
+> `20765617` aktif, **16 required check**, hepsi `integration_id: 15368`.
+> Öncesi ölçülmüştü: `/rulesets` `[]`, `/rules/branches/main` `[]`, `enforcement_level
+> "off"` — yani ADIM 45'in `flows` kapısı dâhil on altı kapı merge'i durdurmuyordu.
+> Payload **ölçümden üretildi**; `scripts/required-checks-preflight.sh` POST öncesi
+> zorunlu (üretilmeyen ad → sonsuz `Expected — Waiting for status`). Görsel regresyon
+> ayrı check değil, `E2E …(F-23)` **içinde**. Lighthouse **insan kararıyla** zorunlu —
+> çırpınırsa taban indirilmez (`LH_REPEATS` medyanı), **`armed: false` sessiz kapatma
+> düğmesidir**. `pull_request` kuralı taşıyıcı: onsuz doğrudan push on altısını atlar.
+> **Ruleset repoda değil → drift kapısı yok (açık iş).** Blocker 1 (A-08), BLOCKED.
+
 ---
 
 ## Yazdıktan sonra
 
-1. İki entity + iki claude-mem observation'ı yaz.
+1. Üç entity + üç claude-mem observation'ı yaz.
 2. **Bu dosyayı sil** (`git rm docs/memory/PENDING_CHECKPOINTS.md`).
-3. `docs/ADIM48_LANDED_KICKOFF.md`'deki *"memory checkpoint borcu"* maddesini ve
-   `CLAUDE.md` §Current position'daki *"Memory checkpoint yine YAZILAMADI"* cümlesini
-   kaldır.
+3. `docs/ADIM48_LANDED_KICKOFF.md` **ve** `docs/ADIM49_LANDED_KICKOFF.md`'deki
+   *"memory checkpoint borcu"* maddelerini, `docs/STAGE2_HANDOFF.md` §ADIM 49'daki
+   ilgili cümleyi ve `CLAUDE.md` §Current position'daki *"Memory checkpoint yine
+   YAZILAMADI"* cümlesini kaldır.
 4. **Kalıcı çözüm — insan kararı:** bu borcun tekrar birikmemesi için ya `ecc` /
    `claude-mem` remote ortama kaydedilmeli (repoda `.mcp.json`), ya da ritüelin 4. maddesi
    remote oturumlar için resmen muaf sayılmalı. **İkisi de agent işi değildir.**

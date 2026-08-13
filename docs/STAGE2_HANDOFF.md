@@ -5035,6 +5035,13 @@ başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi*
 **RC verdict'i BLOCKED kalır, blocker sayısı DEĞİŞMEDİ (üç).** Tam kayıt:
 `docs/PROJECT_HISTORY.md` §ADIM 34.
 
+> **Sonradan düzeltildi (PR #702, 2026-08-13).** Yukarıdaki *"başlık bu iki belgede hâlâ
+> `(PR pending)` diyor"* tespiti **artık geçerli değildir**: 22 başlık son eki gerçek PR
+> numarasını taşıyor (ADIM 32 → **#655**) ve repoda `(PR pending)` biçiminde **hiçbir `## `
+> başlığı kalmadı**. Guard'ın rename'i delete'ten ayıramadığı tespiti **hâlâ doğrudur** —
+> kapı `ENTROPIA_DOCS_GUARD=off` ile bilinçli aşıldı, aşmadan önce `## ` sayılarının
+> `origin/main` ile birebir aynı kaldığı kanıtlandı. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 33.
+
 ---
 
 ## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu landed (PR #659)

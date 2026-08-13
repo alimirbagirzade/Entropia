@@ -20,7 +20,7 @@ with a **paste-ready resume prompt** at the bottom.
    the spec FULLY), (5) önceki slice'ların hafıza indeksi — `agentmemory` MCP'si
    (`memory_recall` / `memory_smart_search`). **Taze bir container'da store BOŞTUR**;
    `node scripts/memory_index.mjs --write` (~6 sn, her `## ` bölümü için bir kayıt —
-   ADIM 52'de 67) `docs/PROJECT_HISTORY.md`'den
+   ADIM 53'te 68) `docs/PROJECT_HISTORY.md`'den
    yeniden üretir. **Sunucusuz kip harfi harfine eşleşir** — Türkçe yazımı birebir yaz,
    İngilizce parafraz **hiçbir şey bulmaz**; semantik geri çağırma kalıcı sunucu ister
    (§Hafıza). İndeks kaydı **otorite DEĞİLDİR**, işaret ettiği `PROJECT_HISTORY.md`
@@ -50,7 +50,7 @@ Before stopping a working session, produce **ALL** of the following:
    - **`CLAUDE.md` §Current position** → SADECE 5–6 satırlık özet güncellenir (HEAD sha,
      alembic head, test sayıları, son dalga, Next). **Buraya slice anlatısı YAZMA** —
      CLAUDE.md her oturumda tamamı context'e yüklenir, ince kalmak zorunda.
-4. **Memory checkpoint — TÜRETİLİR, elle yazılmaz (ADIM 52'de değişti).** Slice kaydını
+4. **Memory checkpoint — TÜRETİLİR, elle yazılmaz (ADIM 53'te değişti).** Slice kaydını
    md. 3'te `docs/PROJECT_HISTORY.md`'ye yazdıktan **sonra** tek komut:
    `node scripts/memory_index.mjs --write --only <slice-slug>`. Tek doğruluk kaynağı
    **git'teki belge**; agentmemory onun **aranabilir indeksidir**, rakibi değil — bu yüzden
@@ -207,9 +207,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `8fa0767`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `e2fa521`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 52 (hafıza türetilir oldu + iki sessiz ajan kapısı, 2026-08-13):
+> **Son dalga — ADIM 53 (hafıza türetilir oldu + iki sessiz ajan kapısı, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > Kapanış ritüeli **md. 4 yeniden yazıldı (insan kararı)**: memory checkpoint elle yazılmaz,
 > `docs/PROJECT_HISTORY.md`'den **türetilir** (`scripts/memory_index.mjs --write --only <slug>`)
@@ -223,7 +223,25 @@ Before stopping a working session, produce **ALL** of the following:
 > `20765617`). **Doğrulanmadı:** plugin'in yüklendiği (oturum başında yüklenir) · semantik
 > geri çağırma yok (sunucusuz kip **harf eşleşmesi**; kalıcı sunucu **insan kararı**) ·
 > suite'ler koşmadı (Postgres/`node_modules` yok) → **otorite CI**.
-> `PROJECT_HISTORY.md` §ADIM 52 · `docs/ADIM52_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
+> `PROJECT_HISTORY.md` §ADIM 53 · `docs/ADIM53_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
+>
+> **Öncesinde ADIM 52 (kabul borcu sınıf B, parti 02 — dış work object run
+> provenance'ı, docs 03/04/05): 5 kriter KAPANDI, `partial` 118 → 113,
+> `debt_class.B` 87 → 82. BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict
+> BLOCKED.** Kapananlar: `TL-12` `TL-20` `TS-11` `TS-21` `AOS-21`. **Ürün kodu
+> DEĞİŞMEDİ.** Eksik olan tek şey bir harness'tı — *dış work object içeren
+> kompozisyonda TAMAMLANMIŞ Backtest Run*; yeni
+> `tests/integration/test_external_object_run_provenance.py::_attach_trade_log` +
+> `::_completed_run`, diğer builder'lar **aynen** yeniden kullanıldı.
+> **ÜÇ AÇIK BULGU (insan/PO):** `TL-11.c3` **KAPATILAMAZ** — allocation-enabled run
+> bu build'de **admission'da fail-closed** (`SHARED_ALLOCATION_STATUS=future_dev`),
+> sınıfı **C** görünüyor ve **ADIM 48 (B-01)'in "kapatılabilir" önerisi YANLIŞTI**;
+> `TL-16` D görünüyor; `TL-01.c4` yol sapması. **Hiçbiri yeniden sınıflandırılmadı —
+> o tavanı YÜKSELTİRDİ.** **Parti seçmeden ÖNCE ÖLÇ:** kriterin adlandırdığı davranış
+> `backend/src`'te sevk edilmemişse sınıfı yanlıştır. **NUMARA: bu slice DÖRT KEZ
+> taşındı** (49→#691, 50→#685, 51→#687 merge edilmiş adlarla aldı) → **ADIM 52**;
+> branch/commit `stage-49` yazar. **P1-Gate3 KAPANMADI** (A=1 · B=82 · C=6 · D=32,
+> açık **121**). `PROJECT_HISTORY.md` §ADIM 52 · `docs/ADIM52_LANDED_KICKOFF.md`.
 >
 > Öncesinde **ADIM 51 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
 > KOD DEĞİŞMEDİ.**
@@ -568,7 +586,7 @@ Codemap'ler türetilmiş dosyadır: mimari değişince `ecc:update-codemaps` ile
 
 ---
 
-## Hafıza — `agentmemory` (ADIM 52)
+## Hafıza — `agentmemory` (ADIM 53)
 
 Slice hafızası `.mcp.json`'daki **`agentmemory`** sunucusunda yaşar (`@agentmemory/mcp@0.9.28`,
 pinli). İçeriği **türetilmiştir**: `docs/PROJECT_HISTORY.md`'nin her `## ` kaydı bir memory
@@ -576,7 +594,7 @@ kaydına karşılık gelir.
 
 | Komut | Ne yapar |
 |---|---|
-| `node scripts/memory_index.mjs --write` | store'u sıfırdan doldurur (~6 sn, ADIM 52'de 67 kayıt) |
+| `node scripts/memory_index.mjs --write` | store'u sıfırdan doldurur (~6 sn, ADIM 53'te 68 kayıt) |
 | `… --write --only <slug>` | tek slice yazar (kapanış ritüeli md. 4) |
 | `… --emit` | kayıtları JSON basar (ağ yok) |
 | `… --check` | CI kapısı: her kayıt indekslenir, id'ler tekil (ağ yok) |
@@ -584,7 +602,7 @@ kaydına karşılık gelir.
 **Pazarlıksız sınırlar:**
 - **Kayıt otorite değildir.** Her kayıt `§<başlık> (satır n)` işaretini taşır; karar
   vermeden önce `PROJECT_HISTORY.md`'nin o bölümünü **oku**. Kayıtların üçte ikisi char
-  bütçesinde kesilmiştir (ADIM 52'de 46/67).
+  bütçesinde kesilmiştir (ADIM 53'te 47/68).
 - **Sunucusuz kip = harfi harfine arama.** Ölçüldü: `odak halkası kontrast` bulur,
   `focus ring contrast` **bulmaz**. Hibrit/semantik geri çağırma tam sunucu ister
   (`npx @agentmemory/agentmemory` + `AGENTMEMORY_URL`) — barındırma **insan kararı**.

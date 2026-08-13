@@ -4354,7 +4354,9 @@ criteria:
   clauses:
   - id: AOS-21.c1
     text: Add Outsource Signal selection or save creates no Backtest Result row.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_external_object_run_provenance.py::test_saving_an_external_object_creates_no_backtest_result
   - id: AOS-21.c2
     text: A run may only be admitted against a fresh Ready Check — a stale composition is refused.
     status: covered
@@ -4377,15 +4379,18 @@ criteria:
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelling_a_queued_run_is_terminal_and_produces_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_worker_honors_the_request_at_a_stage_boundary_and_writes_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelled_run_never_reaches_results_history
+  - backend/tests/integration/test_external_object_run_provenance.py::test_saving_an_external_object_creates_no_backtest_result
   evidence_type:
   - backend_integration
-  positive: []
+  positive:
+  - backend/tests/integration/test_external_object_run_provenance.py::test_saving_an_external_object_creates_no_backtest_result
   negative:
   - backend/tests/integration/test_backtest_persistence.py::test_run_rejected_when_composition_stale
   - backend/tests/integration/test_e2e_pipeline.py::test_failed_run_yields_no_result_and_no_history
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelling_a_queued_run_is_terminal_and_produces_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_worker_honors_the_request_at_a_stage_boundary_and_writes_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelled_run_never_reaches_results_history
+  - backend/tests/integration/test_external_object_run_provenance.py::test_saving_an_external_object_creates_no_backtest_result
   auth: []
   occ: []
   idempotency: []
@@ -4394,14 +4399,11 @@ criteria:
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelling_a_queued_run_is_terminal_and_produces_no_result
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The Run side of the boundary is well asserted from both ends — a stale composition cannot
-    admit a run, and failed/cancelled runs write no Result and never surface in history. The literal
-    clause the row leads with, "Add Outsource Signal selection or save never creates Backtest Result",
-    has no asserting test: no test saves or attaches an external object and then asserts that the
-    backtest_result table is still empty. It is true by construction (only the worker calls create_result)
-    but that is an argument, not an assertion.'
+  status: covered
+  notes: ADIM 49 closed c1. Doc 03's row is about the Add Outsource Signal PAGE, not one kind, so
+    both children of the chooser are exercised — a Trading Signal and a Trade Log are each saved and
+    attached and BacktestResult is counted after each — and only after a run is driven does the counter
+    reach one. The Run half of the boundary (c2, c3) was already asserted.
 - id: TS-01
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -4968,7 +4970,9 @@ criteria:
     - backend/tests/unit/test_trading_signal_events.py::test_event_id_and_content_hash_are_deterministic
   - id: TS-11.c3
     text: A completed run manifest is unchanged by the new revision.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_is_unchanged_by_a_new_signal_revision
   production_paths:
   - backend/src/entropia/application/commands/trading_signal.py
   - backend/src/entropia/domain/trading_signal/config.py
@@ -4978,6 +4982,7 @@ criteria:
   - backend/tests/integration/test_gateway_parity_trading_signal.py::test_a_new_revision_is_immutable_and_never_auto_repins_the_item
   - backend/tests/unit/test_trading_signal_config.py::test_config_hash_is_deterministic_and_content_sensitive
   - backend/tests/unit/test_trading_signal_events.py::test_event_id_and_content_hash_are_deterministic
+  - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_is_unchanged_by_a_new_signal_revision
   evidence_type:
   - backend_integration
   - backend_unit
@@ -4986,6 +4991,7 @@ criteria:
   - backend/tests/integration/test_gateway_parity_trading_signal.py::test_a_new_revision_is_immutable_and_never_auto_repins_the_item
   - backend/tests/unit/test_trading_signal_config.py::test_config_hash_is_deterministic_and_content_sensitive
   - backend/tests/unit/test_trading_signal_events.py::test_event_id_and_content_hash_are_deterministic
+  - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_is_unchanged_by_a_new_signal_revision
   negative: []
   auth: []
   occ: []
@@ -4995,15 +5001,15 @@ criteria:
   - backend/tests/integration/test_gateway_parity_trading_signal.py::test_a_new_revision_is_immutable_and_never_auto_repins_the_item
   - backend/tests/unit/test_trading_signal_config.py::test_config_hash_is_deterministic_and_content_sensitive
   - backend/tests/unit/test_trading_signal_events.py::test_event_id_and_content_hash_are_deterministic
+  - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_is_unchanged_by_a_new_signal_revision
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The append-not-mutate half and the hash determinism half are both asserted. The clause the
-    spec words most strongly — "completed run manifest are unchanged" — is not: no test completes
-    a Backtest Run against revision N, then saves revision N+1, then re-reads the finished run manifest
-    and asserts it still names revision N with the same hash. The manifest pinning suite proves manifests
-    pin what they pinned (test_backtest_manifest_pinning.py) but never against a subsequent signal
-    revision, so it is not cited as proof of this row.'
+  status: covered
+  notes: 'ADIM 49 closed c3 with the Trading Signal twin of TL-12.c3, sharing one harness. A run is
+    driven to SUCCEEDED over a composition carrying the Signal, a SECOND Signal revision is then attached,
+    and the finished manifest entry is compared WHOLE against its pre-change value with the manifest_hash
+    re-checked. What the clause guards is the finished manifest rather than the edit path, so a second
+    attached revision is the honest stand-in for a provider/mapping change. Verified to bite: asserting
+    the manifest followed the newer revision fails.'
 - id: TS-12
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -5580,7 +5586,9 @@ criteria:
   clauses:
   - id: TS-21.c1
     text: Save, import and export of a Signal create no Backtest Result row.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_external_object_run_provenance.py::test_signal_import_save_and_export_create_no_backtest_result
   - id: TS-21.c2
     text: A succeeded Run produces exactly one immutable Result, and a redelivered message does not
       mint a second.
@@ -5604,15 +5612,18 @@ criteria:
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelling_a_queued_run_is_terminal_and_produces_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_worker_honors_the_request_at_a_stage_boundary_and_writes_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelled_run_never_reaches_results_history
+  - backend/tests/integration/test_external_object_run_provenance.py::test_signal_import_save_and_export_create_no_backtest_result
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_backtest_persistence.py::test_worker_is_redelivery_idempotent
+  - backend/tests/integration/test_external_object_run_provenance.py::test_signal_import_save_and_export_create_no_backtest_result
   negative:
   - backend/tests/integration/test_e2e_pipeline.py::test_failed_run_yields_no_result_and_no_history
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelling_a_queued_run_is_terminal_and_produces_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_worker_honors_the_request_at_a_stage_boundary_and_writes_no_result
   - backend/tests/integration/test_backtest_run_cancellation.py::test_cancelled_run_never_reaches_results_history
+  - backend/tests/integration/test_external_object_run_provenance.py::test_signal_import_save_and_export_create_no_backtest_result
   auth: []
   occ: []
   idempotency: []
@@ -5622,13 +5633,12 @@ criteria:
   - backend/tests/integration/test_backtest_run_cancellation.py::test_worker_honors_the_request_at_a_stage_boundary_and_writes_no_result
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The Run half is asserted from both directions — only the worker mints a Result and a redelivery
-    returns the same result_id rather than a second row, while failed and cancelled runs write none
-    and stay out of history. The clause the row opens with, "Save/import/export does not create Backtest
-    Result", is not asserted anywhere: no test exports or saves a Signal and then asserts the backtest_result
-    table is unchanged.'
+  status: covered
+  notes: ADIM 49 closed c1, the twin of the TL-23.c3 clause ADIM 48 closed. All THREE operations the
+    criterion names by word are driven — import through the real durable worker (not a seeded row),
+    save, and export — and BacktestResult is counted after each. The test then drives a real run and
+    asserts the same counter reaches one, so the three zeros cannot be a broken query describing an
+    empty database.
 - id: TL-01
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6168,7 +6178,15 @@ criteria:
   notes: 'The readiness conditionality is proven in both directions. The run-time half is not: the
     capital-source assertions in test_backtest_persistence.py (test_worker_independent_run_uses_the_strategy_own_capital)
     run over a STRATEGY item, and no test drives an allocation-enabled run whose capitalised item
-    is a Trade Log.'
+    is a Trade Log. ADIM 49 FINDING — this row is very likely MISCLASSIFIED. c3 names a run over an
+    ALLOCATION-ENABLED composition, but shared capital allocation is fail-closed at ADMISSION in this
+    build: domain/allocation/capability.py sets SHARED_ALLOCATION_STATUS = ''future_dev'' and commands/backtest_run.py
+    raises ALLOCATION_SHARED_MODE_NOT_IN_BUILD before any run, manifest or job is created (test_shared_allocation_run_is_refused_and_leaves_nothing_behind
+    pins exactly that). So the run this clause describes CANNOT BE ADMITTED and no test can construct
+    it — that is the class C definition (''a V1 feature deliberately left closed''), not class B.
+    It was left at B deliberately: moving it would RAISE the C ceiling, which is an adjudication and
+    not a test slice''s call. ADIM 48''s kickoff recommended this row as closable; that recommendation
+    was WRONG and is corrected here.'
 - id: TL-12
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6182,35 +6200,45 @@ criteria:
     - backend/tests/integration/test_trade_log_persistence.py::test_new_revision_does_not_auto_repin
   - id: TL-12.c2
     text: Revision N's content hash and source asset ref are unchanged after N+1 is written.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_external_object_run_provenance.py::test_trade_log_revision_n_survives_n_plus_one_byte_for_byte
   - id: TL-12.c3
     text: A completed run's manifest still resolves the revision it pinned, not the new head.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_keeps_the_trade_log_revision_it_pinned
   production_paths:
   - backend/src/entropia/application/commands/trade_log.py
   - backend/src/entropia/domain/trade_log/compiler.py
   test_evidence:
   - backend/tests/integration/test_trade_log_persistence.py::test_new_revision_does_not_auto_repin
+  - backend/tests/integration/test_external_object_run_provenance.py::test_trade_log_revision_n_survives_n_plus_one_byte_for_byte
+  - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_keeps_the_trade_log_revision_it_pinned
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_trade_log_persistence.py::test_new_revision_does_not_auto_repin
+  - backend/tests/integration/test_external_object_run_provenance.py::test_trade_log_revision_n_survives_n_plus_one_byte_for_byte
+  - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_keeps_the_trade_log_revision_it_pinned
   negative: []
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_external_object_run_provenance.py::test_trade_log_revision_n_survives_n_plus_one_byte_for_byte
+  - backend/tests/integration/test_external_object_run_provenance.py::test_completed_run_manifest_keeps_the_trade_log_revision_it_pinned
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The module docstring of test_trade_log_persistence.py claims this row is satisfied ("TL-12
-    revision immutability -> revision N+1 appends; N's content hash + source asset ref are unchanged"),
-    but the test body only asserts rev2["revision_id"] != first, that auto_repinned is False, and
-    that the board pin still points at revision 1. It never reads revision N's content hash or source_asset_id
-    before and after. The run-manifest clause has no Trade Log test at all — the analogous fail-closed
-    manifest proofs in test_backtest_manifest_pinning.py cover market datasets and packages. historical_integrity
-    is left empty because the two clauses that would justify it are the unproven ones.
+  status: covered
+  notes: 'ADIM 49 closed both clauses and removed the docstring''s unearned claim. c2 re-READS revision
+    N''s own columns after N+1 is written (session.expire_all() first, so the identity map cannot
+    answer for the database) and compares content_hash, source_provenance, payload and the import_binding.source_asset_id
+    by name — the previous test would not have noticed N being rewritten underneath. c3 needed machinery
+    that did not exist: a COMPLETED run over a composition containing a Trade Log. It exists now (_attach_trade_log
+    + _completed_run) and the manifest entry is compared WHOLE, not just its id, with the run''s manifest_hash
+    re-checked so a rewritten manifest could not pass. Verified to bite: pointing c2 at the new revision
+    and expecting c3''s manifest to follow the head both fail.'
 - id: TL-13
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6603,33 +6631,37 @@ criteria:
   - id: TL-20.c3
     text: A completed historical Result still resolves the original Trade Log revision and provenance
       from its manifest.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_external_object_run_provenance.py::test_soft_deleted_trade_log_still_resolves_from_the_historical_manifest
   production_paths:
   - backend/src/entropia/application/commands/mainboard.py
   - backend/src/entropia/application/commands/deletion.py
   - backend/src/entropia/domain/trash/page.py
   test_evidence:
   - backend/tests/integration/test_trade_log_persistence.py::test_soft_delete_removes_item_from_projection
+  - backend/tests/integration/test_external_object_run_provenance.py::test_soft_deleted_trade_log_still_resolves_from_the_historical_manifest
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_trade_log_persistence.py::test_soft_delete_removes_item_from_projection
+  - backend/tests/integration/test_external_object_run_provenance.py::test_soft_deleted_trade_log_still_resolves_from_the_historical_manifest
   negative: []
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_external_object_run_provenance.py::test_soft_deleted_trade_log_still_resolves_from_the_historical_manifest
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: c2 CLOSED by ADIM 42 — the K-06 invariant ("the soft-delete path MUST write
-    trash_repo.add_trash_entry") is now asserted on mb_cmd.soft_delete_work_object itself
-    (TrashEntry SOFT_DELETED with entity_type "work_object", one entity.soft_deleted AuditEvent,
-    one entity.soft_deleted OutboxEvent), where before no test on that path queried any of the
-    three. It HELD on first run, so this is a pin over real behaviour, not a defect fix. STILL
-    PARTIAL on c3 (class B, one integration test) — nothing creates a Result over a Trade Log,
-    deletes the Trade Log and re-reads the Result's manifest, so historical_integrity stays empty.
+  status: covered
+  notes: 'c2 was closed by ADIM 42 (the K-06 trash-entry invariant on mb_cmd.soft_delete_work_object).
+    ADIM 49 closes c3, which is the half that actually distinguishes a durable Result from a live
+    join: the Trade Log root is SOFT-DELETED after a succeeded run, the active projection is asserted
+    to have dropped it, and the finished run''s manifest is then re-read and still names the original
+    work_object_revision_id, the source asset, the record batch id and that batch''s own content hash
+    and accepted_count. A Result whose provenance were resolved from the live composition would go
+    blank here. Verified to bite: substituting a wrong source_asset_id fails the test.'
 - id: TL-21
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'

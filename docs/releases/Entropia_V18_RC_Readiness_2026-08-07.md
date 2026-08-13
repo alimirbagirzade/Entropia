@@ -1980,6 +1980,35 @@ yükseltirdi** ve tavan yalnız aşağı iner. (2) `TL-01.c4` bir **yol sapması
 **126** kalem açık (A=1 · B=87 · C=6 · D=32), bu parti borcun **%6'sını** kapattı.
 **Blocker sayısı DEĞİŞMEDİ (bir — yalnız A-08). §8 verdict BLOCKED kalır.**
 
+**GÜNCELLEME 2 — ADIM 49 (2026-08-12): ikinci parti, ve bir ÖNERİ HATASININ düzeltilmesi.**
+Sınıf-B parti 02 dış work object'in **run provenance**'ından **beş** kriter kapattı:
+`TL-12` (c2+c3) · `TL-20` (c3) · `TS-11` (c3) · `TS-21` (c1) · `AOS-21` (c1). Beşi de tek
+bir eksik makineye dayanıyordu — *dış work object içeren kompozisyon üzerinde TAMAMLANMIŞ
+bir Backtest Run* — ve o makine kuruldu. Yeni ölçüm → **`partial` 118 → 113**,
+**`debt_class.B` 87 → 82**; `uncovered` (8), **A** (1), **C** (6), **D** (32) tavanları ve
+`total_criteria` (383) **el değmedi**. **Ürün kodu değişmedi.**
+
+**Bu güncellemenin asıl içeriği bir düzeltmedir.** ADIM 48'in kickoff'u `TL-11.c3`'ü
+"kapatılabilir" diye önermişti; **bu öneri YANLIŞTI ve ölçümle çürütüldü.** Kriter
+*allocation-enabled* bir kompozisyon üzerinde aktif bir run istiyor, ama bu build'de
+paylaşımlı sermaye **admission'da fail-closed**
+(`domain/allocation/capability.py::SHARED_ALLOCATION_STATUS = "future_dev"` →
+`commands/backtest_run.py` **run, manifest ya da job yaratılmadan**
+`ALLOCATION_SHARED_MODE_NOT_IN_BUILD` fırlatır). O run **kurulamaz**, dolayısıyla
+**hiçbir test** kriteri kapatamaz — bu sınıf **C** tanımıdır, B değil. **Yeniden
+sınıflandırılmadı**, çünkü B→C **C tavanını yükseltirdi** ve tavan yalnız aşağı iner;
+bulgu deftere ve `baseline.json` §`adjudication`'a yazıldı. Böylece **üç** açık
+sınıflandırma bulgusu var: `TL-11.c3` (C görünüyor), `TL-16` (D görünüyor),
+`TL-01.c4` (yol sapması) — **üçü de insan/PO kararı.**
+
+Ders kayda geçirildi: **bir kriteri partiye almadan önce, adlandırdığı davranışın
+`backend/src`'te gerçekten sevk edildiğini ÖLÇ.** ADIM 48'in önerisi ölçülmediği için
+yanlıştı.
+
+**P1-Gate3 KAPANMADI** — **121** kriter açık (A=1 · B=82 · C=6 · D=32); iki parti
+toplamda borcun **~%10**'unu kapattı. **Blocker sayısı DEĞİŞMEDİ (bir — yalnız A-08).
+§8 verdict BLOCKED kalır.**
+
 ---
 
 #### 6.7.11 P10-7 KAPANDI — saat zaten dolmuştu (ADIM 43, 2026-08-12)

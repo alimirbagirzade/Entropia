@@ -543,3 +543,30 @@ raises `PydanticValidationError` and `_signal_price_pins` skips the item, yieldi
 misleading **0 statements**; reuse `test_readiness_signal_market_data.py::_signal_payload`.
 For the research leg build STRATEGY items whose `data.funding` is
 `{enabled: true, source_revision_id: <real rrev>}`. Measure at n=1 and n=11 in one session.
+
+---
+
+## I. Addendum — two findings were resolved on `main` after this audit's base SHA
+
+Everything above was measured at `0d8bf8f` and is left **exactly as measured**. Between that
+base and this document merging, `main` advanced to `916a49b` and two of the items above stopped
+being true. Recorded here rather than edited in place, so the measurement and its expiry stay
+separately readable.
+
+| Item | Measured at `0d8bf8f` | State on `main` (`916a49b`) |
+|---|---|---|
+| **DR-1** — three duplicated K-finding rows | open; "recorded, deliberately not repaired here" | **FIXED** by `056aafe` (**#698**, ADIM 57). That commit dropped the three older rows while adjudicating K-3; its subject line names only the K-3 decision, so the removal is otherwise unrecorded. PR **#711** adds the note that says so. |
+| **§D.3 K-3** — *"No `contentinfo` landmark, OPEN — reported, not gated"* | Open, awaiting PO | **ADJUDICATED 2026-08-13 — PO-signed decision D-11** (`../implementation/a11y_ci_ratchet_and_adjudication.md` §4b). The finding was retired on the ground that **the expectation was wrong, not the product** — no WCAG success criterion requires a `contentinfo` landmark. §D.3's K-3 row and **PO-7**'s "add a `<footer>`?" question are therefore both **closed**. |
+
+**DR-5 is NOT in this table** — it was still stale on `main` at `916a49b` and is repaired by
+PR #711.
+
+**Nothing else moved.** Re-verified against `916a49b`: `#514` still OPEN / `human-only`;
+`#550`, `#551`, `#552`, `#558`, `#559` still OPEN `reopened` with their defects live at the
+`file:line` given in §E.1; `#617` / `#618` still CLOSED `completed`; the two Ready Check legs
+in §B still carry slope 1.0 (`fix/closure-e2-ready-check-batching` is in flight and had not
+merged); the delivery proof is still not a CI gate.
+
+**The blocker count is unchanged: 1 (A-08 only), verdict BLOCKED.** K-3's adjudication closes a
+*finding*, not a criterion — A-08's four exit criteria are still `0 / 4` and the Section A count
+is still `2 / 368`.

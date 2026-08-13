@@ -5859,11 +5859,39 @@ Defterde artık **beş** açık bulgu var; **parti seçmeden ÖNCE ÖLÇ**.
 **P1-Gate3 KAPANMADI** — kalan borç A=1 · B=80 · C=6 · D=32 (açık toplam **119**).
 Tam kayıt: `PROJECT_HISTORY.md` §ADIM 54 · kickoff: `docs/ADIM54_LANDED_KICKOFF.md`.
 
-## Stage — ADIM 55: K-3 ADJUDICATED — imzalı karar D-11, KOD YOK
+## Stage — ADIM 55: agentmemory sunucusu yerele alındı, semantik geri çağırma (PR pending)
 
-> **NUMARA NOTU:** ADIM 54 olarak yazıldı; `#701` main'e ADIM 54 adıyla merge edilince
-> **merge edilmiş ad kazandı** ve bu slice **ADIM 55**'e taşındı. Branch commit mesajları
-> `adim-54` yazar. `#701`'in kaydına dokunulmadı — yalnız `doc-status` düşürüldü.
+**Ürün kodu değişmedi.** Migration yok, `ENGINE_VERSION`/OpenAPI aynı. **A-08 blocker AÇIK,
+verdict BLOCKED** (bu slice ölçmedi).
+
+* **Barındırma GEREKMEDİ.** Sunucunun kazandırdığı şey kalıcılık değil **geri çağırma
+  kalitesi**; kalıcılık ADIM 53'te indeks türetilerek çözülmüştü. `.mcp.json` artık
+  `scripts/memory_mcp.sh`'ı çağırıyor: **önce sunucuyu yerelde kaldır, sonra shim'e dön**.
+* **Ölçülen:** araç 7 → **53** · soğuk kalkış **33 sn** (npx cache sıcakken 4 sn) ·
+  **LLM anahtarı gerekmiyor** (`zero-LLM: BM25 + on-device embeddings`) · İngilizce
+  `focus ring contrast accessibility` sorgusu sunucusuz **boş**, sunucuyla Türkçe
+  **§ADIM 48** kaydını buluyor (çapraz-dilli).
+* **`memory_index.mjs --sync`** — ADIM 53'ün *"`--write` toplayıcıdır"* tuzağını kapatır:
+  REST export'tan mevcut `§başlık` işaretlerini okuyup yalnız eksikleri yazar. Sunucu
+  yoksa çoğaltmak yerine exit 1 verir.
+* **İki kusuru kendi negatif kontrolüm yakaladı:** (a) sunucu `III_REST_PORT`'a bağlanır,
+  URL'deki porta değil → port türetiliyor; **tek makinede tek örnek** koşabilir (iii
+  engine portu sabit). (b) `agent-config-gate.mjs` MCP komutu `npx` değilse pin
+  kontrolünü **atlıyordu** ve zincir takibi `"$ROOT/..."` yüzünden hiç çalışmıyordu →
+  **gate kendi negatifini geçmişti**, düzeltildi.
+* **Dürüst sınır:** soğuk container'da ilk MCP bağlantısı ~33 sn gecikir (oturumu
+  bloklamaz) · suite'ler koşmadı → **otorite CI** · otomatik yakalama hâlâ KAPALI.
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 55 · `docs/ADIM55_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
+
+
+## Stage — ADIM 56: K-3 ADJUDICATED — imzalı karar D-11, KOD YOK
+
+> **NUMARA NOTU:** ADIM 54 yazıldı, 55 denendi, **ADIM 56** oldu — merge beklerken `#701`
+> 54'ü, `#699` 55'i merge edilmiş adla aldı. Numaralar yeniden atanmaz; taşınan taraf
+> merge edilmemiş olandır. Branch commit mesajları `adim-54` yazar. İkisinin de kaydına
+> dokunulmadı — yalnız `doc-status` düşürüldü. **Sebep yapısal:** `Backend` ~50 dk +
+> ruleset `strict: true` → yoğun günde koşu bandı (bu slice dört tur döndü).
 
 **Migration:** yok. **Kod:** **tek satır bile değişmedi** — `backend/src`, `frontend/src`,
 `alembic` ağaçlarına dokunulmadı. **OpenAPI / OCC / Idempotency / route / query-key /

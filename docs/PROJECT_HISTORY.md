@@ -8365,16 +8365,99 @@ sinyal bu: ADIM 42 sınıflandırmayı her kaydın **kendi `notes` gerekçesinde
 ürün kodunu tek tek doğrulamadığını kendi raporunda **yazdı**. Ölçülen her partide en az
 bir yanlış sınıflandırma çıkıyor. **Parti seçmeden ÖNCE ÖLÇ.**
 
+## ADIM 55 — agentmemory sunucusu YERELE alındı: semantik geri çağırma, barındırma YOK
+
+**Tarih:** 2026-08-13 · **Base:** `origin/main` @ `2a90fe3` (#694, ADIM 53) ·
+**Ürün kodu DEĞİŞMEDİ** — `backend/src`, `alembic`, `frontend/src` el değmedi; migration yok,
+`ENGINE_VERSION` ve OpenAPI aynı. **A-08 blocker AÇIK, verdict BLOCKED — bu slice ölçmedi.**
+
+### 0. Soru neydi, cevap neden değişti
+
+ADIM 53 semantik geri çağırmayı *"kalıcı sunucu ister, barındırma insan kararı"* diye açık
+bırakmıştı. Kullanıcı *"kalıcı sunucuyu kuralım"* dedi. **Barındırma gerekmedi** — çünkü
+sunucunun bize kazandırdığı şey kalıcılık DEĞİL, **geri çağırma kalitesi**. Kalıcılık ADIM
+53'te zaten çözülmüştü (indeks türetilmiş). Ölçüm:
+
+| Ölçülen | Sonuç |
+|---|---|
+| tam sunucu yerelde kalkıyor mu | **evet** — `npx @agentmemory/agentmemory@0.9.28` |
+| soğuk kalkış (npm indirmesi dâhil) | **33 sn** · npx cache sıcakken **4 sn** |
+| bellek | ~135 MB RSS (+ iii engine) |
+| araç sayısı | sunucusuz **7** → sunucuyla **53** |
+| LLM anahtarı gerekiyor mu | **HAYIR** — `zero-LLM (BM25 + on-device embeddings)` |
+| `focus ring contrast accessibility` (İngilizce) | sunucusuz **BOŞ** → sunucuyla **§ADIM 48** (Türkçe kayıt) |
+| `required status checks branch protection` | **§ADIM 49** · `N+1 query performance regression` → **§ADIM 24/43** |
+| sunucu yeniden başlayınca store | **0 kayıt** — ve bu bir sorun değil, `--sync` 3 sn'de geri getiriyor |
+
+**Çapraz-dilli semantik eşleşme** bu repoda belirleyici: kayıtlar Türkçe, sorular sık sık
+İngilizce terimlerle geliyor.
+
+### 1. Ne eklendi
+
+- **`scripts/memory_server.sh`** — sunucuyu **idempotent** ayağa kaldırır. Önce `livez`
+  sorar; canlıysa hiçbir şey yapmaz. **Uzak bir `AGENTMEMORY_URL` için kendiliğinden
+  başlatmaz** (başkasının store'unu taklit etmiş olurdu). Deadline'da pes eder ve
+  çağıranın düşük kipte devam etmesini bekler.
+- **`scripts/memory_mcp.sh`** — `.mcp.json`'un yeni giriş noktası: **önce sunucu, sonra
+  shim**. Sebep yapısal: shim bir kez, bağlanma anında karar verir; sunucu o an ayakta
+  değilse **tüm oturum** 7 araçlık kipte kalır ve sonradan yükselmez.
+- **`memory_index.mjs --sync`** — REST `export`'tan store'un hâlihazırda tuttuğu
+  `§başlık` işaretlerini okur, **yalnız eksikleri** yazar. `memory_save`'in upsert'ü yok;
+  ADIM 53'ün *"`--write` toplayıcıdır, ikinci koşu çoğaltır"* tuzağı böyle kapandı.
+  **Sunucu yoksa sessizce çoğaltmaz** — export alamayınca exit 1 verip `--write`'a yönlendirir.
+
+### 2. İki kusur kendi negatif kontrolüm yakaladı
+
+- **Port uyuşmazlığı.** Sunucu `III_REST_PORT`'a bağlanır, URL'de yazan porta değil.
+  `AGENTMEMORY_URL=http://localhost:3999` verildiğinde 3111'e bir süreç doğurup probe'u
+  hiç tatmin etmiyordu → URL'den port türetilip `III_REST_PORT` olarak geçiriliyor.
+  Yan bulgu: **tek makinede tek örnek** koşabilir (`Port already in use` — iii engine
+  portu sabit).
+- **Zincir takibi hiç çalışmıyordu.** `agent-config-gate.mjs` MCP komutu `npx` değilse
+  pin kontrolünü **atlıyordu**; betiği takip etmeye başlayınca da `"$ROOT/scripts/x.sh"`
+  içindeki yolu `$` sınırından kestiği için hiçbir zincirlenmiş betiği okumadı. **Gate
+  kendi negatif kontrolünü GEÇMİŞTİ** — düzeltilmeseydi wrapper'a taşınan `npx`
+  çağrılarının pin garantisi sessizce kaybolurdu.
+
+### 3. `agent-config-gate.mjs` genişledi
+
+Artık MCP sunucusu bir repo betiğiyle başlatıldığında o betiği **ve çağırdığı betikleri**
+okuyup içlerindeki `npx` çağrılarının sürüm pinlediğini doğruluyor; kabuk değişkenini
+(`PACKAGE="…@0.9.28"`) betiğin kendi atamasından çözüyor, `npx` kelimesinin yorum/mesaj
+içinde geçtiği satırları eliyor. Dört negatif kontrol de **ateşliyor**: wrapper'da pinsiz
+paket, zincirlenmiş betikte pinsiz paket, zincirlenmiş betik silinmesi, ve ADIM 53'ten
+devralınan üç kontrol.
+
+### 4. Dürüst sınırlar
+
+- **Barındırma yapılmadı ve gerekmiyor.** Bir yere sunucu koymanın tek ek getirisi
+  makineler arası paylaşılan **elle** yazılmış hafızadır; otomatik yakalama kapalı olduğu
+  için öyle bir içerik üretilmiyor. İstenirse `AGENTMEMORY_URL` tek değişkendir ve
+  `memory_server.sh` uzak URL'de kendiliğinden başlatmayı **reddeder**.
+- **Soğuk container'da ilk MCP bağlantısı ~33 sn gecikir.** Oturumu bloklamaz (MCP
+  sunucuları arka planda bağlanır) ama ilk saniyelerde `agentmemory` araçları yoktur.
+- **Suite'ler koşmadı** (Postgres yok, `node_modules` yok) → **otorite CI**. Koşan ve
+  yeşil olanlar: `agent-config-gate` (dört negatifle), `memory_index --check`, doc-status
+  kapısı, uçtan uca `--sync` (68 kayıt → ikinci koşu 0 yazdı, store 68'de kaldı).
+- **Otomatik yakalama hâlâ KAPALI.** ADIM 53'ün gerekçesi değişmedi.
+
 ---
 
-## ADIM 55 — K-3 ADJUDICATED: imzalı karar D-11 (`contentinfo` landmark), KOD YOK
+## ADIM 56 — K-3 ADJUDICATED: imzalı karar D-11 (`contentinfo` landmark), KOD YOK
 
 > **NUMARA NOTU.** Bu slice ADIM 54 olarak yazıldı; `#701` (kabul borcu sınıf B,
-> parti 03) main'e **ADIM 54 adıyla** merge edilince kural uygulandı — **numaralar
-> yeniden atanmaz, merge edilmiş ad kazanır** — ve bu slice **ADIM 55**'e taşındı.
-> Branch commit mesajları `adim-54` yazar. Aynı haftanın **ikinci** çakışması
-> (öncesi ADIM 48 → 49 → 50). Bu slice `#701`'in kaydına **dokunmadı**; yalnız
-> `doc-status` işaretini düşürdü (aynı anda tek belge `current` olabilir).
+> parti 03) ADIM 54'ü, `#699` ADIM 55'i merge edilmiş adla aldı — **numaralar
+> yeniden atanmaz, merge edilmiş ad kazanır** — ve bu slice ÜÇ kez taşındı: ADIM 56.
+> Branch commit mesajları `adim-54` yazar. Aynı haftanın **ikinci** çakışma dizisi
+> (öncesi ADIM 48 → 49 → 50). Bu slice ne `#701`'in ne `#699`'un kaydına **dokundu**;
+> yalnız `doc-status` işaretlerini düşürdü (aynı anda tek belge `current` olabilir).
+>
+> **Yapısal sebep, suçlu değil:** `Backend` kapısı ~50 dk sürüyor ve ruleset
+> `strict: true` — branch güncel olmadan merge yok. Yoğun bir günde bu ikisi bir
+> **koşu bandı** üretir: her yeşilde main ilerlemiş olur. Bu slice **dört tur**
+> döndü (yeşil → main ilerledi → güncelle → yeşil …). Numara taşımak ucuzdur; asıl
+> maliyet turlardır. Çare: **auto-merge** (yeşilin ilk saniyesinde merge) ya da
+> main'in sakin olduğu bir pencere — ikisi de bu slice'ın kararı değil, akış kararı.
 
 **Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok;
 `backend/src`, `frontend/src` ve `alembic` ağaçlarına **tek satır** dokunulmadı.

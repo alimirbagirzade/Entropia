@@ -20,14 +20,24 @@
 > has not been started at all**, so §5's criteria 1 and 2 cannot close no matter
 > how far SR-2 goes.
 >
+> Nothing in this repository — not the axe-core ratchet, not the keyboard spec,
+> not the automated prechecks added alongside this file — may be transcribed
+> into these tables as a screen-reader result. **A partly filled worksheet is
+> evidence for exactly the cells a person filled and for nothing else.**
+> An empty template is not evidence — and almost every cell below is still
+> empty. A `—` is not a quiet `PASS`, and the completion counters are
+> deliberately not rounded up.
+>
 > **The tracking issue is OPEN again.** A human re-opened **GitHub #514** on
 > `2026-08-12T11:08:58Z` (`state_reason: reopened`) expressly to run this audit.
 > The closure/evidence divergence this file used to carry is therefore
 > **RESOLVED — by reading (B)**; the record of it is kept below as history, not
 > as a live conflict. **This changes the tracking state and nothing else:** the
-> worksheet is still empty, the four exit criteria are still `0 / 4`, and A-08 is
-> still `HUMAN-BLOCKED`. `#514` carries the `human-only` label; an agent or
-> automated scan must not close it — nor re-open it.
+> four exit criteria are still `0 / 4` and A-08 is still `HUMAN-BLOCKED`. The
+> worksheet did stop being empty on the same day, but that is the SR-2 session
+> recorded in §1 — **2 of 184 cells** — not the issue's state moving. `#514`
+> carries the `human-only` label; an agent or automated scan must not close it —
+> nor re-open it.
 >
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.

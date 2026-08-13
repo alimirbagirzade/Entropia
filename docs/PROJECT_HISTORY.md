@@ -5759,6 +5759,13 @@ hâlâ kapı.
   bir `## ` başlığının `origin/main`'de olup yeni içerikte olmamasını **kayıt silme** sayar ve
   commit'i reddeder — başlığı yeniden yazmak tam olarak o kapının önlemek için var olduğu şeye
   benzer. Ayrışma burada **kaydedildi**; düzeltmek insan kararıdır.
+  > **Sonradan düzeltildi (PR #702, 2026-08-13).** İnsan kararı verildi: bu maddenin
+  > *"başlık hâlâ `(PR pending)` diyor"* tespiti **artık geçerli değildir** — 22 başlık son eki
+  > gerçek PR numarasını taşıyor (ADIM 32 → **#655**) ve repoda `(PR pending)` biçiminde
+  > **hiçbir `## ` başlığı kalmadı**. Guard'ın rename↔delete ayrımını yapamadığı tespiti
+  > **hâlâ doğrudur**; kapı `ENTROPIA_DOCS_GUARD=off` ile **bilinçli** aşıldı ve aşmadan önce
+  > `## ` sayılarının `origin/main` ile birebir aynı kaldığı kanıtlandı (72 / 171, gövde
+  > satırı değişmedi). Maddenin geri kalanı **tarihseldir**, silinmedi.
 
 ### Verdict
 

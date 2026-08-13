@@ -58,7 +58,14 @@ kanıtı değildir.
   Render şablonları var) + `AGENTMEMORY_URL` + `AGENTMEMORY_SECRET` → **insan kararı**.
   Kod tarafı hazır: tek env değişkeni.
 - **Suite'ler bu oturumda koşmadı** (Postgres yok, `frontend/node_modules` yok) → **otorite CI**.
-- **A-08 denetimi hâlâ yapılmadı**, defter boş (0/4), #514 **AÇIK**. Değişmedi.
+- **A-08 — bu satır PR sürerken TAZELENDİ.** Kapanış yazıldığında *"denetim hiç yapılmadı,
+  defter boş"* diyordu; **#684 aynı gün main'e indi** (`8579897`) ve bu branch'e merge edildi
+  (`b7a406b`). Güncel gerçek: **denetim BAŞLADI, BİTMEDİ** — SR-2 (VoiceOver/Safari) ilk
+  oturumu 2026-08-12'de koştu, **184 Section A hücresinin 2'si**, **10 akışın 0'ı**,
+  **SR-1 (NVDA/Firefox) hiç başlamadı** → **dört çıkış kriteri de ☐**, blocker sayısı
+  **1**, verdict **BLOCKED**. #514 **AÇIK**; oturumu ürün sahibi koştu, **denetçi rolü
+  atanmadı**. Kanonik blok `docs/audit/a11y_screen_reader_audit_results.md` §STATUS.
+  **ADIM 52 bu eksene dokunmadı** — yukarıdaki değişimin sahibi #684'tür.
 
 ## Next (değişmedi)
 

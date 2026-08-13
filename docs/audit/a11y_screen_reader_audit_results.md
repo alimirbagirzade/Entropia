@@ -12,20 +12,32 @@
 
 > ## STATUS: `A-08 HUMAN-BLOCKED`
 >
-> **This file is an EMPTY WORKSHEET. An empty template is not evidence.** Every
-> result cell below reads `—` because no human has run this audit. Nothing in
-> this repository — not the axe-core ratchet, not the keyboard spec, not the
-> automated prechecks added alongside this file — may be transcribed into these
-> tables as a screen-reader result.
+> **The audit has STARTED and is nowhere near done.** This file stopped being an
+> empty worksheet on **2026-08-12**, when the **SR-2 (VoiceOver / Safari /
+> macOS)** session was opened and the first cells were recorded from a human.
+> What it holds is **2 of Section A's 184 cells** (23 routes × 8 checks) on the
+> **SR-2 half only**, and **0 of 10 flows**. **SR-1 (NVDA / Firefox / Windows)
+> has not been started at all**, so §5's criteria 1 and 2 cannot close no matter
+> how far SR-2 goes.
+>
+> Nothing in this repository — not the axe-core ratchet, not the keyboard spec,
+> not the automated prechecks added alongside this file — may be transcribed
+> into these tables as a screen-reader result. **A partly filled worksheet is
+> evidence for exactly the cells a person filled and for nothing else.**
+> An empty template is not evidence — and almost every cell below is still
+> empty. A `—` is not a quiet `PASS`, and the completion counters are
+> deliberately not rounded up.
 >
 > **The tracking issue is OPEN again.** A human re-opened **GitHub #514** on
 > `2026-08-12T11:08:58Z` (`state_reason: reopened`) expressly to run this audit.
 > The closure/evidence divergence this file used to carry is therefore
 > **RESOLVED — by reading (B)**; the record of it is kept below as history, not
 > as a live conflict. **This changes the tracking state and nothing else:** the
-> worksheet is still empty, the four exit criteria are still `0 / 4`, and A-08 is
-> still `HUMAN-BLOCKED`. `#514` carries the `human-only` label; an agent or
-> automated scan must not close it — nor re-open it.
+> four exit criteria are still `0 / 4` and A-08 is still `HUMAN-BLOCKED`. The
+> worksheet did stop being empty on the same day, but that is the SR-2 session
+> recorded in §1 — **2 of 184 cells** — not the issue's state moving. `#514`
+> carries the `human-only` label; an agent or automated scan must not close it —
+> nor re-open it.
 >
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.
@@ -39,7 +51,7 @@ document points here instead of restating it.
 |---|---|---|
 | GitHub **#514** state | **OPEN** — re-opened `2026-08-12T11:08:58Z`, `state_reason: reopened` | `gh issue view 514 --json state,stateReason,updatedAt` |
 | Issue label | `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"* | `gh issue view 514 --json labels` |
-| Audit performed? | **NO** — every result cell is `—` | §1, §2 below |
+| Audit performed? | **STARTED, NOT DONE** — SR-2 opened 2026-08-12; **2 / 184** Section A cells, **0 / 10** flows; SR-1 never started | §1, §2 below |
 | Exit criteria met? | **0 / 4** — all four still `☐` | §5 below |
 | Findings committed? | **NO** — the register holds only its placeholder row | §3 below |
 
@@ -104,17 +116,41 @@ screen readers, and a single-combination run cannot satisfy A-08.
 
 | Field | Value |
 |---|---|
-| Auditor (name / role) | — |
-| Screen-reader user? (regular user / certified auditor / neither) | — |
-| Date (ISO 8601) | — |
-| Operating system + version | — |
-| Screen reader + version | VoiceOver — version: — |
-| Browser + version | Safari — version: — |
-| Stack commit (`git rev-parse HEAD`) | — |
+| Auditor (name / role) | Ali Mirbagirzade (product owner) |
+| Screen-reader user? (regular user / certified auditor / neither) | **`neither`** — see the scope limit below |
+| Date (ISO 8601) | 2026-08-12 |
+| Operating system + version | macOS 15.3 |
+| Screen reader + version | VoiceOver (macOS 15.3) |
+| Browser + version | Safari 18.3 |
+| Stack commit (`git rev-parse HEAD`) | `7dd1dfe` |
 | Seed flags | `SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1` |
-| Stack URL | — |
-| Session recording / audio evidence path | — |
-| Elapsed time | — |
+| Stack URL | `http://127.0.0.1:18280` |
+| Session recording / audio evidence path | — (none captured) |
+| Elapsed time | **~42 min of recorded session** (`17:46Z` → `18:28Z`, 2026-08-12) — see the caveat |
+
+> **What the elapsed figure is, and is not.** It is the wall-clock span of the
+> *recorded* session — first header commit to the auditor stopping — and it is
+> the only span anyone measured. The auditor's own time at the machine is **not
+> included and was not clocked**: the stack was brought up on their Mac before
+> the recording began. Do not use this number to estimate what a full 23-route
+> Section A costs; two of 184 cells were filled in it.
+
+> **Scope limit — the auditor is not a screen-reader user.** `neither` is the
+> honest answer to the third row and it is recorded rather than smoothed over.
+> It does **not** invalidate this session: what an auditor *hears* is the
+> evidence A-08 asks for, and a first-time VoiceOver user hears it as well as
+> anyone. What it does limit is the *negative* half — an experienced user knows
+> which announcements should have come and did not, and notices friction a
+> newcomer reads as normal. So a `PASS` in this session means "the expected
+> announcement was heard", not "an expert found nothing wrong", and the absence
+> of findings on a route is weaker evidence here than a finding is.
+>
+> **Provenance.** The stack was brought up on the auditor's own Mac, not in an
+> agent container: the container this session ran in cannot pull the stack's
+> base images (the environment's network policy answers `403` to
+> `production.cloudfront.docker.com:443`), so `scripts/a11y-audit-stack.sh up`
+> failed there three times and was run by the auditor instead. It reported
+> `0 failed`.
 
 ---
 
@@ -174,7 +210,7 @@ A `FAIL` **must** carry a finding ID from §3.
 
 | # | Route | Doc | A-1 | A-2 | A-3 | A-4 | A-5 | A-6 | A-7 | A-8 | Finding IDs |
 |---:|---|---:|---|---|---|---|---|---|---|---|---|
-| 1 | `/` | 1 | — | — | — | — | — | — | — | — | — |
+| 1 | `/` | 1 | PASS | PASS ᴷ³ | — | — | — | — | — | — | — |
 | 2 | `/strategy` | 2 | — | — | — | — | — | — | — | — | — |
 | 3 | `/outsource-signal` | 3 | — | — | — | — | — | — | — | — | — |
 | 4 | `/trading-signal` | 4 | — | — | — | — | — | — | — | — | — |
@@ -199,6 +235,26 @@ A `FAIL` **must** carry a finding ID from §3.
 | 23 | `/future-dev` | 22 | — | — | — | — | — | — | — | — | — |
 
 **SR-2 Section A completion:** 0 / 23 routes.
+
+> **`0`, not `1` — route 1 is partial, and partial is not complete.** Route 1
+> (`/`) carries A-1 and A-2 and nothing else. A route counts here only when all
+> eight checks carry a result, so the two cells it does hold are reported in the
+> table rather than rounded up into this counter.
+
+> **ᴷ³ on route 1's A-2.** The auditor navigated the rotor's Landmarks list and
+> heard `banner`, `navigation` and `main`. **`contentinfo` was absent** — this
+> is K-3, already measured on 23/23 routes, and it is *not* re-filed as a
+> finding. `PASS` records the auditor's own judgement that the absence was
+> **cosmetic** — it did not impede landmark navigation — and it does **not**
+> mean four landmarks were heard. Three were.
+>
+> **A-3 on route 1 is deliberately `—`, not a result.** Asked whether the
+> `h1 → h3` jump misled rotor navigation, the auditor answered *"I didn't
+> notice the jump"*, which does not distinguish "navigated the heading list and
+> was not misled" (an answer to K-5) from "did not inspect the levels" (no
+> answer at all). The cell stays empty until that is settled. **K-5 remains
+> open**: nothing here supports re-cutting — or keeping — 21 pages' heading
+> outlines.
 
 ---
 
@@ -306,10 +362,32 @@ Copied from the checklist so this file can be read alone:
 
 | # | Criterion | Met |
 |---:|---|---|
-| 1 | Both SR-1 and SR-2 were run | ☐ (0 / 2) |
-| 2 | Section A complete on all 23 routes; Section B on all 10 flows, for both combinations | ☐ (0 / 46 routes, 0 / 20 flows) |
-| 3 | Every finding carries `FIX` or `PO-APPROVE` | ☐ |
-| 4 | Every `FIX` has landed **or** become a PO-signed deviation | ☐ |
+| 1 | Both SR-1 and SR-2 were run | ☐ (**0 / 2** — SR-2 *started*, not run to completion; SR-1 not started) |
+| 2 | Section A complete on all 23 routes; Section B on all 10 flows, for both combinations | ☐ (**0 / 46** routes, **0 / 20** flows — route 1 of SR-2 is partial, and partial ≠ complete) |
+| 3 | Every finding carries `FIX` or `PO-APPROVE` | ☐ (no findings recorded yet — vacuous, not satisfied) |
+| 4 | Every `FIX` has landed **or** become a PO-signed deviation | ☐ (nothing to land yet — vacuous, not satisfied) |
+
+**No SR-2 session can ever tick criteria 1 or 2 on its own.** Both name *both*
+combinations explicitly, and **SR-1 (NVDA / Firefox / Windows) has not been
+started**. Even a flawless, complete SR-2 run — 23/23 routes and 10/10 flows —
+would leave criterion 1 at `1 / 2` and criterion 2 at `23 / 46` routes. This is
+stated here so nobody reads a future "SR-2 complete" line as A-08 nearing done:
+**the remaining half is a whole second audit on a different operating system.**
+
+Criteria 3 and 4 are `☐` for a reason worth naming: they are *empty*, not *met*.
+Zero findings after 2 of 184 cells is not a clean bill — it is a sample too
+small to have produced one.
+
+### Session log
+
+| Session | Combination | Date | Auditor | What was covered | Outcome |
+|---|---|---|---|---|---|
+| 1 | **SR-2** — VoiceOver / Safari / macOS 15.3 | 2026-08-12 | Ali Mirbagirzade (product owner, `neither`) | Route 1 `/` — A-1, A-2 only | 2 / 184 Section A cells; 0 findings; **K-5 not settled** (A-3 left `—`) |
+
+**Where the next session picks up:** route 1's **A-3** (the `h1 → h3` heading
+question, K-5 — read the note under §1's SR-2 table for exactly what was asked
+and why the answer did not count), then A-4…A-8, then routes 2–23, then §2's ten
+flows. After that, the entire SR-1 combination.
 
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.

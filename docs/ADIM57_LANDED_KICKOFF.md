@@ -1,5 +1,6 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 58 bu belgeden SONRA indi.** Kayıt olarak doğrudur; devam
+> noktası için `docs/ADIM58_LANDED_KICKOFF.md`'ye bak. Sayısal otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 57 LANDED — K-3 adjudicated (imzalı karar D-11) · sıradaki slice için kickoff

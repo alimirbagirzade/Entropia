@@ -5990,6 +5990,54 @@ K-3'ün kapanması A-08'i **ilerletmez**; bu kalem hiç blocker değildi.
 **Açık kalan:** **K-5** (22/23, maliyet ölçülü: 204 başlık / ~40 dosya / 5 tag-scoped CSS
 kuralı) ve **K-6a** — ikisi de **yalnız A-08** ile kapanır. **K-7** ölçüldü, düzeltilmedi.
 
+## Stage — ADIM 58: plugin hook'ları kurulumdan bağımsız oldu (iki bloklayıcı guard)
+
+**Ürün kodu DEĞİŞMEDİ** (`backend/src`, `alembic`, `frontend/src` el değmedi). Migration
+yok, `ENGINE_VERSION` değişmedi. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict
+BLOCKED.**
+
+**Ölçüm önce, karar sonra: `enabledPlugins` KURULUM DEĞİLDİR.**
+`/root/.claude/plugins/installed_plugins.json` bu container'da `{"version":2,"plugins":{}}`
+— **boş**. Yani ADIM 53'ün *"depoya güvenen her oturumda önerilir/etkinleşir"* cümlesi
+remote'ta **yanlıştı** ve `guard-git.sh`'in docs-regresyon kapısı — #590/#604'ten sonra tam
+onları durdurmak için yazılmıştı — **hiç koşmamıştı**. Sebep yapılandırma hatası **değil**
+(`agent-config-gate.mjs` adı çözüyor, yeşil): kurulum bir **onay istemi** ister, remote
+container etkileşimsizdir.
+
+**Ne landed:** `.claude/settings.json` artık `guard-git.sh` (Bash) ve `guard-generated.sh`
+(Edit/Write/MultiEdit/NotebookEdit) betiklerini `${CLAUDE_PROJECT_DIR}` üzerinden
+**doğrudan** kaydediyor. **Dosya kopyalanmadı** — tek kaynak plugin'in içinde, ikilenen
+yalnız **kayıt**. `${CLAUDE_PLUGIN_ROOT}` kullanılamazdı: onu plugin çalıştırıcısı kurar.
+
+**Çift koşma bilinçli bir tavizdir ve `plugins/entropia-maintenance/README.md` §Çift koşma'da
+gerekçesiyle yazılıdır** — *"kopya bırakılmadı"* kararı sessizce çiğnenmedi, açıkça gözden
+geçirildi ve kapsamı **dosya**yla sınırlandı. Bedel ölçüldü: **≈25 ms/çağrı** (20 koşu:
+24 / 27 ms), yan etki yok, iki guard da salt-okur + idempotent. Alternatifi
+(*"kuruluysa atla"*) **fail-open**'dır; çift koşma fail-closed. **Yalnız BLOKLAYAN ikisi**
+ikilendi — `post-edit-lint` / `session-brief` / `vendor-react-rules` hatırlatmadır.
+
+**YENİ KAPI — `scripts/hook-guard-proof.sh`, `Frontend` job'ına ADIM olarak** (yeni job
+DEĞİL; ruleset `20765617`, check adı job adıdır ve değişmedi). `agent-config-gate.mjs`
+**kabloyu** kanıtlar, davranışı kanıtlayamaz: bir `case` kolunu düzenlemek her yolu geçerli
+bırakırken guard'ı sessizce etkisizleştirir. Yeni kapı **19 beklenti** koşar — **6
+engelleme + 13 geçiş**, çünkü her şeyi engelleyen bir guard pozitif-yalnız testi geçerken
+işe yaramaz olur. Kaydın kendisi de assert edilir: `settings.json` betiklerden birini
+adlandırmayı bırakırsa kırmızı.
+
+**Üç negatif kontrol ailesi koşuldu ve üçü de kırmızı verdi:** guard davranışı (kapıyı
+etkisizleştir / her şeyi engelle) · `agent-config-gate` yeni yolları (yeniden adlandır /
+`chmod -x` — ikinci durumda **her iki yapılandırmayı da** adlandırdı) · kaydın silinmesi.
+**Canlı kanıt:** kapı bu oturumun kendi Bash çağrılarını **üç kez** bloklladı.
+
+**Ölçülmüş sınır (düzeltilmedi, fail-closed):** `guard-git.sh` **komut dizesinin tamamında**
+desen arar → `feat/main-menu` de engellenir, bu desenleri *içeren* bir heredoc/döngü de.
+Kaçınma yolu: metni Write ile bir **dosyaya** yaz, dosyayı koştur. Ayrıca
+`docs-history-guard.py` (origin/main'e karşı, 2 dosya) ile `guard-git.sh`'in docs kapısı
+(staged diff, tüm `docs/`) **farklı eksenlerdir**; tekilleştirmek birini kaybettirir.
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 58 · `docs/ADIM58_LANDED_KICKOFF.md`
+(paste-ready resume prompt en altta).
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge

@@ -1,7 +1,7 @@
 {
   "name": "entropia-maintenance",
   "description": "Entropia bakim sistemi: teshis/dar-fix/dogrulama ajanlari, adjudicated invariant skill'leri (O-02, O-12, O-13, O-30, K-06, K-07), test ve regresyon kapilari, uretilmis dosyalari koruyan hook'lar.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "author": {
     "name": "Entropia maintainers"
   },

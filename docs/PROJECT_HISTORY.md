@@ -8554,8 +8554,6 @@ teşhis yok, tek sinyal geçen süre.
 - **A-08 hakkında hiçbir şey ölçülmedi.** Bu slice denetimin **kaydıdır**, denetim değildir.
 - Denetçi rolü **hâlâ atanmadı** — oturumu ürün sahibi kendi koştu.
 
----
-
 ## ADIM 57 — K-3 ADJUDICATED: imzalı karar D-11 (`contentinfo` landmark), KOD YOK
 
 > **NUMARA NOTU — bu slice DÖRT kez taşındı (54 → 55 → 56 → 57).** ADIM 54 olarak
@@ -8660,3 +8658,235 @@ değil, çift kaydın temizliği** — hiçbir kalemin statüsü bu yüzden değ
 - **Kod kapıları koşulmadı ve koşulması GEREKMEDİ**: bu slice `docs/` dışına hiç
   dokunmadı. Koşulan tek kapı `generate_repository_facts.py --check` (doc-status
   sınıflandırması dahil).
+
+
+## ADIM 58 — plugin hook'ları kurulumdan bağımsız oldu: iki bloklayıcı guard + davranış kapısı
+
+**Tarih:** 2026-08-13 · **Base:** `origin/main` @ `e0c25e6` · **Branch:**
+`claude/entropia-plugin-hooks-independent-7tuil2` · **Ürün kodu DEĞİŞMEDİ:**
+`backend/src`, `alembic`, `frontend/src` ağaçlarına hiç dokunulmadı. Migration yok,
+`ENGINE_VERSION` değişmedi, OpenAPI / OCC / Idempotency / route / react-query key /
+SSE taksonomisi el değmedi. **A-08 blocker AÇIK, blocker sayısı DEĞİŞMEDİ (1), verdict
+BLOCKED.**
+
+### 1. Ölçüm: `enabledPlugins` kurulum değildir
+
+ADIM 53 `.claude/settings.json`'a `extraKnownMarketplaces` + `enabledPlugins` ekledi ve
+her iki README'ye *"depoya güvenen her oturumda **önerilir/etkinleşir**"* yazdı. **Remote'ta
+bu yanlıştı.** Ölçüm (bu container, 2026-08-13):
+
+```
+/root/.claude/plugins/installed_plugins.json  →  {"version":2,"plugins":{}}
+```
+
+**Boş.** Yani `plugins/entropia-maintenance` **kurulu değil**; ajanları, skill'leri,
+slash command'ları ve **dört hook'u** bu oturumda hiç yüklenmedi.
+
+**Sebep bir yapılandırma hatası DEĞİL** — bu ayrım önemli, çünkü yanlış teşhis bir
+sonraki oturumu `settings.json`'ı "onarmaya" gönderirdi. `scripts/agent-config-gate.mjs`
+adın marketplace'te çözüldüğünü doğruluyor ve **yeşil**. Gerçek sebep: plugin kurulumu
+bir **onay istemi** ister, remote container **etkileşimsizdir**, istem hiç gelmez.
+`enabledPlugins` yalnızca *kurulduğunda* etkin sayılmasını söyler.
+
+**Bunun bedeli ölçülebilir bir boşluktu.** `guard-git.sh`'in docs-regresyon kapısı, tam
+olarak korumak için yazıldığı üç regresyondan (#590 211 satır, #604 194 satır) sonra
+eklendi — ve **remote'ta hiç koşmadı**. Hiçbir CI kapısı `docs/` okumadığı için o eksende
+tek otomatik savunma buydu.
+
+### 2. Ne landed
+
+`.claude/settings.json` artık plugin'in **iki bloklayıcı** hook betiğini
+`${CLAUDE_PROJECT_DIR}` üzerinden **doğrudan** kaydediyor:
+
+| Olay | Betik | Ne yapar |
+|---|---|---|
+| `PreToolUse` (Bash) | `plugins/entropia-maintenance/hooks/guard-git.sh` | docs kayıt silen commit · self-merge denemesi · main'e force push → **exit 2** |
+| `PreToolUse` (Edit/Write/MultiEdit/NotebookEdit) | `…/hooks/guard-generated.sh` | `docs/openapi.json` + `docs/generated/*` elle düzenlemesi → **exit 2** |
+
+**Dosya kopyalanmadı.** Tek kaynak hâlâ plugin'in içinde; ikilenen şey yalnızca **kayıt**.
+`.claude/README.md`'nin *"kopya bırakılmadı"* kararı **korundu** — kapsamı daraltıldı ve
+gerekçesi `plugins/entropia-maintenance/README.md` §Çift koşma'ya yazıldı (sessizce
+çelişilmedi).
+
+**Yalnız BLOKLAYAN ikisi ikilendi.** `post-edit-lint.sh`, `session-brief.sh` ve
+`vendor-react-rules.sh` bilerek dışarıda: onlar hatırlatmadır, ikilenmeleri güvenlik
+kazandırmaz, yalnız gürültü üretir.
+
+**`${CLAUDE_PLUGIN_ROOT}` kullanılamazdı** — o değişkeni plugin çalıştırıcısı kurar ve
+plugin kurulu değil. Betiklerin kendi kök çözümü (`CLAUDE_PROJECT_DIR`, yoksa
+`git rev-parse --show-toplevel`) değişmedi ve bu yolla doğru köke baktığı ölçüldü.
+
+### 3. Çift koşma — bilinçli taviz, ölçülmüş bedel
+
+Plugin **yerelde kuruluysa** aynı guard bir araç çağrısında **iki kez** koşar
+(`hooks.json` + `settings.json`). Ölçülen bedel, geçiş yolunda 20 koşunun ortalaması:
+**`guard-generated.sh` 24 ms**, **`guard-git.sh` 27 ms** — yani çağrı başına **≈25 ms**
+ve bir engellemede **yinelenen bir stderr mesajı**. Yan etki yok: iki guard da
+salt-okurdur ve idempotenttir.
+
+**Neden kabul edildi:** alternatifi (*"plugin kuruluysa atla"*) hook'un çağrı anında
+kurulumu güvenilir okumasını ister; yanlış okuyan bir kontrol guard'ı **sessizce kapatır**
+→ **fail-open**. Çift koşma **fail-closed**'dır. Bu depoda yön bellidir.
+
+### 4. Negatif kontroller — pozitif yeşil kanıt değil
+
+**(a) Guard davranışı: 19 beklenti, 6 engelleme + 13 geçiş.** Bir guard'ın *her şeyi*
+engellemesi pozitif-yalnız bir testi geçerken kendini işe yaramaz kılar; o yüzden her kapı
+**geçirmesi gereken** girdiyle de ateşlendi. Kapanlar: staged `-## ` docs kaydı silme ·
+self-merge · `git push --force origin main` · `--force-with-lease origin main` ·
+`docs/openapi.json` · `docs/generated/*`. Geçenler: `--dry-run` · yalnız **ekleyen** docs
+commit'i · salt-okuma `gh pr view`/`checks` · feature branch'e force push · elle yazılmış
+doc · backend kaynağı · `ENTROPIA_HOOKS=off` · ayrıştırılamayan stdin · `file_path`'siz
+payload.
+
+**(b) `agent-config-gate.mjs` yeni yolları GERÇEKTEN kapsıyor** — üç mutasyon, üçü de
+kırmızı: `guard-git.sh` yeniden adlandırıldı → `exit 1`, adıyla · `guard-generated.sh`
+yeniden adlandırıldı → `exit 1` · `chmod -x guard-git.sh` → `exit 1` ve **her iki
+yapılandırmayı da** (`settings.json` + `hooks.json`) adlandırdı. Yani ikilenme kapıdan
+görünmez değil.
+
+**(c) Yeni kapının kendi negatifi** — üç mutasyon, üçü de kırmızı: docs kapısı
+etkisizleştirildi (`exit 2` → `exit 0`) → `1 expectation missed` · `guard-git.sh`
+`settings.json`'dan **kaydı silindi** → `FAIL: .claude/settings.json no longer registers
+guard-git.sh` · `guard-generated.sh` her şeyi engelledi → **2** geçiş beklentisi düştü.
+Üçünden sonra ağaç geri yüklendi ve kapı yeşile döndü.
+
+**(d) Canlı kanıt — kapı bu oturumun kendisini ÜÇ KEZ engelledi.** Kabuk
+tek-satırlığıyla koşulmak istenen iki force-push probe'u ve bir heredoc, `settings.json`
+kaydı üzerinden `guard-git.sh` tarafından **gerçekten bloklandı**
+(`PreToolUse:Bash hook error: … BLOCKED`; ikisi gate 3, biri gate 2). Plugin kurulu
+olmadan koştuğunun kanıtı budur; sentetik değil.
+
+### 5. `scripts/hook-guard-proof.sh` — kanıt kapı oldu
+
+`agent-config-gate.mjs` **kabloyu** kanıtlar (yol var, çalıştırılabilir). **Davranışı**
+kanıtlayamaz: `guard-git.sh`'in bir `case` kolunu düzenlemek her yolu geçerli bırakırken
+guard'ı sessizce engellemez hale getirir. Yeni betik o ikinci yarıdır ve **`Frontend`
+job'ına ADIM olarak** bağlandı — **yeni job DEĞİL** (ruleset `20765617`; üretilmeyen bir
+required ad tüm merge'leri kilitler, ADIM 49). Ağsız, DB'siz, ~1 sn; geçici bir git
+fixture'ı kurar, **gerçek deponun index'ine hiç dokunmaz**.
+
+Betik ayrıca **kaydın kendisini** de doğruluyor: `settings.json` iki betikten birini
+adlandırmayı bırakırsa kapı kırmızıya döner. Bu slice'ın tamamı o kayda dayandığı için
+kaydın sessizce geri alınması en olası regresyondur.
+
+### 6. Fazla iddialı cümleler düzeltildi
+
+`.claude/README.md` ve `plugins/entropia-maintenance/README.md` içindeki ADIM 53 cümlesi
+(*"depoya güvenen her oturumda önerilir/etkinleşir"*) ölçümle değiştirildi: **yerelde
+önerilir, remote'ta hiç önerilmez**; `enabledPlugins` kurulumu tetiklemez. Plugin sürümü
+`0.4.1 → 0.4.2` (iki yerde birlikte: `plugin.json` + kök `marketplace.json`).
+
+### 7. Ölçülmüş sınırlar (dürüst, düzeltilmedi)
+
+- **`guard-git.sh` komut dizesinin TAMAMINDA desen arar.** Bu yüzden
+  `git push --force origin feat/main-menu` **engellenir** (`main` alt-dize) ve bu
+  desenleri yalnızca *içeren* bir kabuk tek-satırlığı — döngü, heredoc, hatta bir `echo` —
+  de engellenir. Bu oturumda **üç kez** gerçekleşti. Aşırı-engellemedir, yani
+  **fail-closed**; düzeltilmedi çünkü ters yön kaçırmaktır. Kaçınma yolu: metni bir
+  **dosyaya** yaz (Write aracıyla), sonra dosyayı koştur.
+- **Ayrıştırılamayan stdin geçirilir** (`exit 0`). İki guard da bu noktada fail-open'dır;
+  bilinçli, çünkü Claude Code payload şeması değişirse kapı tüm araç çağrılarını kilitlerdi.
+- **`.claude/settings.json`'daki docs kapısı ile `guard-git.sh`'inki AYNI DEĞİL** ve
+  ikisi de kaldı: `docs-history-guard.py` **`origin/main`'e karşı** iki dosyada
+  (`PROJECT_HISTORY.md`, `STAGE2_HANDOFF.md`) kayıp başlık arar — bayat base'i yakalar;
+  `guard-git.sh` **staged diff'te** (HEAD'e karşı) `docs/` altındaki **her** dosyada
+  `-## ` arar. Biri diğerinin üst kümesi değildir; tekilleştirmek bir ekseni kaybettirirdi.
+- **Plugin hâlâ kurulu değil** ve bu slice onu kurmuyor. Kurulum bir **insan kararıdır**
+  (yerel oturumda `/plugin install`). Bu slice yalnız **iki bloklayıcı guard'ı** kurulumdan
+  bağımsız kıldı; ajanlar, skill'ler, slash command'lar ve öteki üç hook remote'ta **hâlâ
+  yüklenmiyor**.
+- **`Frontend` job'ının gerçekten koştuğu bu oturumda doğrulanmadı** — yerelde `node`
+  kapıları koştu, ama CI otoritedir. Yeni adımın adı bir **required check adı üretmez**
+  (check adı job adıdır ve `Frontend — lint, typecheck, build, test` **değişmedi**).
+
+### 8. Koşan kapılar (yerel, hepsi ağsız)
+
+| Kapı | Sonuç |
+|---|---|
+| `node scripts/agent-config-gate.mjs` | **5 yapılandırma geçerli** ✓ (negatifi 3 mutasyonla kanıtlı) |
+| `node scripts/memory_index.mjs --check` | **71 kayıt, id'ler tekil** ✓ |
+| `scripts/hook-guard-proof.sh` | **19/19 beklenti** ✓ (negatifi 3 mutasyonla kanıtlı) |
+| `generate_repository_facts.py --check` (`check_classification` dahil) | **documentation-truth gate OK** |
+| `docs-history-guard.py` | commit anında koştu — silinen kayıt yok |
+
+**Koşmadı:** backend/frontend suite'leri (bu slice `backend/src` ve `frontend/src`'ye
+dokunmadı; Postgres ve `node_modules` bu container'da kurulu değil) → **otorite CI**.
+
+### 9. NUMARA: bu slice ADIM 57 yazıldı, `#698` o adı merge edilmiş olarak aldı → **ADIM 58**
+
+Kural değişmedi ve yeniden tartışılmadı: **numaralar yeniden atanmaz, merge edilmiş ad
+kazanır**; taşınan taraf hep merge edilmemiş olandır. Dal commit mesajları ve PR başlığı
+`adim-57` yazmaya devam eder — merge edilmiş metin değiştirilemez. Bu haftanın **üçüncü**
+çakışma dizisi: ADIM 48 → 49 → 50, ardından 54 → 55 → 56, ve şimdi K-3/D-11 slice'ı
+54 → 55 → 56 → **57** taşınırken bu slice 57 → **58** taşındı.
+
+### 10. DÖRDÜNCÜ docs regresyonu — ve guard'ın ulaşamadığı yol
+
+**Bu slice'ın kendi dalında oldu.** Merge `7a7c21e` (*"Merge branch 'main' into
+claude/entropia-plugin-hooks-independent-7tuil2"*, GitHub arayüzünden, insan eliyle)
+main'in içeriğini **sessizce düşürdü**:
+
+| Kayıp | Boyut |
+|---|---|
+| `docs/PROJECT_HISTORY.md` §ADIM 57 (K-3 ADJUDICATED, D-11) | **105 satır** |
+| `docs/STAGE2_HANDOFF.md` §Stage — ADIM 57 (K-3) | **64 satır** |
+| `docs/ADIM57_LANDED_KICKOFF.md` | tamamen — aynı adlı **benim** dosyamla ezildi |
+| `docs/audit/closure_w0_shared_portfolio_2026-08-13.md` (#707) | **579 satır**, dosya yok oldu |
+| `docs/implementation/final_closure_prompt_pack_2026-08-13.md` (#706) | **2233 satır**, dosya yok oldu |
+
+Bu, #590 (211 satır) ve #604 (194 satır) ile **aynı sınıftır** ve bu slice'ın tamamı o
+sınıfı durdurmak üzerineydi. **Neden guard yakalamadı — ölçülmüş, savunma değil:**
+
+1. **`guard-git.sh` bir PreToolUse hook'udur; yalnız bir ajanın `git commit` çağrısında
+   koşar.** Bu merge **GitHub arayüzünde** yapıldı — orada ne hook var ne ajan. Kapının
+   kapsamadığı yol budur ve bu slice onu genişletmiyor.
+2. **`docs-history-guard.py` de aynı sebeple sessizdi.**
+3. **Hiçbir CI kapısı `docs/` okumaz** — 22/22 yeşildi ve 3181 satırlık kayıp yeşilin
+   içindeydi. **Yeşil CI bir docs regresyonunun yokluğunu KANITLAMAZ.**
+
+Aynı adı taşıyan iki kickoff dosyası çakışmayı **görünmez** kıldı: `git` çakışma bile
+bildirmedi, çünkü ikisi de "yeni dosya"ydı ve çözüm biri lehine yapıldı.
+
+**Onarım fix-forward yapıldı, geçmiş yeniden yazılmadı** (`7a7c21e` yerinde duruyor):
+kayıp beş kalem `origin/main`'den geri kondu, K-3 kaydı **ADIM 57 olarak** kendi yerine
+yerleştirildi, bu slice **ADIM 58**'e taşındı. Doğrulama kapısı:
+`git diff origin/main -- docs/ CLAUDE.md | grep '^-## '` → **boş**.
+
+**Bir sonraki oturum için pazarlıksız:** bir docs PR'ını merge etmeden ya da main'i içeri
+almadan **önce ve sonra** bu grep'i koştur. Kapı arayüzdeki merge'e ulaşamıyor; bu adım
+elle yapılır. Kalıcı çare bir **CI kapısı** olurdu (`docs/` kayıt-silme kontrolü PR
+diff'inde) — bu slice'ta yazılmadı, açık iş.
+
+### 11. `guard-git.sh` gate 1 HEAD-göreli ve YENİDEN ADLANDIRMAYA KÖR — ölçüldü, bu commit'te
+
+Onarım commit'i kendi guard'ıma takıldı ve **haklı olmadığı ölçüldü**. İki kapı aynı
+soruya farklı cevap verdi:
+
+| Kapı | Neye karşı bakar | Bu commit'teki verdict |
+|---|---|---|
+| `guard-git.sh` gate 1 | **staged diff, HEAD'e karşı**, tüm `docs/` | **BLOCK** — 6 başlık "silindi" dedi |
+| `.claude/hooks/docs-history-guard.py` | **`origin/main`'e karşı**, 2 dosya | **exit 0** |
+
+**Doğrusu ikincisidir.** "Silindi" denen altı başlığın **altısı da** staged ağaçta
+duruyor: dördü kickoff dosyasıyla birlikte `ADIM58_LANDED_KICKOFF.md`'ye taşındı, ikisi
+`ADIM 57 →  ADIM 58` olarak yeniden numaralandı. Otoritatif kontrol —
+`git diff --cached origin/main -- docs/ CLAUDE.md | grep '^-## '` — **boş**.
+
+Kusur şudur: gate 1 satır bazlı diff okur, **dosya içeriği okumaz**. Bir yeniden
+adlandırma (dosya adı ya da başlık) ona **silme** görünür. Bu bir aşırı-engellemedir,
+yani fail-closed — kaçırmaktan iyidir ve **düzeltilmedi**; ama artık yazılı.
+
+**İKİNCİ, DAHA TEHLİKELİ KUSUR — hook staged olmayanı göremez.** Hook araç çağrısından
+**önce** koşar, yani `git add -A && git commit …` tek bir Bash çağrısıysa kapı
+**`git add`'den ÖNCEKİ index'i** okur. Bu oturumda canlı gerçekleşti: onarımı yapmış
+ağaç henüz staged değilken `docs-history-guard.py` **HEAD'in taşıdığı regresyonu**
+bildirdi ve onarım commit'ini blokladı. Yön tersine döndüğünde bu bir **false
+negative**'dir: aynı çağrıda `git add` ile sahnelenen bir kayıt silme kapıya **hiç
+görünmez**. `docs-history-guard.py` yalnız `-a`/`--all` bayrağını tanıyor, zincirlenmiş
+`git add`'i tanımıyor. **Düzeltilmedi** (bu slice'ın kapsamı değil) — pratik kural:
+**`git add`'i ayrı çağrıda koştur**, yoksa kapı bayat bir index'e bakar.
+
+**Kalıcı çare ikisi için de aynı ve bir CI kapısıdır:** PR diff'inde `docs/` altındaki
+silinen `## ` başlıklarını arayan bir adım. PreToolUse hook'u yapısal olarak ne arayüzden
+yapılan merge'i ne de bayat index'i kapsayabilir. **Açık iş.**

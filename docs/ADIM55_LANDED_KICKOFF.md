@@ -1,6 +1,7 @@
 <!-- doc-status: historical -->
-> **SUPERSEDED — ADIM 56 (2026-08-13).** Canlı kickoff artık
-> `docs/ADIM56_LANDED_KICKOFF.md` (K-3 adjudicated, imzalı karar D-11 — kod yok).
+> **SUPERSEDED (2026-08-13).** Sonrasında **ADIM 56** (A-08 / SR-2 oturum 1 kaydı,
+> `docs/ADIM56_LANDED_KICKOFF.md`) ve **ADIM 57** (K-3 adjudicated, imzalı karar D-11 —
+> kod yok) landed. Canlı kickoff artık `docs/ADIM57_LANDED_KICKOFF.md`.
 > Aşağısı ADIM 55 kapanışındaki durumu kaydeder. **Değişmeyen:** blocker sayısı 1
 > (yalnız A-08), verdict BLOCKED. Sayısal gerçekler için otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).

@@ -1,8 +1,10 @@
 <!-- doc-status: historical -->
 > **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu
 > kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat olabilir.
-> **SUPERSEDED — canlı kickoff artık `docs/ADIM55_LANDED_KICKOFF.md`** (K-3
-> adjudicated, imzalı karar D-11 — kod yok). **Değişmeyen:** blocker sayısı 1
+> **SUPERSEDED — canlı kickoff artık `docs/ADIM57_LANDED_KICKOFF.md`** (K-3
+> adjudicated, imzalı karar D-11 — kod yok). Aradaki iki slice: **ADIM 55**
+> (agentmemory sunucusu yerele alındı) ve **ADIM 56** (A-08 / SR-2 oturum 1 kaydı).
+> **Değişmeyen:** blocker sayısı 1
 > (yalnız A-08), verdict BLOCKED. Sayısal otorite bu belge DEĞİL →
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 

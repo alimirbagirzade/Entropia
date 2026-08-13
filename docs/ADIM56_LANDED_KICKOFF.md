@@ -1,130 +1,92 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
-> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+<!-- doc-status: historical -->
 
-# ADIM 56 LANDED — K-3 adjudicated (imzalı karar D-11) · sıradaki slice için kickoff
+# ADIM 56 landed — A-08 denetimi BAŞLADI (SR-2 oturum 1), sıradaki oturum
 
-> **NUMARA NOTU — bu slice ADIM 54 yazıldı, 55 denendi, ADIM 56'ya taşındı (ÜÇ kez).**
-> Merge beklerken main iki slice daha aldı: `#701` **ADIM 54**'ü, `#699` **ADIM 55**'i
-> merge edilmiş adla aldı. Kural: **numaralar yeniden atanmaz, merge edilmiş ad
-> kazanır** — taşınan taraf hep merge edilmemiş olandır. Branch commit mesajları
-> `adim-54` yazmaya devam eder; **slice'ın adı ADIM 56'dır.**
-> Bu slice ne `#701`'in ne `#699`'un kaydına **dokundu** — yalnız `doc-status`
-> işaretlerini düşürdü, çünkü aynı anda tek belge `current` olabilir.
->
-> **Yapısal gözlem, bir sonraki oturum için:** bu depoda `Backend` kapısı ~50 dk
-> sürüyor ve `strict: true` branch'in güncel olmasını istiyor. Yoğun bir günde bu
-> ikisi bir **koşu bandı** üretir: her yeşilde main ilerlemiş olur, güncelle-bekle
-> döngüsü tekrarlar (bu slice **dört** tur döndü). Çare numarayı savunmak değil;
-> ya **auto-merge** (yeşilin ilk saniyesinde merge) ya da main'in sakin olduğu bir
-> pencere. Numara taşımak ucuzdur, tur atmak değildir.
+> Kayıt: `docs/PROJECT_HISTORY.md` §ADIM 56. Bu belge **devam noktasıdır**, kayıt değil.
 
-## Neredeyiz
+## Nerede duruyoruz
 
-**Blocker sayısı 1 (yalnız A-08), verdict BLOCKED.** ADIM 56 **kod yazmadı** — RC §6.5'in
-K-3 kalemini bir **imzalı PO kararıyla** kapattı. Migration yok, OpenAPI değişmedi,
-`ENGINE_VERSION` değişmedi.
+**A-08 denetimi artık "yapılmadı" değil, "başladı ve bitmedi".** Defter bir insanın
+duyduğu **2 hücre** taşıyor (rota 1, A-1 + A-2). Buna rağmen:
 
-RC §6.5'in durumu artık şu: **K-2 / K-4 kodla kapandı** (#685) · **K-6b kodla kapandı**
-(#688) · **K-3 kod yazmadan kapandı** (D-11) · **K-5 + K-6a yalnız A-08 ile kapanır** ·
-**K-7 ölçüldü, düzeltilmedi**.
-
-## Bu slice'ın bıraktıkları (reuse anchor'ları — tam adlarıyla)
-
-| Anchor | Ne için |
+| Kapı | Durum |
 |---|---|
-| `docs/implementation/a11y_ci_ratchet_and_adjudication.md` §4b `Karar # : D-11` | İmzalı a11y kararlarının **sicili** (D-10 kontrast + D-11 landmark). Yeni karar **aynı bloğa** yazılır; **imzalayan adı olmadan yazılmaz** |
-| `docs/implementation/a11y_screen_reader_audit_checklist.md` **A-2** | Beklenti **ÜÇ** landmark. Denetçi bunu okur — dört arayan bir denetçi yanlış `FAIL` yazar |
-| `docs/audit/…audit_results.md` §1 A-2 metni · route 1 dipnotu **ᴷ³** · §6 K-3 | Üçü **aynı** gerçeği söyler; biri değişirse üçü değişir |
+| Çıkış kriterleri | **0 / 4** — dördü de ☐ |
+| Section A | **2 / 184** hücre (SR-2 yarısı), **0 / 23** rota TAM |
+| Section B | **0 / 10** akış |
+| SR-1 (NVDA/Firefox/Windows) | **hiç başlamadı** |
+| Denetçi rolü | **atanmadı** — oturum 1'i ürün sahibi koştu (`neither`) |
+| Blocker sayısı | **1 (yalnız A-08)** · verdict **BLOCKED** |
+| GitHub #514 | **AÇIK** (2026-08-12T11:08:58Z) — kullanıcı açık kalmasına karar verdi |
 
-## Tavizsiz kurallar (bu slice'ta kanıtlandı)
+**Hiçbir belge A-08'i `Complete`/`PASS`/`Done` gösteremez.** Kapı issue'nun durumu değil,
+`docs/audit/a11y_screen_reader_audit_results.md` §5'in dört kriteridir.
 
-1. **Ölçümü susturmak bir çözüm değildir.** K-3'ün advisory'si 23 rotada çıkmaya devam
-   eder. Karar **dispozisyonu** belirler, ölçümü değil. Boş/gizli footer seçeneği tam bu
-   yüzden **reddedildi**: sayacı memnun eder, rotor kullanıcısına hiçbir şey vermez.
-2. **Bir kalem üç şekilde kapanabilir** — kod düzelir · **beklenti düzelir** · insan
-   duyar. Dördüncüsü yok. K-3, ikinci yolun ilk örneğidir: kusur üründe değil
-   checklist'in kendi cümlesindeydi.
-3. **"İmzalı sapma" iki farklı şeyi anlatabilir, karıştırma.** D-10 **gerçek** bir ihlali
-   (1.4.3, 45 düğüm) imzalar → ürün o ölçüt için uyumlu **değildir**. D-11 **olmayan bir
-   yükümlülüğü** kaydeder → hiçbir SC contentinfo istemiyor. İkisini aynı torbaya koymak
-   D-10'un ağırlığını hafifletir.
-4. **İnsan gözlemi tek rotadan genellenmez** ama yönü doğrulayabilir. SR-2 route 1'in
-   "kozmetik" yargısı karara **tek başına** yetmedi; makine sayısıyla aynı yöne baktığı
-   için kayda geçti.
-5. **Çift kayıt sessizce yaşar.** Audit §6'nın tablosunda K-4/K-5/K-6 satırları iki
-   kezdi ve ikinci küme bayattı — iki slice'ın aynı tabloyu düzenlemesinden kalmış bir
-   merge artefaktı. Aynı tabloya dokunan bir sonraki slice **tekrar sayı** kontrolü yapsın.
+## Sıradaki oturum tam olarak nereden devam eder
 
-## Açık kalanlar (ADIM 56 bunları KAPATMADI)
+1. **Rota 1'in `A-3`'ü** — `h1 → h3` atlaması (K-5). Oturum 1'de soruldu, cevap
+   *"atlamayı fark etmedim"* geldi ve **sayılmadı**: "gezindim, yanılmadım" ile "seviyelere
+   bakmadım"ı ayırmıyor. **Sorulacak soru budur:** *VO rotorunda başlık listesini aç
+   (`VO+U` → Headings); listede kaç seviye görüyorsun, `h2` var mı, `h1`'den sonra doğrudan
+   `h3` mü geliyor?* Cevap seviyeleri **adlandırmalı**, yoksa hücre yine `—` kalır.
+2. Sonra rota 1'in **A-4…A-8**'i, sonra **rota 2–23**, sonra **§2'nin on akışı**.
+3. Ondan sonra **SR-1 kombinasyonunun tamamı** (Windows + NVDA + Firefox gerekir).
 
-- **A-08 / #514** — tek blocker. Defter **2 / 184** hücre (yalnız SR-2), **SR-1 hiç
-  başlamadı**, çıkış kriterleri **0 / 4**, issue **açık**. **İnsan kapısı.**
-- **K-5** (22 / 23 route) — maliyeti ölçülü: **204 başlık / ~40 dosya + 5 tag-scoped CSS
-  kuralı**. Denetim "sıçrama yanılttı mı?" sorusuna cevap vermeden **outline yeniden
-  kesilmez**. SR-2 route 1'de bu hücre bilerek `—` bırakıldı (denetçi "fark etmedim"
-  dedi; bu K-5'e cevap değil).
-- **K-6a** — halkanın görünürlüğü; precheck programatik odak kullandığı için **kanıt
-  üretemez**. Yalnız A-08.
-- **K-7** — ilk DOM'da `aria-live` yok (21 / 23). Ölçüldü, düzeltilmedi.
-- **Memory checkpoint** — ADIM 53 `agentmemory` ile hafızayı türetilir yaptı; bu slice
-  onu kullanmadı. Bir sonraki oturum **önce ölçsün** (bağlı mı), sonra yazsın.
+**Yığın:** `scripts/a11y-audit-stack.sh up` → `… validate` (güncel main'de 9/9).
+Reçete: `docs/implementation/a11y_screen_reader_audit_checklist.md` ·
+Runbook: `docs/implementation/a11y_screen_reader_audit_runbook.md`.
 
-## Sıradaki iş
+## REUSE — bu slice'ın bıraktığı çapalar
 
-Değişmedi: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**;
-ADR §16 insan kapısından geçmeden başlanmaz. RC §6.7'de açık kalemler: P4-3 · P10-B6 ·
-P11-6b · P11-3b · P8-B3b · P1-Gate3 · P10-B3/B4/B5.
+- `docs/audit/a11y_screen_reader_audit_results.md` — §0 SR-2 blok (doldurulmuş biçim
+  örneği), §1 rota 1 satırı, §5 oturum günlüğü (**"nereden devam edilir" satırı burada**).
+- `backend/tests/contract/test_a11y_audit_prep_contract.py` — **21 test**, defterin
+  invariant'larını pinler. **Deftere dokunan her değişiklikten sonra koştur.**
+- `docs/audit/…` §STATUS ▸ *Tracking-issue state* — #514 ayrışmasının **kanonik** kaydı;
+  başka hiçbir belge bunu yeniden anlatmaz, hepsi buraya işaret eder.
 
----
+## Pazarlıksız — bu slice'ta bedeli ödendi
+
+- **Sayaç kanonik biçimde kalır.** `test_declared_completion_matches_the_cells` sayacı
+  hücrelerden yeniden hesaplar; düzyazıya çevirmek kapıyı kırar. Açıklamayı **altına** yaz.
+- **`-X theirs` invariant düşürebilir.** Bu slice'ta `"An empty template is not evidence"`
+  sessizce kayboldu. Her strateji-çözümünden sonra **sözleşme testini koştur**.
+- **Main'in gerisinde kalan dal merge EDİLEMEZ** — 22/22 yeşil olsa bile
+  (`strict_required_status_checks_policy`, ruleset `20765617`). Çözüm main'i içeri almak;
+  **ruleset bypass edilmez**.
+- **Docs PR'ı merge etmeden önce** `git diff origin/main..HEAD -- docs/ CLAUDE.md | grep '^-#'`
+  koştur — bu repoda bayat base'li docs PR'ı **üç kez** kayıt sildi.
+- **`—` sessiz bir `PASS` değildir**, sayaçlar yukarı yuvarlanmaz, ve otomatik hiçbir çıktı
+  (axe, Lighthouse, precheck) §1/§2/§3'e **kopyalanamaz**.
 
 ## Paste-ready resume prompt
 
 ```
-ENTROPIA — ADIM 56 sonrası devam
+Entropia — A-08 ekran okuyucu denetimi, SR-2 oturum 2.
 
-CLAUDE.md §Session START protokolünü uygula (fetch + origin/main log + PR listesi;
-handoff STALE-BY-DEFAULT'tur — aynı gün DÖRT paralel oturumun aynı numarayı aldığı
-görüldü, numaraları doğrulamadan yazma).
+Önce doğrula (handoff STALE-BY-DEFAULT): git fetch && git log --oneline origin/main -6.
+Sonra oku: docs/ADIM56_LANDED_KICKOFF.md, docs/PROJECT_HISTORY.md §ADIM 56, ve
+docs/audit/a11y_screen_reader_audit_results.md §STATUS + §1 + §5.
 
-ÖNCE OKU (otorite sırası)
-  1. docs/ADIM56_LANDED_KICKOFF.md (bu belge)
-  2. docs/STAGE2_HANDOFF.md → "## Stage — ADIM 56" + "## Next"
-  3. docs/PROJECT_HISTORY.md §ADIM 56
-  4. docs/generated/repository_facts.md (SAYISAL OTORİTE — CLAUDE.md'deki sayı değil)
+Durum: A-08 denetimi BAŞLADI ama BİTMEDİ. Defterde 184 Section A hücresinin 2'si dolu
+(rota 1: A-1, A-2), 10 akışın 0'ı, SR-1 hiç başlamadı, çıkış kriterleri 0/4. GitHub #514
+AÇIK ve öyle kalacak (kullanıcı kararı) — agent onu ne kapatabilir ne açabilir.
 
-DURUM (doğrula, güvenme)
-  · Blocker sayısı 1 (yalnız A-08), verdict BLOCKED. "READY" YAZMA.
-  · RC §6.5: K-2/K-4/K-6b kodla, K-3 D-11 ile kapandı; K-5 + K-6a A-08 bekler; K-7 açık.
-  · A-08 defteri 2/184 hücre, SR-1 hiç başlamadı, 0/4 kriter, #514 AÇIK.
+Bu oturumda yapılacak: SR-2'yi rota 1'in A-3'ünden devam ettir. A-3 oturum 1'de sorulmuştu
+ama cevap sayılmadı ("atlamayı fark etmedim" — "gezindim, yanılmadım" ile "seviyelere
+bakmadım"ı ayırmıyor). Denetçiye VO rotorunda başlık listesini açtır (VO+U → Headings) ve
+gördüğü seviyeleri ADLANDIRMASINI iste; adlandırmazsa hücre `—` kalır. Sonra A-4…A-8,
+sonra rota 2-23.
 
-ÖNCELİK: birini seç
-  (a) A-08'in SR-1 (NVDA/Firefox/Windows) yarısı — İNSAN işi, agent koşamaz. Yalnız
-      hazırlık/kayıt tarafına dokunulabilir.
-  (b) Memory checkpoint: ADIM 53'ün agentmemory mekanizması bağlı mı ÖLÇ, sonra yaz.
-  (c) §6.7'nin açık kalemleri (P10-B6, P8-B3b, P4-3, P1-Gate3, P11-6b/3b, P10-B3/B4/B5).
-  (d) PR B (ItemParticipant) — ADR §16 insan kapısından geçmeden BAŞLAMA.
+Rolün SCRIBE: hücreleri yalnız insanın duyduğundan yaz. axe/Lighthouse/precheck çıktısını
+§1/§2/§3'e ASLA kopyalama. Koşulmayan hücre `—` kalır, sayaçları yukarı yuvarlama,
+hiçbir belgeye A-08 için Complete/PASS/Done yazma.
 
-TAVİZ VERİLEMEZ
-  · OCC (If-Match / expected_*_version / X-*-Version), Idempotency-Key, route YOLLARI,
-    react-query key'leri, ENGINE_VERSION, app/nav.ts DEĞİŞMEZ.
-  · UI işi v18 mockup'ı referans alır (docs/spec/index_guncellenmis_duzeltilmis_v18.html).
-  · A-08 / #514'ün durumunu DEĞİŞTİRME — insan kapısı. Defteri agent doldurmaz.
-  · İmzalayan adı verilmeden imzalı karar (D-xx) YAZMA.
-  · Advisory/ölçüm SUSTURMA — karar dispozisyonu belirler, sayıyı değil.
-  · Yeşile zorlama YOK: kapı kırılıyorsa BLOCKED yaz.
+Yığın: scripts/a11y-audit-stack.sh up && scripts/a11y-audit-stack.sh validate (9/9 bekle).
+Deftere dokunduktan sonra: cd backend && uv run pytest tests/contract/test_a11y_audit_prep_contract.py -q --no-cov
+ve uv run --project backend python scripts/generate_repository_facts.py --check (repo kökünden).
 
-ÖLÇÜM TUZAKLARI (bu repoda gerçekten yaşandı)
-  · a11y precheck sayısını TEK KOŞUYLA tazeleme — ilk koşu soğuktur, EKSİK raporlar.
-  · vitest: --no-file-parallelism ZORUNLU. pytest'i | tail'e BORULAMA.
-  · Host'ta docker YOKSA @a11y / @visual / @lighthouse yerelde KOŞMAZ → otorite CI.
-  · main'e merge 16 ZORUNLU check ister (ruleset 20765617) — Backend ~50 dk.
-    Merge sırasında main ilerlerse çakışma çıkar; BAŞKASININ slice kaydını yeniden
-    düzenleme, yalnız kendi numaranı boş olana taşı.
-  · docs PR'ı öncesi: git diff origin/main -- docs/ | grep '^-## ' → BOŞ olmalı.
-  · Aynı tabloya iki slice dokunduysa TEKRAR SATIR ara (K-tablosunda yaşandı).
-
-KAPANIŞ: CLAUDE.md §Session CLOSING ritüelinin 6 maddesi +
-  cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check
-  (bu belgeyi doc-status: historical'a düşür, yeni kickoff'u current yap — TEK current)
+Merge etmeden önce: dal main'in gerisindeyse merge REDDEDİLİR (ruleset 20765617, strict) —
+main'i içeri al, ruleset'i bypass etme; ve `git diff origin/main..HEAD -- docs/ CLAUDE.md
+| grep '^-#'` ile kayıt silmediğini doğrula.
 ```

@@ -206,9 +206,9 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `c4cd932`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `31ed27d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 56 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
+> **Son dalga — ADIM 57 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
 > satır bile değişmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > K-3 (`contentinfo` landmark yok, 23/23) **kod yazmadan** kapandı: eksik olan ürün değil
 > **BEKLENTİYDİ** — hiçbir WCAG SC'si contentinfo zorunlu kılmaz (1.3.1 *var olan* yapıyı
@@ -221,17 +221,34 @@ Before stopping a working session, produce **ALL** of the following:
 > belirler, ölçümü değil. **D-10 ile karıştırma:** D-10 gerçek bir ihlali (1.4.3, 45 düğüm)
 > imzalar, D-11 **olmayan bir yükümlülüğü** kaydeder. Yönü doğrulayan insan gözlemi:
 > A-08 SR-2 route 1'de denetçi üç landmark duydu, yokluğu **kozmetik** buldu (tek rota
-> genellenmez). **Yan iş:** audit §6 K-tablosunda K-4/K-5/K-6 satırları **iki kezdi**
-> (ikinci küme bayat: K-4 `Open`, K-5 `21/23`) — merge artefaktı, üç fazla satır silindi.
-> **NUMARA:** ADIM 54 yazıldı, `#701` 54'ü merge edilmiş adla alınca **ADIM 55** oldu;
-> **NUMARA:** ADIM 54 yazıldı → 55 denendi → `#701` 54'ü, `#699` 55'i merge edilmiş
-> adla alınca **ADIM 56** oldu; commit mesajları `adim-54` yazar. **Sebep yapısal:**
-> `Backend` ~50 dk + ruleset `strict: true` → yoğun günde koşu bandı (**dört tur**).
+> genellenmez) — **ADIM 56'nın kaydettiği oturumun aynısı**. **Yan iş:** audit §6
+> K-tablosunda K-4/K-5/K-6 satırları **iki kezdi** (ikinci küme bayat: K-4 `Open`,
+> K-5 `21/23`) — merge artefaktı, üç fazla satır silindi.
+> **NUMARA: bu slice DÖRT kez taşındı** — ADIM 54 yazıldı, `#701` 54'ü, `#699` 55'i,
+> `#697` 56'yı merge edilmiş adla aldı → **ADIM 57**; commit mesajları `adim-54` yazar.
+> **Sebep yapısal:** `Backend` ~50 dk + ruleset `strict: true` → yoğun günde koşu bandı
+> (**beş tur**). **Çare uygulandı: auto-merge** — elle beklemek bandı kapatmıyor.
 > **A-08 DEĞİŞMEDİ:** defter **2/184** hücre, SR-1 hiç başlamadı, **0/4**, #514 açık.
 > Açık: **K-5** (22/23) ve **K-6a** → yalnız A-08; **K-7** ölçüldü.
-> `PROJECT_HISTORY.md` §ADIM 56 · RC §6.5.
+> `PROJECT_HISTORY.md` §ADIM 57 · `docs/ADIM57_LANDED_KICKOFF.md` · RC §6.5.
 >
-> Öncesinde ADIM 55 (agentmemory sunucusu YERELE alındı, 2026-08-13): ÜRÜN KODU
+> Öncesinde **ADIM 56 (A-08 denetimi BAŞLADI: SR-2 oturum 1, PR #684, 2026-08-13):
+> ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> Defter boş olmaktan çıktı: bir insanın duyduğu **2 hücre** (rota 1 `/`, A-1 + A-2) =
+> **184'ün 2'si**, **0/10 akış**, **0/23 rota TAM**, **SR-1 hiç başlamadı** → çıkış kriterleri
+> **0/4** ve kriter 1/2 tek kombinasyonla **kapatılamaz**. Denetçi **`neither`** (ürün sahibi),
+> rol **atanmadı**. **`A-3` bilerek `—`** ("atlamayı fark etmedim" ≠ cevap) → **K-5 AÇIK**.
+> İkinci yarı: `CLAUDE.md`'nin bayat A-08 bloğu düzeltildi — **#687 defterleri uzlaştırmış ama
+> rehbere dokunmamıştı**. **Süreç bedeli:** P11-1 ruleset'i ilk kez kapı oldu (**22/22 yeşilken
+> merge reddedildi** — dal main'in gerisindeydi; çözüm main'i içeri almak, **bypass DEĞİL**) ·
+> **`-X theirs` sözleşme testinin pinlediği cümleyi sessizce düşürdü** → strateji-çözümünden
+> sonra testi koştur · `Backend` **85 dk**'ya çıktı, koşarken log'u **404**.
+> **NUMARA: bu slice AYNI GÜN İKİ KEZ taşındı** (54 → #701 aldı → 55 → #699 aldı → **56**;
+> merge edilmiş ad kazanır, dal commit mesajları `adim-54`/`adim-55` yazar). **Kapanış
+> yazmadan önce `git fetch` + `grep '^## ADIM' docs/PROJECT_HISTORY.md` ile numarayı doğrula.**
+> `PROJECT_HISTORY.md` §ADIM 56 · `docs/ADIM56_LANDED_KICKOFF.md`.
+>
+> **Öncesinde ADIM 55 (agentmemory sunucusu YERELE alındı, 2026-08-13): ÜRÜN KODU
 > DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > ADIM 53'ün açık bıraktığı semantik geri çağırma kapandı — **hiçbir şey barındırmadan**:
 > `.mcp.json` artık `scripts/memory_mcp.sh`'ı çağırıyor, o da tam sunucuyu **yerelde**

@@ -8443,21 +8443,125 @@ devralınan üç kontrol.
 
 ---
 
-## ADIM 56 — K-3 ADJUDICATED: imzalı karar D-11 (`contentinfo` landmark), KOD YOK
+## ADIM 56 — A-08 denetimi BAŞLADI: SR-2 (VoiceOver) oturum 1 kaydı (PR #684)
 
-> **NUMARA NOTU.** Bu slice ADIM 54 olarak yazıldı; `#701` (kabul borcu sınıf B,
-> parti 03) ADIM 54'ü, `#699` ADIM 55'i merge edilmiş adla aldı — **numaralar
-> yeniden atanmaz, merge edilmiş ad kazanır** — ve bu slice ÜÇ kez taşındı: ADIM 56.
-> Branch commit mesajları `adim-54` yazar. Aynı haftanın **ikinci** çakışma dizisi
-> (öncesi ADIM 48 → 49 → 50). Bu slice ne `#701`'in ne `#699`'un kaydına **dokundu**;
-> yalnız `doc-status` işaretlerini düşürdü (aynı anda tek belge `current` olabilir).
+**Tarih:** 2026-08-12/13 · **Base:** `origin/main` @ `8fa0767` · **Branch:**
+`claude/entropia-v18-a08-voiceover-audit-m42atk` · **Squash:** `8579897` · **Ürün kodu
+DEĞİŞMEDİ:** `backend/src`, `alembic`, `frontend/src` ağaçlarına hiç dokunulmadı.
+Migration yok, `ENGINE_VERSION` değişmedi, OpenAPI / OCC / Idempotency / route /
+react-query key / SSE taksonomisi el değmedi. **A-08 blocker AÇIK, verdict BLOCKED.**
+
+### 1. Ne landed — ve ne landed DEĞİL
+
+**Defter boş olmaktan çıktı.** `docs/audit/a11y_screen_reader_audit_results.md` artık bir
+insanın duyduğu iki hücreyi taşıyor: **rota 1 (`/`, Mainboard)**, **A-1 `PASS`** ve
+**A-2 `PASS ᴷ³`**. Bu, Section A'nın **184 hücresinin 2'si** (23 rota × 8 kontrol),
+SR-2 yarısında; **10 akışın 0'ı**; **0 bulgu**.
+
+| Alan | Değer |
+|---|---|
+| Kombinasyon | **SR-2** — VoiceOver / Safari 18.3 / macOS 15.3 |
+| Denetçi | Ali Mirbagirzade (ürün sahibi) — **`neither`** |
+| Yığın commit'i | `7dd1dfe` · `SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1` |
+| Kayıtlı süre | **~42 dk** (`17:46Z` → `18:28Z`) — *yalnız kayıt altındaki* süre |
+| Çıkış kriterleri | **0 / 4** — DEĞİŞMEDİ |
+
+**Üç şey yumuşatılmadan kaydedildi:**
+
+1. **`A-2 PASS` dört landmark duyuldu demek DEĞİL — üç duyuldu.** `contentinfo` yoktu
+   (K-3, 23/23 rotada zaten biliniyor, yeniden açılmadı). `PASS`, denetçinin bu yokluğu
+   *kozmetik* bulduğu yargısını kaydeder. Bu not olmadan satır, ileride "kabuğun footer
+   landmark'ı var" kanıtı gibi okunurdu.
+2. **`A-3` bilerek `—` ve oturumun en sonuçlu hücresi bu.** `h1 → h3` atlamasının rotor
+   gezinimini yanıltıp yanıltmadığı soruldu; cevap *"atlamayı fark etmedim"* oldu. Bu cevap
+   **"başlık listesinde gezindim ve yanılmadım"** ile **"seviyelere hiç bakmadım"**ı
+   ayırmıyor. Biri K-5'e cevaptır, diğeri değildir → **K-5 AÇIK KALDI**; 21 sayfanın başlık
+   hiyerarşisini yeniden kesmek için de, olduğu gibi bırakmak için de bu oturumda kanıt yok.
+3. **Denetçi `neither`** — ekran okuyucuyu düzenli kullanmıyor, sertifikalı denetçi değil.
+   `PASS` = "beklenen duyuru duyuldu", "uzman bir kusur bulamadı" DEĞİL. **2/184'ten sonra
+   0 bulgu, temiz rapor değil, bulgu üretmeye yetmeyecek kadar küçük bir örneklem.**
+
+**Bir SR-2 oturumu kriter 1 ve 2'yi ASLA kapatamaz:** ikisi de **iki** kombinasyonu adlandırır
+ve **SR-1 (NVDA / Firefox / Windows) hiç başlamadı**. Kusursuz ve tam bir SR-2 koşusu bile
+kriter 1'i `1/2`, kriter 2'yi `23/46` rotada bırakırdı — kalan yarım, başka bir işletim
+sisteminde **ikinci bir denetimdir**.
+
+### 2. İkinci yarı — `CLAUDE.md`'nin bayat A-08 bloğu
+
+`#514` **2026-08-12T11:08:58Z'de insan eliyle yeniden AÇILDI** (`reopened`), ama üç canlı
+belge hâlâ *"#514 KAPALI"* ve *"defter BOŞ"* yazıyordu. **#687 defterleri uzlaştırdı ama
+`CLAUDE.md`'ye hiç dokunmadı** — yani rehberin kendisi bu sabaha kadar yanlış bilgi
+taşıyordu. Bu slice onu kapattı: §Açık sınırlar ve §Açık iş blokları artık "denetim BAŞLADI
+ama BİTMEDİ (2/184), izleme issue'su AÇIK" diyor.
+
+**Adjudicated, tekrar açma:** ayrışma **(B) yolu ile çözüldü** — (A), imzalı kalıcı sapma,
+**hiç yazılmadı ve yazılmamalıdır**. **Kullanıcı 2026-08-13'te issue'nun açık kalmasına
+açıkça karar verdi.** Agent bu issue'yu **ne kapatabilir ne açabilir** (`human-only` etiketi
++ issue gövdesi); issue'nun durumu kanıt değildir, kapı §5'in dört çıkış kriteridir.
+
+### 3. Süreç bulguları — bu slice'ın asıl bedeli
+
+**(a) P11-1 ruleset'i ilk kez gerçekten kapı oldu.** `a5dc701` üzerinde **22/22 yeşildi** ve
+merge yine de reddedildi: `405 — 16 of 16 required status checks are expected`. Sebep
+`strict_required_status_checks_policy: true` (#683, ~30 dk önce inmişti): **main'in gerisinde
+kalan bir dalın check'leri, ne kadar yeşil olursa olsun "beklemede" sayılır.** Çözüm
+bypass değil, **main'i içeri almaktır** — bu PR ruleset'in ilk kurbanıydı.
+
+**(b) Paralel oturum aynı işi yaptı.** #687 (*"reconcile the A-08 record with #514 being
+re-opened"*) benim `a5dc701` düzeltmemle **aynı konuyu**, üstelik **daha eksiksiz** kapattı
+(iki belgenin (A)/(B) harflerini ters numaraladığını da yazmış; ben yazmamıştım). Çözüm:
+çakışan hunk'larda **main kazandı** (`-X theirs`), dalda yalnız **tekil katkı** bırakıldı.
+
+**(c) `-X theirs` sözleşme testinin pinlediği bir cümleyi SESSİZCE düşürdü.** Çözümden sonra
+`"An empty template is not evidence"` dosyada **yoktu**; `test_a11y_audit_prep_contract.py`
+onu pinliyor. Elle geri kondu. **Kural: her `-X theirs` çözümünden sonra sözleşme testini
+koştur** — strateji çözümü invariant'ları kaybedebilir ve diff'te bu bir "silme" gibi
+görünmez.
+
+**(d) #687'nin banner'ı benim kaydım inince yanlış oldu.** *"the worksheet is still empty"*
+cümlesi 2/184 ile çelişiyordu; "aynı gün boş olmaktan çıktı — ama bu SR-2 oturumu, issue'nun
+durumu değil" diye düzeltildi. **İki doğru kayıt yan yana konunca üçüncü bir yanlış
+doğurabilir**; birleştirmeden sonra iddiaları yeniden oku.
+
+**(e) Sayaç kanonik biçimde kalmalı.** `test_declared_completion_matches_the_cells` sayaç
+satırını **regex'le** okuyup hücrelerden yeniden hesaplıyor; `**0 / 23 routes complete.**`
+gibi düzyazıya çevirmek kapıyı kırar. Sayacı gevşetme, açıklamayı **altına** yaz.
+
+**(f) Ölçülen CI maliyeti:** `Backend — lint, type, test` bu gece **85 dk** sürdü (ortalama
+~46 dk); beş PR matrisi runner paylaşıyordu. **Koşarken job log'u `404` verir** — bitmeden
+teşhis yok, tek sinyal geçen süre.
+
+### 4. Dürüst sınırlar
+
+- **Merge'ü ben yapmadım.** `2026-08-13T07:02:58Z`'de **kullanıcı** merge etti; benim
+  kontrolüm iki dakika geç kaldı.
+- Backend/frontend suite'leri bu dalda **yerelde koşulmadı** (docs-only) → **otorite CI**.
+  Yerelde koşan: `test_a11y_audit_prep_contract.py` **21/21**, documentation-truth gate
+  **OK**, docs-regresyon kontrolü (`git diff origin/main..HEAD -- docs/ CLAUDE.md | grep '^-#'`)
+  → **silinen kayıt yok**.
+- **A-08 hakkında hiçbir şey ölçülmedi.** Bu slice denetimin **kaydıdır**, denetim değildir.
+- Denetçi rolü **hâlâ atanmadı** — oturumu ürün sahibi kendi koştu.
+
+---
+
+## ADIM 57 — K-3 ADJUDICATED: imzalı karar D-11 (`contentinfo` landmark), KOD YOK
+
+> **NUMARA NOTU — bu slice DÖRT kez taşındı (54 → 55 → 56 → 57).** ADIM 54 olarak
+> yazıldı; merge beklerken `#701` ADIM 54'ü, `#699` ADIM 55'i, `#697` ADIM 56'yı
+> **merge edilmiş adla** aldı. Kural değişmedi: **numaralar yeniden atanmaz, merge
+> edilmiş ad kazanır**, taşınan taraf hep merge edilmemiş olandır. Branch commit
+> mesajları `adim-54` yazmaya devam eder; slice'ın adı **ADIM 57**'dir. Aynı haftanın
+> **ikinci** çakışma dizisi (öncesi ADIM 48 → 49 → 50), ama bu kez üç ardışık ad
+> gitti. Bu slice `#701`/`#699`/`#697`'nin kayıtlarına **dokunmadı**; yalnız
+> `doc-status` işaretlerini düşürdü (aynı anda tek belge `current` olabilir).
 >
 > **Yapısal sebep, suçlu değil:** `Backend` kapısı ~50 dk sürüyor ve ruleset
 > `strict: true` — branch güncel olmadan merge yok. Yoğun bir günde bu ikisi bir
-> **koşu bandı** üretir: her yeşilde main ilerlemiş olur. Bu slice **dört tur**
+> **koşu bandı** üretir: her yeşilde main ilerlemiş olur. Bu slice **beş tur**
 > döndü (yeşil → main ilerledi → güncelle → yeşil …). Numara taşımak ucuzdur; asıl
-> maliyet turlardır. Çare: **auto-merge** (yeşilin ilk saniyesinde merge) ya da
-> main'in sakin olduğu bir pencere — ikisi de bu slice'ın kararı değil, akış kararı.
+> maliyet turlardır. **Çare ölçüldü ve bu turda uygulandı: auto-merge** — yeşilin
+> ilk saniyesinde merge eder, band kapanır. Elle beklemek bandı kapatmıyor; beş
+> turun kanıtladığı budur.
 
 **Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok;
 `backend/src`, `frontend/src` ve `alembic` ağaçlarına **tek satır** dokunulmadı.

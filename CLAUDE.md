@@ -189,9 +189,59 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `7dd1dfe`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `ce823a8`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
+> **Son dalga — ADIM 51 (#514 izleme ayrışması KAPANDI, A-08 blocker AÇIK, 2026-08-12):
+> KOD DEĞİŞMEDİ.**
+> #514 `11:08:58Z`'de **insan eliyle yeniden AÇILDI** → ADIM 29'un kaydettiği "kapalı issue
+> ↔ boş defter" ayrışması kapandı; 8 belge uzlaştırıldı (RC raporu **kendi içinde
+> çelişiyordu**: banner yeniden açılmayı yazarken §6.1 + P12 tablosu + `İzleme` bloğu hâlâ
+> `CLOSED` diyordu). **BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED** —
+> defter hâlâ boş, `0/4`, 0/46 rota, 0/20 akış. **Yeniden açma bir SONUÇ DEĞİLDİR**;
+> değişen tek şey izlemenin artık açık olması. **Harf karışıklığı pinlendi:** defterde
+> (A)=imzalı kabul / (B)=geri alma, RC §6.1'de (A)=denetimi koştur / (B)=imzalı sapma —
+> issue'daki *"path (A)"* **RC anlamındadır**; ikisi de yeniden numaralandırılMADI.
+> **#514'e DOKUNULMADI** (`human-only`). **NUMARA: bu slice ÜÇ KEZ taşındı** — ADIM 48'i
+> #686+#688, ADIM 49'u #691, ADIM 50'yi #685 aldı; dördü de merge edildiği için başlıkları
+> değişmez, benimki edilmemişti → **ADIM 51**. `PROJECT_HISTORY.md` §ADIM 51 ·
+> `docs/ADIM51_LANDED_KICKOFF.md`.
+>
+> **Öncesinde ADIM 50 (RC §6.5'in İKİ PO kararı, 2026-08-12): K-2 + K-4 KAPANDI (PR #685).
+> BLOCKER SAYISI DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Skip link (`Layout.tsx`
+> `.skip-link` + `<main id="main-content" tabIndex={-1}>`) ve `/user-manual` `<h1>`.
+> **K-2 bir UYGUNLUK düzeltmesi DEĞİLDİ** — 2.4.1 landmark'larla (ARIA11) zaten
+> karşılanıyordu, axe `bypass` hep yeşildi; ergonomiydi. **K-4'ün bedeli ÖLÇÜLDÜ:**
+> `/user-manual` K-5'in kümesine girdi → **K-5 21 → 22**, advisory toplamı **90 → 67**
+> (CI job `94221023796`; tek+soğuk koşu → 22 bir **taban**). **Eksik `<h1>`'i precheck'te
+> BLOCKING YAPMA** — sonda ilk DOM'u okur, veri render'ıyla yarışır; pin
+> `17-page-coverage.spec.ts` `level: 1`. **K-6 İKİYE ayrıldı:** K-6a (halka görünüyor mu)
+> A-08 bekler ve **mevcut sonda ona kanıt üretmez** (programatik `el.focus()`
+> `:focus-visible`'ı eşleştirmez); **K-6b ölçüldü ve DÜŞÜYOR** — `#00a9e8` ↔ beyaz
+> **2.68 : 1 < 3 : 1** (1.4.11), axe koşmuyor, D-10 (1.4.3) kapsamıyor → **`#688`'de KAPANDI**
+> (halka `var(--text)`; main'de ADIM 48 adıyla kayıtlı). **K-3 hâlâ PO'da** — prompt `docs/ADIM50_KICKOFF.md` §P-2. Frontend **722 passed /
+> 71 dosya**, coverage line **%84.90**. `PROJECT_HISTORY.md` §ADIM 50 · RC §6.5.
+> **NUMARA ÇAKIŞMASI (aynı gün DÖRT oturum):** bu slice ADIM 48 yazıldı → 49 denendi →
+> `#691` 49'u merge edilmiş adla alınca **ADIM 50** oldu. Kural: **numaralar yeniden
+> atanmaz, merge edilmiş ad kazanır**; taşınan taraf hep merge edilmemiş olandır. Branch
+> commit mesajları `adim-48` yazar. Çakışmayı gözle değil **`doc-status` kapısı** yakaladı.
+> **Başkasının slice'ını yeniden düzenleme:** K-6b'yi ayrı belgeye taşıma denemesi
+> `#691`'in kaydı üzerine **geri alındı** — o düzenleme bir **insan kararıdır**.
+>
+> Öncesinde ADIM 49 (P11-1 KAPANDI): **main'de required status check ruleset'i
+> `20765617` AKTİF** (PR #683 hazırlığı + ayarı insan uyguladı). **16 zorunlu check**,
+> hepsi `integration_id: 15368`; `pull_request` (0 onay) · `strict: true` ·
+> `bypass_actors: []`. **ÇALIŞMA ŞEKLİ DEĞİŞTİ: main'e doğrudan push YOK, her PR 16 yeşil
+> check + main ile güncellik ister** (`Backend` ~48 dk — bilinçli bedel). **Yeni CI job'ı
+> ya da `name:` değişikliğinde SIRA: önce merge → adın üretildiğini gör →
+> `scripts/required-checks-preflight.sh <pr>` → `PUT …/rulesets/20765617`. TERS SIRA TÜM
+> MERGE'LERİ KİLİTLER.** Lighthouse **insan kararıyla** zorunlu; çırpınırsa **taban
+> indirilmez** (`LH_REPEATS` medyanı) ve **`armed: false` kapının sessiz kapatma
+> düğmesidir**. Blocker sayısı DEĞİŞMEDİ (1 — A-08), verdict BLOCKED. **Ruleset repoda
+> DEĞİL — silinirse hiçbir kapı fark etmez (drift kapısı açık iş).** **Memory checkpoint
+> yine YAZILAMADI** (ortam yapısal — remote'ta `ecc`/`claude-mem` kayıtlı değil) → borç
+> **ADIM 47 + 48 + 49**; sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md`.
+> `PROJECT_HISTORY.md` §ADIM 49 · `docs/ADIM49_LANDED_KICKOFF.md`.
+> Öncesinde **ADIM 48 (K-6b: odak halkası kontrastı, WCAG 1.4.11): TEK CSS deklarasyonu.**
 > `global.css` `:focus-visible` halkası `var(--accent)` → **`var(--text)`**: eski hâli
 > **hiçbir** zeminde 3:1'i geçmiyordu (beyaz 2.68:1, `#f5f5f5` 2.46:1, `.dropdown-blue`
 > **1.00:1**), yenisi **her** zeminde geçiyor (beyaz 15.91:1; en kötü zemin `#0092c8`

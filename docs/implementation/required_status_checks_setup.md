@@ -8,10 +8,17 @@
 
 # main — required status check kurulumu (RC §6.7 / P11-1)
 
-> **BU BELGE HAZIRLIKTIR, UYGULAMA DEĞİL.** Repo ayarı değiştirmek agent yetkisinde
-> değildir (ve bu oturumun token'ı `branches/main/protection` üzerinde zaten `403`
-> alıyor). Aşağıdaki komutu **insan çalıştırır**. Ölçüm, sınıflandırma, komut ve
-> geri alma yolu burada; karar ve tetik sizde.
+> **UYGULANDI — 2026-08-12.** Ruleset **`20765617`** kuruldu (`enforcement: active`,
+> `23:14:40+03:00`) ve doğrulandı: 16 ad + `integration_id` **sıra dâhil birebir**,
+> `/rules/branches/main` **4 kuralı da etkin** gösteriyor, `strict: true`,
+> `current_user_can_bypass: "never"`, **üretilmemiş ad YOK**. §1'in "main korumasız"
+> ölçümü **artık tarihseldir** — POST öncesi durumu kaydeder, bugünkü durumu değil.
+> Kurtarma/geri alma §6'da; **bakım sırası §7'de ve bağlayıcıdır**.
+> Tam kayıt: `PROJECT_HISTORY.md` §ADIM 49.
+>
+> **BU BELGE HAZIRLIK OLARAK YAZILDI.** Repo ayarı değiştirmek agent yetkisinde
+> değildir (bu oturumun token'ı `branches/main/protection` üzerinde `403` alıyor);
+> aşağıdaki komutu **insan çalıştırdı**.
 
 **Ölçüm tarihi:** 2026-08-12 · **Ölçülen commit:** `7dd1dfe` (main HEAD, PR #682) ·
 **Payload:** `.github/rulesets/main-required-status-checks.json` ·

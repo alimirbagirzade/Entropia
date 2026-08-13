@@ -713,11 +713,10 @@ INVARIANT_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
         "A08_COMPLETE",
         re.compile(r"A-08[^\n]{0,80}?(Complete|COMPLETE|PASS|Done|tamamlan|kapandı)"),
         "A-08 (screen-reader acceptance) is claimed complete. It requires a human "
-        "NVDA/VoiceOver audit that this tree records only a first partial session of "
-        "(SR-2, 2026-08-12: 2 of 184 Section A cells, 0 of 10 flows; SR-1 never "
-        "started). GH #514's state is not the evidence in either direction — it was "
-        "closed unaudited on 2026-08-07 and re-opened by a human on 2026-08-12. The "
-        "gate is the four exit criteria. See "
+        "NVDA/VoiceOver audit that no artefact in this tree records. GH #514 is OPEN "
+        "again (a human re-opened it 2026-08-12 after two unaudited closures), so it "
+        "does track the work — but an open issue is no more evidence than a closed one "
+        "was; the gate is the ledger's four exit criteria, still 0/4. See "
         "docs/audit/a11y_screen_reader_audit_results.md §STATUS.",
     ),
     (

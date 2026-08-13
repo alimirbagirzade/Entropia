@@ -10,11 +10,10 @@
 > `entropia_v18_remediation_status.md` A-08 satırı ve `v18_final_acceptance.md` §6
 > AÇIK kalır; bu belgenin varlığı hiçbir satırı Complete yapmaz.
 >
-> **Takip issue'su GitHub #514 yeniden AÇIK** (`2026-08-12T11:08:58Z`, `reopened`;
-> öncesinde `2026-08-07T03:52:03Z`'de `completed` ile kapatılmıştı). **Denetim
-> başladı ama bitmedi** — SR-2'nin ilk oturumu 2026-08-12'de koştu, SR-1 hiç
-> başlamadı. Ne kapatma ne de yeniden açma aşağıdaki reçetenin tek satırını
-> karşılar; kapı §çıkış kriterleridir. Ayrışmanın kanonik kaydı ve nasıl çözüldüğü:
+> **Takip issue'su GitHub #514 2026-08-12T11:08:58Z'de bir insan tarafından YENİDEN
+> AÇILDI (`reopened`) — denetim yine de koşulmadı.** Ne kapatma ne yeniden açma,
+> aşağıdaki reçetenin tek satırını bile karşılamaz; ikisi de issue'nun durumunu
+> değiştirdi, defterin içeriğini değil. Takip durumunun kanonik kaydı:
 > [`docs/audit/a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
 > §STATUS ▸ *Tracking-issue state*.
 
@@ -39,7 +38,7 @@ görevi tamamlayabiliyor mu?** Bunun otomatik karşılığı yok, çünkü:
 
 | Rol | Sorumluluk | Not |
 |---|---|---|
-| **Denetimi yapan** | Ekran okuyucuyu düzenli kullanan bir denetçi (tercihen görme engelli kullanıcı ya da sertifikalı a11y denetçisi) | **HÂLÂ ATANMADI.** SR-2'nin 1. oturumunu ürün sahibi kendisi koştu (`neither` — ekran okuyucuyu düzenli kullanmıyor); bu, oturumun kaydettiği hücreler için kanıttır ama **rolü doldurmaz**. Atama takibi GitHub #514'te açık (yeniden açıldı `2026-08-12`). |
+| **Denetimi yapan** | Ekran okuyucuyu düzenli kullanan bir denetçi (tercihen görme engelli kullanıcı ya da sertifikalı a11y denetçisi — **tercih, şart değil**; §0'ın *"Screen-reader user?"* alanı `neither` yazmayı kaldırır ve sınırı kayda geçirir) | **ATANMADI** — ama artık **izleniyor**: #514 2026-08-12'de yeniden açıldı ve atamayı açıkça *"the remaining human step"* olarak adlandırıyor. |
 | **Ortam** | Seeded Compose stack (E2E ile aynı fixture: `SEED_E2E_GOLDEN=1 SEED_ESP_TA=1 SEED_RATIONALE=1`), Admin oturumu | Aynı fixture, aksi halde boş sayfalar denetimi eksik gösterir |
 | **Bulguların kaydı** | Her bulgu → `v18_visual_deviations.md` biçiminde FIX / PO-APPROVE statüsü | Bu belgeye değil |
 
@@ -122,7 +121,7 @@ Denetim **tamamlandı** sayılabilmesi için:
 
 Bu dört madde sağlanana kadar A-08 **AÇIK**tır ve hiçbir belge onu Complete gösteremez.
 
-**Takip issue'sunu kapatmak bu dördünden hiçbirini karşılamaz.** #514 bugüne kadar
-**iki kez** (2026-07-30, 2026-08-07) tek bir kayıtlı sonuç olmadan kapatıldı; ilki
-2026-08-03'te geri alındı, ikincisi **açık ayrışma olarak durmaktadır**. Kapı bu dört
-maddedir, issue'nun durumu değil.
+**Takip issue'sunun durumu bu dördünden hiçbirini karşılamaz — iki yönde de.** #514
+bugüne kadar **iki kez** (2026-07-30, 2026-08-07) tek bir kayıtlı sonuç olmadan
+kapatıldı ve **ikisi de geri alındı** (2026-08-03, 2026-08-12). Bugün **AÇIK**, ama
+açık olması da bir sonuç değildir. Kapı bu dört maddedir, issue'nun durumu değil.

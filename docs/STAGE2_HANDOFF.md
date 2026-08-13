@@ -4714,6 +4714,10 @@ ve test **davranışı** değişmedi.
 `2026-07-30T19:05:32Z`, 2026-08-03'te geri alınmıştı; **bu geri alınmadı**). Denetim yine
 koşulmadı: defter boş, dört çıkış kriteri de ☐, findings register'da tek kayıt yok.
 
+> **ADIM 48 düzeltmesi (2026-08-12).** Bu paragrafın *"bu geri alınmadı"* parantezi artık
+> **bayattır**: ikinci kapatma da `2026-08-12T11:08:58Z`'de geri alındı. Aşağıdaki ADIM 29
+> kaydı olduğu gibi durur — yazıldığı gün doğruydu; ayrışmanın kapanışı ADIM 48'dedir.
+
 **Sorun.** *"A-08 açık issue #514'te izleniyor"* iddiası **BAYAT** (issue kapalı);
 *"A-08 tamamlandı"* iddiası ise **yanlış** — denetim yapılmadı. İkisi de yazılamazdı.
 
@@ -5662,15 +5666,117 @@ ikizlerini de açar.
 **P1-Gate3 KAPANMADI** — kalan borç A=1 · B=87 · C=6 · D=32 (açık toplam **126**).
 Tam kayıt: `PROJECT_HISTORY.md` §ADIM 48 · kickoff: `docs/ADIM48_LANDED_KICKOFF.md`.
 
+## Stage — ADIM 49: P11-1 KAPANDI, main'de required status check ruleset'i (PR #683)
+
+**Landed:** PR #683 (`74bbd70`) + **repo ayarı** ruleset `20765617` (insan uyguladı,
+2026-08-12T23:14:40+03:00). **Migration yok · `ENGINE_VERSION` değişmedi · ürün
+ağaçlarına (`backend/src`, `alembic`, `frontend/src`) HİÇ dokunulmadı.**
+
+RC §6.7'nin **repo dışı** tek kalemi kapandı. Öncesi ölçüldü: `GET /rulesets` → `[]`,
+`GET /rules/branches/main` → `[]`, `branches/main` → `enforcement_level: "off"`.
+Yani ADIM 45'in `flows` kapısı dâhil **on altı kapı** merge'i durdurmuyordu.
+
+**Yeni dosyalar (reuse anchor'ları):**
+- `.github/rulesets/main-required-status-checks.json` — 16 context, hepsi
+  `integration_id: 15368`; `deletion` · `non_fast_forward` · `pull_request`
+  (`required_approving_review_count: 0`) · `required_status_checks`
+  (`strict_required_status_checks_policy: true`). **GitHub bu yolu otomatik OKUMAZ.**
+- `scripts/required-checks-preflight.sh` — POST öncesi **zorunlu** salt-okuma kapısı;
+  payload'ı üretilen check adlarıyla diff'ler, göremediğini `FATAL` + `exit 1` yapar.
+- `docs/implementation/required_status_checks_setup.md` — runbook (§2.1 Lighthouse kararı,
+  §3 komut, §5 uyarılar, §6 geri alma, §7 bakım sırası).
+
+**Sınıflandırma:** 16 zorunlu · 1 ayrıldı (çıplak `CodeQL` — farklı app `57789`,
+PR-only, alert triage) · 5 gürültü (nightly/manual; `Nightly failure notice` **iki
+workflow'dan aynı adla** gelir, tek-anlamlı required yapılamaz).
+
+**Lighthouse insan kararıyla ZORUNLU** (ilk taslak varyans gerekçesiyle ayırmıştı).
+Çırpınırsa **taban indirilmez**: skor `LH_REPEATS` medyanıdır → tekrar sayısını artır.
+**`armed: false` + boş `floors` spec'i GEÇİRİR** → required olduktan sonra bu bayrak
+kapının **sessiz kapatma düğmesidir**.
+
+**Doğrulandı (canlı ↔ main'deki payload, programatik):** 16 ad + `integration_id`
+sıra dâhil birebir · `/rules/branches/main` = 4 kural · `strict: true` ·
+`current_user_can_bypass: "never"` · **kilitlenme kontrolü: üretilmemiş ad YOK**.
+
+**Dürüst sınırlar:** `bypass_actors` salt-okuma token'ına görünmüyor (kanıt POST
+yanıtı) · **ruleset repoda değil** — silinirse hiçbir CI kapısı fark etmez, drift
+kapısı **yazılmadı (açık iş)** · **A-08 DEĞİŞMEDİ** (blocker 1, verdict BLOCKED) ·
+**memory checkpoint yine yazılamadı** → borç **ADIM 47 + 48 + 49**, üç oturum;
+sahnelenmiş içerik `docs/memory/PENDING_CHECKPOINTS.md` (bu slice Entity C'yi ekledi).
+
+**Artık geçerli:** main'e doğrudan push kapalı; her PR 16 yeşil check + main ile
+güncellik ister (`Backend` ~48 dk — bilinçli bedel, runbook §3'te tek alanı çeviren
+komut var); muafiyet yok, sahibi dâhil. Kurtarma: ruleset `20765617` → `Disabled`/sil.
+
+Tam kayıt: `PROJECT_HISTORY.md` §ADIM 49 · kickoff: `docs/ADIM49_LANDED_KICKOFF.md`.
+
+## Stage — ADIM 50: RC §6.5'in K-2 ve K-4'ü KAPANDI (PO kararı, PR #685)
+
+> **NUMARA NOTU:** bu slice ADIM 48 olarak başladı; `#686` main'e ADIM 48 adıyla merge
+> edilince **merge edilmiş ad kazandı** ve bu slice ADIM 49'a taşındı. Branch'in commit
+> mesajları `adim-48` yazmaya devam eder — yazılmış commit mesajı değiştirilmez.
+
+**Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi.
+**OpenAPI:** değişmedi. **OCC / Idempotency / route yolları / react-query key'leri /
+`app/nav.ts`:** değişmedi. Presentation-only frontend + belge kaydı.
+
+**Nasıl başladı:** kod değil, **karar brifingi**. Beş gözlemin (K-2..K-6) her biri için
+ne / kaç rotada / hangi ölçüt · **ölçülen** düzeltme maliyeti · düzeltmemenin bedeli ·
+öneri → `docs/ADIM50_KICKOFF.md` (dört paste-ready prompt: P-1..P-4). PO **P-1**'i seçti.
+
+**(A) K-2 KAPANDI.** `app/Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş
+`Skip to main content` linki; `<main>` `id="main-content"` + `tabIndex={-1}`.
+**Kayda geçen düzeltme:** WCAG 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu**
+(axe `bypass` hep yeşildi) → bu bir **ergonomi** düzeltmesiydi, uygunluk düzeltmesi değil.
+
+**(B) K-4 KAPANDI.** `/user-manual` artık `<h1 class="page-title">`. `.page-title` sınıf
+tabanlı → **0 görsel diff** — ÖLÇÜLDÜ: `@visual` job `94223919309` **23/23 passed**,
+hiçbir baseline yeniden üretilmedi. **Yan etki:** sayfa `h2 → h3` iken atlama taşımıyordu,
+`h1 → h3` olunca taşıyor → **K-5'in kümesine girdi**: CI job `94221023796`
+**K-5 21 / 23 → 22 / 23**, toplam advisory **90 → 67**. Tek ve **soğuk** koşu →
+22 bir **taban**. Döküm: `docs/audit/a11y_screen_reader_audit_results.md` §6.
+
+**(C) K-6 İKİYE AYRILDI.** **K-6a** (halka görünüyor mu, 2.4.7) A-08 bekliyor **ve mevcut
+sondanın çıktısı ona kanıt DEĞİL** (programatik `el.focus()` `:focus-visible`'ı
+eşleştirmez; halka `global.css`'te yazılı). **K-6b** (kontrast, 1.4.11) **ölçüldü ve
+düşüyor**: `#00a9e8` ↔ beyaz **2.68 : 1** < 3 : 1; axe bu kuralı koşmuyor, D-10 (1.4.3)
+kapsamıyor → **PO kararı bekliyor**.
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+
+- `frontend/src/app/Layout.tsx` → `.skip-link` + `<main id="main-content" tabIndex={-1}>`
+  — **yeni bir shell landmark'ı eklerken** bu üçlüyü birlikte düşün: link / hedef id /
+  odaklanabilirlik. Biri eksikse link sessizce hiçbir şey yapmaz.
+- `frontend/src/styles/global.css` → `.skip-link` / `.skip-link:focus` — clip deseni
+  (**negatif offset DEĞİL**; odaklanan ekran-dışı öğe sayfayı yana kaydırır) ve tetikleyici
+  **`:focus`**, `:focus-visible` değil (K-6a hâlâ açık).
+- `frontend/src/test/skipLink.test.tsx` — K-2'nin **üç parçalı** sözleşmesi; negatifi
+  kanıtlı (kırık `href` → exit 1, `tabIndex` yok → exit 1). **Yalnız "link var" assert
+  eden bir test yazma** — hedef adı değişince yeşil kalır.
+- `frontend/e2e/specs/17-page-coverage.spec.ts` → `/user-manual` `level: 1` — K-4'ün
+  regresyon pini **burada**, precheck'te değil: **eksik `<h1>`'i BLOCKING yapmak
+  değerlendirildi ve bilerek yapılmadı** (sonda ilk DOM'u okur, veri render'ıyla yarışır →
+  çırpınan kapı). Gerekçe `specs/20-a11y-prechecks.spec.ts` içinde yazılı.
+
+**Testler:** frontend **722 passed / 71 dosya** (ölçüldü, `--no-file-parallelism`);
+coverage kapısı geçti (**line %84.90**). Backend'e dokunulmadı.
+
+**Açık kalan (bu slice kapsamadı):** **K-3** (footer/checklist kararı) ve **K-6b**
+(halka rengi) → ikisi de **A-08'e bağımlı DEĞİL**, ikisi de **PO kararı** bekliyor;
+prompt `docs/ADIM50_KICKOFF.md` §P-2 (K-3). **K-6b `#688`'de KAPANDI.** **K-5 + K-6a** → **A-08 bekliyor**.
+**A-08'e dokunulmadı:** defter boş (0/4), `#514` kapalı, **blocker sayısı 1**, verdict
+**BLOCKED**.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
 > ya da sunum slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
-> ayrışma **açık**. RC §6.7'de kalanlar: **P11-1** (branch protection — repo ayarı,
-> **insan kararı**, agent işi değil), **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**,
-> **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
+> ayrışma **açık**. **P11-1 ADIM 49'da KAPANDI** — ruleset `20765617` aktif, 16 required
+> check doğrulandı; artık RC §6.7 kalanları arasında **değil**. RC §6.7'de kalanlar:
+> **P11-6b**, **P11-3b**, **P8-B3b**, **P4-3**, **P10-B6**, **P1-Gate3**, **P10-B3/B4/B5**.
 > **P1-Gate3 ADIM 48'de İŞLENMEYE BAŞLANDI ama KAPANMADI** (8 kriter kapandı, 126 açık).
 > Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
 
@@ -5689,8 +5795,11 @@ açmaz**. Ayrıntı ve tasarım işaretleri: `docs/ADIM35_LANDED_KICKOFF.md` (pa
 en altta), `docs/ADIM16_STEPPER_LANDED_KICKOFF.md` §4.1 ve `docs/ADIM26_KICKOFF.md`.
 
 **A-08 ayrı bir eksendedir ve PR B'yi bloklamaz.** İnsan denetimi hâlâ yapılmadı; iskele
-hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş, #514 kanıtsız kapatıldı.
-ADIM 29 bu ayrışmayı **çözmedi, kaydetti** — kanonik blok
+hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş. **#514 bugün AÇIK** —
+2026-08-12T11:08:58Z'de insan eliyle yeniden açıldı, yani yukarıdaki iki yoldan **(B)
+gerçekleşti** ve ADIM 29'un kaydettiği ayrışma **ADIM 48'de kapandı**; kanonik blok
 `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue state*. Kalan iş
-**insana** düşer: (A) imzalı kalıcı sapma **veya** (B) #514'ün yeniden açılması. **A-08 için
-hiçbir belgeye `Complete`/`PASS`/`Done` yazma; "açık issue #514'te izleniyor" da yazma.**
+**insana** düşer ve artık tek kalemdir: **denetimin kendisi** (imzalı kalıcı sapma yolu
+seçilmedi). **A-08 için
+hiçbir belgeye `Complete`/`PASS`/`Done` yazma** — ama artık "açık issue #514'te
+izleniyor" **yazılabilir**, çünkü doğrudur.

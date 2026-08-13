@@ -1,5 +1,9 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **SUPERSEDED (2026-08-13).** Sonrasında **ADIM 56** (A-08 / SR-2 oturum 1 kaydı,
+> `docs/ADIM56_LANDED_KICKOFF.md`) ve **ADIM 57** (K-3 adjudicated, imzalı karar D-11 —
+> kod yok) landed. Canlı kickoff artık `docs/ADIM57_LANDED_KICKOFF.md`.
+> Aşağısı ADIM 55 kapanışındaki durumu kaydeder. **Değişmeyen:** blocker sayısı 1
+> (yalnız A-08), verdict BLOCKED. Sayısal gerçekler için otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 55 LANDED — agentmemory sunucusu yerele alındı (semantik geri çağırma, barındırma YOK)

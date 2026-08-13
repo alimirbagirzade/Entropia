@@ -258,6 +258,13 @@ responsive spec **6/6**, vitest **514/514**, tsc + eslint temiz.
   > yeniden açılması):
   > [`docs/audit/a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
   > §STATUS ▸ *Tracking-issue state*.
+  >
+  > **GÜNCELLEME (2026-08-12) — iki yoldan İKİNCİSİ seçildi.** #514
+  > `2026-08-12T11:08:58Z`'de bir **insan** tarafından yeniden açıldı
+  > (`state_reason: reopened`); imzalı kalıcı sapma yolu **seçilmedi** ve A-08 için böyle
+  > bir kayıt hâlâ **YOK**. Ayrışma böylece kapandı. **Bu maddenin hükmü değişmedi:**
+  > ekran okuyucu denetimi hâlâ **yapılmamıştır**, defter boştur, ve A-08 bu belgede de
+  > başka hiçbir belgede de `Complete`/`PASS`/`Done` yazılamaz.
 - **Klavye denetimi temel akışla sınırlıdır** (login → Mainboard → Add menü). Her sayfanın
   tam klavye gezinimi tek tek denenmemiştir.
 - **A-06 görsel kıyas tamamlandı; piksel eşitliği iddiası değildir.**

@@ -209,13 +209,20 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
       // ambiguous — the user cannot tell which one names the page — and no
       // route does that today, so a second one is a regression.
       //
-      // Not `=== 1`, deliberately. `/user-manual` renders its page title as
-      // `<h2 className="page-title">` (UserManual.tsx:181), a divergence
-      // already recorded in utils/pageTruth.ts:15. Promoting it to h1 would
-      // shift that page's whole h2→h3→h4→h5/h6 outline and change spec 17's
-      // expectation — a product decision, not an audit-preparation one. It is
-      // reported as an advisory below so the auditor tests it by rotor
-      // (checklist A-1 and A-3) instead of it being silently normalised here.
+      // Still `> 1`, not `=== 1`, but for a DIFFERENT reason than before.
+      // The product decision this comment used to defer — promote
+      // `/user-manual`'s `<h2 className="page-title">` to h1 — was taken by the
+      // PO on 2026-08-12 (K-4) and has landed, so all 23 routes now name
+      // themselves with exactly one h1 and the `h1Count === 0` advisory below
+      // fires on none of them.
+      //
+      // Making a missing h1 BLOCKING was considered and deliberately not done
+      // here: this probe reads the INITIAL DOM and races each page's first data
+      // render (see the audit file's count caveat — routes drop in and out of
+      // the h3/aria-live counts between runs), and a gate that flaps is worse
+      // than no gate. The regression pin lives where it is stable instead —
+      // specs/17-page-coverage.spec.ts declares `level: 1` for `/user-manual`
+      // and waits for the page's real projection before asserting.
       if (rec.h1Count > 1) {
         blocking.push(`${target.path}: ${rec.h1Count} <h1> elements — a page may name itself once`);
       }

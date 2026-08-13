@@ -1,4 +1,7 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **HISTORICAL — ADIM 49 (P11-1 required status checks) bunu devraldı.**
+> Canlı kickoff: `docs/ADIM49_LANDED_KICKOFF.md`. Aşağıdaki iki H1, iki paralel
+> oturumun aynı dosyaya yazmasından kalmadır; **ayrıştırma insan kararıdır**.
 # ADIM 48 LANDED — K-6b: odak halkasının kontrastı (WCAG 1.4.11) · sıradaki slice için kickoff
 # ADIM 48 LANDED — kabul borcu sınıf B, parti 01 · sıradaki slice için kickoff
 

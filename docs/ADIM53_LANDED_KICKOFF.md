@@ -37,7 +37,7 @@ kanıtı değildir.
 3. **Sunucusuz kip harfi harfine eşleşir.** `odak halkası kontrast` bulur,
    `focus ring contrast` **bulmaz**. Aradığını bulamıyorsan **belgedeki yazımı** dene;
    "hafızada yok" sonucuna atlama.
-4. **İndeks kaydı otorite DEĞİLDİR** ve 46/67'si kesiktir. Karar vermeden önce kaydın
+4. **İndeks kaydı otorite DEĞİLDİR** ve 47/68'i kesiktir. Karar vermeden önce kaydın
    işaret ettiği `PROJECT_HISTORY.md` §bölümünü **oku**.
 5. **Yeni CI job'ı ekleme, adım ekle.** Required status check ruleset'i `20765617`
    adları başlıkla tanır; **üretilmeyen bir ad tüm merge'leri kilitler** (ADIM 49).
@@ -85,7 +85,7 @@ Entropia'da yeni bir oturum açıyorum. Önce CLAUDE.md §Session START protokol
 2. Otorite sırası: docs/ADIM53_LANDED_KICKOFF.md (bu belge) → docs/STAGE2_HANDOFF.md
    ("ADIM 53 ... landed" + "Next") → docs/STAGE_BUILD_PLAN.md → docs/spec/NN_*.
 3. Hafıza indeksi: taze container'da store BOŞTUR →
-   `node scripts/memory_index.mjs --write` (~6 sn, 67 kayıt), sonra agentmemory MCP'sinin
+   `node scripts/memory_index.mjs --write` (~6 sn, 68 kayıt), sonra agentmemory MCP'sinin
    memory_recall/memory_smart_search araçlarıyla ara. TÜRKÇE yazımı birebir yaz —
    sunucusuz kip harf eşleşmesidir, İngilizce parafraz hiçbir şey bulmaz.
    Bulduğun kayıt OTORİTE DEĞİLDİR: işaret ettiği PROJECT_HISTORY.md §bölümünü oku.

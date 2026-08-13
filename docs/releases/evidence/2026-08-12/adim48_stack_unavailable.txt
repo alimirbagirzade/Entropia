@@ -1,0 +1,64 @@
+ADIM 48 — why `npm run a11y` and `npm run visual` did NOT run locally
+=====================================================================
+
+The slice's own verification list required, in order:
+
+    scripts/a11y-audit-stack.sh up
+    cd frontend/e2e && npm run a11y      # at least twice, take the second
+    cd frontend/e2e && npm run visual    # 23/23 baselines must not move
+
+None of the three ran. The session container has no reachable container
+registry. This is recorded rather than worked around, and NOTHING in this
+slice's documents claims those gates passed.
+
+WHAT WAS TRIED
+  1. dockerd was not running at all (no /var/run/docker.sock). Started it.
+  2. First `a11y-audit-stack.sh up` — the script's own 3-attempt retry loop
+     exhausted itself on image resolution:
+
+       failed to resolve reference "docker.io/library/postgres:16-alpine":
+       failed to authorize: failed to fetch anonymous token: unexpected status
+       from GET request to https://auth.docker.io/token?... :
+       503 Service Unavailable
+
+  3. dockerd restarted WITH the agent proxy exported
+     (HTTP_PROXY/HTTPS_PROXY/NO_PROXY; `docker info` then reports
+     "HTTPS Proxy: http://127.0.0.1:37853"). Manifest resolution started
+     working; blob download did not:
+
+       unexpected status from HEAD request to
+       https://registry-1.docker.io/v2/library/postgres/manifests/16-alpine:
+       429 Too Many Requests
+
+       failed to copy: httpReadSeeker: failed open: failed to do request:
+       Get "https://production.cloudfront.docker.com/registry-v2/.../data?...":
+       Forbidden
+
+  4. Retried five times over ~10 minutes with backoff. Both failures are
+     reproducible: 429 on the manifest (shared-egress anonymous pull limit)
+     and 403 on the blob CDN host (not permitted through the proxy). Per
+     /root/.ccr/README.md this class is "report, do not work around".
+
+WHAT THIS DOES AND DOES NOT LEAVE UNVERIFIED
+
+  NOT verified locally — CI is the authority (E2E workflow, jobs `a11y` and
+  `e2e`/visual, both run on the PR):
+    * the precheck's measured K-2 reach (expected 23 -> 0)
+    * the precheck's measured K-4 reach (expected 1 -> 0)
+    * the precheck's measured K-5 reach (expected 21 -> 22)
+    * the 23 visual-regression baselines (expected: 0 diff)
+
+  VERIFIED locally, and these are the load-bearing ones for the change itself:
+    * lint / typecheck / full vitest suite / coverage gate — see
+      adim48_local_gate_runs.txt
+    * NEW unit gates pinning both fixes, with negative proof — the skip link
+      really is the first tabbable node in the rendered shell, and the User
+      Manual really does name itself with a level-1 heading. These are
+      stronger than the precheck advisories they replace, because they FAIL a
+      build; the precheck cannot.
+
+  A CI precheck run is ONE COLD run. Section 6 of
+  docs/audit/a11y_screen_reader_audit_results.md establishes that a cold run
+  UNDER-reports the two unstable classes (K-5, K-7). So CI settles K-2 and
+  K-4 (stable classes) but does NOT settle K-5's new figure. That one stays
+  derived until someone measures it warm, twice.

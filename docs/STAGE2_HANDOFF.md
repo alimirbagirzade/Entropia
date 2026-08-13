@@ -5919,11 +5919,74 @@ ile numarayı doğrula — paralel oturumlar birbirini görmüyor.**
 Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 56 · `docs/ADIM56_LANDED_KICKOFF.md`
 (paste-ready resume prompt en altta).
 
+## Stage — ADIM 57: K-3 ADJUDICATED — imzalı karar D-11, KOD YOK
+
+> **NUMARA NOTU:** ADIM 54 yazıldı, 55 ve 56 denendi, **ADIM 57** oldu — merge beklerken
+> `#701` 54'ü, `#699` 55'i, `#697` 56'yı merge edilmiş adla aldı (DÖRT taşıma). Numaralar
+> yeniden atanmaz; taşınan taraf merge edilmemiş olandır. Branch commit mesajları
+> `adim-54` yazar. Üçünün de kaydına dokunulmadı — yalnız `doc-status` düşürüldü.
+> **Sebep yapısal:** `Backend` ~50 dk + ruleset `strict: true` → yoğun günde koşu bandı
+> (bu slice **beş tur** döndü). **Çare bu turda uygulandı: auto-merge.**
+
+**Migration:** yok. **Kod:** **tek satır bile değişmedi** — `backend/src`, `frontend/src`,
+`alembic` ağaçlarına dokunulmadı. **OpenAPI / OCC / Idempotency / route / query-key /
+`ENGINE_VERSION`:** değişmedi. Bu bir **karar kaydı** slice'ıdır.
+
+**Ne kapandı.** RC §6.5'in **K-3**'ü (`contentinfo` landmark yok, 23/23 route). PO
+`docs/ADIM50_KICKOFF.md` §P-2'yi **Varyant A** ile uyguladı: footer eklenmedi, **beklenti**
+hizalandı.
+
+**Reuse anchor'ları (tam adlarıyla):**
+
+- `docs/implementation/a11y_ci_ratchet_and_adjudication.md` **§4b → `Karar # : D-11`** —
+  imzalı a11y kararlarının **sicili** artık bu belge (D-10 kontrast + D-11 landmark).
+  Yeni imzalı a11y kararı buraya, **aynı** `Karar # / Onaylayan / Tarih / Kayıt` bloğuyla
+  yazılır. **İmzalayan adı olmadan blok YAZILMAZ.**
+- `docs/implementation/a11y_screen_reader_audit_checklist.md` **A-2 satırı** — beklenti
+  artık **ÜÇ** landmark (`banner`/`navigation`/`main`); `contentinfo` **beklenmez**.
+  A-08 denetçisi bu satırı okur; dört landmark arayan bir denetçi yanlış `FAIL` yazardı.
+- `docs/audit/a11y_screen_reader_audit_results.md` §1 A-2 madde metni + route 1 dipnotu
+  **ᴷ³** + §6 K-3 satırı — üçü **aynı** gerçeği söyler; biri değişirse üçü değişir.
+
+**Kararın dayanağı — biri insan, biri makine.** (1) Hiçbir WCAG SC'si `contentinfo`
+zorunlu kılmaz; 1.3.1 *var olan* yapıyı ister. Eski `1.3.1 / 2.4.1` etiketi kalemi
+olduğundan ağır gösteriyordu, düzeltildi. (2) **A-08'in SR-2 oturumu bu soruyu zaten
+cevaplamıştı:** route 1'de denetçi üç landmark duydu, yokluğu **kozmetik** buldu. Tek
+rota karar vermeye yetmez, ama makine sayısıyla (23/23 yok) **aynı yöne** bakıyor.
+
+**Reddedilen iki seçenek, gerekçeleriyle kayıtta:** görünür footer (v18'de footer YOK →
+zorunlu görsel referans ihlali + 23 baseline + Lighthouse yeniden tabanlama + yeni v18
+sapma kaydı) ve **boş/gizli footer** (sayacı yeşile çevirir, rotor kullanıcısına hiçbir
+şey vermez — *ölçüyü ürüne değil ölçüme uydurmak*).
+
+**Yan iş — main'de duran bir hasar onarıldı.** §6'nın K-tablosunda **K-4, K-5 ve K-6
+satırları İKİ KEZ** vardı: ikinci küme bayattı (K-4 `Open`, K-5 `21/23`) ve ADIM 50 ile
+#688'in aynı tabloyu düzenlemesinden kalan bir **merge artefaktıydı**. Üç fazla satır
+silindi; tablo artık her kalem için **tek** satır taşıyor (K-1, K-2, K-3, K-4, K-5, K-6a,
+K-6b, K-7). Bu bir yargı düzeltmesi değil, **çift kaydın** temizliğidir.
+
+**Tavizsiz sınırlar (bu slice'ta pinlendi):**
+
+1. **Advisory SUSTURULMADI.** K-3'ün `::warning::` satırı 23 rotada çıkmaya devam eder.
+   Karar **dispozisyonu** belirler, ölçümü değil. Sonda çıktısını kırpan bir "temizlik"
+   bu kararı yanlış okumuş olur.
+2. **D-11 gelecekteki footer'ı KAPSAMAZ.** Ürün gerçek footer içeriği (sürüm / ortam /
+   yasal metin) isterse bu **yeni** bir karardır ve bir v18 sapma kaydı gerektirir.
+3. **Bu bir WCAG uyumluluk iddiası DEĞİL** — ama bir uyumluluk **eksiği** de değil.
+   D-10 ile karıştırma: D-10 gerçek bir ihlali (1.4.3) imzalar, D-11 **olmayan bir
+   yükümlülüğü** kaydeder.
+
+**A-08 DEĞİŞMEDİ:** defter **2 / 184** hücre (yalnız SR-2), SR-1 hiç başlamadı, çıkış
+kriterleri **0 / 4**, `#514` **açık**. **Blocker sayısı 1 (yalnız A-08), verdict BLOCKED.**
+K-3'ün kapanması A-08'i **ilerletmez**; bu kalem hiç blocker değildi.
+
+**Açık kalan:** **K-5** (22/23, maliyet ölçülü: 204 başlık / ~40 dosya / 5 tag-scoped CSS
+kuralı) ve **K-6a** — ikisi de **yalnız A-08** ile kapanır. **K-7** ölçüldü, düzeltilmedi.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
 > ya da sunum slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
-> slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
 > (`../validate` + `../baseline-parse` → 202); **`validation-runs` 201'de KALDI** ve o
 > ayrışma **açık**. **P11-1 ADIM 49'da KAPANDI** — ruleset `20765617` aktif, 16 required
 > check doğrulandı; artık RC §6.7 kalanları arasında **değil**. RC §6.7'de kalanlar:

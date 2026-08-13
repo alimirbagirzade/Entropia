@@ -1431,9 +1431,15 @@ def _build_stepper(
         the SIGNAL bar's strength multiplier (F-07g, 1x unless volatility-adjusted
         sizing is active). Under allocation a 0-capacity sleeve (an unallocated item, or
         a compound pool busted below its reserve) yields no fill at all — ``None`` —
-        rather than a phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode
-        books even a bust-equity 0-size fill (preserving the risk-based
-        no-phantom-profit invariant), but an UNMODELLED sizing method (F-09), leverage
+        rather than a phantom 0-size trade (doc 13 §8.4 step 5/6). **Independent mode now
+        refuses it too (GH #551).** This sentence used to read "Independent mode books even
+        a bust-equity 0-size fill (preserving the risk-based no-phantom-profit invariant)",
+        and that WAS the shipped behaviour — a documented invariant, not an oversight. It is
+        deliberately reversed here: a position carrying no risk is not a trade, and booking
+        one polluted `total_trades`, the win-rate denominator, average trade and expectancy,
+        and wrote a zero-notional `position_intervals` row. Nothing about the risk-based
+        path needs the phantom fill to stay honest — a refused entry books no profit either.
+        An UNMODELLED sizing method (F-09), leverage
         configuration (F-07f), signal-strength mode (F-07g) or any ``future_dev`` capability
         selection (F-05) opens nothing at all — no phantom trade for a strategy the user
         never validly configured.
@@ -1462,18 +1468,28 @@ def _build_stepper(
         size = _planned_size(direction, fill_raw, strength)
         if size <= _ZERO:
             # GH #551. This guard used to read ``if alloc_on and size <= _ZERO``, so it only
-            # fired under allocation and independent mode — the DEFAULT — opened a phantom
-            # 0-size position that closed as a 0.00-PnL trade. Three paths reach a
+            # fired under allocation, and independent mode — the DEFAULT — opened a phantom
+            # 0-size position that closed as a 0.00-PnL trade. The paths that reach a
             # non-positive size without allocation: a ``min > max`` window (``_clamp_to_limits``
-            # fails closed to 0), ``base_position_size`` saved as 0, and a non-positive Kelly
-            # edge. ``risk_based_sizing`` cannot — ``stop_loss_point`` is schema-guarded ``gt=0``.
+            # fails closed to 0), a ``max`` of 0, ``base_position_size`` saved as 0 or NEGATIVE,
+            # a non-positive Kelly edge, and any method run on bust equity — ``risk_based_sizing``
+            # included, whose ``stop_loss_point`` is schema-guarded ``gt=0`` but whose EQUITY leg
+            # is not. ``<= _ZERO`` covers all of them, the negative case included: a stored
+            # ``-5`` used to open a -5-unit long and book a LOSS on a bar that moved in the
+            # position's favour, because the size's sign inverts the PnL.
             #
-            # The reporting was never the load-bearing half. A full close appends to
-            # ``led.position_intervals``, and ``execution/rules.py::conflicts_with_prior`` reads
-            # an interval by ``direction`` alone — it never looks at ``peak_notional`` — so a
-            # 0-notional phantom could satisfy BLOCK_OPPOSITE and block a LATER-pinned item's
-            # genuine entry. A position that never existed changed another strategy's result.
-            # Refusing to open is what closes that at the source; no interval is written.
+            # What this actually closes, measured rather than assumed: the trade count, the
+            # win-rate denominator, average trade and expectancy, the zero-notional
+            # ``position_intervals`` row, and — with a commission configured — real money, since
+            # a 0-unit position paid the same flat per-fill fee as a full one.
+            #
+            # It does NOT close a cross-item leak, and an earlier version of this comment
+            # claimed it did. ``execution/rules.py::conflicts_with_prior`` does read an interval
+            # by ``direction`` alone, but it never sees a phantom: the only producer of
+            # ``PriorItemInterval`` is ``build_prior_intervals`` above, which drops any window
+            # whose ``peak_notional`` is not positive before the gate runs. That filter is
+            # pinned by ``test_backtest_portfolio_rules.py``'s
+            # ``test_build_prior_intervals_fails_closed_on_bad_bounds_and_drops_zero_notional``.
             #
             # Under allocation the reason stays ``sleeve_zero_capacity`` (more specific, and
             # already contracted) — the ladder in ``sizing.blocked_reason`` reaches it via

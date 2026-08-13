@@ -249,13 +249,19 @@ def test_a_min_above_max_window_opens_nothing() -> None:
     0.00-PnL row, because the guard read ``if alloc_on and size <= _ZERO`` and so never
     fired in independent mode. It now reads ``if size <= _ZERO``.
 
-    Three assertions, and the third is the one that mattered. ``total_trades`` no longer
+    What it closes, stated as measured rather than as argued: ``total_trades`` no longer
     counts a position that never carried risk, so the win/loss split is not diluted by a
-    0-PnL lot landing on the loss side. And **no ``position_intervals`` record is written**,
-    which is what actually closes the cross-item leak: ``execution/rules.py::
-    conflicts_with_prior`` matches an interval on ``direction`` alone and never reads
-    ``peak_notional``, so a 0-notional phantom could otherwise satisfy BLOCK_OPPOSITE and
-    block a later-pinned item's genuine entry."""
+    0-PnL lot landing on the loss side, and no ``position_intervals`` record is written.
+    With a commission configured it is also money — a 0-unit position used to pay the same
+    flat per-fill fee as a full one.
+
+    It is NOT a cross-item leak, and #551's own text calls that "the load-bearing one".
+    ``execution/rules.py::conflicts_with_prior`` does match an interval on ``direction``
+    alone without reading ``peak_notional``, but it never sees a phantom: the only producer
+    of ``PriorItemInterval`` is ``engine.py::build_prior_intervals``, which drops a window
+    whose notional is not positive before the gate runs
+    (``test_backtest_portfolio_rules.py::
+    test_build_prior_intervals_fails_closed_on_bad_bounds_and_drops_zero_notional``)."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -268,6 +274,29 @@ def test_a_min_above_max_window_opens_nothing() -> None:
     assert out.trades == []
     assert out.summary["total_trades"] == 0
     assert out.position_intervals == []
+    assert _blocked_reason(out) == "size_resolved_to_zero"
+
+
+def test_a_negative_size_opens_nothing_rather_than_inverting_the_pnl_sign() -> None:
+    """The severe variant of GH #551, and the one its text does not mention.
+
+    ``_raw_position_size`` returned the stored base value verbatim and
+    ``_clamp_to_limits`` short-circuits on a non-positive size (so a ``min`` floor cannot
+    resurrect the 0 "do not open" sentinel), which together let a NEGATIVE size through
+    untouched. A stored ``-5`` opened a -5-unit long and booked a LOSS on this fixture's
+    bar, which moves +2.00 in the position's favour: the size multiplies the price delta,
+    so its sign inverts the result. The schema enforces neither Master Ref §10.1's
+    positive-only rule nor doc 02's "required >0".
+
+    ``if size <= _ZERO`` covers it with the same comparison that covers zero — there is no
+    separate negative branch, which is why this case is worth pinning rather than assuming:
+    a future refactor that split the guard into ``== 0`` would silently reopen it."""
+    out = _sized({"method": "base_position_size", "base_position_size": "-5"})
+
+    assert not [e for e in out.signal_events if e.event_type == "entry_fill"]
+    assert out.trades == []
+    assert out.summary["total_trades"] == 0
+    assert out.summary["final_equity"] == Decimal("10000.00")
     assert _blocked_reason(out) == "size_resolved_to_zero"
 
 

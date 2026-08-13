@@ -6979,7 +6979,7 @@ kontrol varlığı, kimlik-yeşil, 3× negatif, bant türetimi, üç-sahip drift
 
 ---
 
-## ADIM 44 — RC blocker 4 KAPANDI + blocker 1 koşulabilir hâle geldi (PR pending)
+## ADIM 44 — RC blocker 4 KAPANDI + blocker 1 koşulabilir hâle geldi (PR #678)
 
 **Base:** `e719af1` (origin/main; ADIM 43 / #676 merged) · **Branch:**
 `release/rc-blocker4-and-a08-readiness` · **Tarih:** 2026-08-12 · **Migration YOK** ·

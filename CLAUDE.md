@@ -208,7 +208,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **HEAD `c4cd932`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 55 (agentmemory sunucusu YERELE alındı, 2026-08-13): ÜRÜN KODU
+> **Son dalga — ADIM 56 (A-08 denetimi BAŞLADI: SR-2 oturum 1, PR #684, 2026-08-13):
+> ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> Defter boş olmaktan çıktı: bir insanın duyduğu **2 hücre** (rota 1 `/`, A-1 + A-2) =
+> **184'ün 2'si**, **0/10 akış**, **0/23 rota TAM**, **SR-1 hiç başlamadı** → çıkış kriterleri
+> **0/4** ve kriter 1/2 tek kombinasyonla **kapatılamaz**. Denetçi **`neither`** (ürün sahibi),
+> rol **atanmadı**. **`A-3` bilerek `—`** ("atlamayı fark etmedim" ≠ cevap) → **K-5 AÇIK**.
+> İkinci yarı: `CLAUDE.md`'nin bayat A-08 bloğu düzeltildi — **#687 defterleri uzlaştırmış ama
+> rehbere dokunmamıştı**. **Süreç bedeli:** P11-1 ruleset'i ilk kez kapı oldu (**22/22 yeşilken
+> merge reddedildi** — dal main'in gerisindeydi; çözüm main'i içeri almak, **bypass DEĞİL**) ·
+> **`-X theirs` sözleşme testinin pinlediği cümleyi sessizce düşürdü** → strateji-çözümünden
+> sonra testi koştur · `Backend` **85 dk**'ya çıktı, koşarken log'u **404**.
+> **NUMARA: bu slice AYNI GÜN İKİ KEZ taşındı** (54 → #701 aldı → 55 → #699 aldı → **56**;
+> merge edilmiş ad kazanır, dal commit mesajları `adim-54`/`adim-55` yazar). **Kapanış
+> yazmadan önce `git fetch` + `grep '^## ADIM' docs/PROJECT_HISTORY.md` ile numarayı doğrula.**
+> `PROJECT_HISTORY.md` §ADIM 56 · `docs/ADIM56_LANDED_KICKOFF.md`.
+>
+> **Öncesinde ADIM 55 (agentmemory sunucusu YERELE alındı, 2026-08-13): ÜRÜN KODU
 > DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > ADIM 53'ün açık bıraktığı semantik geri çağırma kapandı — **hiçbir şey barındırmadan**:
 > `.mcp.json` artık `scripts/memory_mcp.sh`'ı çağırıyor, o da tam sunucuyu **yerelde**

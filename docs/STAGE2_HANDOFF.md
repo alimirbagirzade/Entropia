@@ -5884,6 +5884,40 @@ verdict BLOCKED** (bu slice ölçmedi).
 
 Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 55 · `docs/ADIM55_LANDED_KICKOFF.md` · `CLAUDE.md` §Hafıza.
 
+## Stage — ADIM 56: A-08 denetimi BAŞLADI, SR-2 oturum 1 kaydı (PR #684)
+
+**Ürün kodu DEĞİŞMEDİ** (docs-only). Migration yok, `ENGINE_VERSION` değişmedi.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+**Defter boş olmaktan çıktı**, ama sayılar bunu bir sonuç sanmaya izin vermiyor: bir insanın
+duyduğu **2 hücre** (rota 1 `/`, `A-1 PASS` + `A-2 PASS ᴷ³`) = **184'ün 2'si**, **0/10 akış**,
+**0 bulgu**, **0/23 rota TAM**. **SR-1 hiç başlamadı** → çıkış kriterleri **0/4** ve kriter
+1/2 bir SR-2 koşusuyla **kapatılamaz** (ikisi de iki kombinasyon ister). Denetçi
+**`neither`** (ürün sahibi kendi koştu) — rol **hâlâ atanmadı**.
+
+Yumuşatılmayan üç kayıt: `A-2 PASS` **üç** landmark demek (`contentinfo` yok, K-3) ·
+**`A-3` bilerek `—`** çünkü *"atlamayı fark etmedim"* cevabı "yanılmadım" ile "bakmadım"ı
+ayırmıyor → **K-5 AÇIK** · 2/184'ten sonra **0 bulgu temiz rapor değil**, örneklem çok küçük.
+
+İkinci yarı: **`CLAUDE.md`'nin bayat A-08 bloğu** düzeltildi — #514 `2026-08-12T11:08:58Z`'de
+yeniden açılmıştı, **#687 defterleri uzlaştırdı ama rehbere dokunmadı**. Ayrışma **(B) yolu
+ile çözüldü**; (A) imzalı sapma **hiç yazılmadı ve yazılmamalıdır**. **Kullanıcı issue'nun
+açık kalmasına karar verdi**; agent onu ne kapatabilir ne açabilir.
+
+**Süreç bedeli (tekrarlanmasın):** P11-1 ruleset'i ilk kez kapı oldu — **22/22 yeşilken merge
+reddedildi** (`405`, dal main'in gerisindeydi, `strict` politika); çözüm **main'i içeri almak**,
+bypass değil · **#687 aynı işi yaptı**, çakışan hunk'larda main kazandırıldı · **`-X theirs`
+sözleşme testinin pinlediği bir cümleyi sessizce düşürdü** → her strateji-çözümünden sonra
+sözleşme testini koştur · `Backend` job'ı **85 dk**'ya kadar çıktı ve **koşarken log'u 404**.
+
+**NUMARA: bu slice AYNI GÜN İKİ KEZ taşındı** — önce ADIM 54 yazıldı, #701 o adı merge
+edilmiş olarak aldı → 55; sonra #699 55'i aldı → **56**. Kural: numaralar yeniden atanmaz,
+**merge edilmiş ad kazanır**. Dal commit mesajları `adim-54`/`adim-55` yazar. **Ders:
+kapanış belgelerini yazmadan önce `git fetch && grep '^## ADIM' docs/PROJECT_HISTORY.md`
+ile numarayı doğrula — paralel oturumlar birbirini görmüyor.**
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 56 · `docs/ADIM56_LANDED_KICKOFF.md`
+(paste-ready resume prompt en altta).
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
 
@@ -5911,8 +5945,10 @@ kalanı bu boşluk kapanmadan kapanamaz; **A4 ve A18 artık ölçülebilir ama A
 açmaz**. Ayrıntı ve tasarım işaretleri: `docs/ADIM35_LANDED_KICKOFF.md` (paste-ready resume prompt
 en altta), `docs/ADIM16_STEPPER_LANDED_KICKOFF.md` §4.1 ve `docs/ADIM26_KICKOFF.md`.
 
-**A-08 ayrı bir eksendedir ve PR B'yi bloklamaz.** İnsan denetimi hâlâ yapılmadı; iskele
-hazır (`scripts/a11y-audit-stack.sh up && … validate`), defter boş. **#514 bugün AÇIK** —
+**A-08 ayrı bir eksendedir ve PR B'yi bloklamaz.** İnsan denetimi **BAŞLADI ama BİTMEDİ**
+(ADIM 56, SR-2 oturum 1): iskele hazır (`scripts/a11y-audit-stack.sh up && … validate`),
+defter artık boş değil ama **2/184** hücre, **0/10** akış, **SR-1 hiç başlamadı**, çıkış
+kriterleri **0/4**. **#514 bugün AÇIK** —
 2026-08-12T11:08:58Z'de insan eliyle yeniden açıldı, yani yukarıdaki iki yoldan **(B)
 gerçekleşti** ve ADIM 29'un kaydettiği ayrışma **ADIM 48'de kapandı**; kanonik blok
 `docs/audit/a11y_screen_reader_audit_results.md` §STATUS ▸ *Tracking-issue state*. Kalan iş

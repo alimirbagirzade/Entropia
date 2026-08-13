@@ -5534,7 +5534,7 @@ Kanıt: `docs/releases/evidence/2026-08-10/P10B_alert_notification_path.md` +
 
 ---
 
-## ADIM 32 — RC §6.7 / P9-F2: SPA origin'inde Content-Security-Policy (PR pending)
+## ADIM 32 — RC §6.7 / P9-F2: SPA origin'inde Content-Security-Policy (PR #655)
 
 **Dalganın tipi:** güvenlik / sunum-katmanı başlık işi. **Ürün kodu değişmedi** —
 `backend/src` ve `frontend/src` bu dalgada hiç düzenlenmedi; route path, react-query key,
@@ -5673,7 +5673,7 @@ değildi, §6.7'nin blocker-olmayan kalemlerinden biriydi. **"READY" yazılmadı
 
 ---
 
-## ADIM 33 — RC §6.7 / P9-F1: frontend build reproducibility (PR pending)
+## ADIM 33 — RC §6.7 / P9-F1: frontend build reproducibility (PR #656)
 
 **Dalganın tipi:** build tesisatı. **Ürün kodu değişmedi** — `backend/src` ve `frontend/src`
 bu dalgada hiç düzenlenmedi; route path, react-query key, OCC token, Idempotency-Key, hook,
@@ -5767,7 +5767,7 @@ değildi, §6.7'nin blocker-olmayan kalemlerinden biriydi. **"READY" yazılmadı
 
 ---
 
-## ADIM 36 — RC §6.7 / P6-ek + P6-6: harness fail-fast dayanıklılığı (PR pending)
+## ADIM 36 — RC §6.7 / P6-ek + P6-6: harness fail-fast dayanıklılığı (PR #658)
 
 **Dalganın tipi:** harness/script. **Ürün kodu değişmedi** — `backend/src` ve `frontend/src`
 bu dalgada hiç düzenlenmedi; route path, react-query key, OCC token, Idempotency-Key, hook,
@@ -6017,7 +6017,7 @@ listeliyordu, **bayattı**; bu dalgada düzeltildi.
 
 ---
 
-## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu (PR pending)
+## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu (PR #659)
 
 **Tip:** motor yolu, ama **containment'ın DIŞINDA** — yeni bir domain modülü + faz döngüsüne
 additive bir kayıt alanı. Migration **yok** (alembic head `0043_i08_registry_strategy_fks`
@@ -6136,7 +6136,7 @@ Containment kapısına 1 test eklendi. `repository_facts` collected: **3432 → 
 
 ---
 
-## ADIM 37 — RC §6.7 / P10-B2: sayfalama sınırının şemada yayımlanması (PR pending)
+## ADIM 37 — RC §6.7 / P10-B2: sayfalama sınırının şemada yayımlanması (PR #663)
 
 **Numara notu (önce bunu oku).** Bu slice'ın kickoff prompt'u kendisini **"ADIM 36"** diye
 adlandırıyordu. **ADIM 36 doludur** — RC §6.7 / P6-ek + P6-6 harness fail-fast slice'ı
@@ -6289,7 +6289,7 @@ P4-3'te yaptığı gibi: **ölçüldü, adlandırıldı, kaydedildi.**
 
 ---
 
-## ADIM 38 — RC §6.7 / P11-3 + P11-6: kapının ölçtüğü ile iddia ettiği (PR pending)
+## ADIM 38 — RC §6.7 / P11-3 + P11-6: kapının ölçtüğü ile iddia ettiği (PR #664)
 
 > **Numaralandırma notu.** Bu slice görev metninde "ADIM 37" başlığıyla geldi, ama
 > `ADIM 37` merge edilmiş **#663**'ün (sayfalama sınırı) PR başlığına ve commit
@@ -6533,7 +6533,7 @@ Rapor: §6.7 tablosu (`P11-2` üstü çizili, `P11-3b` cevaplandı) + **§6.7.7*
 
 ---
 
-## ADIM 40 — RC §6.7 / P1-B1+B2 + P8-B1+B3: sayının sahibi değişti (PR pending)
+## ADIM 40 — RC §6.7 / P1-B1+B2 + P8-B1+B3: sayının sahibi değişti (PR #666)
 
 **Numaralandırma notu.** Bu slice'a giden istem "ADIM 38" diyordu ve base olarak ADIM 37b'yi
 varsayıyordu; `origin/main` doğrulandığında **ADIM 38 (#664) ve ADIM 39 (#665) zaten sevk
@@ -6624,7 +6624,7 @@ bozuldu → kapı tam iki doğru bulgu verdi, sonra geri alındı) · tam backen
 
 ---
 
-## ADIM 41 — RC §6.7 / P8-B2: durable admission status'ü karara bağlandı (PR pending)
+## ADIM 41 — RC §6.7 / P8-B2: durable admission status'ü karara bağlandı (PR #668)
 
 **Ne yapıldı:** raporun P8-B2 kalemi (*"Create-Package durable admission uçları 200 dönüyor,
 diğer dokuzu 202"*) **adjudicate edildi**. Bir bug fix değil, bir karar slice'ı: önce ayırt
@@ -6719,7 +6719,7 @@ işaretlendi (iki operation `200 → 202`, path/operation **sayısı** aynı).
 
 ---
 
-## ADIM 42 — RC §6.7 / P1-Gate3: kabul kriteri kapsamı ölçüldü, sınıflandırıldı, ratchet'lendi (PR pending)
+## ADIM 42 — RC §6.7 / P1-Gate3: kabul kriteri kapsamı ölçüldü, sınıflandırıldı, ratchet'lendi (PR #669)
 
 **Ne yapıldı:** raporun P1-Gate3 kalemi (*"8 uncovered + 131 partial kriter, kapı yeşil
 sayıyor"*) **ele alınabilir** hale getirildi. 139 kalem **kapatılmadı** — kapatmak PR

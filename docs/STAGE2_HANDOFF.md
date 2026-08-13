@@ -5983,7 +5983,83 @@ K-3'ün kapanması A-08'i **ilerletmez**; bu kalem hiç blocker değildi.
 **Açık kalan:** **K-5** (22/23, maliyet ölçülü: 204 başlık / ~40 dosya / 5 tag-scoped CSS
 kuralı) ve **K-6a** — ikisi de **yalnız A-08** ile kapanır. **K-7** ölçüldü, düzeltilmedi.
 
-## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**
+## Stage — ADIM 58: P-A1 shared portfolio erişilebilirlik denetimi (PR #707)
+
+**Migration:** yok. **Kod:** `backend/src`, `frontend/src`, `backend/alembic`,
+`backend/tests` → `git diff --stat` **0 satır**. **OpenAPI / OCC / Idempotency / route /
+query-key / `ENGINE_VERSION` / feature flag / issue state:** değişmedi. **Blocker sayısı
+DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Sevk edilen tek şey
+`docs/audit/closure_w0_shared_portfolio_2026-08-13.md` (579 satır, `historical`).
+
+**Ne kanıtlandı.** `run_portfolio` (`portfolio_engine.py:518`), `project_portfolio_run`
+(`execution/portfolio_projection.py:513`) ve `build_portfolio_manifest`
+(`execution/provenance.py:473`) üretimde **çağrısız**; son ikisinin `backend/src`'te
+**sıfır importer'ı** var. `ItemParticipant`'ın üretim implementasyonu **yok** — depodaki
+tek örnek test sahipli `_ScriptedParticipant` (`tests/unit/oracles/portfolio_harness.py:156`).
+Başka isim altında gizli adapter **yok**.
+
+**İlk üretim sapması — tek satır:** `application/jobs/backtest_engine.py:299`
+(`for prepared in prepared_items:`). Aşağı akıştaki her şey bundan türer.
+**Not: bu satır eskiden bu belgede `:298` yazıyordu; ölçülen değer `:299`, fold ise `:364`.**
+
+**YENİ BULGU — §Next'in (a) engeli ZATEN KAPALI.** `_ItemStepper` (`engine.py:756`) barı
+ayrı ayrı çağrılabilir fazlar olarak sevk eder (`admit`/`carry`/`open_fills`/`held`/
+`entry`/`tail`/`open_position`) ve **`E(t)` enjeksiyon noktası da sevk edilmiştir**:
+`_phase_entry(bar, *, equity)` (`engine.py:2448`), `engine.py:786` bunu birebir *"the
+SHARED `E(t)` for a portfolio participant"* diye belgeler. PR #602'den beri böyle.
+**Kalan boşluk tam olarak (b)'dir:** üç faz **book eder**, `ItemParticipant` ise
+arbitrasyon öncesi **tarif** ister (`CarryCharges` / `MandatoryExit` / `ItemIntent`).
+Kapsam daraldı, **kapı açılmadı** — describe/book ayrımı `run_engine`'in bar gövdesine
+dokunur, 46 golden digest ADR §15 R-4'ün riskidir, ADR §16 insan kapısı yerinde durur.
+
+**Reuse anchor'ları (tam adlarıyla):**
+
+- `docs/audit/closure_w0_shared_portfolio_2026-08-13.md` — §0 doğrulama tablosu, iki
+  mermaid akış, importer haritası, tripwire assert-assert analizi, A1–A22
+  KARŞILANAN/KARŞILANMAYAN dökümü, **en riskli beş seam**.
+- `domain/backtest/engine.py::_ItemStepper` (`:756`) + `::_build_stepper` (`:793`) —
+  adapter'ın oturacağı substrat. Faz callable'ları: `_phase_carry` `:1913`,
+  `_phase_held` `:2264`, `_phase_entry` `:2448`.
+- `domain/backtest/portfolio_engine.py::ItemParticipant` (`:238`) — adapter'ın
+  karşılaması gereken üç hook.
+- `tests/unit/oracles/portfolio_harness.py::_ScriptedParticipant` (`:156`) +
+  `::simulate` (`:210`) — adapter'ın **şekil** referansı (davranış referansı DEĞİL).
+- `application/commands/backtest_run.py:542` + `domain/allocation/rules.py:154` —
+  iki fail-closed kapısı; tek doğruluk kaynağı `domain/allocation/capability.py:105`.
+
+**Tavizsiz sınırlar (bu slice'ta pinlendi):**
+
+1. **Containment-gate'in YEŞİLİ, shared engine'in aktif olduğunu DEĞİL, üretimin
+   `run_portfolio`'ya ULAŞMADIĞINI kanıtlar.** İki merkezi assert **negatiftir**
+   (`assert callers == []`). `5000.00` fixture'ı da sevk edilen fold **hâlâ yanlış**
+   olduğu için geçer.
+2. **E5 tripwire'ı SİLMEZ, DARALTIR** — boş beklenti yerine pinli çağıran allowlist'i +
+   bayrak-erişilebilirliği assert'i. **`:225-233` ve `:103` E5'te DEĞİŞMEZ**; onlar
+   *lift* kapısıdır. Bir E5 kendini `:230`/`:125`'i düzenlerken bulursa sessizce
+   **ADIM 20 olmuştur** → önce ADR §16.
+3. **`combine_item_runs` BAĞIMSIZ modun da yoludur.** Tüm çok-item koşularını faz
+   döngüsüne yönlendiren bir wiring, bayraksız ve `ENGINE_VERSION` bump'sız her
+   bağımsız-mod Result'ını yeniden fiyatlar.
+4. **Alt küme koşarken `uv sync --all-extras` ÖNCE.** Soğuk venv'de prompt'un komutu
+   **exit 4** verir (`unrecognized arguments: --cov=entropia … --no-cov`) — test hatası
+   değil, ortam hatası.
+
+**Kaydedildi, DÜZELTİLMEDİ (kapsam dışı):** containment-gate docstring `:146` hâlâ
+stepper için *"was never written"* diyor (ADR §12 AMENDMENT / #602 bunu geçersiz kılar);
+GH **#582**'nin gövdesi üç iddiada bayat (durumu **OPEN** ve doğru).
+
+**Süreç:** ADIM 57'nin çaresi **ölçüldü** — auto-merge açıkken main #707 altında üç kez
+ilerledi, yeşilin ardından merge oldu, **numara taşınmadı**.
+
+## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+
+> **ADIM 58 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli
+> (faz-bölünmüş bar) **KAPALI** — `_ItemStepper` `engine.py:756`, `E(t)` girişi
+> `_phase_entry(bar, *, equity)` `engine.py:2448`. **Kalan tek engel (b):** üç faz book
+> eder, `ItemParticipant` tarif ister. Bu `run_engine`'in bar gövdesine dokunur →
+> **ADR §16 insan kapısı + ADR amendment'ı** gerekir. **Ondan önce başlanmaz.**
+> Ayrıntı, seam sıralaması ve tripwire tasarımı:
+> `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
 > ya da sunum slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**
@@ -5995,14 +6071,16 @@ kuralı) ve **K-6a** — ikisi de **yalnız A-08** ile kapanır. **K-7** ölçü
 > Paste-ready resume prompt: `docs/ADIM48_LANDED_KICKOFF.md` en altta.
 
 **Kapsam daraldı ama kapı açılmadı.** ADIM 35 §4.1'in **(c)** engelini kapattı: projeksiyon artık
-var, `execution/portfolio_projection.py::project_portfolio_run`. Kalan **(a)** ve **(b)** —
-stepper'ın barı bütün olarak ilerletmesine karşılık faz döngüsünün fazlara bölünmüş bar istemesi,
-ve `entry`'nin book-etmeyen bir değerlendirme girişine ihtiyaç duyması — `run_engine`'in bar
+var, `execution/portfolio_projection.py::project_portfolio_run`. **ADIM 58 (a)'yı ölçtü ve KAPALI
+buldu** — `_ItemStepper` (`engine.py:756`) barı zaten fazlara bölünmüş sevk ediyor ve `E(t)` girişi
+`_phase_entry(bar, *, equity)` (`engine.py:2448`) olarak mevcut (PR #602'den beri). **Kalan tek
+engel (b):** `carry`/`held`/`entry` **book eder**, `ItemParticipant` ise arbitrasyon öncesi
+**tarif** ister (`CarryCharges` / `MandatoryExit` / `ItemIntent`). Bu `run_engine`'in bar
 gövdesine dokunur ve **ADR §16 insan kapısı + bir ADR amendment'ı** gerektirir. Bu kapıdan
-geçmeden (a)/(b)'ye başlanmaz.
+geçmeden (b)'ye başlanmaz.
 
 `run_portfolio` **ve** `project_portfolio_run` üretimde **çağrısız**:
-`jobs/backtest_engine.py:298` item döngüsü, `:363` `combine_item_runs`,
+`jobs/backtest_engine.py:299` item döngüsü, `:364` `combine_item_runs`,
 `SHARED_ALLOCATION_STATUS = future_dev` (containment KAPALI). ADIM 20 matrisindeki satırların
 kalanı bu boşluk kapanmadan kapanamaz; **A4 ve A18 artık ölçülebilir ama ADIM 20'yi tek başına
 açmaz**. Ayrıntı ve tasarım işaretleri: `docs/ADIM35_LANDED_KICKOFF.md` (paste-ready resume prompt

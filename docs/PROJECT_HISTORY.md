@@ -8653,3 +8653,234 @@ değil, çift kaydın temizliği** — hiçbir kalemin statüsü bu yüzden değ
 - **Kod kapıları koşulmadı ve koşulması GEREKMEDİ**: bu slice `docs/` dışına hiç
   dokunmadı. Koşulan tek kapı `generate_repository_facts.py --check` (doc-status
   sınıflandırması dahil).
+
+---
+
+## ADIM 58 — P-A1: shared portfolio erişilebilirliğinin adli yeniden doğrulaması (PR #707)
+
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok.
+`backend/src`, `frontend/src`, `backend/alembic`, `backend/tests` ağaçlarına **tek satır**
+dokunulmadı (`git diff --stat origin/main -- <dört ağaç>` = **0 satır**). OpenAPI / OCC /
+Idempotency / route yolları / react-query key'leri / `ENGINE_VERSION` / feature flag /
+issue state değişmedi. Bu bir **salt-okunur denetim** slice'ıdır; sevk edilen şey
+`docs/audit/closure_w0_shared_portfolio_2026-08-13.md` (579 satır, `doc-status: historical`).
+
+### Taban — verilen SHA yanlıştı, ölçüm yeniden alındı
+
+Prompt tabanı `31ed27d` diyordu; `origin/main` **bir docs commit'i öndeydi** (`0d8bf8f`,
+#702). Bu **kabul edilmedi**: §0'ın verdiği dokuz ölçümün tamamı yeniden alındı. Sonuç —
+sekizi doğru, ikisi **yol** olarak eksikti (`portfolio_projection.py` ve `provenance.py`
+`domain/backtest/**execution**/` altında), biri **anlam** olarak yanlış etiketlenmişti
+(`engine.py:3263` bir *çağrı* değil, `_build_stepper`'ın `_ItemStepper(...)` **kurulumu**),
+ve tripwire'ın iki assert satırı **`:180` / `:218`** (prompt `:178-180` / `:216` diyordu).
+
+**Yöntem notu:** bayat bir tabanla gelen bir denetim, ölçümlerini kopyalarsa denetim
+değil **yankıdır**. Bu slice her satırı yeniden ölçtü ve farkları tabloya yazdı.
+
+### Sorulan on bir sorunun cevabı — hepsi kanıtlı
+
+1. **`run_portfolio` üretimden çağrılmıyor. Sıfır çağıran.** `backend/src` taramasında
+   altı isabet: tanım (`portfolio_engine.py:518`), `__all__` (`:609`), modül docstring'i
+   (`:1`) ve üç kardeş modülün **düz metin** docstring atfı (`execution/intents.py:15`,
+   `execution/arbitration.py:11`, `execution/portfolio_ledger.py:20`). Hiçbir
+   `import run_portfolio` ve hiçbir `run_portfolio(` çağrısı yok. Depodaki **tek**
+   çağrı `tests/unit/oracles/portfolio_harness.py:238`.
+2. **`ItemParticipant`'ın üretim implementasyonu YOK.** `backend/src`'te yalnız Protocol
+   tanımı ve tip pozisyonları var. Depodaki tek implementasyon **test sahipli**
+   `_ScriptedParticipant` (`portfolio_harness.py:156`) — hiçbir şey hesaplamayan,
+   timestamp→script sözlüğü okuyan bir **lookup**.
+3. **Başka isim altında gizli adapter YOK** (adapter / participant / stepper / coordinator
+   / runner / executor / facade / worker taraması). `backend/src`'te üç sınıf isabeti var,
+   üçü de ilgisiz: `shared/errors.py:471 ResolverAdapterIncompatible`,
+   `domain/esp/enums.py:30 RuntimeAdapter`, `domain/backtest/engine.py:756 _ItemStepper`.
+4. **Worker dış döngüsü ITEM.** `application/jobs/backtest_engine.py:299` —
+   `for prepared in prepared_items:`. Her tur `_replay_strategy` (`:323`) → `run_engine`
+   (`engine.py:859`), yani item **bütün bar eksenini** tüketir; sonra `combine_item_runs`
+   (`:364`) biten koşuları pin sırasında katlar.
+5. **Her item AYNI `E(t)`'yi GÖRMÜYOR.** `resolve_allocation_execution` (`engine.py:614`)
+   **her item için** `initial_capital=p0` — yani **tam havuz** — döndürür ve **hiç**
+   çapraz-item durumu taşımaz.
+6. **Ledger ITEM-LOCAL.** `_build_stepper` her item için bir `_Ledger` kurar
+   (`engine.py:812-829`). Tek paylaşılan `PortfolioLedger` **var** ama yalnız
+   `portfolio_engine.py:90` import eder, o da çağrısızdır.
+7. **Simultane intent arbitrasyonu üretimde DEĞİL, yalnız oracle'da.**
+   `execution/arbitration.py`'nin iki importer'ı var: `portfolio_engine.py:68` (çağrısız)
+   ve `execution/provenance.py` (o da çağrısız).
+8. **`project_portfolio_run` gerçek Result yolunda DEĞİL.** Worker'ın Result'ı
+   `combine_item_runs`'ın çıktısından gelir (`:364` → `bt_repo.create_result` `:394`).
+   `portfolio_projection` modülünün `backend/src`'te **sıfır importer'ı** var.
+9. **`build_portfolio_manifest` gerçek manifest yolunda DEĞİL.** Sevk edilen manifest
+   `build_run_manifest` (`manifest.py:188`), tek çağıranı `commands/backtest_run.py:573`.
+   `execution/provenance.py`'nin de **sıfır importer'ı** var.
+10. **Fail-closed iki noktada, bilerek birbirinden bağımsız.** (i) Sert kapı:
+    `commands/backtest_run.py:542` — snapshot yüklendikten **sonra**, `build_run_manifest`
+    (`:573`) **öncesinde**; run/manifest/job satırı **hiç doğmaz**. (ii) Teşhis edilebilir
+    kapı: `domain/allocation/rules.py:154`. Tek doğruluk kaynağı
+    `domain/allocation/capability.py:105`.
+11. **Lift önkoşulları:** ölçüldü, aşağıda.
+
+### YENİ BULGU — `CLAUDE.md` §4.1'in (a) engeli ZATEN KAPALI
+
+Bu slice'ın tek gerçek keşfi. `CLAUDE.md` §Next iki engel sayıyordu: **(a)** faz-bölünmüş
+bar ve **(b)** book-etmeyen değerlendirme girişi. **(a) kapalı ve PR #602'den (`ADIM 16
+(ADR §12)`) beri kapalı** — ampirik olarak doğrulandı:
+
+`_ItemStepper` (`engine.py:756`) barı **ayrı ayrı çağrılabilir fazlar** olarak sevk eder:
+`admit` · `carry` (`_phase_carry` `:1913`) · `open_fills` · `held` (`_phase_held` `:2264`)
+· `entry` (`_phase_entry` `:2448`) · `tail` · `open_position`. Dahası **`E(t)` enjeksiyon
+noktası da sevk edilmiş**: `_phase_entry(bar, *, equity: Decimal | None = None)` ve
+`engine.py:786` bunu birebir şöyle belgeler — *"the SHARED `E(t)` for a portfolio
+participant"*. `run_engine` (`:3279`) bu stepper üzerinde dokuz satırlık bir sürücüdür.
+
+**Kalan boşluk tam olarak (b)'dir, ve şekli şudur:** üç faz **book eder**, oysa
+`ItemParticipant` arbitrasyon **öncesi** **tarif** ister.
+
+| `ItemParticipant` istiyor | `_ItemStepper` veriyor | Fark |
+|---|---|---|
+| `carry(view) -> CarryCharges \| None` | `carry(bar) -> None` | hiçbir şey döndürmez, anında charge eder |
+| `mandatory_exit(view, *, held) -> MandatoryExit \| None` | `held(bar) -> bool` | bayrak döndürür, çıkışı kendisi book eder |
+| `entry(view, snapshot, *, held) -> ItemIntent \| None` | `entry(bar, *, equity) -> None` | hiçbir şey döndürmez, arbitrasyonsuz book eder |
+
+**Bu bir kapsam daralmasıdır, kapı açılması DEĞİL.** describe/book ayrımı `run_engine`'in
+bar gövdesine dokunur → **46 golden digest** ADR §15 R-4'ün adlandırdığı riskin ta
+kendisidir. ADR §16 insan kapısı yerinde durur.
+
+### İlk üretim sapması — tek satır
+
+> **`backend/src/entropia/application/jobs/backtest_engine.py:299`** — `for prepared in prepared_items:`
+
+Kanon (doc 13 §8.3, ADR §4/§8, `capability.py:76-77` kaldırma koşulu 1) dış döngünün
+**birleşik zaman ekseni** olmasını ister; o bir **item listesidir**. Aşağı akıştaki her
+şey — item-local `_Ledger`, item başına `E`, `combine_item_runs` birleştirmesi, zaman
+sıralı OLMAYAN kompozit eğri, **%66 abartılı** `max_drawdown` — bu tek döngü
+değişkeninden türer.
+
+**İkinci sapma, ve döngüyü tek başına değiştirmenin neden yetmediği:** `:323` →
+`engine.py:859`, `_replay_strategy` `run_engine`'i çağırır ve item'ı **sonuna kadar**
+koşturur. Askıya alınabilir alternatif (`_build_stepper`, `engine.py:793`) **üretim
+kodudur** ama portföy yolunda kimse onu çağırmaz.
+
+### Tripwire — E5'in en riskli seam'i, assert assert analiz edildi
+
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py` bir **metin taramasıdır**
+(AST ya da import grafiği değil). Dürüst bir E5 wiring'i **beş** assert'i kırar: `:180`
+(`run_portfolio` çağıran kazanır) · `:184` (`for prepared in prepared_items:` kaybolur) ·
+`:218` (projeksiyon çağıran kazanır) · `:222` (`portfolio_projection` worker'da görünür) ·
+`:125`/`:129` (`max_drawdown` `5000.00` → `3000.00`, `stamps` sıralı olur).
+
+`:170`'in importer kontrolü **yalnız adapter `execution/` DIŞINA konursa** ateşlenir —
+kontrol `path.parent.name == "execution"` olanı muaf tutar. Adapter'ı
+`domain/backtest/execution/participant.py`'ye koymak 6.'yı yapısal olarak çözer, **1-5'i
+çözmez**.
+
+**İki kırılganlık kayda geçti:** `:180` bare `"run_portfolio(" in text` eşler — bir üretim
+modülündeki **yorum satırı** bile onu kırmızıya çevirir (mevcut docstring'ler yalnız
+parantezsiz ``run_portfolio`` yazdıkları için hayatta). `:222` çıplak
+`"portfolio_projection"` alt dizisini eşler — yorumlanmış bir import bile yeter.
+
+**Önerilen minimum güvenli değişiklik (kapıyı SİLMEDEN daraltmak):** boş beklentiyi
+**pinli** beklentiye çevir (`_AUTHORISED_LOOP_CALLERS` / `_AUTHORISED_PROJECTION_CALLERS`
+tam yol demetleri), `:182-184`/`:222`'yi **bayrağa koşullu** yap (fold bağımsız modda
+kalır!), ve *"hiçbir şey çağırmıyor"*un yerini alacak asıl taşıyıcı assert'i ekle:
+worker'ın `shared_allocation_is_executable` / `shared_allocation_requested` üzerinden
+geçtiğini pinle. **E5'te DEĞİŞMEYECEK iki test:** `:225-233` (flag + `ENGINE_VERSION`) ve
+`:103` (5000/3000). Bunlar **lift** kapısıdır, wiring kapısı değil — bir E5 kendini
+`:230` ya da `:125`'i düzenlerken bulursa sessizce **ADIM 20 olmuştur** ve önce ADR §16
+insan kapısı gerekir.
+
+### Containment lift önkoşulları — ölçüldü
+
+**KARŞILANAN:** merged-axis clock primitifi (`execution/clock.py`) · tek paylaşılan
+`PortfolioLedger` · faz döngüsü gerçek bir üretim giriş noktası olarak (`run_portfolio`) ·
+simetrik arbitrasyon modülü (`CONTENTION_SELECTION_POLICY == "pin_order_admission"`,
+OD-3 çözümüyle uyumlu) · Result projeksiyonu · manifest builder' ı · **askıya alınabilir,
+faz-bölünmüş item replay'i** (`_ItemStepper`) · **`E(t)` enjeksiyon noktası** ·
+ADR 0002 **Accepted** (2026-08-05) ve OD-1…OD-7 §13.1'de çözülmüş · A20 rollback kanıtı.
+
+**KARŞILANMAYAN:** A1 (dış döngü hâlâ item) · A2 (item başına `_Ledger`) · A3 (tek `E(t)`
+yok) · A9 (ileri-yönlü `PriorItemInterval` önceliği) · A5 (`stamps != sorted(stamps)`
+kapıda **mevcut kusur olarak** assert ediliyor) · A15 (`ENGINE_VERSION` sabit) ·
+A4/A18 (gerçek motor olmadan **ölçülemez**) · A16 (dört policy alanı yok) · A21
+(checkpoint'ler item arası) · **`ItemParticipant` adapter'ı + worker call site — yazılmadı** ·
+GH **#544** (NET) ve **#559** (DST) **açık** `product-decision` · GH **#582** **açık**.
+
+**NOT-A-GAP olarak kaydedildi:** `MARK_STALENESS_POLICY = "undefined_pending_od2"` ve
+`CONTENTION_SELECTION_STATUS = "recommended_pending_approval"`. ADR §13.1'in kapanış notu
+bu ayrışmanın **bilinçli** olduğunu ve **ADIM 20'nin iki flip'i de sahiplendiğini** yazar:
+manifest'i taşımayan bir policy etiketini çevirmek, hiçbir artefaktın kaydetmediği bir
+kararı reklam etmek olurdu.
+
+### Test forensics — yeşilin ne KANITLADIĞI
+
+Üç modül koşuldu, **hepsi saf unit**: `AsyncSession` / `session` / `db_` referansı
+**sıfır**. Hiçbiri worker'a, veritabanına ya da Result kalıcılığına dokunmaz.
+
+`exit=0`, **54 passed** (containment gate 5 · projection 23 · provenance 26).
+
+> **Containment-gate suite'inin GEÇMESİ, shared engine'in aktif olduğunu DEĞİL, tam
+> tersine üretimin `run_portfolio`'ya ULAŞMADIĞINI kanıtlar.** İki merkezi test
+> **negatif** assert'tir (`assert callers == []`) ve bir çağıran belirdiği gün kırmızıya
+> döner. `test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock` de sevk
+> edilen fold **hâlâ yanlış sayıyı** (`5000.00`) raporladığı için geçer; `3000.00`
+> raporladığı gün düşer — **ve o düşüş kabul kanıtıdır.**
+
+**Ortam tuzağı (yeni, kayda değer):** prompt'un komutu `uv sync --all-extras` içermiyordu;
+soğuk bir venv'de ilk çağrı **exit 4** verir —
+`pytest: error: unrecognized arguments: --cov=entropia … --no-cov`, çünkü `pytest-cov`
+henüz kurulu değilken `addopts` onu zaten adlandırıyor. **Bu bir test hatası değil**,
+ortam hatasıdır; önce sync, sonra koş.
+
+### İki belge sapması — KAYDEDİLDİ, DÜZELTİLMEDİ (kapsam dışı)
+
+1. **Containment gate docstring `:146`** hâlâ ADIM 16 stepper'ı için *"was never written"*
+   diyor. ADR §12 **AMENDMENT**'ı (PR #602) bunu açıkça geçersiz kılar: stepper yazıldı ve
+   merge edildi. Testin **assert'leri** doğru, **gerekçesi** bayat.
+2. **GH #582'nin gövdesi** üç iddiada bayat: `grep "def run_portfolio" → no match` (artık
+   var), stepper *"never written"* (artık var), A17 *"4 `xfail(strict=True)`"* (artık
+   **1**). Issue'nun **OPEN durumu doğrudur** — bayat olan yalnız gövdedir.
+
+**İkisi de bu slice'ta düzeltilmedi**, çünkü (1) bir test dosyasına dokunmaktır ve bu
+denetim salt-okunurdu; (2) `#582` bir **insan** izleme kaydıdır.
+
+### E4/E5 için en riskli beş seam (sırayla)
+
+1. **`_ItemStepper`'ın fazları book ediyor** (`:1913`, `:2264`, `:2448`) — describe/book
+   ayrımı 46 golden digest'in kapsadığı ifadelere dokunur. **Çare:** ayrımı **sıfır digest
+   oynamayan saf bir refactor** olarak, kendi PR'ında indir. Digest oynarsa **DUR**: bu
+   bir re-price'tır, restructure değil.
+2. **Tripwire'ın `assert callers == []`'i** — beş assert ilk dürüst wiring commit'inde
+   kırmızıya döner; testleri silmek modu neyin kapalı tuttuğunun **tek çalıştırılabilir
+   ifadesini** yok eder. `-X theirs` burada **kesinlikle** kullanılmaz.
+3. **`combine_item_runs` BAĞIMSIZ modun da yoludur** (`:348-372`). Tüm çok-item koşularını
+   `run_portfolio`'ya yönlendiren bir wiring, **bayraksız, `ENGINE_VERSION` bump'sız ve
+   kullanıcıya görünmeden** her bağımsız-mod kompozit Result'ını yeniden fiyatlar. Dal
+   **tek** bir yerde ve `alloc_probe is not None and shared_allocation_is_executable()`
+   olmalı; A13/A14 merge öncesi kanıtlanmalı.
+4. **Cancellation checkpoint'leri item'dan tick'e taşınmalı** (`:303`, `:381`). `:381`
+   doc 15 §16'yı (*CANCELLED run Result üretmez*) uygulayan satırdır. Yeniden
+   konumlandırılmadan wiring, uzun bir shared koşuyu **iptal edilemez** yapar — ya da
+   daha kötüsü, Result **var olduktan sonra** iptal edilebilir. **A21 E5'in alt görevidir,
+   ADIM 20'nin değil.**
+5. **`PriorItemInterval` ile kanonik arbitrasyon aynı soruya iki canlı cevap**
+   (`:291`, `:314-322`, `:332-339` ↔ `execution/arbitration.py`). ADR §12 satır 19
+   arbitrasyonun ileri-yönlü önceliği **emekliye ayırdığını** söyler. İkisi birlikte
+   koşarsa aynı çatışma iki farklı sıra-bağımlılığıyla iki kez adjudicate edilir — ve
+   **#544 açık** olduğu için birinin doğru olabileceği kanonik bir tanım yok.
+
+### Süreç — auto-merge bandı kapattı, doğrulandı
+
+ADIM 57 numara taşımanın yapısal sebebini (`Backend` ~50 dk + `strict: true` → koşu bandı)
+ve çaresini (**auto-merge**) kaydetmişti. **Bu slice o çareyi ölçtü:** #707 açıldıktan
+sonra main **üç kez** ilerledi (`76a7a8c`, `e9a9ca3`, `7c662ad` — üçü de main'i içeri alan
+merge), auto-merge 18:41Z'de açıldı, yeşilin ardından **19:34:32Z'de merge edildi** ve
+**numara taşınmadı**. Kayıt: çare çalışıyor.
+
+**Sayısal not:** #707 dört commit taşır ama **tek** dosya değiştirir (+579) — üçü main
+merge'idir.
+
+### Bu slice'ın DOKUNMADIKLARI
+
+`docs/audit/a11y_screen_reader_audit_results.md` · `#514` · `#582` · `#544` · `#559` ·
+`SHARED_ALLOCATION_STATUS` · `ENGINE_VERSION` · kabul borcu ratchet'i
+(`acceptance_coverage_baseline.json`) · `docs/CODEMAPS/*` (yeni endpoint / tablo / sayfa /
+job yok, kapanış ritüeli md. 5 bu yüzden **uygulanmaz**).

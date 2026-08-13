@@ -1,105 +1,136 @@
 <!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 58 bu belgeden SONRA indi.** Kayıt olarak doğrudur; devam
+> noktası için `docs/ADIM58_LANDED_KICKOFF.md`'ye bak. Sayısal otorite:
+> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
-# ADIM 57 landed — plugin hook'ları kurulumdan bağımsız, sıradaki oturum
+# ADIM 57 LANDED — K-3 adjudicated (imzalı karar D-11) · sıradaki slice için kickoff
 
-> Kayıt: `docs/PROJECT_HISTORY.md` §ADIM 57. Bu belge **devam noktasıdır**, kayıt değil.
+> **NUMARA NOTU — bu slice DÖRT kez taşındı: 54 → 55 → 56 → 57.**
+> ADIM 54 olarak yazıldı; merge beklerken main üç slice daha aldı — `#701` **ADIM 54**'ü,
+> `#699` **ADIM 55**'i, `#697` **ADIM 56**'yı **merge edilmiş adla** aldı. Kural:
+> **numaralar yeniden atanmaz, merge edilmiş ad kazanır** — taşınan taraf hep merge
+> edilmemiş olandır. Branch commit mesajları `adim-54` yazmaya devam eder;
+> **slice'ın adı ADIM 57'dir.** Bu slice üç kaydın hiçbirine **dokunmadı** — yalnız
+> `doc-status` işaretlerini düşürdü, çünkü aynı anda tek belge `current` olabilir.
+>
+> **Yapısal gözlem, bir sonraki oturum için — ve bu turda uygulanan çare:** bu depoda
+> `Backend` kapısı ~50 dk sürüyor ve `strict: true` branch'in güncel olmasını istiyor.
+> Yoğun bir günde bu ikisi bir **koşu bandı** üretir: her yeşilde main ilerlemiş olur,
+> güncelle-bekle döngüsü tekrarlar. Bu slice **beş** tur döndü ve üç ad kaybetti.
+> Elle beklemek bandı kapatmıyor — **auto-merge** (yeşilin ilk saniyesinde merge)
+> kapatıyor; bu slice sonunda onu kullandı. Numara taşımak ucuzdur, tur atmak değildir.
 
-## Nerede duruyoruz
+## Neredeyiz
 
-**Ürün ekseninde hiçbir şey değişmedi.** `backend/src`, `alembic`, `frontend/src` el
-değmedi; migration yok, `ENGINE_VERSION` aynı. **A-08 blocker AÇIK, blocker sayısı 1,
-verdict BLOCKED.** Bu slice ajan araç zincirini onardı, ürünü değil.
+**Blocker sayısı 1 (yalnız A-08), verdict BLOCKED.** ADIM 57 **kod yazmadı** — RC §6.5'in
+K-3 kalemini bir **imzalı PO kararıyla** kapattı. Migration yok, OpenAPI değişmedi,
+`ENGINE_VERSION` değişmedi.
 
-Kapanan boşluk şuydu: `plugins/entropia-maintenance` **kurulmuyor** ve bu yüzden onun
-içindeki iki **bloklayıcı** guard remote'ta hiç koşmuyordu — üstelik biri (`guard-git.sh`)
-tam olarak üç kez yaşanmış bir regresyonu (#590 211 satır, #604 194 satır) durdurmak için
-yazılmıştı ve hiçbir CI kapısı `docs/` okumuyor.
+RC §6.5'in durumu artık şu: **K-2 / K-4 kodla kapandı** (#685) · **K-6b kodla kapandı**
+(#688) · **K-3 kod yazmadan kapandı** (D-11) · **K-5 + K-6a yalnız A-08 ile kapanır** ·
+**K-7 ölçüldü, düzeltilmedi**.
 
-## Bu slice'ın bıraktıkları (reuse anchor'ları, tam sembol adlarıyla)
+**ADIM 56 ile bağı:** D-11'in insan yarısı — SR-2 (VoiceOver) route 1'de denetçinin
+rotor'da üç landmark duyup `contentinfo` yokluğunu **kozmetik** bulması — ADIM 56'nın
+kaydettiği **aynı oturumdur** (`#684`). İki slice aynı iki hücreye bakıyor: ADIM 56 onu
+**defterin ilk kaydı** olarak, ADIM 57 bir kararın **doğrulayıcı yönü** olarak. Tek rota
+karar vermeye yetmedi; makine ölçümüyle aynı yöne baktığı için kayda geçti.
 
-| Anchor | Ne |
+## Bu slice'ın bıraktıkları (reuse anchor'ları — tam adlarıyla)
+
+| Anchor | Ne için |
 |---|---|
-| `.claude/settings.json` → `hooks.PreToolUse` | iki yeni kayıt; yollar `${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/…` |
-| `scripts/hook-guard-proof.sh` | guard **davranış** kapısı — 19 beklenti (6 engelleme, 13 geçiş) + kaydın kendisini assert eder |
-| `.github/workflows/ci.yml` → `frontend` job → adım **`Agent hook behaviour proof`** | kapının CI bağlantısı (**yeni job değil**) |
-| `scripts/agent-config-gate.mjs` | değişmedi — yeni yolları zaten kapsıyor, negatifi bu slice'ta 3 mutasyonla kanıtlandı |
-| `plugins/entropia-maintenance/README.md` §**Çift koşma** | *"kopya bırakılmadı"* kararının gözden geçirilmiş hâli + ölçülmüş bedel |
-| `.claude/README.md` | `enabledPlugins` ≠ kurulum ölçümü; ADIM 53'ün fazla iddialı cümlesi düzeltildi |
+| `docs/implementation/a11y_ci_ratchet_and_adjudication.md` §4b `Karar # : D-11` | İmzalı a11y kararlarının **sicili** (D-10 kontrast + D-11 landmark). Yeni karar **aynı bloğa** yazılır; **imzalayan adı olmadan yazılmaz** |
+| `docs/implementation/a11y_screen_reader_audit_checklist.md` **A-2** | Beklenti **ÜÇ** landmark. Denetçi bunu okur — dört arayan bir denetçi yanlış `FAIL` yazar |
+| `docs/audit/…audit_results.md` §1 A-2 metni · route 1 dipnotu **ᴷ³** · §6 K-3 | Üçü **aynı** gerçeği söyler; biri değişirse üçü değişir |
 
-## Sıradaki oturum için işaretler
+## Tavizsiz kurallar (bu slice'ta kanıtlandı)
 
-**Ana eksen değişmedi: `## Next` hâlâ PR B** (`ItemParticipant` adaptörü +
-`jobs/backtest_engine.py:298` call site) ve o **ADR §16 insan kapısının** arkasında.
-Detay: `docs/ADIM35_LANDED_KICKOFF.md`.
+1. **Ölçümü susturmak bir çözüm değildir.** K-3'ün advisory'si 23 rotada çıkmaya devam
+   eder. Karar **dispozisyonu** belirler, ölçümü değil. Boş/gizli footer seçeneği tam bu
+   yüzden **reddedildi**: sayacı memnun eder, rotor kullanıcısına hiçbir şey vermez.
+2. **Bir kalem üç şekilde kapanabilir** — kod düzelir · **beklenti düzelir** · insan
+   duyar. Dördüncüsü yok. K-3, ikinci yolun ilk örneğidir: kusur üründe değil
+   checklist'in kendi cümlesindeydi.
+3. **"İmzalı sapma" iki farklı şeyi anlatabilir, karıştırma.** D-10 **gerçek** bir ihlali
+   (1.4.3, 45 düğüm) imzalar → ürün o ölçüt için uyumlu **değildir**. D-11 **olmayan bir
+   yükümlülüğü** kaydeder → hiçbir SC contentinfo istemiyor. İkisini aynı torbaya koymak
+   D-10'un ağırlığını hafifletir.
+4. **İnsan gözlemi tek rotadan genellenmez** ama yönü doğrulayabilir. SR-2 route 1'in
+   "kozmetik" yargısı karara **tek başına** yetmedi; makine sayısıyla aynı yöne baktığı
+   için kayda geçti.
+5. **Çift kayıt sessizce yaşar.** Audit §6'nın tablosunda K-4/K-5/K-6 satırları iki
+   kezdi ve ikinci küme bayattı — iki slice'ın aynı tabloyu düzenlemesinden kalmış bir
+   merge artefaktı. Aynı tabloya dokunan bir sonraki slice **tekrar sayı** kontrolü yapsın.
 
-**Bu slice'ın açık bıraktıkları — hiçbiri blocker değil:**
+## Açık kalanlar (ADIM 57 bunları KAPATMADI)
 
-1. **Plugin hâlâ kurulu değil.** Ajanlar, skill'ler, slash command'lar ve öteki üç hook
-   remote'ta yüklenmiyor. Kurmak **insan kararıdır** (yerel `/plugin install`). Bu slice
-   sadece iki bloklayıcı guard'ı kurtardı — **"plugin artık çalışıyor" DEME.**
-2. **`guard-git.sh` aşırı-engelliyor** (komut dizesinin tamamında desen arar). Bilinçli,
-   fail-closed. Düzeltmek istersen: eşleşmeyi `git push` argüman listesine daraltmak
-   gerekir ve **o daraltma bir kaçırma riski açar** — daraltmadan önce
-   `scripts/hook-guard-proof.sh`'e o kaçırmayı yakalayan bir beklenti ekle.
-3. **`Frontend` job'ının yeni adımı CI'da koşmadı** (yerel koştu). İlk yeşil koşuda
-   job log'undan **gerçekten koştuğunu** doğrula — ADIM 34'ün "0-job'lı sahte yeşil"
-   dersi burada da geçerli.
+- **A-08 / #514** — tek blocker. Defter **2 / 184** hücre (yalnız SR-2), **SR-1 hiç
+  başlamadı**, çıkış kriterleri **0 / 4**, issue **açık**. **İnsan kapısı.**
+- **K-5** (22 / 23 route) — maliyeti ölçülü: **204 başlık / ~40 dosya + 5 tag-scoped CSS
+  kuralı**. Denetim "sıçrama yanılttı mı?" sorusuna cevap vermeden **outline yeniden
+  kesilmez**. SR-2 route 1'de bu hücre bilerek `—` bırakıldı (denetçi "fark etmedim"
+  dedi; bu K-5'e cevap değil).
+- **K-6a** — halkanın görünürlüğü; precheck programatik odak kullandığı için **kanıt
+  üretemez**. Yalnız A-08.
+- **K-7** — ilk DOM'da `aria-live` yok (21 / 23). Ölçüldü, düzeltilmedi.
+- **Memory checkpoint** — ADIM 53 `agentmemory` ile hafızayı türetilir yaptı; bu slice
+  onu kullanmadı. Bir sonraki oturum **önce ölçsün** (bağlı mı), sonra yazsın.
 
-## Yöntem — bu slice'ta işe yarayan çalışma döngüsü
+## Sıradaki iş
 
-- **Ölç, sonra karar ver.** Bu slice'ın tamamı tek bir `cat installed_plugins.json`
-  ölçümüne dayanıyor. "Yapılandırma bozuk" teşhisi yanlış olurdu ve bir sonraki oturumu
-  `settings.json`'ı onarmaya gönderirdi.
-- **Pozitif yeşil kanıt değil.** Her kapı, geçirmesi gereken girdiyle de ateşlendi; kapının
-  kendisi de üç mutasyonla kırmızıya çevrildi. Bir guard'ın *her şeyi* engellemesi
-  pozitif-yalnız bir testi geçer.
-- **Yeni CI job'ı EKLEME.** Ruleset `20765617` 16 required check adını **başlıkla** tanır;
-  üretilmeyen bir ad tüm merge'leri kilitler (ADIM 49). Var olan job'a **adım** ekle.
-- **Hook artık senin de kapındır.** `git push --force`, self-merge ya da bu desenleri
-  *içeren* bir heredoc/döngü Bash çağrını bloklar. Metni Write ile **dosyaya** yaz, sonra
-  dosyayı koştur.
+Değişmedi: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site**;
+ADR §16 insan kapısından geçmeden başlanmaz. RC §6.7'de açık kalemler: P4-3 · P10-B6 ·
+P11-6b · P11-3b · P8-B3b · P1-Gate3 · P10-B3/B4/B5.
 
 ---
 
 ## Paste-ready resume prompt
 
 ```
-Entropia — ADIM 58
+ENTROPIA — ADIM 57 sonrası devam
 
-ÖNCE CLAUDE.md §Session START protokolünü uygula: git fetch, git log --oneline
-origin/main -6, gh pr list --state all. ADIM numarasını `grep '^## ADIM'
-docs/PROJECT_HISTORY.md | tail -3` ile DOĞRULA — bu depoda numara beş kez taşındı ve
-merge edilmiş ad kazanır.
+CLAUDE.md §Session START protokolünü uygula (fetch + origin/main log + PR listesi;
+handoff STALE-BY-DEFAULT'tur — aynı gün BEŞ paralel oturum görüldü; bu slice üç ad kaybetti, numaraları doğrulamadan yazma).
 
-DURUM (ADIM 57 sonrası, doğrula):
-- A-08 blocker AÇIK, blocker sayısı 1, verdict BLOCKED. #514 açık (human-only —
-  agent ne kapatabilir ne açabilir). Hiçbir belgeye A-08 için Complete/PASS yazma.
-- alembic head `0043_i08_registry_strategy_fks`, ENGINE_VERSION değişmedi,
-  SHARED_ALLOCATION_STATUS = future_dev.
-- ADIM 57 ürün koduna dokunmadı: iki bloklayıcı ajan hook'unu (guard-git.sh,
-  guard-generated.sh) .claude/settings.json'a doğrudan bağladı — plugin remote'ta
-  KURULMUYOR (onay istemi gerekir, container etkileşimsiz). Yeni kapı:
-  scripts/hook-guard-proof.sh, `Frontend` job'ında ADIM olarak.
-- P1-Gate3 KAPANMADI (A=1 · B=80 · C=6 · D=32, açık 119).
+ÖNCE OKU (otorite sırası)
+  1. docs/ADIM57_LANDED_KICKOFF.md (bu belge)
+  2. docs/STAGE2_HANDOFF.md → "## Stage — ADIM 57" + "## Next"
+  3. docs/PROJECT_HISTORY.md §ADIM 57
+  4. docs/generated/repository_facts.md (SAYISAL OTORİTE — CLAUDE.md'deki sayı değil)
 
-SIRADAKİ İŞ — seçeneklerden birini seç ve GEREKÇESİNİ YAZ:
-(a) `## Next` ana ekseni: PR B — ItemParticipant adaptörü +
-    jobs/backtest_engine.py:298 call site. ADR §16 İNSAN KAPISI + ADR amendment'ı
-    gerektirir; o kapıdan geçmeden başlama (docs/ADIM35_LANDED_KICKOFF.md §4.1).
-(b) Kabul borcu sınıf B, parti 04. PARTİ SEÇMEDEN ÖNCE ÖLÇ: kriterin adlandırdığı
-    davranış backend/src'te sevk edilmemişse sınıfı yanlıştır (ADIM 52/54 dersi).
-    Sınıfı değiştirmek bir adjudication'dır — tavanı YÜKSELTİR, test slice'ının
-    kararı değil.
-(c) RC §6.7'de kalanlar: P11-6b · P11-3b · P8-B3b · P4-3 · P10-B6 · P10-B3/B4/B5.
+DURUM (doğrula, güvenme)
+  · Blocker sayısı 1 (yalnız A-08), verdict BLOCKED. "READY" YAZMA.
+  · RC §6.5: K-2/K-4/K-6b kodla, K-3 D-11 ile kapandı; K-5 + K-6a A-08 bekler; K-7 açık.
+  · A-08 defteri 2/184 hücre, SR-1 hiç başlamadı, 0/4 kriter, #514 AÇIK.
 
-KURALLAR:
-- Yeni CI job'ı EKLEME (ruleset 20765617 — üretilmeyen required ad tüm merge'leri
-  kilitler). Var olan job'a ADIM ekle.
-- Ratchet YALNIZ AŞAĞI iner; eşik düşürme, kriter silme yok.
-- Her CRITICAL/HIGH code-review bulgusunu düzeltmeden ÖNCE ampirik doğrula.
-- Bash çağrıların artık guard-git.sh'ten geçiyor: "git push --force … main",
-  self-merge ya da bu desenleri İÇEREN bir heredoc/döngü bloklanır. Metni Write ile
-  dosyaya yaz, dosyayı koştur.
-- Kapanışta CLAUDE.md ritüelinin altı çıktısı; md. 4 türetilir:
-  node scripts/memory_index.mjs --sync --only <slug>.
+ÖNCELİK: birini seç
+  (a) A-08'in SR-1 (NVDA/Firefox/Windows) yarısı — İNSAN işi, agent koşamaz. Yalnız
+      hazırlık/kayıt tarafına dokunulabilir.
+  (b) Memory checkpoint: ADIM 53'ün agentmemory mekanizması bağlı mı ÖLÇ, sonra yaz.
+  (c) §6.7'nin açık kalemleri (P10-B6, P8-B3b, P4-3, P1-Gate3, P11-6b/3b, P10-B3/B4/B5).
+  (d) PR B (ItemParticipant) — ADR §16 insan kapısından geçmeden BAŞLAMA.
+
+TAVİZ VERİLEMEZ
+  · OCC (If-Match / expected_*_version / X-*-Version), Idempotency-Key, route YOLLARI,
+    react-query key'leri, ENGINE_VERSION, app/nav.ts DEĞİŞMEZ.
+  · UI işi v18 mockup'ı referans alır (docs/spec/index_guncellenmis_duzeltilmis_v18.html).
+  · A-08 / #514'ün durumunu DEĞİŞTİRME — insan kapısı. Defteri agent doldurmaz.
+  · İmzalayan adı verilmeden imzalı karar (D-xx) YAZMA.
+  · Advisory/ölçüm SUSTURMA — karar dispozisyonu belirler, sayıyı değil.
+  · Yeşile zorlama YOK: kapı kırılıyorsa BLOCKED yaz.
+
+ÖLÇÜM TUZAKLARI (bu repoda gerçekten yaşandı)
+  · a11y precheck sayısını TEK KOŞUYLA tazeleme — ilk koşu soğuktur, EKSİK raporlar.
+  · vitest: --no-file-parallelism ZORUNLU. pytest'i | tail'e BORULAMA.
+  · Host'ta docker YOKSA @a11y / @visual / @lighthouse yerelde KOŞMAZ → otorite CI.
+  · main'e merge 16 ZORUNLU check ister (ruleset 20765617) — Backend ~50 dk.
+    Merge sırasında main ilerlerse çakışma çıkar; BAŞKASININ slice kaydını yeniden
+    düzenleme, yalnız kendi numaranı boş olana taşı.
+  · docs PR'ı öncesi: git diff origin/main -- docs/ | grep '^-## ' → BOŞ olmalı.
+  · Aynı tabloya iki slice dokunduysa TEKRAR SATIR ara (K-tablosunda yaşandı).
+
+KAPANIŞ: CLAUDE.md §Session CLOSING ritüelinin 6 maddesi +
+  cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check
+  (bu belgeyi doc-status: historical'a düşür, yeni kickoff'u current yap — TEK current)
 ```

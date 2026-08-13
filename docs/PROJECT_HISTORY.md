@@ -8547,7 +8547,113 @@ teşhis yok, tek sinyal geçen süre.
 - **A-08 hakkında hiçbir şey ölçülmedi.** Bu slice denetimin **kaydıdır**, denetim değildir.
 - Denetçi rolü **hâlâ atanmadı** — oturumu ürün sahibi kendi koştu.
 
-## ADIM 57 — plugin hook'ları kurulumdan bağımsız oldu: iki bloklayıcı guard + davranış kapısı
+## ADIM 57 — K-3 ADJUDICATED: imzalı karar D-11 (`contentinfo` landmark), KOD YOK
+
+> **NUMARA NOTU — bu slice DÖRT kez taşındı (54 → 55 → 56 → 57).** ADIM 54 olarak
+> yazıldı; merge beklerken `#701` ADIM 54'ü, `#699` ADIM 55'i, `#697` ADIM 56'yı
+> **merge edilmiş adla** aldı. Kural değişmedi: **numaralar yeniden atanmaz, merge
+> edilmiş ad kazanır**, taşınan taraf hep merge edilmemiş olandır. Branch commit
+> mesajları `adim-54` yazmaya devam eder; slice'ın adı **ADIM 57**'dir. Aynı haftanın
+> **ikinci** çakışma dizisi (öncesi ADIM 48 → 49 → 50), ama bu kez üç ardışık ad
+> gitti. Bu slice `#701`/`#699`/`#697`'nin kayıtlarına **dokunmadı**; yalnız
+> `doc-status` işaretlerini düşürdü (aynı anda tek belge `current` olabilir).
+>
+> **Yapısal sebep, suçlu değil:** `Backend` kapısı ~50 dk sürüyor ve ruleset
+> `strict: true` — branch güncel olmadan merge yok. Yoğun bir günde bu ikisi bir
+> **koşu bandı** üretir: her yeşilde main ilerlemiş olur. Bu slice **beş tur**
+> döndü (yeşil → main ilerledi → güncelle → yeşil …). Numara taşımak ucuzdur; asıl
+> maliyet turlardır. **Çare ölçüldü ve bu turda uygulandı: auto-merge** — yeşilin
+> ilk saniyesinde merge eder, band kapanır. Elle beklemek bandı kapatmıyor; beş
+> turun kanıtladığı budur.
+
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok;
+`backend/src`, `frontend/src` ve `alembic` ağaçlarına **tek satır** dokunulmadı.
+OpenAPI / OCC / Idempotency / route yolları / react-query key'leri / `ENGINE_VERSION`
+değişmedi. Bu bir **karar kaydı** slice'ıdır — sevk edilen şey bir imza, bir kod değil.
+
+### Ne karara bağlandı
+
+RC §6.5'in **K-3**'ü: shell hiçbir `<footer>` render etmiyor, yani `contentinfo`
+landmark'ı **23 / 23 route'ta yok** (precheck'in beş koşuda da `23` verdiği, oynamayan
+bir sınıf). Denetim checklist'inin **A-2** maddesi ise **dört** landmark bekliyordu.
+Soru şuydu: eksik olan **ürün mü, beklenti mi?**
+
+PO `docs/ADIM50_KICKOFF.md` §P-2'yi **Varyant A** ile uyguladı → **beklenti** eksikti.
+
+### Karar — D-11
+
+`docs/implementation/a11y_ci_ratchet_and_adjudication.md` **§4b**, D-10'un birebir
+biçiminde: `Karar # / Konu / Seçenekler / Onaylayan / Tarih / Karar / Kayıt`.
+**Onaylayan `alimirbagirzade (product owner)`, tarih `2026-08-13`, karar (i).**
+Belge bu slice'la **imzalı a11y kararlarının sicili** hâline geldi: D-10 (kontrast,
+1.4.3) + D-11 (landmark kümesi). Yeni imzalı a11y kararı buraya, aynı bloğa yazılır.
+
+**Kaydın özü:** Entropia bir footer sevk etmez; uygulamanın landmark kümesi **ÜÇ**'tür
+(`banner` / `navigation` / `main`) ve checklist A-2 bu ürün için üçü bekler. K-3
+`PO-APPROVE` olur, yeniden dosyalanmaz.
+
+### Dayanak — biri makine, biri İNSAN
+
+1. **Hiçbir WCAG başarı ölçütü `contentinfo`'yu zorunlu kılmaz.** 1.3.1 *var olan*
+   yapının programatik sunumunu ister; var olmayan bir footer'ın sunulması gerekmez.
+   K-3 satırının eski `1.3.1 / 2.4.1` etiketi kalemi **olduğundan ağır** gösteriyordu
+   ve bu slice onu düzeltti — kalem bir **uyumluluk eksiği değildi**.
+2. **A-08'in insan denetçisi soruyu zaten cevaplamıştı.** SR-2 (VoiceOver / Safari /
+   macOS, 2026-08-12) oturumunda route 1 (`/`) A-2 kontrolünde denetçi rotor'un
+   Landmarks listesini gezdi, `banner`/`navigation`/`main` duydu, **`contentinfo`
+   yoktu** ve yokluğu **kozmetik** buldu — landmark gezinmesini engellemedi. Kayıt:
+   audit §1 ▸ route 1 dipnotu **ᴷ³**. **Tek rota karar vermeye yetmez** ve bu kayda
+   böyle geçti; ama makine ölçümü (23/23 yok) ile insan yargısı **aynı yöne** bakıyor.
+   Bu, "otomasyon ölçer, insan yorumlar" ayrımının işlediği ilk somut örnek.
+
+### Reddedilen iki seçenek — gerekçeleri kayıtta
+
+- **Görünür footer.** v18 mockup'ta footer **YOK** (grep: 0) → CLAUDE.md'nin zorunlu
+  görsel referansının ihlali; 23 `-linux` baseline'ının 23'ü yeniden üretilir;
+  Lighthouse CLS tabanı yeniden ölçülür; ayrıca **yeni bir v18 sapma kaydı** gerekir.
+- **Boş / görsel olarak gizli `<footer>`.** 0 baseline değişir, 1 dosya — **ama
+  landmark'ı doldurmaz**: rotor'la `contentinfo`'ya atlayan kullanıcı hiçbir şey duymaz.
+  **Açıkça reddedildi:** ölçüyü ürüne değil **ölçüme** uydurmak olurdu. Bu repoda
+  sayacı memnun eden çözüm bir çözüm sayılmaz.
+
+### Üç farklı kapanma yolu — fark sayıdan önemli
+
+K-2 / K-4 **kodla** kapandı (#685), K-6b **kodla** kapandı (#688), K-3 **kod yazmadan**
+kapandı çünkü kusur beklentideydi. K-5 ve K-6a **yalnız insan** kapatabilir (A-08).
+RC §6.5'e bu ayrım açıkça yazıldı: **dördüncü bir yol — ölçümü susturmak — yok.**
+
+### Yan iş: main'de duran çift kayıt onarıldı
+
+Audit §6'nın K-tablosunda **K-4, K-5 ve K-6 satırları İKİ KEZ** vardı ve ikinci küme
+**bayattı** (K-4 `Open` gösteriyordu — hâlbuki #685'te düzeldi; K-5 `21 / 23`
+gösteriyordu — hâlbuki `22 / 23`). ADIM 50 ile #688'in **aynı tabloyu** düzenlemesinden
+kalan bir merge artefaktıydı. Üç fazla satır silindi; tablo artık her kalem için tek
+satır taşıyor (K-1 · K-2 · K-3 · K-4 · K-5 · K-6a · K-6b · K-7). **Yargı düzeltmesi
+değil, çift kaydın temizliği** — hiçbir kalemin statüsü bu yüzden değişmedi.
+
+### Honest boundary
+
+- **A-08 DEĞİŞMEDİ.** Defter **2 / 184** hücre (yalnız SR-2 yarısı), **SR-1 hiç
+  başlamadı**, çıkış kriterleri **0 / 4**, `#514` **açık**. K-3'ün kapanması A-08'i
+  **ilerletmez** — bu kalem hiç blocker olmadı. Hiçbir belge A-08'i `Complete` göstermez.
+- **Advisory SUSTURULMADI.** K-3'ün `::warning::` satırı 23 rotada çıkmaya devam eder;
+  karar **dispozisyonu** belirler, **ölçümü** değil. `precheck-results.json`'ı kırpan
+  bir "temizlik" bu kararı yanlış okumuş olur.
+- **D-11 gelecekteki footer'ı kapsamaz.** Ürün gerçek footer içeriği isterse bu **yeni**
+  bir karardır ve bir v18 sapma kaydı gerektirir.
+- **Bu bir WCAG uyumluluk iddiası değil** — ama bir uyumluluk **eksiği** de değil.
+  D-10 ile karıştırma: D-10 **gerçek** bir ihlali (1.4.3, 45 düğüm) imzalar; D-11
+  **olmayan bir yükümlülüğü** kaydeder. İkisini aynı cümlede "imzalı sapma" diye
+  toplamak D-10'un ağırlığını hafifletir.
+- **Memory checkpoint borcu** — ADIM 53 hafızayı türetilir yaptı (`agentmemory`); bu
+  slice o mekanizmayı **kullandı mı, kullanmadı mı** bir sonraki oturum ölçmeli.
+  İçerik `docs/memory/PENDING_CHECKPOINTS.md`'de duruyorsa oradan yürütülür.
+- **Kod kapıları koşulmadı ve koşulması GEREKMEDİ**: bu slice `docs/` dışına hiç
+  dokunmadı. Koşulan tek kapı `generate_repository_facts.py --check` (doc-status
+  sınıflandırması dahil).
+
+
+## ADIM 58 — plugin hook'ları kurulumdan bağımsız oldu: iki bloklayıcı guard + davranış kapısı
 
 **Tarih:** 2026-08-13 · **Base:** `origin/main` @ `e0c25e6` · **Branch:**
 `claude/entropia-plugin-hooks-independent-7tuil2` · **Ürün kodu DEĞİŞMEDİ:**
@@ -8699,3 +8805,81 @@ kaydın sessizce geri alınması en olası regresyondur.
 
 **Koşmadı:** backend/frontend suite'leri (bu slice `backend/src` ve `frontend/src`'ye
 dokunmadı; Postgres ve `node_modules` bu container'da kurulu değil) → **otorite CI**.
+
+### 9. NUMARA: bu slice ADIM 57 yazıldı, `#698` o adı merge edilmiş olarak aldı → **ADIM 58**
+
+Kural değişmedi ve yeniden tartışılmadı: **numaralar yeniden atanmaz, merge edilmiş ad
+kazanır**; taşınan taraf hep merge edilmemiş olandır. Dal commit mesajları ve PR başlığı
+`adim-57` yazmaya devam eder — merge edilmiş metin değiştirilemez. Bu haftanın **üçüncü**
+çakışma dizisi: ADIM 48 → 49 → 50, ardından 54 → 55 → 56, ve şimdi K-3/D-11 slice'ı
+54 → 55 → 56 → **57** taşınırken bu slice 57 → **58** taşındı.
+
+### 10. DÖRDÜNCÜ docs regresyonu — ve guard'ın ulaşamadığı yol
+
+**Bu slice'ın kendi dalında oldu.** Merge `7a7c21e` (*"Merge branch 'main' into
+claude/entropia-plugin-hooks-independent-7tuil2"*, GitHub arayüzünden, insan eliyle)
+main'in içeriğini **sessizce düşürdü**:
+
+| Kayıp | Boyut |
+|---|---|
+| `docs/PROJECT_HISTORY.md` §ADIM 57 (K-3 ADJUDICATED, D-11) | **105 satır** |
+| `docs/STAGE2_HANDOFF.md` §Stage — ADIM 57 (K-3) | **64 satır** |
+| `docs/ADIM57_LANDED_KICKOFF.md` | tamamen — aynı adlı **benim** dosyamla ezildi |
+| `docs/audit/closure_w0_shared_portfolio_2026-08-13.md` (#707) | **579 satır**, dosya yok oldu |
+| `docs/implementation/final_closure_prompt_pack_2026-08-13.md` (#706) | **2233 satır**, dosya yok oldu |
+
+Bu, #590 (211 satır) ve #604 (194 satır) ile **aynı sınıftır** ve bu slice'ın tamamı o
+sınıfı durdurmak üzerineydi. **Neden guard yakalamadı — ölçülmüş, savunma değil:**
+
+1. **`guard-git.sh` bir PreToolUse hook'udur; yalnız bir ajanın `git commit` çağrısında
+   koşar.** Bu merge **GitHub arayüzünde** yapıldı — orada ne hook var ne ajan. Kapının
+   kapsamadığı yol budur ve bu slice onu genişletmiyor.
+2. **`docs-history-guard.py` de aynı sebeple sessizdi.**
+3. **Hiçbir CI kapısı `docs/` okumaz** — 22/22 yeşildi ve 3181 satırlık kayıp yeşilin
+   içindeydi. **Yeşil CI bir docs regresyonunun yokluğunu KANITLAMAZ.**
+
+Aynı adı taşıyan iki kickoff dosyası çakışmayı **görünmez** kıldı: `git` çakışma bile
+bildirmedi, çünkü ikisi de "yeni dosya"ydı ve çözüm biri lehine yapıldı.
+
+**Onarım fix-forward yapıldı, geçmiş yeniden yazılmadı** (`7a7c21e` yerinde duruyor):
+kayıp beş kalem `origin/main`'den geri kondu, K-3 kaydı **ADIM 57 olarak** kendi yerine
+yerleştirildi, bu slice **ADIM 58**'e taşındı. Doğrulama kapısı:
+`git diff origin/main -- docs/ CLAUDE.md | grep '^-## '` → **boş**.
+
+**Bir sonraki oturum için pazarlıksız:** bir docs PR'ını merge etmeden ya da main'i içeri
+almadan **önce ve sonra** bu grep'i koştur. Kapı arayüzdeki merge'e ulaşamıyor; bu adım
+elle yapılır. Kalıcı çare bir **CI kapısı** olurdu (`docs/` kayıt-silme kontrolü PR
+diff'inde) — bu slice'ta yazılmadı, açık iş.
+
+### 11. `guard-git.sh` gate 1 HEAD-göreli ve YENİDEN ADLANDIRMAYA KÖR — ölçüldü, bu commit'te
+
+Onarım commit'i kendi guard'ıma takıldı ve **haklı olmadığı ölçüldü**. İki kapı aynı
+soruya farklı cevap verdi:
+
+| Kapı | Neye karşı bakar | Bu commit'teki verdict |
+|---|---|---|
+| `guard-git.sh` gate 1 | **staged diff, HEAD'e karşı**, tüm `docs/` | **BLOCK** — 6 başlık "silindi" dedi |
+| `.claude/hooks/docs-history-guard.py` | **`origin/main`'e karşı**, 2 dosya | **exit 0** |
+
+**Doğrusu ikincisidir.** "Silindi" denen altı başlığın **altısı da** staged ağaçta
+duruyor: dördü kickoff dosyasıyla birlikte `ADIM58_LANDED_KICKOFF.md`'ye taşındı, ikisi
+`ADIM 57 →  ADIM 58` olarak yeniden numaralandı. Otoritatif kontrol —
+`git diff --cached origin/main -- docs/ CLAUDE.md | grep '^-## '` — **boş**.
+
+Kusur şudur: gate 1 satır bazlı diff okur, **dosya içeriği okumaz**. Bir yeniden
+adlandırma (dosya adı ya da başlık) ona **silme** görünür. Bu bir aşırı-engellemedir,
+yani fail-closed — kaçırmaktan iyidir ve **düzeltilmedi**; ama artık yazılı.
+
+**İKİNCİ, DAHA TEHLİKELİ KUSUR — hook staged olmayanı göremez.** Hook araç çağrısından
+**önce** koşar, yani `git add -A && git commit …` tek bir Bash çağrısıysa kapı
+**`git add`'den ÖNCEKİ index'i** okur. Bu oturumda canlı gerçekleşti: onarımı yapmış
+ağaç henüz staged değilken `docs-history-guard.py` **HEAD'in taşıdığı regresyonu**
+bildirdi ve onarım commit'ini blokladı. Yön tersine döndüğünde bu bir **false
+negative**'dir: aynı çağrıda `git add` ile sahnelenen bir kayıt silme kapıya **hiç
+görünmez**. `docs-history-guard.py` yalnız `-a`/`--all` bayrağını tanıyor, zincirlenmiş
+`git add`'i tanımıyor. **Düzeltilmedi** (bu slice'ın kapsamı değil) — pratik kural:
+**`git add`'i ayrı çağrıda koştur**, yoksa kapı bayat bir index'e bakar.
+
+**Kalıcı çare ikisi için de aynı ve bir CI kapısıdır:** PR diff'inde `docs/` altındaki
+silinen `## ` başlıklarını arayan bir adım. PreToolUse hook'u yapısal olarak ne arayüzden
+yapılan merge'i ne de bayat index'i kapsayabilir. **Açık iş.**

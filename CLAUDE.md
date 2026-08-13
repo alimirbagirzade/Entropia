@@ -87,7 +87,7 @@ Before stopping a working session, produce **ALL** of the following:
   EDIT/WRITE to an existing file triggers fact-force (present 4 facts: importers / affected
   public API / data schema / user request verbatim -> retry). First Bash of a session
   triggers a one-time fact gate.
-- **İki bloklayıcı guard artık plugin kurulumundan bağımsız koşar (ADIM 57).**
+- **İki bloklayıcı guard artık plugin kurulumundan bağımsız koşar (ADIM 58).**
   `.claude/settings.json` `guard-git.sh` (Bash) + `guard-generated.sh` (Edit/Write) betiklerini
   doğrudan kaydeder. Pratik sonucu: **`git push --force … main`, self-merge (`gh pr merge`) ve
   bu desenleri yalnızca İÇEREN bir heredoc/döngü Bash çağrını bloklar** — eşleşme komut
@@ -214,7 +214,7 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **HEAD `e0c25e6`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
-> **Son dalga — ADIM 57 (plugin hook'ları kurulumdan bağımsız oldu, 2026-08-13): ÜRÜN KODU
+> **Son dalga — ADIM 58 (plugin hook'ları kurulumdan bağımsız oldu, 2026-08-13): ÜRÜN KODU
 > DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > **Ölçüm: `enabledPlugins` KURULUM DEĞİLDİR** — `installed_plugins.json` bu container'da
 > **boş**, çünkü kurulum bir **onay istemi** ister ve remote etkileşimsizdir (yapılandırma
@@ -232,11 +232,16 @@ Before stopping a working session, produce **ALL** of the following:
 > dizesinin tamamında** desen arar → `feat/main-menu` de, bu desenleri *içeren* bir
 > heredoc/döngü de bloklanır (fail-closed, düzeltilmedi) → metni **Write ile dosyaya yaz**.
 > **Plugin HÂLÂ kurulu değil** — ajanlar/skill'ler/komutlar remote'ta yüklenmiyor; kurmak
-> **insan kararı**. `PROJECT_HISTORY.md` §ADIM 57 · `docs/ADIM57_LANDED_KICKOFF.md`.
+> **insan kararı**. `PROJECT_HISTORY.md` §ADIM 58 · `docs/ADIM58_LANDED_KICKOFF.md`.
 >
-> Öncesinde **HEAD `4d9a373`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **NUMARA: bu slice ADIM 57 yazıldı, `#698` o adı MERGE EDİLMİŞ olarak aldı → ADIM 58.**
+> Kural değişmedi: **numaralar yeniden atanmaz, merge edilmiş ad kazanır**; dal commit
+> mesajları `adim-57` yazar. Aynı gün main'e inen K-3/D-11 slice'ı da üç ad taşımıştı
+> (54 → 55 → 56 → 57) — bu haftanın **üçüncü** çakışma dizisi.
+>
+> Öncesinde **HEAD `31ed27d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 57 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
+> **Öncesinde ADIM 57 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
 > satır bile değişmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > K-3 (`contentinfo` landmark yok, 23/23) **kod yazmadan** kapandı: eksik olan ürün değil
 > **BEKLENTİYDİ** — hiçbir WCAG SC'si contentinfo zorunlu kılmaz (1.3.1 *var olan* yapıyı

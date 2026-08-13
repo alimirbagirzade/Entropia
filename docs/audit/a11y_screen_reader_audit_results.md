@@ -474,17 +474,15 @@ the count: the run printed the skip verbatim, which is what makes K-4's side eff
 | K-6b | **Focus-ring contrast below WCAG 1.4.11 Non-text Contrast (AA).** `global.css :focus-visible` painted `2px solid var(--accent)`, and **#00a9e8 measures 2.68:1 on white / 2.46:1 on #f5f5f5** — a focus indicator is a non-text UI component and owes **3:1**. Nothing in the repo measured this: axe does not run a focus-ring contrast rule, and the green ratchet was never evidence. **Separate criterion from K-1/D-10**, which is the 1.4.3 *text* axis. | every focusable node, 23 / 23 routes | **CLOSED 2026-08-12** — ring re-pointed to `var(--text)` (`#222222`) | Nothing. **Measured after the change:** 15.91:1 on white, 14.59:1 on #f5f5f5, 12.98:1 on the #e8e8e8 title bar, 5.94:1 on the #00a9e8 `dropdown-blue` panel, 4.92:1 on the #8f8f8f dropdown panel, and **4.50:1 on the #0092c8 menu-blue hover — the worst surface in the app**. All ≥ 3:1. `--accent` itself was not touched. |
 | **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
 
-> **Three superseded rows were removed from this table on 2026-08-13** — it had carried
-> **eight IDs in eleven rows** since PR #685. That PR (`ce823a8`) inserted updated `K-2`,
-> `K-4` and `K-5` rows *plus a pre-split bare `K-6`*, without removing the rows they
-> replaced and without seeing that `#688` (`04c6a9c`) had split `K-6` into `K-6a`/`K-6b`
-> the previous evening. The result was a table that showed **`K-4` as FIXED and as Open**,
-> **`K-5` at 22 / 23 and at 21 / 23**, and a `K-6` whose own explanatory paragraph below
-> speaks only of `K-6a`/`K-6b`. The rows deleted are the **older** three in each pair
-> (`K-4` Open, `K-5` 21 / 23, bare `K-6`); **no status, reach or wording of a surviving row
-> was touched**, and the eight IDs above are now unique. Recorded rather than done
-> silently: this is the canonical block every other document points at, so a reader who
-> remembers eleven rows is owed the reason there are now eight.
+> **Why this table has eight rows and not eleven.** Until `056aafe` (**#698**, ADIM 57) it
+> carried **eight IDs across eleven rows**: `K-4` appeared as **FIXED** *and* as Open, `K-5`
+> at **22 / 23** *and* at **21 / 23**, and a pre-split bare `K-6` sat beside the `K-6a` /
+> `K-6b` its own explanatory paragraph below already used. PR **#685** (`ce823a8`) had
+> inserted updated `K-2` / `K-4` / `K-5` rows plus that bare `K-6` without removing the rows
+> they replaced, not seeing that **#688** (`04c6a9c`) had split `K-6` the previous evening.
+> `056aafe` dropped the three older rows while adjudicating K-3, but its subject line names
+> only the K-3 decision — so the removal is recorded **here**, where a reader who remembers
+> eleven rows will look. No status, reach or wording of a surviving row changed.
 
 K-2 through K-7 are **reported rather than gated on purpose** — with **K-6b as the
 one exception**, and the exception is instructive about where the line is. Each of

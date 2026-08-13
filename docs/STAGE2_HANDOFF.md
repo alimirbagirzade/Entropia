@@ -4899,7 +4899,7 @@ tek yapısal `up == 0`). Bu repo içinde kapatılamaz; **imzalı sapma DEĞİLD�
 
 ---
 
-## ADIM 32 — RC §6.7 / P9-F2: SPA origin'inde CSP landed (PR pending)
+## ADIM 32 — RC §6.7 / P9-F2: SPA origin'inde CSP landed (PR #655)
 
 **Tip:** güvenlik / sunum-katmanı başlık işi. **`backend/src` ve `frontend/src`
 DEĞİŞMEDİ**, migration yok, lockfile değişmedi, `ENGINE_VERSION` sabit,
@@ -4944,7 +4944,7 @@ backend/frontend birim suite'leri **koşulmadı** (tek satır Python/TS kaynağ�
 `generate_repository_facts.py --check` exit 0). **RC verdict'i BLOCKED kalır, blocker
 sayısı DEĞİŞMEDİ (üç).** Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 32.
 
-## Stage — ADIM 34: RC §6.7 / P4-1 + P4-2, model↔migration şema paritesi (PR pending)
+## Stage — ADIM 34: RC §6.7 / P4-1 + P4-2, model↔migration şema paritesi (PR #657)
 
 **Base** `970ec81` (ADIM 33 / #656 merged). **alembic head DEĞİŞMEDİ**
 (`0043_i08_registry_strategy_fks`) — bu dalgada **migration YOK**. `ENGINE_VERSION` sabit,
@@ -4983,7 +4983,7 @@ kendisi yazar ve head değişmedi. **RC verdict'i BLOCKED kalır, blocker sayıs
 
 ---
 
-## ADIM 33 — RC §6.7 / P9-F1: frontend build reproducibility landed (PR pending)
+## ADIM 33 — RC §6.7 / P9-F1: frontend build reproducibility landed (PR #656)
 
 **Tip:** build tesisatı. **`backend/src` ve `frontend/src` DEĞİŞMEDİ**, migration yok,
 `ENGINE_VERSION` sabit, `SHARED_ALLOCATION_STATUS` = `future_dev`. Route path, react-query
@@ -5037,7 +5037,7 @@ başlık yeniden yazmayı kayıt silme sayacağı için **bilerek düzeltilmedi*
 
 ---
 
-## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu landed (PR pending)
+## ADIM 35 — `PortfolioRun` → composite `EngineOutput` projeksiyonu landed (PR #659)
 
 **Tip:** motor yolu, **containment'ın dışında**. Migration **yok** (alembic head
 `0043_i08_registry_strategy_fks` sabit), `ENGINE_VERSION` **sabit**,
@@ -5102,7 +5102,7 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 35. Devir: `docs/ADIM35_LANDED_KICK
 
 ---
 
-## ADIM 37 — RC §6.7 / P10-B2: sayfalama sınırı YAYIMLANDI, aşım davranışı AÇIK (PR pending)
+## ADIM 37 — RC §6.7 / P10-B2: sayfalama sınırı YAYIMLANDI, aşım davranışı AÇIK (PR #663)
 
 **Numara düzeltmesi:** kickoff prompt'u bu slice'a "ADIM 36" diyordu; **ADIM 36 doludur**
 (P6-ek + P6-6, PR #658, `881d273`). Merge edilmiş numara yeniden atanmaz → **ADIM 37**.
@@ -5143,7 +5143,7 @@ ayarı, insan kararı). **Blocker sayısı DEĞİŞMEDİ, verdict BLOCKED KALIR.
 
 ---
 
-## ADIM 38 — RC §6.7 / P11-3 + P11-6: kapının ölçtüğü ile iddia ettiği landed (PR pending)
+## ADIM 38 — RC §6.7 / P11-3 + P11-6: kapının ölçtüğü ile iddia ettiği landed (PR #664)
 
 > Görev metni "ADIM 37" diyordu; o ad merge edilmiş **#663**'e bağlı ve değiştirilemez →
 > çift-ad hatasını tekrarlamamak için **ADIM 38**.
@@ -5225,7 +5225,7 @@ Doğrulama: e2e tsc temiz · `visual-baseline-platform-gate.sh` → **23 baselin
 
 ---
 
-## ADIM 40 — RC §6.7 / P1-B1+B2 + P8-B1+B3: sayının sahibi değişti landed (PR pending)
+## ADIM 40 — RC §6.7 / P1-B1+B2 + P8-B1+B3: sayının sahibi değişti landed (PR #666)
 
 **Numaralandırma:** istem "ADIM 38" diyordu ve base olarak ADIM 37b'yi varsayıyordu; doğrulama
 `origin/main`'de **ADIM 38 (#664) + ADIM 39 (#665) zaten merge** gösterdi → numara yeniden
@@ -5270,7 +5270,7 @@ rapor **§6.7.8**; devir: `docs/ADIM40_LANDED_KICKOFF.md`.
 
 ---
 
-## ADIM 41 — RC §6.7 / P8-B2: durable admission status'ü karara bağlandı (PR pending)
+## ADIM 41 — RC §6.7 / P8-B2: durable admission status'ü karara bağlandı (PR #668)
 
 **Karar slice'ı, bug fix değil.** "Tutarsızlık gördüm, hizalayayım" refleksine direnildi.
 
@@ -5311,7 +5311,7 @@ rapor **§6.7.9**; devir: `docs/ADIM41_LANDED_KICKOFF.md`.
 
 ---
 
-## ADIM 42 — RC §6.7 / P1-Gate3: kabul kriteri kapsamı ölçüldü, sınıflandırıldı, ratchet'lendi (PR pending)
+## ADIM 42 — RC §6.7 / P1-Gate3: kabul kriteri kapsamı ölçüldü, sınıflandırıldı, ratchet'lendi (PR #669)
 
 **Migration:** yok · **Yeni tablo:** yok · **Ürün kodu:** DEĞİŞMEDİ (`ENGINE_VERSION`,
 OpenAPI, alembic head sabit). Bu bir **test/kapı** slice'ıdır.
@@ -5524,7 +5524,7 @@ Paste-ready resume prompt: `docs/ADIM46_LANDED_KICKOFF.md` en altta.
 
 ---
 
-## Stage — ADIM 47: RC §6.7'nin iki PO kararı uygulandı (PR pending)
+## Stage — ADIM 47: RC §6.7'nin iki PO kararı uygulandı (PR #682)
 
 **Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi.
 **OpenAPI: DEĞİŞTİ** (bilerek) — iki operation `200 → 202`, iki component eklendi;
@@ -5575,7 +5575,7 @@ Paste-ready resume prompt: `docs/ADIM47_LANDED_KICKOFF.md` en altta.
 
 ---
 
-## Stage — ADIM 48: K-6b, odak halkasının kontrastı (WCAG 1.4.11) (PR pending)
+## Stage — ADIM 48: K-6b, odak halkasının kontrastı (WCAG 1.4.11) (PR #688)
 
 **Migration:** yok. **Yeni tablo:** yok. **`ENGINE_VERSION`:** değişmedi. **OpenAPI:**
 değişmedi. **Ürün kodu değişikliği TEK deklarasyondur:**
@@ -5802,7 +5802,7 @@ silinmedi. `repository_facts --check` bunu yakalamıyor (kuralı dosya başına 
 **P1-Gate3 KAPANMADI** — kalan borç A=1 · B=82 · C=6 · D=32 (açık toplam **121**).
 Tam kayıt: `PROJECT_HISTORY.md` §ADIM 52 · kickoff: `docs/ADIM52_LANDED_KICKOFF.md`.
 
-## Stage — ADIM 53: hafıza türetilir oldu (agentmemory) + iki sessiz ajan kapısı (PR pending)
+## Stage — ADIM 53: hafıza türetilir oldu (agentmemory) + iki sessiz ajan kapısı (PR #694)
 
 **Ürün kodu değişmedi** — `backend/src`, `alembic`, `frontend/src` el değmedi; migration yok,
 `ENGINE_VERSION` ve OpenAPI değişmedi. **A-08 blocker AÇIK, verdict BLOCKED** (bu slice ölçmedi).
@@ -5859,7 +5859,7 @@ Defterde artık **beş** açık bulgu var; **parti seçmeden ÖNCE ÖLÇ**.
 **P1-Gate3 KAPANMADI** — kalan borç A=1 · B=80 · C=6 · D=32 (açık toplam **119**).
 Tam kayıt: `PROJECT_HISTORY.md` §ADIM 54 · kickoff: `docs/ADIM54_LANDED_KICKOFF.md`.
 
-## Stage — ADIM 55: agentmemory sunucusu yerele alındı, semantik geri çağırma (PR pending)
+## Stage — ADIM 55: agentmemory sunucusu yerele alındı, semantik geri çağırma (PR #699)
 
 **Ürün kodu değişmedi.** Migration yok, `ENGINE_VERSION`/OpenAPI aynı. **A-08 blocker AÇIK,
 verdict BLOCKED** (bu slice ölçmedi).

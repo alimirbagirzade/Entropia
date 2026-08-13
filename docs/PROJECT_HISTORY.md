@@ -8365,9 +8365,14 @@ sinyal bu: ADIM 42 sınıflandırmayı her kaydın **kendi `notes` gerekçesinde
 ürün kodunu tek tek doğrulamadığını kendi raporunda **yazdı**. Ölçülen her partide en az
 bir yanlış sınıflandırma çıkıyor. **Parti seçmeden ÖNCE ÖLÇ.**
 
-## ADIM 55 — agentmemory sunucusu YERELE alındı: semantik geri çağırma, barındırma YOK
+## ADIM 55 — agentmemory sunucusu YERELE alındı: semantik geri çağırma, barındırma YOK (PR #699)
 
-**Tarih:** 2026-08-13 · **Base:** `origin/main` @ `2a90fe3` (#694, ADIM 53) ·
+**Tarih:** 2026-08-13 · **Base:** `origin/main` @ `2a90fe3` (#694, ADIM 53) · **Merge:** PR #699, `main` üzerinde **`c4cd932`**.
+> **NUMARA — bu slice İKİ KEZ taşındı: ADIM 54 → 55.** Çalışırken `#701` ADIM 54 adını
+> **merge edilmiş** olarak aldı; kural gereği taşınan taraf merge edilmemiş olandır.
+> **Squash commit mesajı `feat(adim-54)` yazar** — merge edilmiş mesaj değiştirilemez,
+> kayıt adı **ADIM 55**'tir. (Emsal: ADIM 52'nin commit'leri `stage-49` yazar.)
+
 **Ürün kodu DEĞİŞMEDİ** — `backend/src`, `alembic`, `frontend/src` el değmedi; migration yok,
 `ENGINE_VERSION` ve OpenAPI aynı. **A-08 blocker AÇIK, verdict BLOCKED — bu slice ölçmedi.**
 

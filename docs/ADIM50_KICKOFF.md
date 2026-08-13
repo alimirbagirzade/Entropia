@@ -1,4 +1,9 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 51 (2026-08-12).** Canlı kickoff artık
+> `docs/ADIM51_LANDED_KICKOFF.md`. Aşağısı ADIM 50 (RC §6.5 / K-2 + K-4) kapanışındaki
+> durumu kaydeder. ADIM 51 **yalnız belge uzlaştırmasıdır** — K-2/K-4 kararlarına,
+> K-3/K-5/K-6a/K-7'nin açık durumuna ve buradaki hiçbir sayıya dokunmadı.
+
 # ADIM 50 KICKOFF — RC §6.5 (K-2..K-6): beş a11y gözlemi için ürün kararı promptları
 
 > **NUMARA NOTU — bu slice ADIM 48 olarak yazıldı, ADIM 50'ye taşındı (iki kez).**

@@ -18,43 +18,64 @@
 > automated prechecks added alongside this file — may be transcribed into these
 > tables as a screen-reader result.
 >
-> **The tracking issue is CLOSED while this worksheet is still empty.** Read the
-> divergence block below before citing **GitHub #514** as tracking anything.
-> `#514` carries the `human-only` label; an agent or automated scan must not
-> close it — nor re-open it.
+> **The tracking issue is OPEN again.** A human re-opened **GitHub #514** on
+> `2026-08-12T11:08:58Z` (`state_reason: reopened`) expressly to run this audit.
+> The closure/evidence divergence this file used to carry is therefore
+> **RESOLVED — by reading (B)**; the record of it is kept below as history, not
+> as a live conflict. **This changes the tracking state and nothing else:** the
+> worksheet is still empty, the four exit criteria are still `0 / 4`, and A-08 is
+> still `HUMAN-BLOCKED`. `#514` carries the `human-only` label; an agent or
+> automated scan must not close it — nor re-open it.
 >
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.
 
-### Tracking-issue state — closure/evidence divergence (recorded 2026-08-07)
+### Tracking-issue state — divergence RESOLVED 2026-08-12 (recorded 2026-08-07)
 
-This block is the **canonical record** of the divergence. Every other document
-points here instead of restating it.
+This block is the **canonical record** of the tracking-issue state. Every other
+document points here instead of restating it.
 
 | Fact | Value | How to re-derive |
 |---|---|---|
-| GitHub **#514** state | **CLOSED** — `2026-08-07T03:52:03Z`, `state_reason: completed` | `gh issue view 514 --json state,closedAt,stateReason` |
+| GitHub **#514** state | **OPEN** — re-opened `2026-08-12T11:08:58Z`, `state_reason: reopened` | `gh issue view 514 --json state,stateReason,updatedAt` |
 | Issue label | `human-only` — *"Sadece insan kapatabilir; kanitsiz kapatma yasak"* | `gh issue view 514 --json labels` |
 | Audit performed? | **NO** — every result cell is `—` | §1, §2 below |
 | Exit criteria met? | **0 / 4** — all four still `☐` | §5 below |
 | Findings committed? | **NO** — the register holds only its placeholder row | §3 below |
 
-**A closed issue is not evidence of a completed audit.** These facts are in
-conflict, and this file records the conflict rather than resolving it. Both
-readings below stay open: choosing between them is a **human** decision an agent
-may neither make nor enact, because each one either changes the issue's state or
-adds a signature.
+**The divergence is closed; the blocker is not.** From 2026-08-07 to 2026-08-12
+this file recorded a conflict — the issue said `COMPLETED` while this worksheet
+was empty. On `2026-08-12T11:08:58Z` a human resolved it by taking **reading
+(B)**: re-opening #514 with the reason recorded on the issue itself —
 
-| Reading | What it would mean | What it requires — human action |
+> *"Reopened 2026-08-12 to run path (A) of the RC readiness report §6.1 … The
+> 2026-08-07T03:52:03Z closure carried stateReason=COMPLETED while the worksheet
+> was empty — 0/4 exit criteria, 0/46 routes, 0/20 flows, 0 recorded SR-BULGU.
+> No signed permanent deviation exists for A-08. The audit stack is prepared and
+> validated; auditor assignment is the remaining human step."*
+
+**Only the tracking state moved.** Re-opening the issue is not a result any more
+than closing it was: it added no auditor, no version string and no finding. The
+gate is §5's four criteria, which are still `0 / 4`.
+
+> **Mind the lettering — the two documents number their options in opposite
+> directions.** In *this* file's table below, **(A)** = signed acceptance and
+> **(B)** = the erroneous closure being reverted. In the readiness report
+> ([`Entropia_V18_RC_Readiness_2026-08-07.md`](../releases/Entropia_V18_RC_Readiness_2026-08-07.md)
+> §6.1), **(A)** = run the audit and **(B)** = signed deviation. The issue comment
+> quoted above says *"path (A)"* in the **report's** sense — run the audit. Same
+> two outcomes, two numberings; neither file was renumbered, because both are
+> cited by ID elsewhere.
+
+| Reading | Status | What it meant |
 |---|---|---|
-| **(A) Deliberate acceptance** | The product owner knowingly accepted shipping without the audit | A **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — recorded in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). **No signer has been supplied, so no such record exists**, and none may be written on an agent's initiative. |
-| **(B) Closed in error** | The tracking issue was closed by mistake | A human **re-opens #514**. That would make it the **second** evidence-free closure to be reverted — the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
+| **(A) Deliberate acceptance** | **NOT TAKEN** | Would have required a **signed permanent deviation** in the D-10 form — named signer, ISO date, explicit scope — in [`v18_visual_deviations.md`](../implementation/v18_visual_deviations.md). No signer was ever supplied, so **no such record exists**; none may be written on an agent's initiative. |
+| **(B) Closed in error** | **TAKEN — 2026-08-12** | A human re-opened #514. This is the **second** evidence-free closure to be reverted; the first was `2026-07-30T19:05:32Z`, re-opened 2026-08-03. |
 
-Neither reading lets A-08 be reported as done. Under **(A)** what is accepted is
-the *absence* of the audit, not a result; under **(B)** the audit is simply still
-outstanding. The recurrence is itself the finding: **#514 has now been closed
-twice without a single committed result**, which is why §5's exit criteria — not
-the issue's state — are the gate.
+The recurrence stands as the finding: **#514 was closed twice without a single
+committed result, and both closures had to be reverted.** That is why §5's exit
+criteria — not the issue's state — are the gate. Under (B) the audit is simply
+still outstanding, which is exactly where A-08 sits today.
 
 ---
 
@@ -293,10 +314,11 @@ Copied from the checklist so this file can be read alone:
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.
 
-**Closing the tracking issue satisfies none of the four.** GitHub #514 was closed
-on `2026-08-07T03:52:03Z` with this table still at `0 / 4`; the closure changed
-the issue's state, not this file's contents, and it added no auditor, no version
-string and no finding. The gate is this table. See the divergence block in the
+**The tracking issue's state satisfies none of the four — in either direction.**
+GitHub #514 was closed on `2026-08-07T03:52:03Z` and re-opened on
+`2026-08-12T11:08:58Z` with this table at `0 / 4` both times. Each move changed
+the issue's state, not this file's contents; neither added an auditor, a version
+string or a finding. The gate is this table. See the tracking-issue block in the
 STATUS banner above.
 
 ---

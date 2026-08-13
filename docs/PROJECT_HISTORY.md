@@ -7947,3 +7947,93 @@ rapor etti.
   haritalanmıştır, shell landmark'larını haritalamaz.
 
 ---
+
+## ADIM 51 — #514 izleme ayrışması KAPANDI, A-08 blocker AÇIK: belgeler uzlaştırıldı
+
+**Tarih:** 2026-08-12 · **Base:** `origin/main` @ `d6fa02f` (#686, ADIM 48) ·
+**Numara notu:** bu slice **ADIM 48 olarak yazıldı**; iş sürerken #683 ve #686 main'e
+merge edildi ve **#686 "ADIM 48" adını aldı**. Merged başlıklar değiştirilemez, bu slice
+ise henüz merge edilmemişti → **ADIM 49'a taşındı**. CLAUDE.md'nin uyardığı çakışma
+(*"yeniden numaralandırma YASAK"*) **merged** kayıtlar içindir; burada ucuzken önlendi. ·
+**Kod değişikliği YOK** — yalnız belge uzlaştırması. Migration yok, `ENGINE_VERSION`
+değişmedi, alembic head `0043_i08_registry_strategy_fks`.
+
+**Tetikleyen olgu.** Oturum başı doğrulamasında ölçüldü: GitHub **#514**
+`2026-08-12T11:08:58Z`'de bir **insan** tarafından yeniden **AÇILDI**
+(`state=OPEN`, `state_reason=reopened`), gerekçesi issue'ya yazıldı:
+
+> *"Reopened 2026-08-12 to run path (A) of the RC readiness report §6.1 … The
+> 2026-08-07T03:52:03Z closure carried stateReason=COMPLETED while the worksheet was
+> empty — 0/4 exit criteria, 0/46 routes, 0/20 flows, 0 recorded SR-BULGU. No signed
+> permanent deviation exists for A-08. The audit stack is prepared and validated;
+> auditor assignment is the remaining human step."*
+
+**Sorun.** Repository bunu hiçbir yerde kaydetmemişti. RC raporu **kendi içinde
+çelişiyordu**: üst banner'ı (`:31`) yeniden açılmayı yazarken, blocker kaydının kendisi
+(§6.1), P12 ölçüm tablosu (`:494`) ve `İzleme` kod bloğu (`:662`) hâlâ
+`CLOSED 2026-08-07 / COMPLETED` diyordu. Kanonik defter de `CLOSED` diyordu. Yani ADIM 29'un
+kaydettiği ayrışma **gerçekte çözülmüştü ama belgelerde açık görünüyordu** — ve bu, ADIM 29
+ile aynı sınıftan bir docs-truth kusuruydu, yalnız ters yönde.
+
+**Karar — ayrışma KAPANDI, blocker KAPANMADI.** İnsan (defterin harflemesiyle) **(B)**
+yolunu seçti: hatalı kapatmayı geri aldı. İmzalı kalıcı sapma yolu **seçilmedi** ve A-08
+için böyle bir kayıt hâlâ **YOK**. Değişen tek şey **izleme durumudur**: defter hâlâ boş,
+dört çıkış kriteri hâlâ `0 / 4`, 0/46 rota, 0/20 akış, 0 `SR-BULGU`. **Yeniden açma bir
+sonuç değildir** — kapatmanın olmadığı gibi.
+
+**Uzlaştırılan belgeler (8):**
+- `docs/audit/a11y_screen_reader_audit_results.md` — **kanonik blok**. STATUS banner'ı +
+  *Tracking-issue state* tablosu `OPEN/reopened`'a çevrildi; başlık *"divergence RESOLVED
+  2026-08-12"*; okuma tablosu **(A) NOT TAKEN / (B) TAKEN** olarak kapatıldı; §5'in kapanış
+  paragrafı *"in either direction"* hâline getirildi.
+- `docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md` — P12 ölçüm tablosu, `İzleme`
+  bloğu, §6.1 giriş banner'ı ve ADIM 45 banner'ı (`:2136`) düzeltildi; §6.1'in *"(A)
+  seçilirse #514'ün önce yeniden açılması gerekir"* şartının **yerine getirildiği** kayda
+  geçti.
+- `docs/implementation/a11y_screen_reader_audit_checklist.md` · `…_runbook.md` ·
+  `entropia_v18_remediation_status.md` · `v18_final_acceptance.md` ·
+  `docs/STAGE2_HANDOFF.md` · `CLAUDE.md`.
+
+**HARF KARIŞIKLIĞI PİNLENDİ (yeni tuzak).** Defter ile RC raporu seçenekleri **ters**
+harfliyor: defterde **(A)** = imzalı kabul, **(B)** = hatalı kapatmanın geri alınması; RC
+§6.1'de **(A)** = denetimi koştur, **(B)** = imzalı sapma. Issue yorumundaki *"path (A)"*
+**RC anlamındadır**. İki belgeye de bunu söyleyen bir not kondu; **hiçbiri yeniden
+numaralandırılmadı** — ikisi de başka yerlerden kimlikle anılıyor.
+
+**Doğrulama.**
+- `generate_repository_facts.py --root .. --check` → **exit 0**, *"documentation-truth gate
+  OK — artefakts fresh, documents classified, no stale claims."*
+- `git diff origin/main -- docs/ | grep '^-## '` → **BOŞ** (docs regresyon guard'ı temiz;
+  bu kusur bu repoda üç kez yaşandı: #590, #604).
+- Test koşulmadı: **kod değişmedi**, yalnız markdown.
+
+**Honest boundary — bu slice'ın YAPMADIĞI şey.**
+- **A-08 denetimi YAPILMADI.** Defter boş, `0 / 4`, hiçbir belge `Complete`/`PASS`/`Done`
+  demiyor ve verdict **BLOCKED** kalıyor. Blocker sayısı **1** — değişmedi.
+- **#514'e DOKUNULMADI** — `human-only`; agent ne kapatabilir ne açabilir. Bu slice yalnız
+  insanın yaptığı hareketi **kaydetti**.
+- **SR-2 bu oturumda koşulamazdı:** oturum uzak bir Linux konteynerinde çalışıyor,
+  kullanıcı macOS'ta; `a11y-audit-stack.sh` burada ayağa kalksa bile kullanıcının
+  Safari'sinden erişilemez. Kâtiplik oturumu **kullanıcının kendi makinesinde** yığını
+  kaldırmasını gerektirir.
+- **P11-1'e dokunulmadı** — hazırlığı **PR #683** (taslak, aynı gün) yapıyor; bu slice onu
+  çoğaltmadı.
+- **Memory checkpoint YAZILAMADI** — `ecc` ve `claude-mem` MCP sunucuları bu oturumda da
+  **bağlı değil** (ADIM 47'de de öyleydi) → kapanış ritüelinin 4. maddesi **eksiktir**.
+- **YENİ BULGU — `A08_COMPLETE` kapısının kapsamı dar (ÖLÇÜLDÜ, DÜZELTİLMEDİ).**
+  `generate_repository_facts.py::INVARIANT_GLOBS` A-08'in en kritik üç belgesini
+  **taramıyor**: kanonik defter, kanonik readiness raporu (`doc-status: current`) ve **canlı
+  kickoff**. Negatif kanıt: kickoff'a `A-08 denetimi tamamlandı ve PASS.` eklendi → kapı
+  **exit 0** (yakalamadı); satır geri alındı. Glob'ları genişletmek bugün **7 sahte kırmızı**
+  üretir — yedisi de invariant'ı doğru ifade eden **yasak** cümleleridir; `NEGATION_RE`
+  `gösteremez` / `tanımlayamaz` / `yazma` / `Nothing` / `no document` biçimlerini tanımıyor.
+  **Sıra zorunlu:** önce `NEGATION_RE` (her terim için negatifi kanıtlanarak), sonra glob.
+  Ayrıntı + tablo: `docs/ADIM48_LANDED_KICKOFF.md` §YENİ BULGU. **Kapının mesaj metni bu
+  slice'ta güncellendi** (eski hâli *"#514 no longer tracks it"* diyordu — bayat), **deseni
+  ve kapsamı değişmedi**.
+- **Satır tabanlı kural tuzağı.** `A-08[^\n]{0,80}?(Complete|…)` newline geçmez: `A-08` ile
+  `Complete` ayrı satırlara düşerse kural **hiç ateşlenmez**. Bu slice'ta bir yeniden sarma
+  önce kapıyı kırmızıya çevirdi (STAGE2_HANDOFF), sonra özgün sarma düzenine dönülerek
+  çözüldü. **Bir satırı yeniden sararken kapının davranışını değiştirdiğini bil.**
+---
+

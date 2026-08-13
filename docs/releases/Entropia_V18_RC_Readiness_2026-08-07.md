@@ -491,7 +491,7 @@ hiyerarşisi atlıyor · `/user-manual`'da `<h1>` yok · +1 odak göstergesi gö
 
 | Ölçüm | Komut | Sonuç |
 |---|---|---|
-| #514 durumu | `gh issue view 514 --json state,closedAt,stateReason,labels` | **CLOSED** · `closedAt 2026-08-07T03:52:03Z` · `stateReason COMPLETED` · label `human-only` |
+| #514 durumu | `gh issue view 514 --json state,stateReason,updatedAt,labels` | **OPEN** · yeniden açıldı `2026-08-12T11:08:58Z` · `stateReason REOPENED` · label `human-only` — *(2026-08-07 ölçümü **CLOSED/COMPLETED** idi; ayrışma §6.1'de kapandı)* |
 | Denetim defteri §0 | okuma (346 satır) | denetçi `—`, tarih `—`, SR sürümü `—`, tarayıcı `—`, stack commit `—`, kayıt yolu `—` — **iki blokta da tek dolu alan yok** |
 | Defter §1 (Section A) | okuma | **SR-1: 0/23 rota · SR-2: 0/23 rota** (46 koşunun 46'sı `—`) |
 | Defter §2 (Section B) | okuma | **SR-1: 0/10 akış · SR-2: 0/10 akış** (20 koşunun 20'si `—`) |
@@ -629,8 +629,11 @@ değildir.
 
 > **2026-08-12 / ADIM 44 — denetim KOŞULABİLİR hâle geldi. Blocker KAPANMADI.**
 > Aşağıdaki blok **olduğu gibi geçerlidir**: dört çıkış kriteri de ☐, defterin §1/§2/§3'ü
-> boş, #514 hâlâ kanıtsız kapalı. Değişen tek şey, (A) yolunun önündeki **hazırlık**
-> engellerinin kalkması:
+> boş. Değişen tek şey, (A) yolunun önündeki **hazırlık** engellerinin kalkması:
+>
+> *(**2026-08-12 / ADIM 48 düzeltmesi.** Bu bloğun *"#514 hâlâ kanıtsız kapalı"* ifadesi
+> **bayattır** — issue aynı gün `11:08:58Z`'de bir insan tarafından yeniden AÇILDI. Blocker
+> bundan etkilenmez; ayrıntı aşağıdaki `İzleme` satırında.)*
 >
 > * **Yığın güncel main'de yeniden doğrulandı — `9 passed / 0 failed`.** Önceki doğrulama
 >   `1f4b88b`'deydi; main o zamandan beri ADIM 30–43 ile dokuz slice ilerledi. Ölçüldü,
@@ -659,15 +662,19 @@ Eksen   : Erişilebilirlik — insan ekran okuyucu kabul denetimi (A-08)
 Durum   : BLOCKED
 Ölçüm   : çıkış kriterleri 0 / 4 (defter §5) · 0 / 46 rota · 0 / 20 akış ·
           0 doldurulmuş SR-BULGU kaydı · A-08 için imzalı kalıcı sapma YOK
-İzleme  : GitHub #514 — CLOSED 2026-08-07T03:52:03Z (COMPLETED), label human-only.
-          İkinci kanıtsız kapatma; ilki 2026-07-30, 2026-08-03'te geri alınmıştı.
+İzleme  : GitHub #514 — OPEN, yeniden açıldı 2026-08-12T11:08:58Z (REOPENED),
+          label human-only. İki kanıtsız kapatmanın (2026-07-30, 2026-08-07)
+          ikisi de geri alındı (2026-08-03, 2026-08-12). İş açık, izleme AÇIK.
 Etki    : Hiçbir belge A-08'i Complete / PASS / Done gösteremez (defter §5:293-294).
 ```
 
-**#514 kanıtsız kapalıdır.** `stateReason: COMPLETED` bir **iddiadır, kanıt değildir**:
-kapatma issue'nun durumunu değiştirdi, defterin içeriğini değil — ne denetçi adı, ne sürüm
-dizesi, ne bulgu ekledi. Defterin kendi cümlesi: *"Closing the tracking issue satisfies
-none of the four."*
+**#514 iki kez kanıtsız kapatıldı, ikisi de geri alındı.** `stateReason: COMPLETED` bir
+**iddiadır, kanıt değildir**: kapatma issue'nun durumunu değiştirdi, defterin içeriğini
+değil — ne denetçi adı, ne sürüm dizesi, ne bulgu ekledi. **Yeniden açma da aynı ölçüde
+kanıt değildir** ve bu belge onu bir ilerleme olarak saymaz: `2026-08-12T11:08:58Z`'de
+issue AÇILDI, defter aynı gün hâlâ `0 / 4`. Değişen tek şey, açık işin artık açık bir
+kaydı olması. Defterin kendi cümlesi: *"The tracking issue's state satisfies none of the
+four — in either direction."*
 
 **P11'in üç yeşil katmanının hiçbiri A-08 değildir.** axe koşusunun kendi çıktısı bunu
 satır olarak basıyor:
@@ -679,9 +686,20 @@ REMINDER: A-08 is HUMAN-BLOCKED. Nothing above counts as a screen-reader PASS.
 Otomatik tarama duyuru sırasını, okunan adı, rol/durum telaffuzunu, canlı bölge kesintisini
 ölçmez. **İki çözüm yolu vardır, ikisi de insan işidir:** (A) denetimi koştur (iki
 kombinasyon: NVDA/Firefox/Windows **ve** VoiceOver/Safari/macOS — tek kombinasyon A-08'i
-karşılamaz) → dört kriter ☑ olunca insan #514'ü kapatır, ki (A) seçilirse #514'ün önce
-**yeniden açılması** gerekir; (B) D-10 biçiminde imzalı kalıcı sapma. **Üçüncü yol yok** —
-#514'ü kapalı bırakmak bir çözüm değildir, ayrışmayı yalnız görünmez kılar.
+karşılamaz) → dört kriter ☑ olunca insan #514'ü kapatır; (B) D-10 biçiminde imzalı kalıcı
+sapma. **Üçüncü yol yok** — #514'ü kapalı bırakmak bir çözüm değildir, ayrışmayı yalnız
+görünmez kılar.
+
+> **2026-08-12: (A) yolu seçildi — ama yalnızca ön koşulu tamamlandı.** Bu paragrafın
+> *"(A) seçilirse #514'ün önce **yeniden açılması** gerekir"* şartı **yerine getirildi**:
+> issue `11:08:58Z`'de yeniden açıldı ve gerekçesi *"to run path (A) of the RC readiness
+> report §6.1"* olarak issue'ya yazıldı. Geriye kalan **denetimin kendisidir** — issue'nun
+> kendi ifadesiyle *"auditor assignment is the remaining human step"*. **Bir yolu seçmek o
+> yolu yürümek değildir:** blocker açık, kriterler `0 / 4`, verdict **BLOCKED**.
+>
+> *(Harf karışıklığına dikkat: bu bölümün **(A)** = denetimi koştur, **(B)** = imzalı sapma.
+> Defterin kendi tablosunda harfler **terstir** — orada (A) = imzalı kabul, (B) = hatalı
+> kapatmanın geri alınması. Aynı iki sonuç, iki farklı numaralandırma.)*
 
 **Yan bulgu P12-B1 (düzeltilmedi):** defter iki yerde (`:50`, `:258-259`) imzalı sapmanın
 `v18_visual_deviations.md`'de *"D-10 gibi"* kaydedildiğini söylüyor, ama **D-10 o dosyada
@@ -2171,6 +2189,9 @@ Ek olarak: `SHARED_ALLOCATION_STATUS` **`future_dev`** (containment KAPALI, §4)
 > (yığın güncel main'de yeniden doğrulandı, precheck sayıları tazelendi, denetçi
 > runbook'u yazıldı). Bu blocker'ı **kapatmaz** — dört çıkış kriteri de hâlâ ☐, defterin
 > §1/§2/§3'ü hâlâ boş, #514 hâlâ kanıtsız kapalı. Hazırlık denetim değildir.
+> *(**ADIM 48 düzeltmesi:** bu cümlenin son ifadesi **bayattır** — #514 aynı gün
+> `11:08:58Z`'de yeniden AÇILDI. Cümlenin hükmü değişmez: hazırlık hâlâ denetim değildir
+> ve blocker hâlâ açıktır.)*
 >
 > **Eski blocker (4) — react-router `GHSA-qwww-vcr4-c8h2` — 2026-08-12'de (ADIM 44)
 > KAPANDI** (§6.4), ve **imzayla değil, kaldırmayla**: advisory 2026-08-07T18:16:54Z'de

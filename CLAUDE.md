@@ -87,6 +87,12 @@ Before stopping a working session, produce **ALL** of the following:
   EDIT/WRITE to an existing file triggers fact-force (present 4 facts: importers / affected
   public API / data schema / user request verbatim -> retry). First Bash of a session
   triggers a one-time fact gate.
+- **İki bloklayıcı guard artık plugin kurulumundan bağımsız koşar (ADIM 57).**
+  `.claude/settings.json` `guard-git.sh` (Bash) + `guard-generated.sh` (Edit/Write) betiklerini
+  doğrudan kaydeder. Pratik sonucu: **`git push --force … main`, self-merge (`gh pr merge`) ve
+  bu desenleri yalnızca İÇEREN bir heredoc/döngü Bash çağrını bloklar** — eşleşme komut
+  dizesinin tamamındadır (fail-closed, bilinçli). Böyle bir metni **Write ile dosyaya yaz,
+  sonra dosyayı koştur.** Davranış kapısı `scripts/hook-guard-proof.sh` (`Frontend` job'ında).
 - **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
   — `addopts` artık `--cov-fail-under=90` taşıyor, yani **tam suite** koşusu CI'daki coverage
   kapısını da doğruluyor (**ölçülen toplam %92.06**, 2712 passed; frontend %84.67 line —
@@ -206,7 +212,29 @@ Before stopping a working session, produce **ALL** of the following:
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
 > olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
 
-> **HEAD `4d9a373`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **HEAD `e0c25e6`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **Son dalga — ADIM 57 (plugin hook'ları kurulumdan bağımsız oldu, 2026-08-13): ÜRÜN KODU
+> DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> **Ölçüm: `enabledPlugins` KURULUM DEĞİLDİR** — `installed_plugins.json` bu container'da
+> **boş**, çünkü kurulum bir **onay istemi** ister ve remote etkileşimsizdir (yapılandırma
+> hatası DEĞİL; `agent-config-gate` adı çözüyor). Yani `guard-git.sh`'in docs-regresyon
+> kapısı #590/#604'ten sonra yazılmıştı ve **hiç koşmamıştı**. `.claude/settings.json` artık
+> `guard-git.sh` + `guard-generated.sh`'i `${CLAUDE_PROJECT_DIR}` ile **doğrudan** kaydediyor —
+> **dosya kopyalanmadı, ikilenen yalnız KAYIT**. **Çift koşma bilinçli taviz** (yerelde plugin
+> kuruluysa iki kez koşar; ölçülen **≈25 ms/çağrı**, salt-okur + idempotent); alternatifi
+> *"kuruluysa atla"* **fail-open** olurdu. Gerekçe `plugins/entropia-maintenance/README.md`
+> §Çift koşma'da — *"kopya bırakılmadı"* kararı sessizce çiğnenmedi, **açıkça gözden geçirildi**.
+> YENİ KAPI **`scripts/hook-guard-proof.sh`** → `Frontend` job'ına **ADIM** (yeni job DEĞİL):
+> **19 beklenti = 6 engelleme + 13 GEÇİŞ**, çünkü her şeyi engelleyen guard pozitif-yalnız
+> testi geçer. Üç negatif kontrol ailesi de kırmızı verdi; **kapı bu oturumun kendi Bash
+> çağrılarını üç kez blokladı** (canlı kanıt). **Ölçülmüş sınır:** `guard-git.sh` **komut
+> dizesinin tamamında** desen arar → `feat/main-menu` de, bu desenleri *içeren* bir
+> heredoc/döngü de bloklanır (fail-closed, düzeltilmedi) → metni **Write ile dosyaya yaz**.
+> **Plugin HÂLÂ kurulu değil** — ajanlar/skill'ler/komutlar remote'ta yüklenmiyor; kurmak
+> **insan kararı**. `PROJECT_HISTORY.md` §ADIM 57 · `docs/ADIM57_LANDED_KICKOFF.md`.
+>
+> Öncesinde **HEAD `4d9a373`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 56 (A-08 denetimi BAŞLADI: SR-2 oturum 1, PR #684, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**

@@ -10,13 +10,31 @@ Entropia'nın ajanları, invariant skill'leri ve hook'ları artık bir plugin'di
 
 Kurulmadan ajanlar (`entropia-triage`, `entropia-scoped-fix`, `entropia-verifier`),
 skill'ler (`entropia-canonical-rules`, `entropia-testing`,
-`entropia-regression-check`, `entropia-frontend-parity`) ve hook'lar **aktif olmaz**.
-Kopya bırakılmadı — aynı isim iki kez yüklenmesin diye.
+`entropia-regression-check`, `entropia-frontend-parity`) ve plugin'in **öteki**
+hook'ları **aktif olmaz**. Kopya bırakılmadı — aynı isim iki kez yüklenmesin diye.
+İki **bloklayıcı** guard bu kuralın bilinçli istisnasıdır, aşağıya bak.
 
-**ADIM 52:** artık elle kurmak gerekmiyor — `settings.json` `extraKnownMarketplaces` +
-`enabledPlugins` ile depoya güvenen oturumda önerilir. Aynı slice `settings.json`'ı
-**onarmıştı**: dosya #651'den beri geçersiz JSON'du, yani buradaki `docs-history-guard`
-ve `ultrareview-advisor` hook'ları hiç koşmuyordu (`scripts/agent-config-gate.mjs`).
+**`enabledPlugins` KURULUM DEĞİLDİR — ölçüldü (2026-08-13, bu remote container).**
+`settings.json`'daki `extraKnownMarketplaces.entropia` + `enabledPlugins` yalnızca
+adın **çözülebildiğini** ve kurulunca etkin sayılacağını söyler; kurulumun kendisi
+bir **onay istemi** ister ve remote container etkileşimsizdir, istem yoktur. Ölçüm:
+`/root/.claude/plugins/installed_plugins.json` = `{"version":2,"plugins":{}}` — **boş**.
+Yani plugin **kurulu değil** ve ajanları/skill'leri/komutları bu oturumda **yüklenmedi**.
+Bu bir yapılandırma hatası DEĞİL: `scripts/agent-config-gate.mjs` adın marketplace'te
+çözüldüğünü doğruluyor ve yeşil. ADIM 53'ün *"depoya güvenen her oturumda
+önerilir/etkinleşir"* cümlesi remote'ta **yanlıştı**; yerelde önerilir, remote'ta
+**hiç önerilmez**.
+
+**Sonuç (ADIM 57): iki bloklayıcı guard kurulumdan bağımsız hale getirildi.**
+`settings.json` artık plugin'in `hooks/guard-git.sh` ve `hooks/guard-generated.sh`
+betiklerini `${CLAUDE_PROJECT_DIR}` üzerinden **doğrudan** kaydediyor. Dosyalar
+kopyalanmadı — tek kaynak hâlâ plugin'in içinde; ikilenen şey yalnızca **kayıt**.
+Plugin yerelde kuruluysa aynı guard iki kez koşar (ölçülen bedel ≈ 25 ms/çağrı,
+gerekçe: `../plugins/entropia-maintenance/README.md` §Çift koşma).
+
+Aynı zamanda `settings.json` **#651'den beri geçersiz JSON'du** ve ADIM 53'te
+onarıldı: o aradaki her oturumda buradaki `docs-history-guard` ve
+`ultrareview-advisor` hook'ları hiç koşmuyordu (`scripts/agent-config-gate.mjs`).
 
 Burada kalan tek şey `skills/ponytail-entropia/`: bu çalışmadan önce vardı ve
 `CLAUDE.md` ona **yoluyla** atıf yapıyor, o yüzden yeri değişmedi.

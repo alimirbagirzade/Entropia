@@ -8553,3 +8553,110 @@ teşhis yok, tek sinyal geçen süre.
   → **silinen kayıt yok**.
 - **A-08 hakkında hiçbir şey ölçülmedi.** Bu slice denetimin **kaydıdır**, denetim değildir.
 - Denetçi rolü **hâlâ atanmadı** — oturumu ürün sahibi kendi koştu.
+
+---
+
+## ADIM 57 — K-3 ADJUDICATED: imzalı karar D-11 (`contentinfo` landmark), KOD YOK
+
+> **NUMARA NOTU — bu slice DÖRT kez taşındı (54 → 55 → 56 → 57).** ADIM 54 olarak
+> yazıldı; merge beklerken `#701` ADIM 54'ü, `#699` ADIM 55'i, `#697` ADIM 56'yı
+> **merge edilmiş adla** aldı. Kural değişmedi: **numaralar yeniden atanmaz, merge
+> edilmiş ad kazanır**, taşınan taraf hep merge edilmemiş olandır. Branch commit
+> mesajları `adim-54` yazmaya devam eder; slice'ın adı **ADIM 57**'dir. Aynı haftanın
+> **ikinci** çakışma dizisi (öncesi ADIM 48 → 49 → 50), ama bu kez üç ardışık ad
+> gitti. Bu slice `#701`/`#699`/`#697`'nin kayıtlarına **dokunmadı**; yalnız
+> `doc-status` işaretlerini düşürdü (aynı anda tek belge `current` olabilir).
+>
+> **Yapısal sebep, suçlu değil:** `Backend` kapısı ~50 dk sürüyor ve ruleset
+> `strict: true` — branch güncel olmadan merge yok. Yoğun bir günde bu ikisi bir
+> **koşu bandı** üretir: her yeşilde main ilerlemiş olur. Bu slice **beş tur**
+> döndü (yeşil → main ilerledi → güncelle → yeşil …). Numara taşımak ucuzdur; asıl
+> maliyet turlardır. **Çare ölçüldü ve bu turda uygulandı: auto-merge** — yeşilin
+> ilk saniyesinde merge eder, band kapanır. Elle beklemek bandı kapatmıyor; beş
+> turun kanıtladığı budur.
+
+**Blocker sayısı DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Migration yok;
+`backend/src`, `frontend/src` ve `alembic` ağaçlarına **tek satır** dokunulmadı.
+OpenAPI / OCC / Idempotency / route yolları / react-query key'leri / `ENGINE_VERSION`
+değişmedi. Bu bir **karar kaydı** slice'ıdır — sevk edilen şey bir imza, bir kod değil.
+
+### Ne karara bağlandı
+
+RC §6.5'in **K-3**'ü: shell hiçbir `<footer>` render etmiyor, yani `contentinfo`
+landmark'ı **23 / 23 route'ta yok** (precheck'in beş koşuda da `23` verdiği, oynamayan
+bir sınıf). Denetim checklist'inin **A-2** maddesi ise **dört** landmark bekliyordu.
+Soru şuydu: eksik olan **ürün mü, beklenti mi?**
+
+PO `docs/ADIM50_KICKOFF.md` §P-2'yi **Varyant A** ile uyguladı → **beklenti** eksikti.
+
+### Karar — D-11
+
+`docs/implementation/a11y_ci_ratchet_and_adjudication.md` **§4b**, D-10'un birebir
+biçiminde: `Karar # / Konu / Seçenekler / Onaylayan / Tarih / Karar / Kayıt`.
+**Onaylayan `alimirbagirzade (product owner)`, tarih `2026-08-13`, karar (i).**
+Belge bu slice'la **imzalı a11y kararlarının sicili** hâline geldi: D-10 (kontrast,
+1.4.3) + D-11 (landmark kümesi). Yeni imzalı a11y kararı buraya, aynı bloğa yazılır.
+
+**Kaydın özü:** Entropia bir footer sevk etmez; uygulamanın landmark kümesi **ÜÇ**'tür
+(`banner` / `navigation` / `main`) ve checklist A-2 bu ürün için üçü bekler. K-3
+`PO-APPROVE` olur, yeniden dosyalanmaz.
+
+### Dayanak — biri makine, biri İNSAN
+
+1. **Hiçbir WCAG başarı ölçütü `contentinfo`'yu zorunlu kılmaz.** 1.3.1 *var olan*
+   yapının programatik sunumunu ister; var olmayan bir footer'ın sunulması gerekmez.
+   K-3 satırının eski `1.3.1 / 2.4.1` etiketi kalemi **olduğundan ağır** gösteriyordu
+   ve bu slice onu düzeltti — kalem bir **uyumluluk eksiği değildi**.
+2. **A-08'in insan denetçisi soruyu zaten cevaplamıştı.** SR-2 (VoiceOver / Safari /
+   macOS, 2026-08-12) oturumunda route 1 (`/`) A-2 kontrolünde denetçi rotor'un
+   Landmarks listesini gezdi, `banner`/`navigation`/`main` duydu, **`contentinfo`
+   yoktu** ve yokluğu **kozmetik** buldu — landmark gezinmesini engellemedi. Kayıt:
+   audit §1 ▸ route 1 dipnotu **ᴷ³**. **Tek rota karar vermeye yetmez** ve bu kayda
+   böyle geçti; ama makine ölçümü (23/23 yok) ile insan yargısı **aynı yöne** bakıyor.
+   Bu, "otomasyon ölçer, insan yorumlar" ayrımının işlediği ilk somut örnek.
+
+### Reddedilen iki seçenek — gerekçeleri kayıtta
+
+- **Görünür footer.** v18 mockup'ta footer **YOK** (grep: 0) → CLAUDE.md'nin zorunlu
+  görsel referansının ihlali; 23 `-linux` baseline'ının 23'ü yeniden üretilir;
+  Lighthouse CLS tabanı yeniden ölçülür; ayrıca **yeni bir v18 sapma kaydı** gerekir.
+- **Boş / görsel olarak gizli `<footer>`.** 0 baseline değişir, 1 dosya — **ama
+  landmark'ı doldurmaz**: rotor'la `contentinfo`'ya atlayan kullanıcı hiçbir şey duymaz.
+  **Açıkça reddedildi:** ölçüyü ürüne değil **ölçüme** uydurmak olurdu. Bu repoda
+  sayacı memnun eden çözüm bir çözüm sayılmaz.
+
+### Üç farklı kapanma yolu — fark sayıdan önemli
+
+K-2 / K-4 **kodla** kapandı (#685), K-6b **kodla** kapandı (#688), K-3 **kod yazmadan**
+kapandı çünkü kusur beklentideydi. K-5 ve K-6a **yalnız insan** kapatabilir (A-08).
+RC §6.5'e bu ayrım açıkça yazıldı: **dördüncü bir yol — ölçümü susturmak — yok.**
+
+### Yan iş: main'de duran çift kayıt onarıldı
+
+Audit §6'nın K-tablosunda **K-4, K-5 ve K-6 satırları İKİ KEZ** vardı ve ikinci küme
+**bayattı** (K-4 `Open` gösteriyordu — hâlbuki #685'te düzeldi; K-5 `21 / 23`
+gösteriyordu — hâlbuki `22 / 23`). ADIM 50 ile #688'in **aynı tabloyu** düzenlemesinden
+kalan bir merge artefaktıydı. Üç fazla satır silindi; tablo artık her kalem için tek
+satır taşıyor (K-1 · K-2 · K-3 · K-4 · K-5 · K-6a · K-6b · K-7). **Yargı düzeltmesi
+değil, çift kaydın temizliği** — hiçbir kalemin statüsü bu yüzden değişmedi.
+
+### Honest boundary
+
+- **A-08 DEĞİŞMEDİ.** Defter **2 / 184** hücre (yalnız SR-2 yarısı), **SR-1 hiç
+  başlamadı**, çıkış kriterleri **0 / 4**, `#514` **açık**. K-3'ün kapanması A-08'i
+  **ilerletmez** — bu kalem hiç blocker olmadı. Hiçbir belge A-08'i `Complete` göstermez.
+- **Advisory SUSTURULMADI.** K-3'ün `::warning::` satırı 23 rotada çıkmaya devam eder;
+  karar **dispozisyonu** belirler, **ölçümü** değil. `precheck-results.json`'ı kırpan
+  bir "temizlik" bu kararı yanlış okumuş olur.
+- **D-11 gelecekteki footer'ı kapsamaz.** Ürün gerçek footer içeriği isterse bu **yeni**
+  bir karardır ve bir v18 sapma kaydı gerektirir.
+- **Bu bir WCAG uyumluluk iddiası değil** — ama bir uyumluluk **eksiği** de değil.
+  D-10 ile karıştırma: D-10 **gerçek** bir ihlali (1.4.3, 45 düğüm) imzalar; D-11
+  **olmayan bir yükümlülüğü** kaydeder. İkisini aynı cümlede "imzalı sapma" diye
+  toplamak D-10'un ağırlığını hafifletir.
+- **Memory checkpoint borcu** — ADIM 53 hafızayı türetilir yaptı (`agentmemory`); bu
+  slice o mekanizmayı **kullandı mı, kullanmadı mı** bir sonraki oturum ölçmeli.
+  İçerik `docs/memory/PENDING_CHECKPOINTS.md`'de duruyorsa oradan yürütülür.
+- **Kod kapıları koşulmadı ve koşulması GEREKMEDİ**: bu slice `docs/` dışına hiç
+  dokunmadı. Koşulan tek kapı `generate_repository_facts.py --check` (doc-status
+  sınıflandırması dahil).

@@ -1560,6 +1560,19 @@ def _build_stepper(
             size_override=size_override,
         )
         if pos is not None:
+            if commission > _ZERO:
+                # GH #552 / PD-2: commission is PER-FILL, and this is the entry fill.
+                # It used to be free — the whole round trip was billed at the close — so
+                # equity only fell when the position closed. Charging it here is not a
+                # different total, it is a different TIME: equity drops at entry, which
+                # moves ``peak``, drawdown and every metric derived from them. That is
+                # why this change refreshes the equity curve and not only the trade rows.
+                #
+                # The same seam the scale ladder and ``absorb_remainder`` already use:
+                # the charge lands on equity, not in the trade row's pnl, so the exit's
+                # own ``commission`` in ``close_position`` is the only one that lot
+                # carries. Booking it in both places would double-count.
+                led.equity = (led.equity - commission).quantize(_MONEY)
             fill_detail: dict[str, Any] = {
                 "position_seq": pos.position_seq,
                 "fill_price": str(pos.entry_price),

@@ -16,7 +16,8 @@ oturumda yazılmalı"* dedi; ikincisi geldiğinde koşul değişmemişti, çünk
 `claude-mem` / `codebase-memory-mcp` MCP sunucuları KAYITLI DEĞİL.** 2026-08-12'de ölçüldü:
 
 - `/root/.claude.json` → `projects./home/user/Entropia.mcpServers` = **`[]`** (boş).
-- Repoda `.mcp.json` **yok**.
+- Repoda `.mcp.json` **yok**. *(Bu satır ölçüm anında doğruydu; aynı gün eklendi —
+  aşağıdaki güncellemeye bak. Borcu değiştirmiyor.)*
 - Araç aramasında `ecc` **hiç eşleşme vermiyor**, `mem` yalnız alakasız bir GitHub
   aracına düşüyor.
 - Bağlı olanlar: `github`, `Figma`, `Google_Drive`, `Claude_Code_Remote`
@@ -31,6 +32,27 @@ o yüzden aşağıdaki içerik **hazır** bırakıldı: yeniden türetmek değil
 > çıktı ve üçüncüsü (Entity C + üçüncü observation) aşağıya eklendi. Bu, maddenin
 > "unutulduğu" değil **ortamın yapısal olduğu** iddiasının üçüncü kanıtıdır — kalıcı
 > çözüm (§Yazdıktan sonra, madde 4) hâlâ insan kararı bekliyor.
+
+### GÜNCELLEME (2026-08-12, aynı gün) — `.mcp.json` eklendi, **borç DURUYOR**
+
+Depo köküne bir `.mcp.json` kondu, ama **üç sunucudan yalnız birini** kaydediyor:
+
+| Sunucu | Durum | Neden |
+|---|---|---|
+| `codebase-memory-mcp` | **KAYITLI** | npm'de var, çıplak çağrısı MCP'yi stdio'da başlatıyor (`npx -y codebase-memory-mcp@0.10.2`); handshake doğrulandı. Kod aramasını remote'ta çalışır kılar. |
+| `claude-mem` | kayıtlı **değil** | MCP sunucusu değil, **installer**: plugin + Bun worker (ya da Docker pg+redis'li server runtime) kurar, MCP config'i kendi enjekte eder. |
+| `ecc` | kayıtlı **değil** | npm paketi değil; araç öneki `mcp__plugin_ecc_memory__*` → marketplace **plugin**'i. |
+
+**Ritüel md. 4 tam olarak kayıtlı olmayan iki sunucuya dayanır** → bu dosya **SİLİNMEZ**,
+aşağıdaki **üç** checkpoint hâlâ yazılmayı bekliyor. Ayrıca dikkat: `claude-mem`'in varsayılan
+worker runtime'ı veriyi **konteyner-yerel** tutar; efemer bir remote container'da yazılan
+checkpoint konteynerle birlikte yok olur. Remote'tan gerçekten kapatmanın tek biçimi
+`--runtime server --server-url <kalıcı-url>` ile **paylaşılan kalıcı** bir claude-mem
+sunucusudur — o altyapı **yok** ve kurulması bir **insan kararıdır**.
+
+**`.mcp.json` bu belgenin teşhisini çürütmez, DARALTIR:** ADIM 49'un düşmesi kaydın
+doğruluğunu üçüncü kez gösterdi ve o oturumda dosya henüz yoktu; dosya geldikten sonra da
+kayıtlı olan tek sunucu ritüel md. 4'ün dayanmadığı sunucudur.
 
 ---
 

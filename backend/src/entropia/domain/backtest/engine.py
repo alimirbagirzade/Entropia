@@ -1459,7 +1459,27 @@ def _build_stepper(
         # ``_planned_size`` so the F-07i (C) partial-fill evidence comparison and the
         # booked size can never diverge.
         size = _planned_size(direction, fill_raw, strength)
-        if alloc_on and size <= _ZERO:
+        if size <= _ZERO:
+            # GH #551. This guard used to read ``if alloc_on and size <= _ZERO``, so it only
+            # fired under allocation and independent mode — the DEFAULT — opened a phantom
+            # 0-size position that closed as a 0.00-PnL trade. Three paths reach a
+            # non-positive size without allocation: a ``min > max`` window (``_clamp_to_limits``
+            # fails closed to 0), ``base_position_size`` saved as 0, and a non-positive Kelly
+            # edge. ``risk_based_sizing`` cannot — ``stop_loss_point`` is schema-guarded ``gt=0``.
+            #
+            # The reporting was never the load-bearing half. A full close appends to
+            # ``led.position_intervals``, and ``execution/rules.py::conflicts_with_prior`` reads
+            # an interval by ``direction`` alone — it never looks at ``peak_notional`` — so a
+            # 0-notional phantom could satisfy BLOCK_OPPOSITE and block a LATER-pinned item's
+            # genuine entry. A position that never existed changed another strategy's result.
+            # Refusing to open is what closes that at the source; no interval is written.
+            #
+            # Under allocation the reason stays ``sleeve_zero_capacity`` (more specific, and
+            # already contracted) — the ladder in ``sizing.blocked_reason`` reaches it via
+            # ``ctx.alloc_on`` when nothing was handed over, so this sets the reason only for
+            # the independent case that previously reported the uninformative ``no_fill``.
+            if not alloc_on:
+                led.portfolio_block_reason = "size_resolved_to_zero"
             return None
         if rules_active and portfolio_cap_amount is not None and size > _ZERO:
             # Composition-wide Max Total Exposure: the entry may only deploy the

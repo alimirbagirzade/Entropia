@@ -42,6 +42,15 @@ def _entry_size(out: EngineOutput) -> Decimal:
     return Decimal(str(fill.detail["size"]))
 
 
+def _blocked_reason(out: EngineOutput) -> str:
+    """The reason attached to the ``entry_blocked`` event (F-10 restriction trace).
+
+    Added at GH #551: once a non-positive size opens nothing, the interesting assertion is
+    no longer the size that was computed but the reason the entry was refused."""
+    blocked = next(e for e in out.signal_events if e.event_type == "entry_blocked")
+    return str(blocked.detail["reason"])
+
+
 # --------------------------------------------------------------------------- #
 # Sizing methods                                                               #
 # --------------------------------------------------------------------------- #
@@ -116,8 +125,13 @@ def test_an_absent_kelly_fraction_means_full_kelly() -> None:
 
 
 def test_a_non_positive_kelly_edge_opens_nothing() -> None:
-    """W = 0.3, R = 1 -> edge = 0.3 - 0.7 / 1 = -0.40. A negative edge must clamp to 0
-    (size 0), never invert into a bet AGAINST the edge."""
+    """W = 0.3, R = 1 -> edge = 0.3 - 0.7 / 1 = -0.40. A negative edge must clamp to 0,
+    never invert into a bet AGAINST the edge — and then open NOTHING.
+
+    The name always promised this; until GH #551 the body only asserted the SIZE was 0,
+    which the engine satisfied while still opening a 0-size position and booking a
+    0.00-PnL trade. Asserting the size alone is what let the divergence sit under a
+    correct-sounding name, so the assertions now go to the trade rows."""
     out = _sized(
         {
             "method": "formula_based_sizing",
@@ -128,7 +142,10 @@ def test_a_non_positive_kelly_edge_opens_nothing() -> None:
         }
     )
 
-    assert _entry_size(out) == Decimal("0")
+    assert not [e for e in out.signal_events if e.event_type == "entry_fill"]
+    assert out.trades == []
+    assert out.position_intervals == []
+    assert _blocked_reason(out) == "size_resolved_to_zero"
 
 
 # --------------------------------------------------------------------------- #
@@ -208,14 +225,20 @@ def test_cross_margin_opens_no_position_at_all() -> None:
     assert any("leverage_unsupported" in w for w in out.diagnostics["warnings"])
 
 
-def test_a_min_above_max_window_books_a_zero_size_trade() -> None:
-    """A window no size can satisfy (floor 80 above cap 20) resolves to size 0.
+def test_a_min_above_max_window_opens_nothing() -> None:
+    """A window no size can satisfy (floor 80 above cap 20) resolves to size 0 and opens
+    NOTHING — GH #551, fixed. This test previously pinned the divergence under the name
+    ``..._books_a_zero_size_trade``: the engine opened the position anyway and booked a
+    0.00-PnL row, because the guard read ``if alloc_on and size <= _ZERO`` and so never
+    fired in independent mode. It now reads ``if size <= _ZERO``.
 
-    DIVERGENCE, pinned deliberately: the engine still OPENS the position and books a
-    0.00-PnL trade row, so ``total_trades`` counts a position that never carried risk and
-    the 0-PnL lot lands on the loss side of the win/loss split. Fail-closed elsewhere in
-    the engine means "open nothing" (the unmodelled-sizing path opens no position at all).
-    Filed as issue #551."""
+    Three assertions, and the third is the one that mattered. ``total_trades`` no longer
+    counts a position that never carried risk, so the win/loss split is not diluted by a
+    0-PnL lot landing on the loss side. And **no ``position_intervals`` record is written**,
+    which is what actually closes the cross-item leak: ``execution/rules.py::
+    conflicts_with_prior`` matches an interval on ``direction`` alone and never reads
+    ``peak_notional``, so a 0-notional phantom could otherwise satisfy BLOCK_OPPOSITE and
+    block a later-pinned item's genuine entry."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -224,9 +247,11 @@ def test_a_min_above_max_window_books_a_zero_size_trade() -> None:
         }
     )
 
-    assert _entry_size(out) == Decimal("0")
-    assert out.trades[0].pnl == Decimal("0.00")
-    assert out.summary["total_trades"] == 1
+    assert not [e for e in out.signal_events if e.event_type == "entry_fill"]
+    assert out.trades == []
+    assert out.summary["total_trades"] == 0
+    assert out.position_intervals == []
+    assert _blocked_reason(out) == "size_resolved_to_zero"
 
 
 # --------------------------------------------------------------------------- #

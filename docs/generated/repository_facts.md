@@ -27,7 +27,7 @@ static walk. Only a full CI run reports passes.
 | `ENGINE_VERSION` | `backtest-engine-v18-gap-adjusted-stop-fill` |
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3538 in 337 files |
+| Backend tests **collected** (static, not a pass count) | 3541 in 338 files |
 | Backend `xfail` markers | 1 (1 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 716 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |
@@ -38,8 +38,8 @@ static walk. Only a full CI run reports passes.
 
 | Level | covered | deliberate_future_dev | not_applicable | partial | uncovered |
 |---|---|---|---|---|---|
-| Criteria | 247 | 8 | 7 | 113 | 8 |
-| Clauses | 994 | 27 | 12 | 9 | 133 |
+| Criteria | 249 | 8 | 7 | 111 | 8 |
+| Clauses | 997 | 27 | 12 | 9 | 130 |
 
 ## HTTP operations by method
 

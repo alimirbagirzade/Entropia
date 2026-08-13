@@ -12565,10 +12565,16 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server
+  notes: 'The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server
     command + route). The criterion names "create draft/analysis command" — only create is exercised;
     no test posts /research-datasets/{id}/analysis without a linked market dependency and asserts
-    DEPENDENCY_BLOCKED.
+    DEPENDENCY_BLOCKED. ADIM 54 FINDING — c4 is very likely MISCLASSIFIED and no test can close it.
+    The clause wants the ANALYSIS command to be DEPENDENCY_BLOCKED under a missing market link, but
+    commands/research_data.py::request_research_dataset_analysis has no such gate — and needs none:
+    market_entity_id is a REQUIRED argument of create_research_dataset and _resolve_market_link raises
+    DependencyBlocked there, so a dataset without an approved market link cannot exist. (Approval
+    re-resolves the link too.) Left at class B deliberately: moving it would RAISE a ceiling, which
+    is an adjudication, not a test slice''s call.'
 - id: RD-02
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -12754,7 +12760,9 @@ criteria:
     - backend/tests/integration/test_research_available_time_enforcement.py::test_incoherent_policy_and_delay_fails_closed
   - id: RD-04.c3
     text: A prior analysis is marked stale and re-analysis is required after the rule changes.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_research_revision_immutability.py::test_retiming_an_approved_revision_is_refused_and_the_replacement_is_re_analysed
   production_paths:
   - frontend/src/components/ResearchLifecycle.tsx
   - backend/src/entropia/domain/research_data/time_policy.py
@@ -12764,6 +12772,7 @@ criteria:
     null for a non-fixed available policy
   - backend/tests/unit/test_research_time_policy.py::test_time_policy_validity_matrix
   - backend/tests/integration/test_research_available_time_enforcement.py::test_incoherent_policy_and_delay_fails_closed
+  - backend/tests/integration/test_research_revision_immutability.py::test_retiming_an_approved_revision_is_refused_and_the_replacement_is_re_analysed
   evidence_type:
   - frontend_component
   - backend_unit
@@ -12774,18 +12783,23 @@ criteria:
   - backend/tests/unit/test_research_time_policy.py::test_time_policy_validity_matrix
   negative:
   - backend/tests/integration/test_research_available_time_enforcement.py::test_incoherent_policy_and_delay_fails_closed
+  - backend/tests/integration/test_research_revision_immutability.py::test_retiming_an_approved_revision_is_refused_and_the_replacement_is_re_analysed
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The hidden-field / null-delay behaviour and the server-side coherence gate are both proven,
-    the latter with a real fail-closed refusal rather than a silent degrade. The staleness clause
-    is unproven: no test changes an available-time rule on an already-analysed revision and then asserts
-    the prior validation result is treated as stale or that approval is re-blocked.'
+  status: covered
+  notes: 'ADIM 54 closed c3. The row is worded ''the prior analysis is marked stale''; what SHIPS
+    is stronger and structural, and the test asserts that rather than inventing a flag: an APPROVED
+    revision cannot be retimed at all (time_policy.py::ensure_time_policy_mutable -> LifecycleBlocked,
+    and the approved delay is re-read afterwards to show the refusal changed nothing), and the replacement
+    revision is born DRAFT — a state from which APPROVED is not a legal transition, so re-analysis
+    is mandatory. The replacement''s time policy is declared BEFORE the approve attempt on purpose:
+    without that the call fails earlier on the missing-policy gate and the test would prove the wrong
+    refusal. Approval is driven as ADMIN for the same reason (OWNER would hit the role gate). Verified
+    to bite: moving the replacement to VERIFIED first makes the refusal disappear.'
 - id: RD-05
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -12867,7 +12881,12 @@ criteria:
     and no test drives create_research_dataset or request_research_dataset_analysis with a PrincipalType.AGENT
     actor. The Agent tests that touch research data (test_agent_tool_gateway.py::test_data_bundle_*)
     only CONSUME existing revisions through data_bundle.resolve; they never author a draft. agent_parity
-    is therefore left empty.'
+    is therefore left empty. ADIM 54 FINDING — c5 is very likely MISCLASSIFIED and no test can close
+    it. The clause wants an Agent to drive its own research draft/analysis commands with no UI, but
+    domain/agent_lab/tool_gateway.py::ToolName exposes NO research draft or analysis tool at all —
+    the only research-adjacent member is data_bundle.resolve, which consumes already-approved revisions.
+    That is a missing tool, i.e. class D, not test debt. Left at class B deliberately: moving it would
+    RAISE the D ceiling.'
 - id: RD-06
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -12884,7 +12903,9 @@ criteria:
   - id: RD-06.c2
     text: An Order Book or Macro/Calendar dataset keeps its native columns and the backend never reshapes
       them into OHLCV columns.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_research_revision_immutability.py::test_order_book_dataset_keeps_its_native_columns
   production_paths:
   - backend/src/entropia/application/jobs/research_data.py
   - backend/src/entropia/domain/research_data/value_objects.py
@@ -12893,12 +12914,15 @@ criteria:
   - backend/tests/unit/test_research_policy.py::test_field_definition_requires_full_metadata
   - frontend/src/test/researchDataLifecycle.test.tsx > Research Data revision lifecycle > defines
     a field with all required metadata (no OCC header)
+  - backend/tests/integration/test_research_revision_immutability.py::test_order_book_dataset_keeps_its_native_columns
   evidence_type:
   - backend_unit
   - frontend_component
+  - backend_integration
   positive:
   - frontend/src/test/researchDataLifecycle.test.tsx > Research Data revision lifecycle > defines
     a field with all required metadata (no OCC header)
+  - backend/tests/integration/test_research_revision_immutability.py::test_order_book_dataset_keeps_its_native_columns
   negative:
   - backend/tests/unit/test_research_policy.py::test_field_definition_requires_full_metadata
   auth: []
@@ -12907,14 +12931,14 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The native-schema clause has no test at all: grep across backend/tests finds zero references
-    to ORDER_BOOK, order_book, MACRO_CALENDAR or macro_calendar, so no fixture exercises a non-OHLCV
-    research category and asserts its columns survive ingestion unchanged. Every research ingest/quality
-    fixture uses generic synthetic columns ("x", "label", "oi"). The native-parquet writer is exercised
-    only for event-time normalization (test_ingest_timezone_normalization.py), which asserts timestamps,
-    not schema preservation.'
+  status: covered
+  notes: 'ADIM 54 closed c2. No fixture in the suite exercised a non-OHLCV research category at all
+    — grepping ORDER_BOOK / MACRO_CALENDAR across backend/tests returned nothing — so ''native fields
+    survive'' was an argument about jobs/research_data.py::_advance_revision rather than an assertion.
+    The test drives a real analysis job over an Order Book dataset with injected parse/write, then
+    asserts the persisted native_schema_descriptor columns equal the source columns AND that none
+    of open/high/low/close/volume was invented on the way through. Verified to bite: putting an OHLCV
+    column in the source makes the no-reshape assertion fail.'
 - id: RD-07
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -13093,7 +13117,9 @@ criteria:
   - id: RD-09.c3
     text: v1.0's own content (available time, linked market, content hash) is byte-unchanged after
       v1.1 is written.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_research_revision_immutability.py::test_approved_revision_content_survives_the_next_revision
   - id: RD-09.c4
     text: An existing run or result stays bound to v1.0 after v1.1 is approved.
     status: uncovered
@@ -13105,6 +13131,7 @@ criteria:
   - frontend/src/test/researchDataLifecycle.test.tsx > Research Data revision lifecycle > appends
     a revision under OCC (If-Match rv-4 + Idempotency-Key)
   - backend/tests/integration/test_research_data_persistence.py::test_soft_delete_preserves_revision_chain
+  - backend/tests/integration/test_research_revision_immutability.py::test_approved_revision_content_survives_the_next_revision
   evidence_type:
   - backend_integration
   - frontend_component
@@ -13113,21 +13140,29 @@ criteria:
   - frontend/src/test/researchDataLifecycle.test.tsx > Research Data revision lifecycle > appends
     a revision under OCC (If-Match rv-4 + Idempotency-Key)
   - backend/tests/integration/test_research_data_persistence.py::test_soft_delete_preserves_revision_chain
+  - backend/tests/integration/test_research_revision_immutability.py::test_approved_revision_content_survives_the_next_revision
   negative: []
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_research_revision_immutability.py::test_approved_revision_content_survives_the_next_revision
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The append-under-OCC path exists and is exercised, but no test reads v1.0''s fields before
-    and after creating v1.1 to prove non-mutation — which is the actual claim of this row. The run-binding
-    clause is unproven for research data: the fail-closed manifest re-resolution proofs in test_backtest_manifest_pinning.py
-    cover market datasets and packages, and test_evidence_bundle_pins_exact_ids_and_enforces_scope
-    pins ids at COMPILE time without re-checking after a newer revision is approved. historical_integrity
-    is left empty because the two clauses that would justify it are the unproven ones.'
+  notes: 'ADIM 54 closed c3: v1.0 is re-READ from the database after v1.1 is written (expire_all first,
+    so the identity map cannot answer) and its content hash, available-time policy and delay, event-time
+    semantics, linked market revision, payload and lifecycle state are each compared by NAME to their
+    pre-write values — plus an assertion that the new head''s hash DIFFERS, so the equality is not
+    the trivial unchanged-payload case. Verified to bite: reading the new revision instead of v1.0
+    fails the test. c4 (''an existing run stays bound to v1.0'') is STILL OPEN and stays class B:
+    it is closable, but only through a funding-enabled run — the manifest pins a research revision
+    solely via the strategy''s funding source (backtest_run_context::_research_entries) — and readiness
+    additionally cross-checks that the funding revision is linked to the strategy''s OWN market revision,
+    while the worker fail-closes (RUN_FAILED_FUNDING_SOURCE_INVALID) unless the revision''s native
+    asset rows resolve. run_backtest already accepts load_funding_rows; wiring the whole path outgrew
+    this batch and was left open rather than marked on a half proof.'
 - id: RD-10
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -13253,7 +13288,13 @@ criteria:
     and market_dataset_revision_id — plus a non-empty bundle_hash. The doc row additionally names
     feature definitions, time policies and mapping ids; none of those are read back from the bundle
     by any test. The "new Approved revision does not change a running/finished manifest" clause has
-    no research-data test: nothing approves a successor revision mid-run and re-reads the manifest.'
+    no research-data test: nothing approves a successor revision mid-run and re-reads the manifest.
+    ADIM 54 FINDING — c2 is very likely MISCLASSIFIED and no test can close it. The clause wants the
+    bundle to pin feature definitions, time policies and mapping ids; jobs/research_data.py::_seal_bundle
+    writes members carrying exactly five fields (research_revision_id, research_content_hash, usage_scope,
+    market_dataset_revision_id, market_content_hash) and none of the three named is among them. c3
+    remains genuinely class B. Left at class B deliberately: splitting or moving it would RAISE a
+    ceiling.'
 - id: RD-12
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'

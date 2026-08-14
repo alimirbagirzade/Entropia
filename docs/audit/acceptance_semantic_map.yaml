@@ -15562,8 +15562,9 @@ criteria:
   - id: RH-05.c2
     text: Changing the Strategy on the current Mainboard after the result exists does not change the
       historical result or its excerpt.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_later_mainboard_edit_does_not_touch_a_finished_result
   production_paths:
   - backend/src/entropia/application/queries/backtest_run.py
   - backend/src/entropia/application/queries/results_history.py
@@ -15572,6 +15573,7 @@ criteria:
   - backend/tests/integration/test_results_history.py::test_detail_excerpt_reads_real_pinned_refs_from_manifest
   - frontend/src/test/resultsHistory.test.tsx > Results History page > expands a row to reveal pinned
     strategies, parameters, data, date and the immutable manifest summary (UI-16)
+  - backend/tests/integration/test_result_row_immutability.py::test_later_mainboard_edit_does_not_touch_a_finished_result
   evidence_type:
   - backend_integration
   - frontend_component
@@ -15579,6 +15581,7 @@ criteria:
   - backend/tests/integration/test_results_history.py::test_detail_excerpt_reads_real_pinned_refs_from_manifest
   - frontend/src/test/resultsHistory.test.tsx > Results History page > expands a row to reveal pinned
     strategies, parameters, data, date and the immutable manifest summary (UI-16)
+  - backend/tests/integration/test_result_row_immutability.py::test_later_mainboard_edit_does_not_touch_a_finished_result
   negative: []
   auth: []
   occ: []
@@ -15586,17 +15589,15 @@ criteria:
   async_recovery: []
   historical_integrity:
   - backend/tests/integration/test_results_history.py::test_detail_excerpt_reads_real_pinned_refs_from_manifest
+  - backend/tests/integration/test_result_row_immutability.py::test_later_mainboard_edit_does_not_touch_a_finished_result
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'c2 has no asserting test: no test mutates the Mainboard composition AFTER a Result exists
-    and then re-reads the result detail to prove the excerpt is unchanged. The two nearest tests both
-    stop short — backend/tests/integration/test_e2e_pipeline.py::test_market_successor_never_leaks_and_rerun_is_reproducible
-    moves the MARKET catalog head (not the Mainboard Strategy) and asserts the manifest rather than
-    the detail excerpt, and backend/tests/integration/test_readiness_persistence.py::test_report_becomes_stale_after_composition_change
-    changes the composition but asserts the readiness report, not a Result. Add a case that runs to
-    a succeeded Result, attaches/detaches a Mainboard item, and asserts get_backtest_result returns
-    a byte-identical manifest_excerpt.'
+  status: covered
+  notes: 'ADIM 55 closed c2. The suite proved the projection side of Results History but never re-read
+    the ROW after a neighbouring operation. The test snapshots every persisted column plus the ResultManifestSnapshot,
+    then genuinely mutates the workspace composition (a new work object is attached), then re-reads
+    both with expire_all() so the identity map cannot answer. A Result that resolved its excerpt from
+    the LIVE composition would move here. Verified to bite: comparing against a doctored snapshot
+    fails the test.'
 - id: RH-06
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'
@@ -15832,8 +15833,9 @@ criteria:
       compare selection at two rows
   - id: RH-10.c3
     text: A rejected compare leaves both BacktestResult rows unmodified.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_refused_compare_leaves_both_result_rows_unmodified
   production_paths:
   - backend/src/entropia/application/queries/results_history.py
   - backend/src/entropia/apps/api/routes/results_history.py
@@ -15842,6 +15844,7 @@ criteria:
   - backend/tests/integration/test_results_history.py::test_compare_same_id_is_rejected
   - frontend/src/test/historyActions.test.tsx > Results History compare & soft-delete > caps the compare
     selection at two rows
+  - backend/tests/integration/test_result_row_immutability.py::test_refused_compare_leaves_both_result_rows_unmodified
   evidence_type:
   - backend_integration
   - frontend_component
@@ -15850,19 +15853,18 @@ criteria:
     selection at two rows
   negative:
   - backend/tests/integration/test_results_history.py::test_compare_same_id_is_rejected
+  - backend/tests/integration/test_result_row_immutability.py::test_refused_compare_leaves_both_result_rows_unmodified
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'c3 is a low-severity gap but it is genuinely unasserted: no test reads the two BacktestResult
-    rows (or their row_version) before and after a rejected compare. compare_backtest_results is a
-    documented pure-read POST (docs/CODEMAPS/BACKEND_ROUTES.md lists it under "Salt-okuma POST (8)
-    — hicbir satir yazmaz") and the guard raises before touching anything, so the risk is small; adding
-    a row_version assertion to test_compare_same_id_is_rejected would close it in one line.'
+  status: covered
+  notes: ADIM 55 closed c3. The refusal itself was already asserted; the 'mutates nothing' half was
+    not. TWO distinct results are seeded and both rows are snapshotted and re-read, so a compare that
+    touched only the first would still fail. The raise is typed (CompareRequiresTwoDistinctResultsError)
+    rather than a blind Exception — ruff B017 caught the weaker first draft.
 - id: RH-11
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'
@@ -15884,8 +15886,9 @@ criteria:
     - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
   - id: RH-11.c3
     text: A RESULT_SOFT_DELETED audit event row is written for the deleted result.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_soft_delete_writes_its_audit_row_and_moves_only_lifecycle_columns
   - id: RH-11.c4
     text: The run manifest and the pinned source revisions are not deleted.
     status: covered
@@ -15901,15 +15904,18 @@ criteria:
   - backend/tests/integration/test_results_history.py::test_soft_deleted_result_absent_from_history
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
+  - backend/tests/integration/test_result_row_immutability.py::test_soft_delete_writes_its_audit_row_and_moves_only_lifecycle_columns
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_result_row_immutability.py::test_soft_delete_writes_its_audit_row_and_moves_only_lifecycle_columns
   negative:
   - backend/tests/integration/test_backtest_persistence.py::test_soft_delete_result_removes_projection
   - backend/tests/integration/test_results_history.py::test_soft_deleted_result_absent_from_history
-  auth: []
+  auth:
+  - backend/tests/integration/test_result_row_immutability.py::test_soft_delete_writes_its_audit_row_and_moves_only_lifecycle_columns
   occ: []
   idempotency: []
   async_recovery: []
@@ -15917,13 +15923,12 @@ criteria:
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: c3 has no asserting test. commands/backtest_run.py:1026 emits event_kind="backtest.result_soft_deleted"
-    (and the matching outbox event_type at :1036), but grepping the whole suite for that string returns
-    only the source file — no test reads the AuditEvent back. The trash round-trip test asserts the
-    TrashEntry and the manifest, never the audit row. Add an AuditEvent query on target_entity_id
-    == result_id to test_backtest_result_trash_roundtrip.
+  status: covered
+  notes: 'ADIM 55 closed c3. Naming note, not a defect: doc 16 writes the event as RESULT_SOFT_DELETED;
+    the shipped kind is `backtest.result_soft_deleted` and the shipped name is canonical (O-02 / O-31
+    precedent), so the test pins the wire kind. What makes this an immutability proof rather than
+    a delete smoke test is the column diff: the row is asserted to move on EXACTLY {deletion_state,
+    row_version} and nothing else. Verified to bite: expecting an empty moved-set fails.'
 - id: RH-12
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'
@@ -15942,23 +15947,27 @@ criteria:
     - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
   - id: RH-12.c3
     text: The result's artifact hashes are preserved across the restore.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_restore_preserves_artifact_checksums_and_writes_its_audit_row
   - id: RH-12.c4
     text: A RESULT_RESTORED audit event row is written for the restored result.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_restore_preserves_artifact_checksums_and_writes_its_audit_row
   production_paths:
   - backend/src/entropia/application/commands/deletion.py
   - backend/src/entropia/application/queries/results_history.py
   test_evidence:
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_result_row_immutability.py::test_restore_preserves_artifact_checksums_and_writes_its_audit_row
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_result_row_immutability.py::test_restore_preserves_artifact_checksums_and_writes_its_audit_row
   negative: []
   auth: []
   occ: []
@@ -15967,16 +15976,16 @@ criteria:
   historical_integrity:
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
+  - backend/tests/integration/test_result_row_immutability.py::test_restore_preserves_artifact_checksums_and_writes_its_audit_row
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Two unasserted clauses. c3: neither restore test reads any artifact checksum before and
-    after the round trip (result artifact hashes are asserted elsewhere, e.g. e2e/specs/18-result-artifacts-drilldown.spec.ts,
-    but never across a restore). c4: the shared restore body emits event_kind="trash.restored" (commands/deletion.py:535)
-    and test_trash_page.py::test_restore_keeps_identity_marks_entry_and_audits asserts "trash.restored"
-    in the audit kinds — but for a REGISTRY ROOT entity, not for a backtest_result. test_backtest_result_trash_roundtrip
-    asserts entry status and deletion_state only. Extend that test with the same audit-kind assertion
-    plus an artifact-checksum comparison.'
+  status: covered
+  notes: 'ADIM 55 closed c3 and c4. c3 is the load-bearing half: a restore that re-derived artifact
+    checksums would silently invalidate every later verification, and nothing asserted they survive
+    — the ResultArtifactChecksum rows are compared byte-for-byte across the round trip. c4 was MEASURED,
+    not assumed: doc 16 names the event RESULT_RESTORED, and no such kind exists; the shipped restore
+    path writes `trash.restored`. The shipped name is canonical, and the test additionally asserts
+    target_entity_id == the result id, so it proves THIS result''s restore was audited rather than
+    that some trash activity occurred. Verified to bite: a doctored checksum tuple fails the test.'
 - id: RH-13
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'
@@ -16024,7 +16033,11 @@ criteria:
     c3 is proven only incidentally — the pipeline test applies a personal profile revision and later
     asserts manifest_after.manifest_hash equals the admission hash, but the assertion is framed around
     the Trash round trip, not the profile change. Add a direct list_backtest_results comparison across
-    a create_metric_profile_revision call.'
+    a create_metric_profile_revision call. ADIM 55 measured c2 and deferred it rather than rushing:
+    `results_history._digest_from_rows` filters on the CONSTANT KEY_METRIC_KEYS, so a Result View
+    profile revision cannot reach the digest — but proving it needs the metric REGISTRY seeded before
+    create_metric_profile_revision will validate a selection (MetricCodeUnknownError otherwise). Plumbing,
+    not doubt about the behaviour.'
 - id: RH-14
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'
@@ -16071,7 +16084,10 @@ criteria:
     its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary)
     after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation
     is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash
-    snapshot before and after the artifact.create dispatch.'
+    snapshot before and after the artifact.create dispatch. ADIM 55 measured c3 and deferred it rather
+    than rushing: create_analysis_artifact is capability-gated, so the proof needs the capability
+    registry walked to Limited (test_capability_output_history::_walk_to_limited), whose seeding helper
+    collides with this module''s principals. Plumbing, not doubt about the behaviour.'
 - id: RH-15
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'
@@ -16154,8 +16170,9 @@ criteria:
     - backend/tests/contract/test_occ_dual_token_contract.py::test_agreeing_occ_tokens_pass_the_gate
   - id: RH-16.c2
     text: A STALE expected_row_version on soft_delete_backtest_result returns a precondition/conflict.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_stale_row_version_on_soft_delete_conflicts_and_writes_nothing
   - id: RH-16.c3
     text: After the delete the UI refetches the canonical index rather than mutating local state.
     status: covered
@@ -16172,33 +16189,31 @@ criteria:
   - backend/tests/contract/test_occ_dual_token_contract.py::test_agreeing_occ_tokens_pass_the_gate
   - frontend/src/test/historyActions.test.tsx > Results History compare & soft-delete > soft-deletes
     a result only after the explicit confirm step
+  - backend/tests/integration/test_result_row_immutability.py::test_stale_row_version_on_soft_delete_conflicts_and_writes_nothing
   evidence_type:
   - backend_contract
   - frontend_component
+  - backend_integration
   positive:
   - backend/tests/contract/test_occ_dual_token_contract.py::test_agreeing_occ_tokens_pass_the_gate
   - frontend/src/test/historyActions.test.tsx > Results History compare & soft-delete > soft-deletes
     a result only after the explicit confirm step
   negative:
   - backend/tests/contract/test_occ_dual_token_contract.py::test_disagreeing_occ_tokens_are_409
+  - backend/tests/integration/test_result_row_immutability.py::test_stale_row_version_on_soft_delete_conflicts_and_writes_nothing
   auth: []
   occ:
   - backend/tests/contract/test_occ_dual_token_contract.py::test_disagreeing_occ_tokens_are_409
   - backend/tests/contract/test_occ_dual_token_contract.py::test_agreeing_occ_tokens_pass_the_gate
+  - backend/tests/integration/test_result_row_immutability.py::test_stale_row_version_on_soft_delete_conflicts_and_writes_nothing
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'c2 has no asserting test: no test asserts a stale expected_row_version on soft_delete_backtest_result
-    returns 409 — only the dual-token contract test exists, and that proves token DISAGREEMENT (body
-    vs If-Match), a different rule. The RowVersionConflictError branch at commands/backtest_run.py:681
-    is reachable but unexercised; the only RowVersionConflictError assertions in the suite are test_mainboard_persistence.py:276
-    and test_backtest_run_cancellation.py::test_stale_expected_row_version_is_rejected (run cancel,
-    not result delete). Mirror that cancel test onto soft_delete_backtest_result. c3 is proven for
-    the success-path refetch (the ["backtests"] invalidation removes the row); no test drives a 409
-    response into the page to assert the conflict-path refresh.'
+  status: covered
+  notes: 'ADIM 55 closed c2. The refusal is only half the claim — the other half is that the refused
+    call changes nothing, so the row and the audit count are both re-read after the rollback. Verified
+    to bite: sending the CORRECT row_version makes the expected conflict disappear.'
 - id: AM-01
   document: docs/spec/17_Entropia_V18_Arrange_Metrics_Page_Documentation_v1_1.md
   section: '15'

@@ -225,7 +225,28 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
-> **Son dalga — ADIM 63 (K-5'in SORUSU düzeltildi — checklist A-3, PR #719): KOD YOK.
+> **Son dalga — ADIM 64 (kabul borcu sınıf B, parti 04 — Backtest Result satır
+> değişmezliği, doc 16, PR #704): `RH-05` `RH-10` `RH-11` `RH-12` `RH-16` KAPANDI,
+> `partial` 111 → 106, `debt_class.B` 80 → 75. ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı
+> DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Tema: Result satırı **tarihsel
+> kayıttır** — okumak/karşılaştırmak/üzerine inşa etmek ona dokunamaz; dokunan iki işlem
+> (soft delete, restore) denetlenir ve hash'leri korur. Suite bunu **projeksiyon**
+> üzerinden kanıtlamıştı; satırı komşu işlemden sonra **geri okumayı** hiç yapmamıştı.
+> **İKİ OLAY ADI SEVK EDİLMEMİŞ (ölçüldü):** doc 16 `RESULT_SOFT_DELETED`/`RESULT_RESTORED`
+> der, sevk edilenler **`backtest.result_soft_deleted`** ve **`trash.restored`** → O-02/O-31
+> emsali, **sevk edilen ad kanonik**. Restore testi `target_entity_id`'yi pinler, yoksa
+> **herhangi bir** trash etkinliğiyle geçerdi. **`moved == {deletion_state, row_version}`
+> kümesi TAM olmalı** — gevşetmek testi "delete smoke test"ine indirir. **`pytest.raises
+> (Exception)` yazma** (`ruff` B017). **ERTELENENLER ölçülü:** `RH-13.c2` metrik registry
+> seed'i ister, `RH-14.c3` `_walk_to_limited` çakışması → **yarım kanıtla işaretlenmedi**.
+> **#703 açık:** `revision.native_asset_id` üretimde **hiç yazılmıyor**. **P1-Gate3
+> KAPANMADI** (A=1 · B=75 · C=6 · D=32, açık **114**). **NUMARA: bu slice ÜÇ kez taşındı**
+> (60→62→63→**64**). `PROJECT_HISTORY.md` §ADIM 64 · `docs/ADIM64_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **ADIM 63 (K-5'in SORUSU düzeltildi — checklist A-3, PR #719): KOD YOK.
 > Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED. K-5 KAPANMADI.**
 > Bu slice bir bulguyu değil **aracı** düzeltti: A-3 *"`h1→h2→h3` atlamasız"* diye
 > soruyordu, ama `specs/20-a11y-prechecks.spec.ts` bunu **zaten** her rotada sayıyor

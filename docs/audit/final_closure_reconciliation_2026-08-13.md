@@ -49,10 +49,20 @@ this document describes `main`, not either branch:
 | **#720** `feat/stage-58-sizing-commission-zero-size` | fixes #550 / #551 / #552; bumps `ENGINE_VERSION` to `backtest-engine-v18-percent-sizing-per-fill-commission` | **OPEN**, `mergeable_state: blocked`, 52 files, +1090 −226 |
 | `fix/closure-e2-ready-check-batching` (P-E2) | batches the two residual Ready Check N+1 legs | **NOT MERGED** — 1 commit ahead of `ac5cf50` |
 
-> **The prompt's input `docs/decisions/closure_product_decisions_2026-08-13.md` does not
-> exist.** `docs/decisions/` contains exactly one file, `2026-08-03_shared_portfolio_containment.md`.
-> The `PD-1…PD-7` decisions cited by PR #720 and by the #550 reopen comment have **no
-> repo-side record at all** (§7.1). This is a documentation-truth gap, not a missing input.
+> **`docs/decisions/closure_product_decisions_2026-08-13.md` ARRIVED WHILE THIS DOCUMENT WAS
+> BEING WRITTEN.** It did not exist at `ac5cf50`; it landed on `main` as **PR #709** at
+> 2026-08-14 06:12Z and reached this branch through the merge commit `3702ada`. An earlier
+> revision of this section said it "does not exist" — that sentence was true when written and
+> is now **corrected in place**, because a reconciliation document that carries its own stale
+> claim is worthless.
+>
+> **What it is, precisely: an UNSIGNED options brief, not an adjudication.** It says so twice
+> in its own opening — *"Bu belge KARAR BEKLİYOR. İmzalanmadan P-E1 ve P-E3 BAŞLATILAMAZ"* and
+> *"Bu belgede hiçbir karar verilmemiştir; seçenek elenmemiştir."* **All three signature lines
+> are empty** (`:283`, `:477`, `:717` — `karar veren: ____ tarih: ____`). It covers #552, #558
+> and #559. The `PD-1…PD-7` tokens cited by PR #720 and by the #550 reopen comment still
+> appear **nowhere in the repository** — see §7.1, which is now a sharper finding than the one
+> it replaces, not a retracted one.
 
 ---
 
@@ -77,7 +87,7 @@ stopped being true.
 | "DR-1 … Not repaired here" | P-A3 §D.4 | **CLOSED** by `056aafe` (#698); recorded by #711 |
 | "DR-5 … stale comment in production source" | P-A3 §E.2 | **CLOSED** by #711 |
 | "K-3 OPEN — reported, not gated. PO." | P-A3 §D.3 | **ADJUDICATED** (D-11) — P-A3's own §I addendum already says so |
-| "PO decisions pending: 6" | P-A2 §Executive verdict | **partly superseded** by PD-2 / PD-6 and PR #720 (§7) |
+| "PO decisions pending: 6" | P-A2 §Executive verdict | **re-cut, not closed** — merged with P-A3's list into PO-1…PO-14 (§7.2). A brief for three of them landed as #709; **none is signed** |
 | "`repository_facts.md` records 3541 collected" | P-A3 §E.3 | now **3545** |
 
 ---
@@ -93,7 +103,7 @@ stopped being true.
 | D-10 — 45 accent-blue nodes, **signed permanent deviation** | `a11y_ci_ratchet_and_adjudication.md` §4 | WCAG 1.4.3 — **product is not conformant for this SC** |
 | D-11 — no `contentinfo` landmark required | same, §4b | retires K-3 as an expectation defect |
 | **#550 option A — adopt canon (percent)** | GH #550 comment, 2026-08-04, re-affirmed 2026-08-13 | sizing semantics |
-| **PD-2 — per-FILL commission is canonical** | cited by PR #720; **no repo-side record** | commission split |
+| ~~PD-2 — per-FILL commission is canonical~~ | **cited by PR #720; recorded NOWHERE in this repository.** The brief for this exact question (#709 §Karar 1) is **UNSIGNED** | **NOT a decision in force** — §7.1 |
 
 **ADR 0002 §12's self-correction is the single most misread thing in this repository.** Line
 690 says ADIM 16 "was never written, and is now formally SKIPPED"; line 713 explicitly
@@ -195,12 +205,15 @@ they are decisions, not code:
    (*"Independent mode books even a bust-equity 0-size fill"*) — that is P-A2's **PO-4**, and
    the PR answers it rather than patching around it.
 2. It cites **PD-2 (2026-08-13)** as making per-FILL commission canonical — P-A2's **PO-6**.
-   §7.1 records that PD-2 has no repo-side record.
+   **The repository records no such decision, and the brief for that exact question (#709
+   §Karar 1) is unsigned.** §7.1 treats this as the highest-priority human item: a
+   money-changing change resting on an unrecorded adjudication.
 
 **Still open even if #720 merges:** P-A2 §3.2(c) — canon (Master Ref line 3110) defines
 commission as **bps on notional**, while the field remains a flat per-fill amount with no
-currency and no resolved default published in the manifest. PD-2 settled the *split*, not the
-*basis*. PR #720 states this itself.
+currency and no resolved default published in the manifest. **On #720's own account** PD-2
+settled the *split*, not the *basis* — and per §7.1 even that half is unrecorded. PR #720
+states the basis gap itself.
 
 ---
 
@@ -238,7 +251,7 @@ pointed at these numbers. Closing that is a separate, real piece of work (§10).
 |---|---|---|
 | **DR-6** | `query_budgets.json` covers 1 of Ready Check's 4 resolver legs | P-E2 is in flight over the same file; repairing it here would conflict |
 | **DR-7** *(new)* | **GH #582's body is stale in three places** — it says `grep "def run_portfolio"` returns no match, that the stepper was "never written", and that A17 carries "4 `xfail(strict=True)`". All three are false: `run_portfolio` exists (`:531`), the stepper ships (§3.1), and the deliberate strict-xfail count is **1** | an issue body is GitHub bookkeeping — **HUMAN-ACTION-REQUIRED** (§6.3). The issue's OPEN state is **correct**; only its body has expired |
-| **DR-8** *(new)* | **PD-1…PD-7 have no repo-side record** (§7.1) | writing a decision record on an agent's initiative would forge an adjudication — **HUMAN-ACTION-REQUIRED** |
+| **DR-8** *(new, revised mid-session)* | **The options brief now exists (#709) but NO decision is signed, and PR #720 cites a `PD-2` the repository does not record** (§7.1) | signing a decision, or writing the record of one an agent did not receive, would **forge an adjudication** — **HUMAN-ACTION-REQUIRED** |
 
 ### 5.4 The one non-`docs/` edit
 
@@ -323,7 +336,8 @@ This PR closes no issue, opens no issue and changes no label. The following need
 |---|---|---|
 | Refresh the stale body (DR-7) | **#582** | issue bodies are the author's record; the OPEN state is already correct |
 | Correct claim (b) in the body | **#551** | P-A2 refuted it with a positive control and PR #720 re-confirmed the refutation; the issue still asserts it as *"the load-bearing one"* |
-| Record PD-1…PD-7 in `docs/decisions/` (DR-8) | repo | writing an adjudication an agent did not receive would forge it |
+| **Reconcile PR #720's `PD-2` claim with the unsigned brief** (DR-8) | #720 / `closure_product_decisions` | #720 changes every commissioned run's fee on the authority of a decision the repo does not record, while the brief for that exact question is unsigned and says the slice may not start. **Highest-priority item in this table.** |
+| Sign (or reject) Karar 1 / 2 / 3 | `docs/decisions/closure_product_decisions_2026-08-13.md` `:283` `:477` `:717` | signing on an agent's initiative would forge an adjudication |
 | File the two residual N+1 legs | new issue | §6.2 |
 | Everything about **#514** | **#514** | `human-only`; untouched by this session |
 
@@ -331,16 +345,43 @@ This PR closes no issue, opens no issue and changes no label. The following need
 
 ## §7 — Product decisions waiting
 
-### 7.1 The decisions exist only in GitHub prose
+### 7.1 A brief now exists. **No decision is signed — and PR #720 cites one that is not recorded.**
 
-PR #720 cites **PD-2**; #550's reopen comment cites **PD-6**. Neither appears anywhere in
-`docs/`, `CLAUDE.md` or `docs/decisions/`. `docs/decisions/` holds exactly one file.
+`docs/decisions/closure_product_decisions_2026-08-13.md` (**#709**, merged 2026-08-14 06:12Z)
+briefs #552, #558 and #559 to a high standard: canon literals with line numbers, shipped
+behaviour with `file:line`, three-to-four options each, a mandatory worked numeric example, and
+an explicit *"do nothing"* cost. It is **preparation**, and it says so: *"Bu belgede hiçbir
+karar verilmemiştir"*, *"'Önerilen seçenek' başlıkları bir ÖNERİDİR, karar değildir."*
 
-**This matters beyond tidiness.** #550's own decision comment names the convention:
-*"record the adjudication in `CLAUDE.md` the way O-02 / O-12 / O-30 were"*. A decision that
-lives only in a comment thread is invisible to `grep`, invisible to a fresh session, and
-invisible to CI — which is precisely how the adjudications that *are* recorded (O-02, O-12,
-O-30, O-31, D-10, D-11) earn their authority.
+**All three signature lines are empty.** Measured this session:
+
+| Decision | Question | Signature line | State |
+|---|---|---|---|
+| **Karar 1** | commission model — A per-fill / B round-trip / C bps / D signed deviation | `:283` **empty** | **UNSIGNED** |
+| **Karar 2** | research bundle shape — A pin / B signed deviation / C partial | `:477` **empty** | **UNSIGNED** |
+| **Karar 3** | DST fold/gap — A blocker / B canonical / C offset / D scope gate | `:717` **empty** | **UNSIGNED** |
+
+> ### The contradiction this exposes — load-bearing, because it is about money
+>
+> **PR #720 states: *"PD-2 (2026-08-13) made per-FILL commission canonical."*** That is the
+> justification for changing every commissioned run's fee.
+>
+> **The repository does not record any such decision.** `grep` for `PD-2` (and `PD-1`, `PD-6`)
+> across `docs/` and `CLAUDE.md` returns **zero** hits. And the repo's *own* brief for exactly
+> that question — Karar 1, GH #552 — is **unsigned**, and its banner says
+> **"İmzalanmadan P-E1 ve P-E3 BAŞLATILAMAZ."**
+>
+> Either PD-2 was taken somewhere this repository cannot see, or #720 is resting a
+> money-changing behaviour change on an adjudication that has not been recorded. **This
+> document does not resolve that — it is a human question**, and it is the single most
+> important item in §6.3.
+
+**Why the recording convention matters.** #550's own decision comment names it:
+*"record the adjudication in `CLAUDE.md` the way O-02 / O-12 / O-30 were."* A decision that
+lives only in a comment thread or a PR body is invisible to `grep`, invisible to a fresh
+session, and invisible to CI — which is exactly how the adjudications that *are* recorded
+(O-02, O-12, O-30, O-31, D-10, D-11) earn their authority. The brief is the right shape; what
+is missing is a signature on it.
 
 ### 7.2 Open, with what each blocks
 
@@ -351,12 +392,12 @@ O-30, O-31, D-10, D-11) earn their authority.
 | **PO-3** | On exceeding Max Single Position: clamp or block? Master Ref §10.2 says *"clamp değil blocker"*; code clamps silently. Plus: add strategy-level `max_total_exposure_percent`? | P-A2 §1.3 | **OPEN** — survives PO-1 either way | sizing |
 | **PO-4** | Does the bust-equity 0-size fill survive the guard? | P-A2 §2.5 | **ANSWERED by #720** (deliberately reversed, disclosed) — needs ratification when #720 merges | #551 |
 | **PO-5** | #550 transition gate: BLOCK or WARN? | P-A2 §5.3 | **ANSWERED by #720** — `STRATEGY_SIZING_SEMANTICS_UNCONFIRMED` **blocks** | #550 |
-| **PO-6** | Commission model A / B / C | P-A2 §3.3 | **SPLIT decided (PD-2 → per-FILL). BASIS still OPEN** — canon says bps-on-notional; unit/currency and resolved default still unpublished in the manifest | #552 |
+| **PO-6** | Commission model — A per-fill / B round-trip / C bps / D signed deviation | P-A2 §3.3; **brief §Karar 1** | **UNSIGNED** (`:283`). #720 asserts `PD-2` settled it as per-FILL; **the repo records no such decision** (§7.1). The *basis* (canon says bps-on-notional) and the manifest's `commission_model` field are open regardless | #552 |
 | **PO-7** | Is the unwired `execution_key` reuse path an accepted boundary or an open defect? | P-A2 §7 | **OPEN** — 11 `ENGINE_VERSION` rationales claim a property that has no lookup to protect | process |
-| **PO-8** | #558 bundle hash shape — per-member fields vs §9.2's top-level arrays (two of whose five arrays name concepts **that do not exist in the product**) | P-A3 §A.5 | **OPEN** | strict xfail |
+| **PO-8** | #558 bundle hash shape — per-member fields vs §9.2's top-level arrays (two of whose five arrays name concepts **that do not exist in the product**) | P-A3 §A.5; **brief §Karar 2** | **UNSIGNED** (`:477`) — options A/B/C briefed | strict xfail |
 | **PO-9** | #558 replay compatibility — `run_idempotent.response_ref` returns the old shape (the O-30 precedent) | P-A3 §F | **OPEN** | same |
 | **PO-10** | Should `compile_agent_data_bundle` inherit the approval freeze? | P-A3 §A.3 | **OPEN** — the hash collision is reachable **only** on this path | — |
-| **PO-11** | #559 fold/gap rule; and separately **may E4/E5 proceed with it open?** | P-A3 §E.4 | **OPEN** | see §9b |
+| **PO-11** | #559 fold/gap rule; and separately **may E4/E5 proceed with it open?** | P-A3 §E.4; **brief §Karar 3** | **UNSIGNED** (`:717`). The brief rules it **blocks narrowly** — scope, not axis arithmetic — and its **Seçenek D** (fail-closed scope gate) is the option that unblocks E4/E5. See §9b | see §9b |
 | **PO-12** | #544 — define NET or remove it | GH #544 | **OPEN**, `blocks-adim-19` | arbitration |
 | **PO-13** | Wire `alert-notification-proof.sh` as a CI gate? | P-A3 §C | **OPEN** | observability residue 3 |
 | **PO-14** | K-5 / K-7 — re-cut 22 pages' heading outlines (**measured: 204 headings across ~40 files**)? Mount a persistent status region? | P-A3 §F | **OPEN** (K-3 retired by D-11) | A-08 preparation |
@@ -507,6 +548,35 @@ merged axis the same cell shifts the **shared valuation point every item sees at
 **Nothing in the code enforces this precondition — it lives only in ADR prose.** Whether E4/E5
 may proceed with #559 open is therefore **PO-11**, a product call, not a code fact.
 
+> #### Superseded in scope by `closure_product_decisions_2026-08-13.md` §Karar 3 (#709)
+>
+> The decision brief that arrived mid-session rules on this question **more carefully than the
+> paragraph above, and its treatment is the one to follow.** Two corrections it makes:
+>
+> 1. **"Not blocking" is too strong as a verdict.** An ADR ruling cannot be cancelled by a code
+>    measurement — a measurement can only **narrow its scope**. ADR 0002 names #559 a
+>    prerequisite in three places and `:291` says *"The clock must not paper over it."* The
+>    brief therefore rules **(a) #559 DOES block — under the ADR's narrow condition, and the
+>    thing it blocks is not the axis arithmetic.**
+> 2. **There is a live silent path today, which this document missed.** The brief's measurement
+>    4 finds #559 genuinely reachable **now** via research → funding
+>    (`funding.py:193`), not only prospectively once the axis merges. So the ruling is not idle.
+>
+> Its scope table, which supersedes the binary framing above:
+>
+> | Work | Is #559 a gate? |
+> |---|---|
+> | `clock.py` axis itself, the `ItemParticipant` adapter, tick/merge arithmetic | **NO** |
+> | Co-simulation over single-zone (or `utc` / `exchange` mode) sources | **NO** |
+> | The axis spanning **different `custom` zones** | **YES** — ADR `:745`, `:853` |
+> | Research/funding charged inside a shared-pool run | **YES** — reachable today |
+>
+> The two documents **agree on every measurement** (the axis consumes instants; six of seven
+> engine-side readers pass `source_zone=None`; no admission gate compares zones). They differ
+> on how far a measurement may push an ADR ruling, and **the brief is right**: scope, not veto.
+> Its Seçenek D — turn the precondition into a **fail-closed scope gate** — is the option that
+> lets E4/E5 proceed without opening mixed-zone by accident. **Still unsigned.**
+
 ---
 
 ## §12 — Where the three audits disagree
@@ -538,7 +608,7 @@ containment being deliberate, or A-08's numbers.
 | `SHARED_ALLOCATION_STATUS` | ADR §10.4, doc 13 §14 | `capability.py:105` = `future_dev`; 2 enforcement points | sometimes read as a gap | **DELIBERATE FAIL-CLOSED CONTAINMENT** | — | §8 |
 | #550 sizing units | Master Ref §10.1 | `sizing.py:216` — **live** | — | live; option A decided, **unimplemented on `main`** | **OPEN** `reopened`, PR #720 open | §4 |
 | #551 phantom trade | Master Ref §10.1 | `engine.py:1462` — **live** | body's claim (b) refuted | live for metrics + fee; **(b) does NOT reproduce** | **OPEN** `reopened`, PR #720 open | body fix = human |
-| #552 commission | Master Ref 3110 / 7513 | `booking.py:93` — **live** | — | live; **split decided (PD-2), basis still open** | **OPEN** `reopened`, PR #720 open | §7 |
+| #552 commission | Master Ref 3110 / 7513 | `booking.py:93` — **live** | — | live; **split claimed decided by #720 (PD-2) but UNRECORDED; brief §Karar 1 unsigned; basis open** | **OPEN** `reopened`, PR #720 open | §7.1 — **human** |
 | #617 / #618 | — | repaired by `6da8a95` (**#681**) | *"#617/#618 açık kaldı"* (ADIM 46) | **CLOSED `completed` 2026-08-13 11:07Z.** #619 is the **measurement** PR, not the repair | **CLOSED** | `CLAUDE.md` repaired §6.2 |
 | Residual N+1 legs | — | `readiness_check.py:554`, `:749` — slope **1.0**, live | — | live; **P-E2 NOT merged** | **no issue exists** | file one = human |
 | #558 | doc 12 §9.1/§9.2 | `bundle_hash` invariant under policy change (measured) | — | live; **product decision** | **OPEN** `reopened`, `product-decision` | §7 |
@@ -546,7 +616,7 @@ containment being deliberate, or A-08's numbers.
 | A-08 | checklist §5 | 2/368 cells, 0/4 criteria | prep sometimes read as the audit | **HUMAN-BLOCKED. Prep ≠ audit.** | **#514 OPEN** `human-only` | untouched |
 | DR-1 / DR-5 | — | repaired | *"not repaired here"* | **CLOSED** (#698 / #711) | — | recorded |
 | DR-2 / DR-3 / DR-4 | `repository_facts.md` | 3545 collected · 716 call sites / 72 files | `2712` · `92.06%` · `84.67%` presented as current | **stale baseline; the generated artefact is the authority; only CI reports passes** | — | repaired §5.2 |
-| PD-1…PD-7 | — | — | cited by #720 / #550 | **no repo-side record exists** | — | **human** |
+| Product decisions | brief `#709` (2026-08-14) | — | *"no decision record exists"* (true at `ac5cf50`) | **brief EXISTS; all three signatures EMPTY. `PD-2`, cited by #720 as settling commission, is recorded NOWHERE** | #552/#558/#559 all OPEN | **human — §7.1** |
 | Codemap portfolio coverage | — | none | — | **structural gap — the coverage gate does not reach `domain/`** | — | filled §5.5 |
 
 ---

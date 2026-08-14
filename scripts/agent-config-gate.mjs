@@ -17,7 +17,7 @@
  *      (an unpinned `npx -y pkg` executes whatever was published last).
  */
 
-import { readFileSync, existsSync, accessSync, constants } from 'node:fs'
+import { readFileSync, readdirSync, existsSync, accessSync, constants } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -196,6 +196,57 @@ for (const configFile of CONFIG_FILES) {
   }
 }
 
+// 5. Plugin ajan/skill'lerinin `.claude/` aynası taze mi.
+//
+// `enabledPlugins` bir plugin'i ADLANDIRIR ama KURMAZ: kurulum bir onay istemi
+// ister ve remote container etkileşimsizdir, o yüzden `installed_plugins.json`
+// orada boş kalır (ADIM 58'de ölçüldü). Sonucu şuydu: `entropia-triage` ve
+// `entropia-scoped-fix` remote'ta HİÇ yüklenmedi — teşhis/düzeltme makinesi
+// yazılmıştı ve her oturum onsuz, elle yürüdü. `.claude/agents/` ve
+// `.claude/skills/` ise kurulum istemeden yüklenir, o yüzden plugin içeriği
+// oraya AYNALANIR (ADIM 58'in hook'lar için yaptığının aynısı: kaynak plugin'de
+// kalır, erişilebilirlik ikinci bir kayıtla sağlanır).
+//
+// Ayna bir KOPYA olduğu için sapabilir — ve sessizce sapan bir ajan tanımı,
+// hiç yüklenmemiş olandan daha kötüdür: yüklenir ve YANLIŞ kuralı uygular.
+// Bu yüzden eşitlik bir kapıdır. Plugin'i düzenlediysen aynayı da güncelle
+// (`scripts/sync-agent-mirror.sh`), tersi de geçerli.
+const MIRRORED = [
+  ['plugins/entropia-maintenance/agents', '.claude/agents', (name) => name],
+  ['plugins/entropia-maintenance/skills', '.claude/skills', (name) => path.join(name, 'SKILL.md')],
+]
+
+for (const [sourceDir, mirrorDir, toRelative] of MIRRORED) {
+  const sourceRoot = path.join(REPO_ROOT, sourceDir)
+  if (!existsSync(sourceRoot)) continue
+  const isSkillTree = mirrorDir.endsWith('skills')
+  const entries = readdirSync(sourceRoot, { withFileTypes: true })
+    .filter((entry) => (isSkillTree ? entry.isDirectory() : entry.name.endsWith('.md')))
+    .map((entry) => entry.name)
+
+  for (const name of entries) {
+    const relative = toRelative(name)
+    const sourcePath = path.join(sourceDir, isSkillTree ? path.join(name, 'SKILL.md') : name)
+    const mirrorPath = path.join(mirrorDir, relative)
+    if (!existsSync(path.join(REPO_ROOT, sourcePath))) continue
+    if (!existsSync(path.join(REPO_ROOT, mirrorPath))) {
+      problems.push(
+        `${mirrorPath}: yok — ${sourcePath} plugin'de tanımlı ama aynalanmamış, ` +
+          'yani plugin kurulmayan bir oturumda (remote container: her zaman) hiç yüklenmez',
+      )
+      continue
+    }
+    const sourceText = readFileSync(path.join(REPO_ROOT, sourcePath), 'utf8')
+    const mirrorText = readFileSync(path.join(REPO_ROOT, mirrorPath), 'utf8')
+    if (sourceText !== mirrorText) {
+      problems.push(
+        `${mirrorPath}: ${sourcePath} ile AYRIŞMIŞ — ayna sessizce eski kuralı uygular; ` +
+          'scripts/sync-agent-mirror.sh ile eşitle',
+      )
+    }
+  }
+}
+
 if (problems.length > 0) {
   process.stderr.write('agent config gate: ajan araç yapılandırması bozuk —\n')
   for (const problem of problems) process.stderr.write(`  - ${problem}\n`)
@@ -204,5 +255,5 @@ if (problems.length > 0) {
 
 process.stdout.write(
   `agent config gate: ${CONFIG_FILES.length} yapılandırma geçerli, hook betikleri yerinde, ` +
-    'MCP sürümleri pinli, enabledPlugins çözülüyor ✓\n',
+    'MCP sürümleri pinli, enabledPlugins çözülüyor, plugin ajan/skill aynası taze ✓\n',
 )

@@ -372,11 +372,28 @@ def test_worksheet_refuses_automated_output_as_evidence() -> None:
     ), "the worksheet must state what the automated artifacts do not prove"
 
 
-def test_checklist_still_records_the_audit_as_not_performed() -> None:
-    """Guards the seam: preparation must not be mistaken for performance."""
+def test_checklist_still_records_the_audit_as_incomplete() -> None:
+    """Guards the seam: preparation must not be mistaken for performance.
+
+    The original form of this guard pinned the checklist's "the audit has not
+    been performed" sentence. That sentence was true when it was written and
+    became false on 2026-08-12, when SR-2's first session filled two cells — at
+    which point the gate was protecting a statement the canonical worksheet
+    contradicts. The seam it exists to defend is not "nothing has run"; it is
+    "nothing may read as finished", and that is what it asserts now: the recipe
+    must say the audit is unfinished, and must never claim the opposite.
+    """
     checklist = _read(CHECKLIST)
-    assert "Denetim yapılmamıştır" in checklist
+    assert "BAŞLADI, BİTMEDİ" in checklist, (
+        "the checklist must state the audit's real state — started and unfinished. "
+        "Neither 'not performed' (stale since SR-2 session 1) nor silence."
+    )
     assert "#514" in checklist
+
+    # The negative half. A recipe that advertises completion is the failure this
+    # guard was written for, whichever wording it arrives in.
+    for claim in ("Denetim tamamlandı", "A-08 Complete", "A-08 PASS"):
+        assert claim not in checklist, f"the checklist claims completion: {claim!r}"
 
 
 # --------------------------------------------------------------------------- #

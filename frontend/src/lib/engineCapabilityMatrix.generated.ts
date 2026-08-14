@@ -350,7 +350,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "use_package_default_tf",
     "status": "future_dev",
     "label": "Use package default timeframe",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -358,7 +358,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "1m",
     "status": "future_dev",
     "label": "1m",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -366,7 +366,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "3m",
     "status": "future_dev",
     "label": "3m",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -374,7 +374,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "5m",
     "status": "future_dev",
     "label": "5m",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -382,7 +382,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "15m",
     "status": "future_dev",
     "label": "15m",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -390,7 +390,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "30m",
     "status": "future_dev",
     "label": "30m",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -398,7 +398,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "1h",
     "status": "future_dev",
     "label": "1h",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -406,7 +406,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "2h",
     "status": "future_dev",
     "label": "2h",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -414,7 +414,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "4h",
     "status": "future_dev",
     "label": "4h",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -422,7 +422,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "1D",
     "status": "future_dev",
     "label": "1D",
-    "dependency": "Needs per-layer resampled evaluation — the ladder is evaluated on the strategy's own replayed bars, so a per-layer timeframe override would require a second resampled series the replay does not build.",
+    "dependency": "Doc 02 §5.7 declares no per-layer timeframe override, so there is no canonical behaviour to implement — the option set is canonical only for an Indicator Block.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {
@@ -446,7 +446,7 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "value": "increasing_by_layer",
     "status": "future_dev",
     "label": "Increasing Timeframe by Layer",
-    "dependency": "Needs a declared step increment. Doc 02 §5.7 names the mode but not the rung size (next canonical timeframe vs. doubling are different ladders), so the engine fails closed rather than guessing one.",
+    "dependency": "Needs a declared top-of-ladder rule. Doc 02 §6.1 fixes the rung — each layer steps one canonical timeframe up — but not what a layer past the last rung (1D) evaluates on, and clamping, stopping and refusing are different ladders.",
     "blockerCode": "STRATEGY_SCALING_UNSUPPORTED"
   },
   {

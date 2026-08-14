@@ -9839,3 +9839,84 @@ Yeni modül **5 test** topluyor (import temiz). `acceptance_semantic_scan --ratc
 **geçti**: 106 partial / 8 uncovered, dondurulmuş tavanla birebir; sınıflar
 A=1 · B=75 · C=6 · D=32. **Postgres bu container'da yok** → integration testleri yerelde
 koşmadı; **otorite CI**.
+
+## ADIM 65 — adli denetim kaydı + #541'in iki blocker gerekçesi düzeltildi (PR #700, DARALTILDI)
+
+> **NUMARA NOTU — bu slice ALTI kez taşındı: 54 → 58 → 60 → 62 → 63 → 64 → 65.**
+> `#701` 54'ü, `#699` 55'i, `#697` 56'yı, `#698` 57'yi, `#715` 58'i, `#718` 59'u, `#716` 60'ı,
+> `#723` 61'i, `#712` 62'yi, `#719` 63'ü, `#704` 64'ü **merge edilmiş adla** aldı. Dal ve
+> commit mesajları `adim-54` yazar ve **değiştirilmedi** — merge edilmiş git geçmişi yeniden
+> yazılmaz. Repo zaten aynı sebeple iki tane "ADIM 16" taşıyor.
+
+> **BU SLICE'IN KAPSAMI BİLEREK DARALTILDI. Ölçüm önce yapıldı, sonra karar verildi.**
+> PR #700 otuz commit / 2256 satır taşıyordu. Güncel main'e karşı yeniden ölçüldüğünde
+> içeriğinin büyük kısmının **#722 ve #720 ile zaten indiği**, bir parçasının ise artık
+> **regresif** olduğu görüldü. Alınanlar ve alınmayanlar aşağıda tek tek gerekçeli.
+
+**Base:** güncel `origin/main` · migration **yok** · `ENGINE_VERSION` **değişmedi** ·
+`SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+verdict BLOCKED.** **Closes #541.**
+
+### 1. ALINAN — `#541`: iki blocker gerekçesi kanonu okuyunca ayakta kalmıyordu
+
+`capabilities.py`'nin scaling-timeframe grubundaki iki `dependency` metni **yanlış bir
+engel** tarif ediyordu. İkisi de ağaca karşı **yeniden ölçüldü**, hatırlanmadı:
+
+| Eski metin | Ölçüm | Sonuç |
+|---|---|---|
+| *"per-layer override, replay'in kurmadığı ikinci bir resampled seri ister"* | `indicators.py:544::_ReferenceSeries` **var** ve base mumları toplayıp yalnız referans mum **KAPANDIĞINDA** ilerliyor (look-ahead yok) | **Yanlış.** Seri var; eksik olan onu merdivenin fiyat karşılaştırmasına bağlamak — ve daha yukarıda bağlanacak **kanonik bir satır**: doc 02 §5.7'de düz per-layer override **yok** |
+| *"rung boyutu bildirilmemiş; sonraki kanonik timeframe ile ikiye katlama farklı merdivenler"* | doc 02 §6.1 *"bir üst timeframe'e geçer"* diyor ve **15m → 30m → 1h** diye işliyor = `CANONICAL_TIMEFRAMES` index + 1 | **Yanlış.** İkiye katlama hiç canlı bir alternatif değildi. Gerçek kalan: merdivenin **TEPESİ** — `CANONICAL_TIMEFRAMES` `1D`'de bitiyor ve canon `1D` sonrasını söylemiyor |
+
+Hiçbir satırın `status`, `value`, `field_path`, `label` veya `blocker_code`'u **değişmedi**;
+yalnız gerekçe metni. **Gerekçe kaynak yorumunda, `dependency` içinde DEĞİL** —
+`CapabilityNote.tsx:24` her `future_dev` seçeneğin `dependency`'sini tek paragrafta
+birleştiriyor ve bu grupta **on tane** var, yani uzun bir metin kullanıcıya **on kez tekrar**
+olarak sevk edilirdi. TS aynası yeniden üretildi (**dalınkiyle birebir aynı çıktı**);
+`test_capability_matrix.py` byte-parity'yi pinliyor (79 test yeşil).
+
+### 2. ALINAN — iki adli denetim belgesi (ikisi de `historical`, tarihli)
+
+`docs/audit/final_closure_forensic_audit_2026-08-13.md` (20 bölüm) ve
+`docs/audit/reopened_issue_reconciliation_2026-08-13.md` (21 toplu-reopen edilmiş issue'nun
+koda karşı ölçümü). İkisi de **ölçtükleri anı dondurur** ve `doc-status: historical` taşır.
+
+**İki bayat işaretçi bu turda onarıldı:**
+- Denetimin banner'ı bulguların kapanış durumu için `docs/ADIM60_LANDED_KICKOFF.md`'ye
+  işaret ediyordu; main'de o belge **bambaşka bir slice** (doküman kapısı) → kendi
+  kickoff'una çevrildi.
+- Banner'a **açık bir geçersizlik notu** eklendi: §7/§13'ün `#550`/`#551`/`#552` satırları
+  *"HÂLÂ BOZUK"* der ve bu `e2fa521` üzerinde **doğruydu**, ama **#720 üçünü de sevk etti**
+  (`5e52465`). Kayıt **bilerek güncellenmedi** — bir denetim belgesi ölçtüğü anı dondurur —
+  ama artık hiçbir okuyucu o satırları bugünkü davranış sanamaz.
+
+### 3. ALINAN — `portfolio_engine.py` HONEST BOUNDARY §1'in (a)/(b)/(c) ayrımı
+
+main (#722 ile) zaten *"eksik olan ADAPTER'dır, stepper değil"* diyor. Bu slice onu
+**ölçülmüş üç maddeye** ayırıyor: **(a) KAPALI** — `_ItemStepper` fazları ayrı callable
+olarak veriyor ve `entry` paylaşılan `E(t)`'yi `equity` argümanı olarak alıyor; **(b) KALAN
+TEK ENGEL** — o fazlar **book eder**, `ItemParticipant` ise arbitrasyon öncesi **tarif**
+ister; **(c) KAPALI (ADIM 35)** — `project_portfolio_run`. (b) `run_engine`'in bar gövdesine
+dokunur → **ADR §16 insan kapısı + ADR amendment'ı**. Additive, main'in metniyle çelişmiyor.
+
+### 4. ALINMAYAN — dördü de gerekçeli, sessiz atlama değil
+
+| Parça | Neden alınmadı |
+|---|---|
+| `booking.py` docstring'i (40+/18−) | **REGRESİF.** main (#720 sonrası) *"COMMISSION IS PER-FILL (GH #552, PD-2 decided)"* diyor ve sevk edilen davranışı anlatıyor; bu dal onu silip *"kod değişmedi, PD-2 uygulanmadı"* yazıyordu. **#720 onu uyguladı** → gereksiz değil, **yanlış** olurdu |
+| `test_oracle_portfolio_containment_gate.py` (11+/5−) | main'in **#722** sürümü daha yeni ve aynı düzeltmeyi zaten taşıyor |
+| `portfolio_harness.py` (8+/3−) | aynı sebeple |
+| `docs/CODEMAPS/BACKEND_LAYERS.md` (+2) | main'de **#722 ile 75 satırlık tam bir bölüm** var (§Unified-clock portfolio adası); iki satır eklemek onu tekrarlardı |
+
+**Yöntem notu:** bu dört karar `git diff origin/main <dal>` görünümüne **bakılarak
+verilmedi** — o görünüm dalın gerisinde kaldığı her şeyi "silinmiş" gösterir. Karar
+`merge-base`'e göre **iki tarafın da ne değiştirdiği** ayrı ayrı sayılarak verildi.
+
+### 5. Dürüst sınırlar
+
+- **Finansal mantık okundu, dokunulmadı.** Bu slice hiçbir PnL'i oynatmıyor.
+- **RC readiness raporunun blocker sayısı yükseltilmedi** — bu verdict'i değiştirir ve
+  **insan kararıdır**.
+- **Denetimin ölçtüğü 13 açık issue'nun durumu değiştirilmedi.**
+- **Postgres bu container'da yok** → integration suite yerelde koşmadı. Yerelde koşan:
+  `pytest -k capability_matrix` **79 geçti**, `ruff`/`format`/`mypy`, doc-truth kapısı.
+  **Otorite CI.**

@@ -6334,6 +6334,58 @@ hiç yapmamıştı.
 hiçbir research dataset ile çalışamaz. `RD-09.c4` buna bağlı. **P1-Gate3 KAPANMADI**
 (A=1 · B=75 · C=6 · D=32, açık **114**).
 
+## Stage 65 — adli denetim kaydı + #541'in iki blocker gerekçesi (PR #700, DARALTILDI) landed
+
+**Ne indi.** İki `historical` adli denetim belgesi, `#541`'in iki yanlış blocker gerekçesinin
+düzeltilmesi (**Closes #541**), ve `portfolio_engine.py` HONEST BOUNDARY §1'in (a)/(b)/(c)
+ayrımı. **Finansal mantık okundu, dokunulmadı.** Migration yok, `ENGINE_VERSION` değişmedi.
+Blocker sayısı **değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+**Kapsam bilerek daraltıldı** — PR 30 commit / 2256 satır taşıyordu; güncel main'e karşı
+yeniden ölçüldüğünde büyük kısmı **#722/#720 ile zaten inmişti** ve bir parçası **regresif**
+hâle gelmişti (aşağıda).
+
+### Reuse anchor'ları (tam adlarıyla)
+
+| Anchor | Ne için |
+|---|---|
+| `domain/backtest/capabilities.py` §scaling-timeframe yorumu | Neden iki gerekçe yanlıştı, ve **gerekçe neden `dependency` içinde DEĞİL** |
+| `domain/strategy/config.py::CANONICAL_TIMEFRAMES` | `1m…1D` — merdivenin **tepesi** `1D`, canon sonrasını söylemiyor |
+| `domain/backtest/indicators.py:544::_ReferenceSeries` | Resampled seri **var**; eksik olan onu merdivenin fiyat karşılaştırmasına bağlamak |
+| `docs/audit/final_closure_forensic_audit_2026-08-13.md` | 20 bölümlük adli ölçüm (`historical`, dondurulmuş) |
+| `docs/audit/reopened_issue_reconciliation_2026-08-13.md` | 21 toplu-reopen issue'nun koda karşı ölçümü |
+
+### Pazarlıksız
+
+1. **`dependency` metnini uzatma.** `CapabilityNote.tsx:24` her `future_dev` seçeneğin
+   `dependency`'sini tek paragrafta birleştirir; bu grupta **on tane** var → uzun bir metin
+   kullanıcıya **on kez tekrar** olarak sevk edilir. Gerekçe **kaynak yorumuna** yazılır.
+2. **`capabilities.py`'ye dokunduysan TS aynasını yeniden üret**
+   (`uv run python tools/export_capability_matrix.py`); `test_capability_matrix.py` byte
+   parity'yi pinler.
+3. **Denetim belgeleri ölçtükleri anı dondurur.** §7/§13'ün `#550`/`#551`/`#552` satırları
+   *"HÂLÂ BOZUK"* der ve `e2fa521`'de **doğruydu** — **#720 üçünü de sevk etti**. Banner
+   bunu açıkça söyler; satırlar **bilerek güncellenmedi**. Bugünkü davranış için
+   `PROJECT_HISTORY.md` §ADIM 61'e bak.
+4. **`git diff origin/main <dal>` bir kapsam kararı için KANIT DEĞİLDİR** — dalın gerisinde
+   kaldığı her şeyi "silinmiş" gösterir. `merge-base`'e göre **iki tarafın da** ne
+   değiştirdiğini ayrı say.
+
+### ALINMAYANLAR (gerekçeli, sessiz atlama değil)
+
+| Parça | Neden |
+|---|---|
+| `booking.py` docstring'i | **REGRESİF** — main'in #720 sonrası *"COMMISSION IS PER-FILL"* metnini silip *"PD-2 uygulanmadı"* yazardı; #720 onu **uyguladı** |
+| `test_oracle_portfolio_containment_gate.py` · `portfolio_harness.py` | main'in **#722** sürümü daha yeni, aynı düzeltmeyi taşıyor |
+| `docs/CODEMAPS/BACKEND_LAYERS.md` (+2) | main'de #722 ile **75 satırlık tam bölüm** var |
+
+### Açık bırakılanlar (insan kararı)
+
+- **RC readiness raporunun blocker sayısı yükseltilmedi** — verdict'i değiştirir.
+- Denetimin ölçtüğü **13 açık issue**'nun durumu değiştirilmedi.
+- Merdivenin tepesi (`1D` sonrası) hâlâ **canonical bir boşluk**: clamp / durdur / reddet
+  üç farklı üründür.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

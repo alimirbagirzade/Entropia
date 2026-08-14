@@ -400,6 +400,37 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
         blocker_code="STRATEGY_SCALING_UNSUPPORTED",
     ),
     # -- Scaling timeframe (scaling_is_modelled) ---------------------------
+    #
+    # GH #541, corrected at ADIM 65. The `dependency` strings on the two scaling-timeframe
+    # groups below used to state blockers that do not survive a canon read. Both were
+    # re-measured against the tree before rewriting; the reasoning is kept HERE rather than
+    # in `dependency` because the UI joins every future_dev option's dependency into one
+    # paragraph (`CapabilityNote.tsx:24`), and this field group has ten of them — a long
+    # string ships as ten repeats of itself to the user.
+    #
+    # 1. `scaling_logic.timeframe` (the ten overrides). The old text said a per-layer
+    #    override "would require a second resampled series the replay does not build". The
+    #    replay DOES build one: `indicators._ReferenceSeries` aggregates base candles
+    #    (high=max, low=min, close=last, volume=sum) and advances only when a reference
+    #    candle CLOSES, so it carries no look-ahead. What is actually absent is wiring that
+    #    series to the scaling ladder's price comparison — and, further up, a canonical row
+    #    to wire it to: doc 02 §5.7 carries Scaling Timeframe Structure, Timeframe Mode and
+    #    Custom Timeframe Sequence, and no flat per-layer override. The identical option set
+    #    is canonical only for an Indicator Block. So the blocker is a canonical gap, not a
+    #    missing primitive, and building it would ship a field canon never asked for.
+    #
+    # 2. `scaling_logic.timeframe_mode="increasing_by_layer"` (below). The old text said the
+    #    rung size is undeclared and offered "next canonical timeframe vs. doubling" as live
+    #    alternatives. Doubling is not an alternative: doc 02 §6.1 states the mode steps
+    #    "bir üst timeframe'e" and works it through as 15m -> 30m -> 1h, which is exactly
+    #    `CANONICAL_TIMEFRAMES` index + 1. The genuine remainder is the TOP of the ladder —
+    #    canon says nothing about a layer past `1D`, and clamping there, stopping the ladder
+    #    and refusing the config are three different products.
+    #
+    # Neither row's `status`, `value`, `field_path`, `label` or `blocker_code` was touched;
+    # only the reason text moved. Regenerate the TS mirror after any edit here
+    # (`uv run python tools/export_capability_matrix.py`) — `dependency` is mirrored and
+    # `test_capability_matrix.py::test_generated_typescript_mirror_is_up_to_date` pins it.
     CapabilityOption(
         field_path="scaling_logic.timeframe",
         value="same_as_base_tf",
@@ -413,9 +444,9 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
             status="future_dev",
             label=label,
             dependency=(
-                "Needs per-layer resampled evaluation — the ladder is evaluated on the "
-                "strategy's own replayed bars, so a per-layer timeframe override would "
-                "require a second resampled series the replay does not build."
+                "Doc 02 §5.7 declares no per-layer timeframe override, so there is no "
+                "canonical behaviour to implement — the option set is canonical only for an "
+                "Indicator Block."
             ),
             blocker_code="STRATEGY_SCALING_UNSUPPORTED",
         )
@@ -462,9 +493,9 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
         status="future_dev",
         label="Increasing Timeframe by Layer",
         dependency=(
-            "Needs a declared step increment. Doc 02 §5.7 names the mode but not the rung "
-            "size (next canonical timeframe vs. doubling are different ladders), so the "
-            "engine fails closed rather than guessing one."
+            "Needs a declared top-of-ladder rule. Doc 02 §6.1 fixes the rung — each layer "
+            "steps one canonical timeframe up — but not what a layer past the last rung (1D) "
+            "evaluates on, and clamping, stopping and refusing are different ladders."
         ),
         blocker_code="STRATEGY_SCALING_UNSUPPORTED",
     ),

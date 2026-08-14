@@ -739,6 +739,21 @@ class PositionSizing(BaseModel):
 
     position_size_limits: PositionSizeLimits | None = Field(default=None)
 
+    size_semantics: Literal["percent_of_capital"] | None = Field(
+        default=None,
+        description=(
+            "Confirms which reading the three sizing magnitudes carry (GH #550). "
+            "`percent_of_capital` means base_position_size and the min/max limits are "
+            "percentages of resolved capital, which is what canon and the UI have always "
+            "said and what the engine now executes. `None` marks a revision saved BEFORE "
+            "the cutover, whose stored numbers were executed as unit counts: Ready Check "
+            "blocks it with SIZING_SEMANTICS_UNCONFIRMED rather than re-interpreting the "
+            "value silently. There is no automatic migration — 50 as units is 51% of a "
+            "10 000 account at price 102 and 5000% of it at price 10 000, and no stored "
+            "number recovers which the author meant."
+        ),
+    )
+
     @field_validator("base_position_size", mode="before")
     @classmethod
     def base_size_required_if_base_method(cls, v: Any, info: ValidationInfo) -> Any:

@@ -112,7 +112,18 @@ def _config(
     the only thing governing the position's life, exactly as this fixture's bars intend. The
     retired breakout proxy produced no opposite signal over these retracement bars, so this
     fixture never had to say which rule it meant."""
-    sizing: dict[str, Any] = {"method": "base_position_size", "base_position_size": "50"}
+    # GH #550 made ``base_position_size`` a PERCENT of resolved capital, so a base size is
+    # now entry-price dependent. The ladder fixtures need the INITIAL position pinned at 50
+    # units while the bars retrace, so the base size is stated as the risk-based equivalent
+    # — 1% of 10 000 across a 2.00 stop distance — which is the one modelled method that
+    # divides by a stop DISTANCE rather than a price level. ``stop_loss_point`` feeds sizing
+    # only; ``protection_stop_logic`` below stays empty, so the ladder still governs the
+    # position's life. Layer sizes are percentages of the INITIAL position (or fixed
+    # amounts), so they are unaffected either way.
+    sizing: dict[str, Any] = {
+        "method": "risk_based_sizing",
+        "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+    }
     if position_size_limits is not None:
         sizing["position_size_limits"] = position_size_limits
     costs: dict[str, Any] = dict(_ZERO_COST)
@@ -383,15 +394,23 @@ def test_short_position_scales_on_adverse_rise() -> None:
 
 
 def test_layer_commission_charged_at_fill() -> None:
-    # The layer's own entry fill pays one commission AT FILL; the close still books the
-    # initial round trip -> trade pnl = (103-101.5)*75 - 2 = 110.50, equity additionally
-    # carries the mid-run 1.00 layer fill -> net 109.50.
+    # THREE fills, one commission each (GH #552 / PD-2): the initial entry, the layer's
+    # own entry, and the close. The layer already paid at fill before #552 — that path was
+    # the model the other two were brought into line with.
+    #
+    # The trade row carries only its own EXIT fill: (103 - 101.5) * 75 - 1 = 111.50. The
+    # two entry fills were charged to equity when they filled, so the run nets
+    # 111.50 - 1 (initial entry) - 1 (layer) = 109.50 and equity lands at 10109.50.
+    #
+    # The run total is unchanged from the round-trip model; only its SPLIT moved. That is
+    # the whole shape of #552: the same three charges, taken at the fills that incur them
+    # instead of two of them being billed at the exit.
     out = _run(
         _config(scaling=_price_scaling(), commission="1.0"),
         _long_then([_RETRACE, _CLOSE_UP]),
     )
     assert out.diagnostics["scale_layers_added"] == 1
-    assert out.trades[0].pnl == Decimal("110.50")
+    assert out.trades[0].pnl == Decimal("111.50")
     assert out.summary["net_profit"] == Decimal("109.50")
     assert out.summary["final_equity"] == Decimal("10109.50")
 

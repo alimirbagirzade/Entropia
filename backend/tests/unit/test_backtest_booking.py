@@ -16,8 +16,9 @@ quietly moving the expectation with it.
 What is deliberately pinned, because it is where a booking bug hides silently:
 
 * the long/short sign and the ADVERSE fill side on the exit leg;
-* commission as a ROUND TRIP on a full close and pro-rata on a partial, so N partial
-  fractions summing to 1 pay exactly what one full close pays;
+* commission as ONE charge per exit FILL (GH #552 / PD-2), so a partial lot and a full
+  close cost the same and four 0.25 lots cost four times a single close — the entry fill
+  pays its own at ``engine._do_open`` and never appears in a trade row;
 * the classification boundaries at exactly zero PnL — a 0-PnL lot is not a winner and
   does not extend the loss streak, and it books a 0 into ``gross_loss``;
 * ``exposure`` measured against the equity BEFORE the lot is booked, and its
@@ -204,8 +205,9 @@ def test_close_position_inverts_the_sign_and_the_fill_side_for_a_short() -> None
     """short 10 @100 -> 90 with spread 0.5 + 2% slip + 2.00 commission.
 
     The exit of a short is a BUY, so it pays up: (90 + 0.5) * 1.02 = 92.31. The sign
-    flips, so the move down is a profit: (92.31 - 100) * 10 * -1 = 76.90, less a 4.00
-    round-trip commission = 72.90.
+    flips, so the move down is a profit: (92.31 - 100) * 10 * -1 = 76.90, less this exit
+    fill's own 2.00 commission = 74.90. (Per-FILL, GH #552: the entry leg's 2.00 was
+    charged at entry and is not in this row; the old model billed 4.00 here.)
     """
     led = _ledger()
     pos = _position(direction="short")
@@ -218,35 +220,44 @@ def test_close_position_inverts_the_sign_and_the_fill_side_for_a_short() -> None
     )
 
     assert led.trades[0].exit_price == Decimal("92.31")
-    assert led.trades[0].pnl == Decimal("72.90")
-    assert led.equity == Decimal("10072.90")
+    assert led.trades[0].pnl == Decimal("74.90")
+    assert led.equity == Decimal("10074.90")
     assert led.winners == 1
 
 
-def test_close_position_charges_commission_as_a_round_trip_on_a_full_close() -> None:
-    """Flat exit, 2.00 per fill: the lot pays 4.00 — entry leg plus exit leg."""
+def test_close_position_charges_one_commission_for_the_exit_fill() -> None:
+    """Flat exit, 2.00 per fill: this close is ONE fill and pays 2.00.
+
+    GH #552 / PD-2. The old model charged 4.00 here — the entry leg billed at the exit —
+    which is why this was called ``..._as_a_round_trip_on_a_full_close``. The entry leg is
+    now charged at ``engine._do_open``, so ``close_position`` never sees it. This function
+    is called directly here, with no entry, which is exactly why the equity below moves by
+    the exit fill alone."""
     led = _ledger()
     pos = _position()
 
     _close(led, pos, _costs(commission="2"), exit_price_raw="100")
 
-    assert led.trades[0].pnl == Decimal("-4.00")
-    assert led.equity == Decimal("9996.00")
+    assert led.trades[0].pnl == Decimal("-2.00")
+    assert led.equity == Decimal("9998.00")
 
 
-def test_close_position_splits_one_round_trip_across_partial_lots() -> None:
-    """Four 0.25 lots pay exactly what a single full close pays — no double charge.
+def test_partial_lots_each_pay_their_own_fill_commission() -> None:
+    """Four 0.25 lots are four exit FILLS and pay four commissions — 8.00, not 2.00.
 
-    This is the invariant that makes partial exits cost-neutral against a full exit:
-    commission is pro-rated on the FRACTION, not on the (shrinking) remaining size.
-    """
+    This inverts the invariant this test used to pin. Under the old model commission was
+    pro-rated on the fraction so that N partials summing to 1 cost exactly one full close;
+    the cost of exiting was independent of how many fills it took. Per-FILL says the
+    opposite and says it deliberately: each fill is a trade the venue charges for, which is
+    what ``costs.commission``'s own "Per-trade fee" description means. Scaling out is
+    genuinely more expensive than closing at once."""
     led = _ledger()
     pos = _position()
     for _ in range(4):
         _close(led, pos, _costs(commission="2"), exit_price_raw="100", fraction="0.25")
 
-    assert [trade.pnl for trade in led.trades] == [Decimal("-1.00")] * 4
-    assert led.equity == Decimal("9996.00")  # identical to the full-close case above
+    assert [trade.pnl for trade in led.trades] == [Decimal("-2.00")] * 4
+    assert led.equity == Decimal("9992.00")
 
 
 def test_close_position_extends_the_loss_streak_and_the_stop_streak_on_a_stop() -> None:
@@ -405,8 +416,9 @@ def test_close_position_emits_a_close_event_linking_the_trade_and_the_holding_sp
 def test_close_position_realizes_a_partial_lot_and_leaves_the_position_open() -> None:
     """0.25 of long 8 @100 -> 120 with 2.00 commission.
 
-    close_size 2.00, gross 40.00, commission 2*2*0.25 = 1.00, pnl 39.00; the position
-    survives at size 6.00 with its notional refreshed to 600.00.
+    close_size 2.00, gross 40.00, commission 2.00 (this exit fill's own, GH #552 — it used
+    to be pro-rated to 2*2*0.25 = 1.00), pnl 38.00; the position survives at size 6.00 with
+    its notional refreshed to 600.00.
     """
     led = _ledger()
     pos = _position(size="8", peak_notional="800.00")
@@ -414,8 +426,8 @@ def test_close_position_realizes_a_partial_lot_and_leaves_the_position_open() ->
     is_full = _close(led, pos, _costs(commission="2"), exit_price_raw="120", fraction="0.25")
 
     assert is_full is False
-    assert led.trades[0].pnl == Decimal("39.00")
-    assert led.equity == Decimal("10039.00")
+    assert led.trades[0].pnl == Decimal("38.00")
+    assert led.equity == Decimal("10038.00")
     assert led.partial_closes == 1
     assert pos.size == Decimal("6.00")
     assert pos.entry_notional == Decimal("600.00")
@@ -481,7 +493,10 @@ def test_close_position_books_a_zero_fraction_as_an_empty_partial_lot() -> None:
     is_full = _close(led, pos, _costs(commission="2"), exit_price_raw="110", fraction="0")
 
     assert is_full is False
-    assert led.trades[0].pnl == Decimal("0.00")
+    # Per-FILL (GH #552): the empty lot is still a fill and still pays its commission,
+    # where the pro-rated model charged 2*2*0 = 0.00. The boundary is unchanged in shape —
+    # a 0-size lot still books a row, an equity point and an event — only its fee moved.
+    assert led.trades[0].pnl == Decimal("-2.00")
     assert led.partial_closes == 1
     assert pos.size == Decimal("10")
 

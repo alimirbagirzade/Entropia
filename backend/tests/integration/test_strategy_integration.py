@@ -125,6 +125,9 @@ def _valid_payload(display_name: str = "Integration Strategy") -> dict[str, Any]
         "position_sizing": {
             "method": "base_position_size",
             "base_position_size": "100.0",
+            # GH #550: saved AFTER sizing became a percent of resolved capital, so
+            # Ready Check raises no STRATEGY_SIZING_SEMANTICS_UNCONFIRMED blocker.
+            "size_semantics": "percent_of_capital",
             "risk_based": None,
             "formula_based": None,
             "signal_strength_adjustment": "no_adjustment",

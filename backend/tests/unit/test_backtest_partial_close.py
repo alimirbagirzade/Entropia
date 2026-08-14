@@ -105,7 +105,16 @@ def _config(
                 "partial_aftermath": partial_aftermath,
             },
             "protection_stop_logic": protection,
-            "position_sizing": {"method": "base_position_size", "base_position_size": "50"},
+            # GH #550 made ``base_position_size`` a PERCENT of resolved capital, so a
+            # base size is now entry-price dependent. This fixture wants its 50-unit
+            # position held fixed while the bars move — the size is its INPUT, not its
+            # subject — so it is stated as the risk-based equivalent: 1% of 10 000 across
+            # a 2.00 stop distance = exactly 50 units at any price. ``stop_loss_point``
+            # feeds sizing only; it installs no stop.
+            "position_sizing": {
+                "method": "risk_based_sizing",
+                "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+            },
             "restrictions_filters": {"rule": "any", "filters": []},
             "conflict_position_handling": {"same_direction_stacking": "ignore"},
         }
@@ -223,7 +232,10 @@ def test_partial_close_50_percent_realizes_a_lot_and_holds_remainder() -> None:
     assert out.trades[1].pnl == Decimal("25.00")  # remainder (103-102)*25
     partials = _events(out, "position_partial_close")
     assert partials and partials[0]["closed_fraction"] == "0.5"
-    assert partials[0]["remaining_size"] == "25.0"
+    # 8-decimal quantity step: the planned size is 50.00000000 and half of it carries the
+    # trailing zeros through (GH #550 — every sizing branch now quantizes, where a base
+    # size used to pass the stored number through as a bare "50").
+    assert partials[0]["remaining_size"] == "25.000000000"
 
 
 def test_move_stop_to_entry_breakevens_the_remainder() -> None:

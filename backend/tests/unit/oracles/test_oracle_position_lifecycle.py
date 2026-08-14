@@ -137,24 +137,29 @@ def test_close_all_collapses_the_partial_into_a_full_exit() -> None:
     assert out.trades[1].entry_price == Decimal("104.00")
 
 
-def test_a_partial_lot_pays_commission_in_proportion_but_the_final_close_pays_a_full_one() -> None:
-    """Commission 7 per fill, so a round trip is 14.00.
+def test_every_fill_pays_one_commission_entry_included() -> None:
+    """Commission 7 PER FILL (GH #552, PD-2). This position has THREE fills — one entry,
+    a 40% partial exit, and the remainder's close — so the account pays 21.00.
 
-    The 40% lot is charged 14.00 * 0.4 = 5.60 -> pnl = -60.00 - 5.60 = -65.60.
-    The remainder's close is a FULL close and is charged a whole 14.00 -> pnl = -14.00
-    (it exits at the breakeven stop, so the fee is the entire result).
-    Run total = -79.60.
+    Each lot carries only its own exit fill:
+      * the 40% lot: -60.00 - 7 = -67.00
+      * the remainder: it exits at the breakeven stop, so the fee is the whole result, -7.00
+    The entry fill's 7 was charged to equity at entry, so the run total is
+    10000 - 7 - 67 - 7 = **9919.00**.
 
-    DIVERGENCE, pinned deliberately: this position had ONE entry fill and TWO exit fills,
-    yet is charged 1.4 round trips (19.60) — neither three per-fill commissions (21.00) nor
-    the single round trip the booking layer documents as its invariant. Filed as issue #552."""
+    This test previously pinned the divergence under the name
+    ``..._pays_commission_in_proportion_but_the_final_close_pays_a_full_one``: 14.00 * 0.4
+    on the partial and a whole 14.00 on the remainder, 19.60 across three fills — neither
+    per-FILL (21.00) nor the single round trip the booking layer claimed as its invariant.
+    Cost scaled with the number of partial CLOSES rather than fills, so a three-step
+    scale-out paid 1.7 round trips for four fills."""
     out = _partial(
         "move_stop_to_entry",
         costs={"slippage_mode": "percentage_slippage", "slippage_value": "0", "commission": "7"},
     )
 
-    assert [t.pnl for t in out.trades] == [Decimal("-65.60"), Decimal("-14.00")]
-    assert out.summary["final_equity"] == Decimal("9920.40")
+    assert [t.pnl for t in out.trades] == [Decimal("-67.00"), Decimal("-7.00")]
+    assert out.summary["final_equity"] == Decimal("9919.00")
 
 
 def test_a_remainder_stop_obeys_the_gap_rule_too() -> None:

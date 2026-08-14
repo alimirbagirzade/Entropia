@@ -42,21 +42,37 @@ def _entry_size(out: EngineOutput) -> Decimal:
     return Decimal(str(fill.detail["size"]))
 
 
+def _blocked_reason(out: EngineOutput) -> str:
+    """The reason attached to the ``entry_blocked`` event (F-10 restriction trace).
+
+    Added at GH #551: once a non-positive size opens nothing, the interesting assertion is
+    no longer the size that was computed but the reason the entry was refused."""
+    blocked = next(e for e in out.signal_events if e.event_type == "entry_blocked")
+    return str(blocked.detail["reason"])
+
+
 # --------------------------------------------------------------------------- #
 # Sizing methods                                                               #
 # --------------------------------------------------------------------------- #
-def test_base_position_size_is_taken_as_the_size() -> None:
-    """50 units at 102 = 5100 notional; pnl = (104 - 102) * 50 = 100.00.
+def test_base_position_size_is_a_percent_of_resolved_capital() -> None:
+    """Doc 02's worked example, run: "Equity 10.000 USD ve Position Size %10 -> 1.000 USD
+    nominal". 10% of 10 000 is a 1 000 NOTIONAL, and at an entry of 102 that notional buys
+    1 000 / 102 = 9.80392156862... -> 9.80392157 units at the engine's 8-decimal step.
+    pnl = 2.00 * 9.80392157 = 19.60784314 -> 19.61.
 
-    SPEC BOUNDARY: doc 02 labels this field a PERCENT of resolved capital (its V18 form
-    input carries a ``%`` suffix and its worked example reads "Equity 10.000 USD ve
-    Position Size %10 -> 1.000 USD nominal"). The shipped engine reads it as an absolute
-    quantity of units. This oracle pins the SHIPPED reading; the divergence is filed as
-    issue #550."""
-    out = _sized({"method": "base_position_size", "base_position_size": "50"})
+    The notional is the invariant worth reading twice: 9.80392157 * 102 = 1 000.00 to the
+    cent, at ANY price the fixture could have used. That is the whole of GH #550. Until it
+    was fixed this test read ``base_position_size: "50"`` -> 50 units and asserted a
+    5 100 notional from a field the shipped UI has always labelled ``%``, under the name
+    ``test_base_position_size_is_taken_as_the_size`` — the divergence pinned as an oracle,
+    which is what an oracle is for. A user who typed 10 meaning 10% of the account opened
+    10 units: 1 020 of notional here, 100 000 at an instrument costing 10 000."""
+    out = _sized({"method": "base_position_size", "base_position_size": "10"})
 
-    assert _entry_size(out) == Decimal("50")
-    assert out.trades[0].pnl == Decimal("100.00")
+    size = _entry_size(out)
+    assert size == Decimal("9.80392157")
+    assert (size * Decimal("102")).quantize(Decimal("0.01")) == Decimal("1000.00")
+    assert out.trades[0].pnl == Decimal("19.61")
 
 
 def test_risk_based_sizing_spends_the_risk_budget_across_the_stop_distance() -> None:
@@ -116,8 +132,13 @@ def test_an_absent_kelly_fraction_means_full_kelly() -> None:
 
 
 def test_a_non_positive_kelly_edge_opens_nothing() -> None:
-    """W = 0.3, R = 1 -> edge = 0.3 - 0.7 / 1 = -0.40. A negative edge must clamp to 0
-    (size 0), never invert into a bet AGAINST the edge."""
+    """W = 0.3, R = 1 -> edge = 0.3 - 0.7 / 1 = -0.40. A negative edge must clamp to 0,
+    never invert into a bet AGAINST the edge — and then open NOTHING.
+
+    The name always promised this; until GH #551 the body only asserted the SIZE was 0,
+    which the engine satisfied while still opening a 0-size position and booking a
+    0.00-PnL trade. Asserting the size alone is what let the divergence sit under a
+    correct-sounding name, so the assertions now go to the trade rows."""
     out = _sized(
         {
             "method": "formula_based_sizing",
@@ -128,14 +149,24 @@ def test_a_non_positive_kelly_edge_opens_nothing() -> None:
         }
     )
 
-    assert _entry_size(out) == Decimal("0")
+    assert not [e for e in out.signal_events if e.event_type == "entry_fill"]
+    assert out.trades == []
+    assert out.position_intervals == []
+    assert _blocked_reason(out) == "size_resolved_to_zero"
 
 
 # --------------------------------------------------------------------------- #
 # Limits and leverage                                                          #
 # --------------------------------------------------------------------------- #
 def test_a_max_limit_pulls_the_size_down() -> None:
-    """50 requested, cap 20 -> 20 units. pnl = 2.00 * 20 = 40.00."""
+    """The caps are percentages too (GH #550, doc 02's ⓘ panel: a 25% Max Single Position
+    means the position may not exceed 25% of equity). 50% asked for, 20% allowed:
+    5 000 / 102 = 49.01960784 requested, capped to 2 000 / 102 = 19.60784314.
+    pnl = 2.00 * 19.60784314 = 39.21568628 -> 39.22.
+
+    Both numbers used to be unit counts (50 pulled down to 20), which made a "25% max" cap
+    mean twenty-five UNITS — a cap that tightens as the instrument gets cheaper and is
+    meaningless above it."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -144,11 +175,12 @@ def test_a_max_limit_pulls_the_size_down() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("20"), Decimal("40.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("19.60784314"), Decimal("39.22"))
 
 
 def test_a_min_limit_pushes_the_size_up() -> None:
-    """50 requested, floor 80 -> 80 units. pnl = 2.00 * 80 = 160.00."""
+    """50% asked for, floor 80%: 49.01960784 pushed up to 8 000 / 102 = 78.43137255.
+    pnl = 2.00 * 78.43137255 = 156.8627451 -> 156.86."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -157,12 +189,13 @@ def test_a_min_limit_pushes_the_size_up() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("80"), Decimal("160.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("78.43137255"), Decimal("156.86"))
 
 
 def test_isolated_leverage_multiplies_the_computed_size() -> None:
-    """50 * 3 = 150 units. pnl = 2.00 * 150 = 300.00 — leverage scales the size, so it
-    scales every downstream notional, exposure and PnL figure with it."""
+    """49.01960784 * 3 = 147.05882352 units. pnl = 2.00 * 147.05882352 = 294.11764704
+    -> 294.12 — leverage scales the size, so it scales every downstream notional, exposure
+    and PnL figure with it."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -172,12 +205,13 @@ def test_isolated_leverage_multiplies_the_computed_size() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("150"), Decimal("300.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("147.05882352"), Decimal("294.12"))
 
 
 def test_no_leverage_normalizes_to_one_x_whatever_multiplier_is_saved() -> None:
     """Master Ref §10.2: "No Leverage modunda 1x olarak normalize edilir." A stale 3
-    in the saved field must NOT leak through: 50 units, pnl 100.00."""
+    in the saved field must NOT leak through: the unlevered 49.01960784 units,
+    pnl = 2.00 * 49.01960784 = 98.03921568 -> 98.04."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -187,7 +221,7 @@ def test_no_leverage_normalizes_to_one_x_whatever_multiplier_is_saved() -> None:
         }
     )
 
-    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("50"), Decimal("100.00"))
+    assert (_entry_size(out), out.trades[0].pnl) == (Decimal("49.01960784"), Decimal("98.04"))
 
 
 def test_cross_margin_opens_no_position_at_all() -> None:
@@ -208,14 +242,26 @@ def test_cross_margin_opens_no_position_at_all() -> None:
     assert any("leverage_unsupported" in w for w in out.diagnostics["warnings"])
 
 
-def test_a_min_above_max_window_books_a_zero_size_trade() -> None:
-    """A window no size can satisfy (floor 80 above cap 20) resolves to size 0.
+def test_a_min_above_max_window_opens_nothing() -> None:
+    """A window no size can satisfy (floor 80 above cap 20) resolves to size 0 and opens
+    NOTHING — GH #551, fixed. This test previously pinned the divergence under the name
+    ``..._books_a_zero_size_trade``: the engine opened the position anyway and booked a
+    0.00-PnL row, because the guard read ``if alloc_on and size <= _ZERO`` and so never
+    fired in independent mode. It now reads ``if size <= _ZERO``.
 
-    DIVERGENCE, pinned deliberately: the engine still OPENS the position and books a
-    0.00-PnL trade row, so ``total_trades`` counts a position that never carried risk and
-    the 0-PnL lot lands on the loss side of the win/loss split. Fail-closed elsewhere in
-    the engine means "open nothing" (the unmodelled-sizing path opens no position at all).
-    Filed as issue #551."""
+    What it closes, stated as measured rather than as argued: ``total_trades`` no longer
+    counts a position that never carried risk, so the win/loss split is not diluted by a
+    0-PnL lot landing on the loss side, and no ``position_intervals`` record is written.
+    With a commission configured it is also money — a 0-unit position used to pay the same
+    flat per-fill fee as a full one.
+
+    It is NOT a cross-item leak, and #551's own text calls that "the load-bearing one".
+    ``execution/rules.py::conflicts_with_prior`` does match an interval on ``direction``
+    alone without reading ``peak_notional``, but it never sees a phantom: the only producer
+    of ``PriorItemInterval`` is ``engine.py::build_prior_intervals``, which drops a window
+    whose notional is not positive before the gate runs
+    (``test_backtest_portfolio_rules.py::
+    test_build_prior_intervals_fails_closed_on_bad_bounds_and_drops_zero_notional``)."""
     out = _sized(
         {
             "method": "base_position_size",
@@ -224,9 +270,34 @@ def test_a_min_above_max_window_books_a_zero_size_trade() -> None:
         }
     )
 
-    assert _entry_size(out) == Decimal("0")
-    assert out.trades[0].pnl == Decimal("0.00")
-    assert out.summary["total_trades"] == 1
+    assert not [e for e in out.signal_events if e.event_type == "entry_fill"]
+    assert out.trades == []
+    assert out.summary["total_trades"] == 0
+    assert out.position_intervals == []
+    assert _blocked_reason(out) == "size_resolved_to_zero"
+
+
+def test_a_negative_size_opens_nothing_rather_than_inverting_the_pnl_sign() -> None:
+    """The severe variant of GH #551, and the one its text does not mention.
+
+    ``_raw_position_size`` returned the stored base value verbatim and
+    ``_clamp_to_limits`` short-circuits on a non-positive size (so a ``min`` floor cannot
+    resurrect the 0 "do not open" sentinel), which together let a NEGATIVE size through
+    untouched. A stored ``-5`` opened a -5-unit long and booked a LOSS on this fixture's
+    bar, which moves +2.00 in the position's favour: the size multiplies the price delta,
+    so its sign inverts the result. The schema enforces neither Master Ref §10.1's
+    positive-only rule nor doc 02's "required >0".
+
+    ``if size <= _ZERO`` covers it with the same comparison that covers zero — there is no
+    separate negative branch, which is why this case is worth pinning rather than assuming:
+    a future refactor that split the guard into ``== 0`` would silently reopen it."""
+    out = _sized({"method": "base_position_size", "base_position_size": "-5"})
+
+    assert not [e for e in out.signal_events if e.event_type == "entry_fill"]
+    assert out.trades == []
+    assert out.summary["total_trades"] == 0
+    assert out.summary["final_equity"] == Decimal("10000.00")
+    assert _blocked_reason(out) == "size_resolved_to_zero"
 
 
 # --------------------------------------------------------------------------- #

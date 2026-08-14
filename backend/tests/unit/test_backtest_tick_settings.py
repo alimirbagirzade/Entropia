@@ -84,7 +84,16 @@ def _cfg(
                 "close_percentage": "100",
             },
             "protection_stop_logic": protection or {},
-            "position_sizing": {"method": "base_position_size", "base_position_size": "50"},
+            # GH #550 made ``base_position_size`` a PERCENT of resolved capital, so a
+            # base size is now entry-price dependent. This fixture wants its 50-unit
+            # position held fixed while the bars move — the size is its INPUT, not its
+            # subject — so it is stated as the risk-based equivalent: 1% of 10 000 across
+            # a 2.00 stop distance = exactly 50 units at any price. ``stop_loss_point``
+            # feeds sizing only; it installs no stop.
+            "position_sizing": {
+                "method": "risk_based_sizing",
+                "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+            },
             "restrictions_filters": {"rule": "any", "filters": []},
             "conflict_position_handling": {},
         }
@@ -378,8 +387,8 @@ def test_partial_allowed_books_the_evidenced_fraction_and_tops_up_later() -> Non
     partials = _events(out, "partial_fill")
     actions = [e.detail["action"] for e in partials]
     assert actions == ["remainder_resting", "remainder_touch"]
-    assert partials[1].detail["fill_size"] == "30"
-    assert partials[1].detail["new_size"] == "50"
+    assert partials[1].detail["fill_size"] == "30.00000000"
+    assert partials[1].detail["new_size"] == "50.00000000"
     assert out.diagnostics["partial_fills"] == 2
     assert "partial_fill_evidence_unavailable" not in out.diagnostics["warnings"]
 
@@ -402,7 +411,7 @@ def test_partial_minimum_50_rejects_a_sub_half_bar_and_fills_a_half_plus_bar() -
     assert fill.detail["bar_seq"] == 23
     assert fill.detail["size"] == "30"
     assert partials[1].detail["action"] == "remainder_resting"
-    assert partials[1].detail["remaining_size"] == "20"
+    assert partials[1].detail["remaining_size"] == "20.00000000"
 
 
 def test_partial_fill_remaining_as_market_completes_at_the_bar_close() -> None:
@@ -415,8 +424,8 @@ def test_partial_fill_remaining_as_market_completes_at_the_bar_close() -> None:
     actions = [e.detail["action"] for e in partials]
     assert actions == ["remainder_market_filled", "market_remainder"]
     # 20 @ limit 102 + 30 @ close 102.5 -> weighted basis 102.30, total size 50.
-    assert partials[1].detail["fill_size"] == "30"
-    assert partials[1].detail["new_size"] == "50"
+    assert partials[1].detail["fill_size"] == "30.00000000"
+    assert partials[1].detail["new_size"] == "50.00000000"
     assert partials[1].detail["entry_basis"] == "102.30"
 
 
@@ -443,7 +452,7 @@ def test_partial_without_print_sizes_degrades_to_the_flagged_full_fill() -> None
     ticks = [_tick(22, "01:00", "101.5")]  # touching print WITHOUT a size column
     out = _run(_partial_config("allowed"), bars, ticks)
     fill = _events(out, "entry_fill")[0]
-    assert fill.detail["size"] == "50"  # the coarse full-fill model
+    assert fill.detail["size"] == "50.00000000"  # the coarse full-fill model
     assert "partial_fill" not in fill.detail
     assert "partial_fill_evidence_unavailable" in out.diagnostics["warnings"]
 
@@ -567,4 +576,4 @@ def test_partial_remainder_dies_with_its_position_and_never_reopens() -> None:
     assert len(_events(out, "entry_fill")) == 1
     cancelled = _events(out, "limit_order_cancelled")
     assert cancelled and cancelled[0].detail["reason"] == "position_closed"
-    assert cancelled[0].detail["remaining_size"] == "30"
+    assert cancelled[0].detail["remaining_size"] == "30.00000000"

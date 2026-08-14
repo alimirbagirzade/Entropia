@@ -107,18 +107,36 @@ def test_spread_is_applied_before_slippage_scales_the_price() -> None:
     assert trade.pnl == Decimal("28.50")
 
 
-def test_commission_is_charged_twice_for_a_round_trip() -> None:
-    """Fills are untouched (102 / 104); only the pnl carries the fee:
-    100.00 - 7 * 2 = 86.00."""
+def test_commission_is_charged_once_per_fill_and_the_entry_pays_at_entry() -> None:
+    """Fills are untouched (102 / 104). Commission 7 is PER-FILL (GH #552, PD-2), and this
+    round trip is two fills, so the account pays 14 in total — but not in one place.
+
+    The trade row carries only its own EXIT fill: 100.00 - 7 = 93.00. The entry fill's 7
+    was charged to equity when it filled, which is the same seam the scale ladder and
+    ``absorb_remainder`` already use, and is why ``final_equity`` (below) is 10086 while
+    this row reads 93.
+
+    Renamed from ``..._charged_twice_for_a_round_trip``, which asserted 86.00 = 100 - 7*2:
+    the whole round trip billed at the exit. That model made cost scale with the number of
+    partial CLOSES rather than fills — see the partial-close oracle in
+    ``test_oracle_position_lifecycle.py``."""
     trade = _long(_costs(commission="7")).trades[0]
     assert (trade.entry_price, trade.exit_price) == (Decimal("102.00"), Decimal("104.00"))
-    assert trade.pnl == Decimal("86.00")
+    assert trade.pnl == Decimal("93.00")
 
 
 def test_costs_reach_the_run_total_and_not_only_the_trade_row() -> None:
-    """A cost that shows on the trade but not in equity would flatter the summary:
-    10000 + 86.00 = 10086.00."""
+    """A cost that shows on the trade but not in equity would flatter the summary.
+
+    This is the assertion that keeps the per-FILL split honest: the trade row reads 93.00
+    (its exit fill only) but the account is down the ENTRY fill's 7 as well, so the run
+    total is 100.00 - 14 = 86.00 and equity lands at 10086.00 — the same total the
+    round-trip model produced, reached by charging each fill once.
+
+    ``net_profit`` is derived from equity, not summed from the trade rows; if it were
+    summed, this split would silently overstate the run by the entry commission."""
     out = _long(_costs(commission="7"))
+    assert out.trades[0].pnl == Decimal("93.00")
     assert out.summary["net_profit"] == Decimal("86.00")
     assert out.summary["final_equity"] == Decimal("10086.00")
 

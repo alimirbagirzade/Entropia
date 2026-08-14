@@ -119,9 +119,9 @@ def _config(
     *,
     direction: str = "long_and_short",
     loss_pct: str = "1.0",
-    base_size: str = "50",
+    base_size: str | None = None,
     instrument: str = "BTCUSDT",
-    method: str = "base_position_size",
+    method: str | None = None,
     with_stop: bool = True,
     risk_pct: str | None = None,
     stop_point: str | None = None,
@@ -136,10 +136,27 @@ def _config(
     entry_timing: str = "current_candle_close",
     exit_timing: str = "current_candle_close",
 ) -> StrategyConfig:
-    """A minimal VALID StrategyConfig; only the fields the engine reads matter."""
+    """A minimal VALID StrategyConfig; only the fields the engine reads matter.
+
+    The DEFAULT sizing is risk-based (1% of 10 000 across a 2.00 stop distance = exactly
+    50 units) rather than a base size, because GH #550 made ``base_position_size`` a
+    PERCENT of resolved capital and therefore entry-price dependent. Risk sizing is the one
+    modelled method that divides by a stop DISTANCE instead of a price level, so it holds
+    the fixtures' 50-unit position fixed while the bars move — which is what every test in
+    this file and its neighbours (funding, the available-time gate, the step-order suite)
+    needs, since the size is their INPUT and not their subject. ``stop_loss_point`` feeds
+    sizing only; the protection stop is the separate ``loss_pct`` / ``with_stop`` pair.
+
+    Passing ``base_size`` selects the base (percent) path explicitly, for the tests that
+    ARE about it.
+    """
+    if method is None:
+        method = "base_position_size" if base_size is not None else "risk_based_sizing"
+        if method == "risk_based_sizing" and risk_pct is None and stop_point is None:
+            risk_pct, stop_point = "1", "2.00"
     sizing: dict[str, Any] = {"method": method}
     if method == "base_position_size":
-        sizing["base_position_size"] = base_size
+        sizing["base_position_size"] = base_size if base_size is not None else "50"
     if method == "risk_based_sizing" and risk_pct is not None and stop_point is not None:
         sizing["risk_based"] = {
             "risk_percentage_per_trade": risk_pct,
@@ -534,47 +551,90 @@ def test_engine_unsupported_sizing_opens_no_position() -> None:
 
 
 # --- position_size_limits (min/max cap) wiring -------------------------------
+#
+# GH #550: the two bounds are PERCENTAGES of resolved capital, so ``_clamp_to_limits``
+# now needs the equity and the entry price to evaluate them. These cases keep the
+# calibration below because it makes the CLAMP the only variable: at equity 10 000 and a
+# price of 100 a percent converts one-for-one into a unit (10 000 * p% / 100 / 100 = p),
+# so every expected number is the pre-#550 number and any change here is a change in the
+# ordering/fail-closed logic rather than in the conversion. The conversion itself is
+# pinned separately, at a price where the two readings CANNOT coincide, by
+# ``test_clamp_to_limits_reads_its_bounds_as_percentages_of_capital``.
+
+
+def _clamped(size: str, limits: PositionSizeLimits | None) -> Decimal:
+    return _clamp_to_limits(
+        Decimal(size), limits, equity=Decimal("10000"), entry_price=Decimal("100")
+    )
 
 
 def test_clamp_to_limits_is_a_noop_without_limits() -> None:
     # No configured window → the raw size passes through byte-identically (this is what
     # keeps every pre-wiring test's expected size unchanged).
-    assert _clamp_to_limits(Decimal("50"), None) == Decimal("50")
+    assert _clamped("50", None) == Decimal("50")
 
 
 def test_clamp_to_limits_caps_down_to_max() -> None:
     limits = PositionSizeLimits(max_position_size=Decimal("30"))
-    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("30")
+    assert _clamped("50", limits) == Decimal("30")
 
 
 def test_clamp_to_limits_lifts_up_to_min() -> None:
     limits = PositionSizeLimits(min_position_size=Decimal("80"))
-    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("80")
+    assert _clamped("50", limits) == Decimal("80")
 
 
 def test_clamp_to_limits_leaves_a_size_within_the_window() -> None:
     limits = PositionSizeLimits(min_position_size=Decimal("10"), max_position_size=Decimal("100"))
-    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("50")
+    assert _clamped("50", limits) == Decimal("50")
 
 
 def test_clamp_to_limits_preserves_the_zero_fail_closed_sentinel() -> None:
     # 0 = "do not open" (bust equity / non-positive entry price). A min cap must NOT
     # resurrect it into a live position.
     limits = PositionSizeLimits(min_position_size=Decimal("80"))
-    assert _clamp_to_limits(Decimal("0"), limits) == Decimal("0")
+    assert _clamped("0", limits) == Decimal("0")
 
 
 def test_clamp_to_limits_min_greater_than_max_fails_closed() -> None:
     # A misconfigured window that no size can satisfy fails closed to 0 rather than
-    # silently honouring one bound and violating the other.
+    # silently honouring one bound and violating the other. The comparison is done in
+    # PERCENT, before either bound is converted, so it does not need a usable price.
     limits = PositionSizeLimits(min_position_size=Decimal("100"), max_position_size=Decimal("30"))
-    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("0")
+    assert _clamped("50", limits) == Decimal("0")
 
 
 def test_clamp_to_limits_neutralises_a_negative_cap() -> None:
     # A nonsensical negative max cannot pull a size negative — the final guard floors at 0.
     limits = PositionSizeLimits(max_position_size=Decimal("-5"))
-    assert _clamp_to_limits(Decimal("50"), limits) == Decimal("0")
+    assert _clamped("50", limits) == Decimal("0")
+
+
+def test_clamp_to_limits_reads_its_bounds_as_percentages_of_capital() -> None:
+    # The conversion, at a price where the two readings cannot be confused. A 25% cap on a
+    # 10 000 account is a 2 500 NOTIONAL cap: at 250 that is 10 units, at 25 it is 100 —
+    # the same cap, a different quantity, which is the property doc 02's ⓘ panel describes
+    # and the unit reading could not express. Pre-#550 both calls returned a flat 25.
+    limits = PositionSizeLimits(max_position_size=Decimal("25"))
+    dear = _clamp_to_limits(
+        Decimal("500"), limits, equity=Decimal("10000"), entry_price=Decimal("250")
+    )
+    cheap = _clamp_to_limits(
+        Decimal("500"), limits, equity=Decimal("10000"), entry_price=Decimal("25")
+    )
+    assert (dear, cheap) == (Decimal("10"), Decimal("100"))
+    assert dear * Decimal("250") == cheap * Decimal("25") == Decimal("2500")
+
+
+def test_clamp_to_limits_treats_an_unpriceable_bound_as_no_bound() -> None:
+    # A non-positive entry price cannot convert a percentage into a quantity. A bound
+    # nobody can evaluate must not silently cap to nothing: the size passes through and
+    # the caller's own fail-closed gate (``_raw_position_size`` returns 0 for exactly this
+    # price) is what refuses the entry.
+    limits = PositionSizeLimits(min_position_size=Decimal("80"), max_position_size=Decimal("90"))
+    assert _clamp_to_limits(
+        Decimal("50"), limits, equity=Decimal("10000"), entry_price=Decimal("0")
+    ) == Decimal("50")
 
 
 def test_position_size_base_is_capped_to_max() -> None:
@@ -588,9 +648,18 @@ def test_position_size_base_is_lifted_to_min() -> None:
 
 
 def test_position_size_risk_based_is_capped_to_max() -> None:
-    # risk_based raw size = 10000 * 2% / 50 = 4; capped to 1.
+    # risk_based raw size = 10000 * 2% / 50 = 4, which is price-INDEPENDENT (it divides by
+    # a stop DISTANCE, not by a level). The cap is not: GH #550 makes a 1% max a 100.00
+    # notional cap, so at 123.45 it allows 100 / 123.45 = 0.81004455 units.
+    #
+    # The two halves of this call now read the price differently on purpose, and that is
+    # the assertion worth having: an engine that capped a risk-based size at a flat 1 unit
+    # (the pre-#550 result) would let the SAME strategy carry a 123x bigger notional on a
+    # 123x dearer instrument under a cap the user set to bound exposure.
     cfg = _config(method="risk_based_sizing", risk_pct="2.0", stop_point="50", max_size="1")
-    assert _position_size(cfg, Decimal("123.45"), Decimal("10000")) == Decimal("1")
+    capped = _position_size(cfg, Decimal("123.45"), Decimal("10000"))
+    assert capped == Decimal("0.81004455")
+    assert (capped * Decimal("123.45")).quantize(Decimal("0.01")) == Decimal("100.00")
 
 
 def test_position_size_kelly_is_capped_to_max() -> None:

@@ -38,6 +38,27 @@ secretGroup = 1
     # Prose in comments that names the contracts by their real names, e.g.
     # "query keys, OCC/Idempotency tokens, hooks and the lib data logic".
     '''^\s*(//|#|\*)\s.*\b(OCC|Idempotency|query keys)\b''',
+    # A whole-line JSON entry whose value is exactly 64 lowercase hex characters:
+    # the shape of `engine_golden_digests.json`, where every value is a SHA-256 of
+    # an `EngineOutput` and every key is a scenario name. Two of them tripped the
+    # entropy threshold once the #550/#551/#552 fixes changed what the engine emits
+    # — `contract.execution_key` on the keyword "key", and
+    # `sizing.base_percent_of_capital` on the "api" inside "cAPItal". Which digests
+    # trip it is luck: the values are content hashes, so every regeneration reshuffles
+    # them, and pinning the fingerprints would fail again on the next legitimate bump.
+    #
+    # Shape, not path, deliberately — consistent with the note above. Excluding
+    # `backend/tests/**` (or even this one file) would stop the scanner finding a real
+    # key pasted into a fixture. This anchors on `^…$` so it only forgives a line that
+    # is ENTIRELY one entry, and the key must be DOTTED (`sizing.base_percent_of_capital`)
+    # — measured: without that the pattern also forgave a bare `"token": "<64 hex>"`,
+    # which is exactly the shape a leaked credential takes. A keyword exclusion cannot be
+    # used here, because the two real hits are keyed on "key" and on the "api" inside
+    # "capital". Residual gap, stated rather than hidden: a credential written as
+    # `"a.dotted.name": "<64 lowercase hex>"` alone on its line.
+    #
+    # (RE2 — no lookaround available, so the narrowing is done with the dot.)
+    '''^\s*"[a-z0-9_]+(\.[a-z0-9_]+)+"\s*:\s*"[0-9a-f]{64}",?\s*$''',
   ]
 
 # `.env.example` is the committed TEMPLATE, and its values are the documented

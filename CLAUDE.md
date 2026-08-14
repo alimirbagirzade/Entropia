@@ -225,7 +225,28 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
-> **Son dalga — ADIM 62 (Ready Check'in son iki artık N+1'i batch'lendi, P-E2, PR #712):
+> **Son dalga — ADIM 63 (K-5'in SORUSU düzeltildi — checklist A-3, PR #719): KOD YOK.
+> Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED. K-5 KAPANMADI.**
+> Bu slice bir bulguyu değil **aracı** düzeltti: A-3 *"`h1→h2→h3` atlamasız"* diye
+> soruyordu, ama `specs/20-a11y-prechecks.spec.ts` bunu **zaten** her rotada sayıyor
+> (`headingSkips`, **22/23**) → insandan makine çıktısını tekrarlaması isteniyordu, yani
+> **denetim K-5'i kaç rota gezerse gezsin kapatamazdı**. Yeni beklenti atlamanın
+> **yanıltıp yanıltmadığını** istiyor (`…audit_checklist.md` **§A-3 notu**).
+> **GEVŞETME DEĞİL** (advisory susturulmadı, 22/23 sayılmaya devam eder, K-5 `Open`) ve
+> **`D-xx` YAZILMADI** — D-10/D-11 bir **gözlemin** dispozisyonunu imzalar, bu **aracı**
+> düzeltir; üçüncü satır *"K-5 adjudicated"* diye okunurdu, **sicil iki kararda kaldı**.
+> **Rota 1'in `—` hücresi `—` KALDI.** **İki maliyet ölçümü düzeltildi:** tag-scoped CSS
+> kuralı **beş değil ALTI** (`.data-guide-card h4`, `global.css:2261` her listede eksikti)
+> · merdiveni kaydırmak **v18 SAPMASI DEĞİL** (mockup `h1:0 h2:1 h3:0 h4:14 h5:0`) → sıra
+> **önce altı kuralı sınıfa çevir, sonra tag**. **Bonus:** `/market-data` "iki seviye
+> atlıyor" değil **yanlış yuvalama** (`h1 → h4×4 → h3×3`) — kaydı düzeltildi, **ayrı kalem
+> yapılMADI**. **A-08 DEĞİŞMEDİ:** 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**,
+> #514 açık. **NUMARA: bu slice BEŞ kez taşındı** (58→59→60→61→62→**63**); commit mesajları
+> `adim-58` yazar. `PROJECT_HISTORY.md` §ADIM 63 · `docs/ADIM63_LANDED_KICKOFF.md` · RC §6.5.
+>
+> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **ADIM 62 (Ready Check'in son iki artık N+1'i batch'lendi, P-E2, PR #712):
 > DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > ADIM 46 (#617) market-data bacağını kapatmıştı; **aynı şekil iki bacakta daha yaşıyordu
 > ve hiçbir issue onu izlemiyordu** (#700'ün denetiminde **M-13**). `signal_market_data_leg`

@@ -6246,6 +6246,42 @@ aynı session'da batch'in yüklediği bir PK için yeniden konan `session.get` *
 üretmez** ve sayaç bunu görmez (gerekçesi `_comment`'te, beş ölçülmüş şekliyle) — kokuyu
 kapıya bağlamak **sayaçla değil kaynak-düzeyi assertion'la** olur.
 
+## Stage 63 — K-5'in sorusu düzeltildi (checklist A-3) + iki maliyet ölçümü (PR #719) landed
+
+**Ne indi.** Bir **bulgu** değil, bulguyu kapatacak **araç** düzeltildi. Checklist **A-3**
+*"`h1→h2→h3` sırası atlamasız"* diye soruyordu; bunu `specs/20-a11y-prechecks.spec.ts`
+zaten her rotada sayıyor (**22 / 23**, K-5) → insandan makine çıktısını tekrarlaması
+isteniyordu, yani **denetim K-5'i kaç rota gezerse gezsin kapatamazdı**. Yeni soru
+atlamanın **yanıltıp yanıltmadığını** istiyor.
+
+**Ürün kodu DEĞİŞMEDİ** — `backend/src`, `frontend/src`, `alembic` ağaçlarında tek satır yok.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED. K-5 KAPANMADI** (yalnızca
+*kapatılabilir* oldu).
+
+### Reuse anchor'ları (tam adlarıyla)
+
+| Anchor | Ne için |
+|---|---|
+| `a11y_screen_reader_audit_checklist.md` **A-3** satırı | Yeni beklenti. **Sayı sorma** — sonda sayıyor; **yanılma** sor |
+| `a11y_screen_reader_audit_checklist.md` **§A-3 notu** | Sorunun neden değiştiği, neden `D-xx` olmadığı, `—` hücresinin neden kaldığı |
+| `a11y_screen_reader_audit_results.md` §6 **K-5** satırı | Altı CSS kuralı + v18 ölçümü + `/market-data` düzeltmesi |
+| `a11y_ci_ratchet_and_adjudication.md` §4 | Sicil **iki kararda kaldı** (D-10 + D-11) — buraya üçüncü satır **yazılmadı** |
+
+### Bir sonraki denetçi/oturum için pazarlıksız
+
+1. **Bu bir gevşetme değil.** Precheck 22 / 23 saymaya devam eder, K-5 audit §6'da ve
+   RC §6.5'te **Open**. Advisory **susturulmadı**.
+2. **`D-xx` yazılmadı ve yazılmamalı.** D-10/D-11 bir **gözlemin** dispozisyonunu imzalar;
+   bu **aracı** düzeltir. Sicile bir satır eklemek *"K-5 adjudicated"* diye okunurdu.
+3. **Rota 1'in `—` hücresi `—` kalır.** Eski cevap yeni soruya da cevap değil.
+4. **K-5 düzeltilecekse sıra bellidir:** önce **altı** tag-scoped CSS kuralını sınıf-tabanlı
+   yap, sonra tag'i oynat. `.data-guide-card h4` (`global.css:2261`) her önceki listede
+   **eksikti** — unutulursa başlık UA varsayılanına düşer ve 23 görsel baseline kırılır.
+   **v18 itirazı burada geçerli değildir** (mockup `h1:0 h2:1 h3:0 h4:14 h5:0`; seviyeler
+   oradan kopyalanmadı).
+5. **`/market-data` ayrı bir kusurdur** — sayı boşluğu değil **yanlış yuvalama**
+   (`h1 → h4×4 → h3×3`). Ayrı kalem yapılmadı, açık bırakıldı.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

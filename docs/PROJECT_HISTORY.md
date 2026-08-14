@@ -9672,3 +9672,88 @@ Aynı dosyada dört döngü-içi okuma daha bulundu, **hiçbiri alınmadı** —
   yüzeyleri **el değmeden kaldı**.
 - Bacakların *kalan* maliyeti hâlâ **O(n)**: `_build_item_inputs` her item için okuma
   yapıyor (§5). Bu slice o ekseni **ölçtü ve bıraktı**, kapatmadı.
+
+## ADIM 63 — K-5'in SORUSU düzeltildi (checklist A-3) + iki maliyet ölçümü, KOD YOK (PR #719)
+
+> **NUMARA NOTU — bu slice BEŞ kez taşındı: 58 → 59 → 60 → 61 → 62 → 63.** ADIM 58 olarak
+> yazıldı; merge beklerken `#715` 58'i, `#718` 59'u, `#716` 60'ı, `#723` 61'i ve `#712` 62'yi
+> **merge edilmiş adla** aldı. Numaralar yeniden atanmaz, **merge edilmiş ad kazanır**;
+> commit mesajları `adim-58` yazar ve **değiştirilmedi**. Taşınan kayıtların hiçbirine
+> dokunulmadı — yalnız `doc-status` işaretleri düşürüldü.
+> **Sebep yapısal:** `Backend` ~50 dk + ruleset `strict: true` + main'in ~30–60 dk'lık landing
+> aralığı. **Auto-merge bunu kapatmaz** — "yeşili fark etme" gecikmesini kapatır, kapının
+> main'in landing aralığından uzun olmasını kapatmaz.
+>
+> **Dal güncel main'den YENİDEN KURULDU** (`0650369`), slice salt-additive uygulandı: üç asıl
+> belgesi main'in hiçbir değişikliğiyle çakışmıyordu (ölçüldü: `main:0`), çakışan tek şey
+> kapanış-ritüeli belgeleriydi. Böylece main'in kayıtları **onarımla değil yapı gereği**
+> dokunulmadan kaldı.
+
+**Tarih:** 2026-08-13/14 · **Base:** `origin/main` @ `0650369` · **Ürün kodu DEĞİŞMEDİ:**
+`backend/src`, `frontend/src`, `alembic` ağaçlarına tek satır dokunulmadı. Migration yok,
+`ENGINE_VERSION` / OpenAPI / OCC / Idempotency / route / react-query key el değmedi.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED. K-5 KAPANMADI.**
+
+### 1. Ne landed
+
+**(a) A-3'ün sorusu yeniden yazıldı.** Eski beklenti *"`h1→h2→h3` sırası atlamasız"*tı.
+Bu bir **makine beklentisiydi**: `specs/20-a11y-prechecks.spec.ts` atlamayı zaten her
+rotada sayıyor (**22 / 23**, K-5) — sonda `headingSkips`'i her rota için hesaplıyor
+(`:95-96`, `:109-114`). İnsandan istenen, sondanın çıktısını elle tekrarlamaktı — yani
+**denetim K-5'i kaç rota gezerse gezsin kapatamazdı**, çünkü soru kapatmayı sağlayacak
+bilgiyi hiç istemiyordu. Yeni beklenti: *başlık listesi sayfanın yapısını doğru gösteriyor
+mu; bir başlık ait olmadığı bir başlığın altında mı duruyor?* Gerekçe ve tuzak
+`a11y_screen_reader_audit_checklist.md` **§A-3 notu**'nda.
+
+**(b) İki maliyet ölçümü düzeltildi** (aşağıda §3).
+
+### 2. Bu bir gevşetme DEĞİL, imzalı karar da DEĞİL
+
+- **Ölçüm susturulmadı.** Precheck 22 / 23 saymaya devam eder; K-5 audit §6'da **Open**;
+  RC §6.5'te **Open**. Değişen tek şey **insandan ne istendiği**.
+- **`D-xx` YAZILMADI ve bu bilinçli.** D-10 (1.4.3 kontrast) ve D-11 (landmark kümesi)
+  bir **gözlemin dispozisyonunu** imzalar; bu slice **aracı** düzeltir ve K-5 hakkında
+  hiçbir uygunluk iddiası taşımaz. Sicile üçüncü bir satır yazmak *"K-5 adjudicated"*
+  diye okunurdu — **değil**. Sicil (`a11y_ci_ratchet_and_adjudication.md` §4) iki
+  kararda kaldı.
+- **Rota 1'in `—` hücresi `—` KALDI.** Eski cevap (*"atlamayı fark etmedim"*) yeni
+  soruya da cevap değil. Hücreyi doldurmak bir insanın rotor'da gezmesini bekler.
+
+**ADIM 57 (D-11) ile aynı sınıf değil, ama aynı ailedendir:** ADIM 57 *beklentinin* yanlış
+olduğunu kaydetti (hiçbir SC `contentinfo` istemiyor); bu slice *sorunun* yanlış sorulduğunu
+kaydediyor (insana makine işi veriliyordu). İkisi de üründe bir kusur bulmadı; ikisi de
+ölçümü susturmadı.
+
+### 3. İki maliyet düzeltmesi — ikisi de ölçüldü, tahmin değil
+
+1. **Tag-scoped CSS kuralı BEŞ değil ALTI.** Önceki her maliyet ifadesi beş sayıyordu;
+   `global.css:2261`'deki **`.data-guide-card h4`** listede yoktu. Tam liste:
+   `.card h3` (`:1040`) · `.card h4` (`:1041`) · `.ready-report-card h3` (`:412`) ·
+   `.state h3` (`:496`) · `.manual-drawer-header h3` (`:888`) · `.data-guide-card h4`
+   (`:2261`). Sayım `styles/` üzerinde **tüketici** — o dizinde tek CSS dosyası var.
+   Bunlar merdiveni kaydırmanın asıl tuzağıdır: selector unutulursa başlık UA varsayılanına
+   düşer, 23 görsel baseline kırılır.
+2. **Merdiveni kaydırmak bir v18 SAPMASI DEĞİL.** Mockup'ta
+   `h1: 0 · h2: 1 · h3: 0 · h4: 14 · h5: 0` — sevk edilen seviyeler oradan
+   **kopyalanmadı**. v18 *görünümü* dikte eder, görünüm CSS'te yaşar. Doğru sıra:
+   **önce altı kuralı sınıf-tabanlı yap, sonra tag'i oynat.** K-3'te footer'a karşı
+   geçerli olan v18 itirazı burada **geçerli değildir** — bu, bir gün K-5 düzeltilirse
+   itirazın nereden gelmeyeceğini sabitler.
+
+**Bonus okuma:** `/market-data` kaydı *"iki seviye atlıyor"* diyordu; eksikti. Dört
+numaralı rehber adımı `section.data-guide-card` içinde `<h4>` ve DOM sırasında sayfanın
+gerçek `<h3>` bölümlerinden **önce** geliyor (`MarketData.tsx:272–325` vs `:497/:805/:942`)
+→ rotor listesi `h1 → h4 h4 h4 h4 → h3 h3 h3`: adımlar hiçbir şeyin altına yerleşiyor,
+sonra seviye **yukarı** zıplıyor. Bu **yanlış yuvalama**, sayı boşluğu değil. **Ayrı
+kalem yapılMADI** — kapsam dışıydı; açık bırakıldı.
+
+### 4. Dürüst sınırlar
+
+- **K-5 KAPANMADI ve bu slice onu kapatmaya yaklaştırmadı.** Yalnızca kapatılabilir
+  hâle getirdi. Cevap hâlâ **yalnız A-08**'den gelir.
+- **A-08 DEĞİŞMEDİ:** defter 2 / 184 hücre, 0 / 10 akış, SR-1 hiç başlamadı,
+  çıkış kriterleri 0 / 4, `#514` **açık**.
+- **Outline'a dokunulmadı.** 204 başlık / 42 dosya yerinde duruyor.
+- **Suite'ler yerelde koşulmadı** (`docs/` dışına diff yok; bu container'da Postgres yok)
+  → **otorite CI**. Yerelde koşan: `generate_repository_facts.py --check` **OK**,
+  `agent-config-gate.mjs` **OK**, `memory_index.mjs --check` **OK**.

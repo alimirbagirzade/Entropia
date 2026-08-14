@@ -1056,7 +1056,7 @@ insan-gözü yarısı **açık kaldı**.
 | **K-2** | ~~**Skip link yok**~~ → **2026-08-12 (ADIM 50, PR #685) KAPANDI.** `Layout.tsx` shell'in ilk çocuğu olarak clip'lenmiş `Skip to main content` linki render ediyor; `<main>` `id="main-content"` + `tabIndex={-1}` taşıyor. **Fixle birlikte kayda geçen düzeltme:** 2.4.1 landmark'larla (ARIA11) **zaten karşılanıyordu** — axe `bypass` bu yüzden hep yeşildi — yani bu bir **uygunluk** değil **ergonomi** düzeltmesiydi; §6.5'in ilk yazımı bunu "WCAG 2.4.1" diye etiketleyerek olduğundan ağır göstermişti | was 23 / 23 | 2.4.1 | **FIXED** |
 | **K-3** | ~~**`contentinfo` landmark yok** — checklist A-2 dört landmark bekliyor, üç var~~ → **2026-08-13 ADJUDICATED, imzalı karar D-11** (`docs/implementation/a11y_ci_ratchet_and_adjudication.md` §4b). **Eksik olan ürün değil BEKLENTİYDİ:** hiçbir WCAG SC `contentinfo` zorunlu kılmaz (1.3.1 *var olan* yapıyı ister), Entropia footer sevk etmez, v18 mockup'ta footer yok. **A-2 artık ÜÇ landmark bekliyor.** Görünür footer fiyatlandırıldı ve **reddedildi** (23 baseline + Lighthouse yeniden tabanlama + yeni v18 sapma kaydı); **boş/gizli footer AÇIKÇA reddedildi** — sayacı yeşile çevirip rotor kullanıcısına hiçbir şey vermezdi. **Bu satırın eski `1.3.1 / 2.4.1` etiketi kalemi olduğundan ağır gösteriyordu** ve düzeltildi. Yönü doğrulayan insan gözlemi: A-08 SR-2, route 1, A-2 → denetçi üç landmark duydu, yokluğu **kozmetik** buldu | was 23 / 23 | — (hiçbir SC zorunlu kılmıyor) | **PO-APPROVE (D-11)** — precheck advisory'si **SUSTURULMADI** |
 | **K-4** | ~~**`/user-manual`'da `<h1>` yok**~~ → **2026-08-12 (ADIM 50, PR #685) KAPANDI.** Sayfa artık `<h1 class="page-title">` kullanıyor; `.page-title` sınıf tabanlı olduğu için değişiklik **yalnız semantik** — ve bu bir çıkarım değil **ölçüm**: görsel kapı (`@visual`, job `94223919309`) **23/23 passed**, tek bir baseline yeniden üretilmedi. Regresyon pini `specs/17-page-coverage.spec.ts` `level: 1` — eksik `<h1>`'i **BLOCKING** yapmak değerlendirildi ve **bilerek yapılmadı** (sonda ilk DOM'u okur, sayfaların veri render'ıyla yarışır; çırpınan kapı kapısızlıktan kötüdür). **YAN ETKİ:** sayfanın outline'ı `h2 → h3` iken `h1 → h3` oldu → **K-5'in kümesine girdi**, K-5 satırına bak | was 1 route | 1.3.1 / 2.4.6 | **FIXED** |
-| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); K-2 ve K-4 kapandıktan sonra setin **en yüksek erişimli** gözlemi. `/market-data` **iki seviye** atlıyor (`h1 → h4`) | **22 / 23 route** — ADIM 50'de yeniden ölçüldü (CI job `94221023796`); önceki `21 / 23`. **+1 = `/user-manual`**, K-4'ün fix'i onu bu kümeye **soktu** (bilinen ve kabul edilen bedel). Set dışında yalnız `/` kaldı | 1.3.1 (A-3) | Open — reported, not gated |
+| **K-5** | **Başlık hiyerarşisi h2'yi atlıyor** — `h1 → h3` doğrudan (ör. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`); K-2 ve K-4 kapandıktan sonra setin **en yüksek erişimli** gözlemi. **`/market-data` ayrı bir kusur** — "iki seviye atlıyor" ifadesi eksikti (yeniden okundu 2026-08-13): dört numaralı rehber adımı `section.data-guide-card` içinde `<h4>` ve DOM sırasında sayfanın gerçek `<h3>` bölümlerinden **önce** geliyor → rotor listesi `h1 → h4 h4 h4 h4 → h3 h3 h3` okunuyor, adımlar hiçbir şeyin altına yerleşip sonra seviye **yukarı** zıplıyor. Bu **yanlış yuvalama**, sayı boşluğu değil; ayrı kalem olup olmayacağı **açık** | **22 / 23 route** — ADIM 50'de yeniden ölçüldü (CI job `94221023796`); önceki `21 / 23`. **+1 = `/user-manual`**, K-4'ün fix'i onu bu kümeye **soktu** (bilinen ve kabul edilen bedel). Set dışında yalnız `/` kaldı | 1.3.1 (A-3) | Open — reported, not gated |
 | **K-6a** | **Odak göstergesi computed style ile saptanamıyor** — `outline: none; box-shadow: none`; UA varsayılan halkası hâlâ boyanıyor olabilir, computed-style probu onu göremez | probe: 1 element | 2.4.7 | Open — **insan gözü gerekiyor** |
 | **K-6b** | **Odak halkasının kontrastı 3:1'in altında** — `:focus-visible` halkası `var(--accent)` (`#00a9e8`) idi: beyazda **2.68:1**, `#f5f5f5`'te **2.46:1**, `.dropdown-blue` üzerinde **1.00:1**; uygulamadaki **15 zeminin hiçbirinde** eşiği geçmiyordu | her odaklanabilir düğüm, **23 / 23 route** | **1.4.11** | **KAPANDI (`#688`, 2026-08-12)** — halka `var(--text)`; beyaz **15.91:1**, en kötü zemin `#0092c8` **4.50:1** |
 
@@ -1065,14 +1065,32 @@ yanıltıyor mu) **sayfaların outline'ını yeniden kesmeyi önermeden ÖNCE** 
 K-6a tam olarak otomasyonun karara bağlayamayacağı sınıftır. A-08 koşulmadığı için ikisi de
 **cevapsızdır**.
 
+**A-3'ün SORUSU YENİDEN YAZILDI (2026-08-13) — kalem hâlâ Open.** Eski beklenti
+*"`h1→h2→h3` sırası atlamasız"*tı; bunu sonda zaten sayıyor (22/23), yani insandan
+makine çıktısını tekrarlaması isteniyordu → **denetim K-5'i kaç rota gezerse gezsin
+kapatamazdı**. Yeni soru atlamanın **yanıltıp yanıltmadığını** istiyor
+(`a11y_screen_reader_audit_checklist.md` §A-3 notu). **Gevşetme değil:** advisory
+susturulmadı, 22/23 sayılmaya devam ediyor, K-5 `Open`. **İmzalı karar da değil** —
+D-10/D-11 bir gözlemin **dispozisyonunu** imzalar, bu **aracı** düzeltir ve K-5
+hakkında hiçbir uygunluk iddiası taşımaz; sicile `D-xx` **yazılmadı**. Bunun somut
+gerekçesi ölçüldü: SR-2 rota 1'de hücre `—` kaldı, çünkü *"fark etmedim"* iki ayrı
+şeyi ayırt etmiyordu. **O hücre `—` KALIR.**
+
 **ADIM 50'nin K-5 hakkında ölçtüğü iki şey — ikisi de "düzelt" demiyor:**
 
 1. **Maliyet artık tahmin değil, sayı.** Merdiveni bir basamak kaydırmak
    (`h3→h2, h4→h3, …`) **204 başlık / ~40 dosya** demek (`<h3>` 98/36, `<h4>` 76/23,
-   `<h5>` 28/6, `<h6>` 2/1). Asıl tuzak CSS'te: başlık stilleri **tag-scoped descendant
-   selector**'larla yazılmış (`global.css` `.card h3`, `.card h4`, `.ready-report-card h3`,
-   `.state h3`, `.manual-drawer-header h3`) → tag değişip selector unutulan her yerde
-   başlık UA varsayılanına düşer ve v18 stili bozulur.
+   `<h5>` 28/6, `<h6>` 2/1; **42 tekil dosya**). Asıl tuzak CSS'te: başlık stilleri
+   **tag-scoped descendant selector**'larla yazılmış → tag değişip selector unutulan her
+   yerde başlık UA varsayılanına düşer ve v18 stili bozulur. **Kural sayısı BEŞ değil
+   ALTI** (yeniden sayıldı 2026-08-13, `styles/` tek dosya): `.card h3`, `.card h4`,
+   `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3` **ve
+   `.data-guide-card h4`** (`global.css:2261`) — altıncısı önceki her maliyet
+   ifadesinde eksikti.
+   **Bu maliyet bir v18 SAPMASI DEĞİL:** mockup'ta `h1: 0 · h2: 1 · h3: 0 · h4: 14 ·
+   h5: 0` — sevk edilen seviyeler oradan **kopyalanmadı**. v18 *görünümü* dikte eder,
+   görünüm CSS'te yaşar → doğru sıra **önce altı kuralı sınıfa çevir, sonra tag'i
+   oynat**. K-3'te footer'a karşı geçerli olan v18 itirazı burada geçerli **değildir**.
 2. **K-4'ün fix'i K-5'i BÜYÜTTÜ — ölçüldü, tahmin edilmedi.** CI job `94221023796` satırı
    birebir bastı: `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA
    USER MANUAL"` → **K-5 21 → 22**. Bilinen ve kabul edilen bedel. Toplam advisory

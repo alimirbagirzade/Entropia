@@ -44,11 +44,24 @@ HONEST BOUNDARY — what this module does NOT do
 -----------------------------------------------
 1. **No production caller.** ``application/jobs/backtest_engine.py`` still loops over ITEMS and
    folds finished runs with ``combine_item_runs``. Wiring it needs an ``ItemParticipant`` backed
-   by the real engine, i.e. a per-item replay that can be advanced to a given ``t`` — ADR §12's
-   **ADIM 16** stepper, which was never written (``grep -n "def step" engine.py`` returns
-   nothing; the bar loop is nested at ``engine.py:1782`` inside a ~1100-line function). Until
-   that exists, the only participant is the oracle package's scripted one, and
+   by the real engine, i.e. a per-item replay that can be advanced to a given ``t``. Until that
+   adapter exists, the only participant is the oracle package's scripted one, and
    ``SHARED_ALLOCATION_STATUS`` stays ``future_dev``.
+
+   **What is missing is the ADAPTER, not the stepper.** This paragraph used to say the stepper
+   "was never written" and offered ``grep -n "def step" engine.py`` as the check. That was true
+   when it was written and stopped being true on 2026-08-05: ADR §12's **ADIM 16** landed as
+   PR #602 (see that ADR's own AMENDMENT, which supersedes the SKIPPED paragraph above it).
+   ``engine._build_stepper`` is now ``run_engine``'s body up to the bar loop and hands back an
+   ``_ItemStepper`` that can be entered one bar at a time; ``run_engine`` keeps its signature and
+   its semantics and is a short driver over it, and all 46 golden digests were unmoved. So the
+   grep the old text prescribed now returns hits, and a reader running it would conclude this
+   containment had lapsed. **It has not.** ADIM 16 added no caller — the boundary this item
+   states is intact and is asserted, not assumed, by
+   ``tests/unit/oracles/test_oracle_portfolio_containment_gate.py::
+   test_the_phase_loop_exists_but_no_production_path_reaches_it``. Only the reason changed:
+   the remaining work is the ``ItemParticipant`` adapter over the stepper plus the call-site
+   change, which ADR §16 puts behind a human gate.
 2. **P0 / P2 / P8 are not modelled.** Data admission is the clock's cursor (P0); pending fills
    (P2) and same-direction scaling (P8) belong to the item's own execution model. An admitted
    ``scale_in`` therefore raises :class:`UnsupportedIntentKindError` rather than being applied

@@ -608,11 +608,53 @@ CURRENT_BANNER = (
 )
 
 
+# `docs/ADIM<n>_…KICKOFF.md` is this repo's slice-kickoff naming, and <n> is the
+# slice order. The count rule below cannot tell WHICH document should be live, so
+# a promotion landing on the wrong file stays green: #697 marked its own ADIM 56
+# kickoff `historical` and left ADIM 55 live, and #714 then promoted ADIM 56 after
+# ADIM 57 had landed. Both left exactly one `current` document — the wrong one.
+KICKOFF_GLOBS = ("docs/*KICKOFF*.md",)
+ADIM_KICKOFF_RE = re.compile(r"^ADIM(\d+)\D.*KICKOFF\.md$")
+
+
 def _expand(root: Path, globs: tuple[str, ...]) -> list[Path]:
     seen: set[Path] = set()
     for pattern in globs:
         seen.update(p for p in root.glob(pattern) if p.is_file())
     return sorted(seen)
+
+
+def _adim_kickoff_number(path: Path) -> int | None:
+    """Slice number of an `ADIM<n>…KICKOFF.md`, or None for any other kickoff name."""
+    match = ADIM_KICKOFF_RE.match(path.name)
+    return int(match.group(1)) if match else None
+
+
+def _check_live_kickoff_is_newest(root: Path, current_rel: str) -> list[str]:
+    """The live kickoff must be the newest slice's — nothing may supersede it.
+
+    Deliberately silent when the live document is not slice-numbered: there is no
+    ordering to compare it against, and inventing one would fail a naming scheme
+    this repo has not adopted yet. A wrong-but-unordered marker is a smaller risk
+    than a gate that locks every merge behind `strict` required checks.
+    """
+    live_number = _adim_kickoff_number(root / current_rel)
+    if live_number is None:
+        return []
+
+    newer = sorted(
+        p.relative_to(root).as_posix()
+        for p in _expand(root, KICKOFF_GLOBS)
+        if (number := _adim_kickoff_number(p)) is not None and number > live_number
+    )
+    if not newer:
+        return []
+    return [
+        f"{current_rel}: marked `current`, but a newer slice kickoff exists: "
+        + ", ".join(newer)
+        + ". The resume seed must be the newest slice's kickoff — demote this one "
+        "and promote the newest."
+    ]
 
 
 def _doc_status(path: Path) -> str | None:
@@ -649,6 +691,10 @@ def check_classification(root: Path) -> list[str]:
             + ", ".join(sorted(current_docs))
             + ". Exactly one kickoff may be live; demote the superseded one(s)."
         )
+    elif len(current_docs) == 1:
+        # Only meaningful once the count is settled: with two live documents the
+        # rule above already names the defect, and "which one" has no answer yet.
+        failures.extend(_check_live_kickoff_is_newest(root, current_docs[0]))
     return failures
 
 

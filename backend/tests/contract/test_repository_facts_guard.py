@@ -229,6 +229,44 @@ def test_two_live_kickoffs_cannot_coexist(tmp_path: Path) -> None:
     assert any("more than one document claims" in f for f in failures)
 
 
+def test_a_superseded_kickoff_cannot_stay_live(tmp_path: Path) -> None:
+    """#697 shipped exactly this: ADIM 56 landed, its own kickoff was marked
+    `historical`, and ADIM 55 kept the live marker. One `current` document, so the
+    count rule stayed green while every fresh session read a stale resume seed."""
+    _write(tmp_path, "docs/ADIM55_LANDED_KICKOFF.md", gate.CURRENT_BANNER + "\n# 55\n")
+    _write(tmp_path, "docs/ADIM56_LANDED_KICKOFF.md", gate.HISTORICAL_BANNER + "\n# 56\n")
+    failures = gate.check_classification(tmp_path)
+    assert any("newer slice kickoff exists" in f for f in failures)
+    assert any("docs/ADIM56_LANDED_KICKOFF.md" in f for f in failures)
+
+
+def test_promoting_a_kickoff_that_is_already_behind_is_caught(tmp_path: Path) -> None:
+    """#714 shipped the mirror image: ADIM 56 was promoted after ADIM 57 had landed.
+    Correct when it was written, one slice behind by the time it was pushed."""
+    _write(tmp_path, "docs/ADIM55_LANDED_KICKOFF.md", gate.HISTORICAL_BANNER + "\n# 55\n")
+    _write(tmp_path, "docs/ADIM56_LANDED_KICKOFF.md", gate.CURRENT_BANNER + "\n# 56\n")
+    _write(tmp_path, "docs/ADIM57_LANDED_KICKOFF.md", gate.HISTORICAL_BANNER + "\n# 57\n")
+    failures = gate.check_classification(tmp_path)
+    assert any("newer slice kickoff exists" in f for f in failures)
+
+
+def test_the_newest_kickoff_may_be_live(tmp_path: Path) -> None:
+    """Negative control: the rule must not fire on the arrangement it is asking for."""
+    _write(tmp_path, "docs/ADIM55_LANDED_KICKOFF.md", gate.HISTORICAL_BANNER + "\n# 55\n")
+    _write(tmp_path, "docs/ADIM56_LANDED_KICKOFF.md", gate.HISTORICAL_BANNER + "\n# 56\n")
+    _write(tmp_path, "docs/ADIM57_LANDED_KICKOFF.md", gate.CURRENT_BANNER + "\n# 57\n")
+    assert gate.check_classification(tmp_path) == []
+
+
+def test_an_unnumbered_live_kickoff_is_left_alone(tmp_path: Path) -> None:
+    """Deliberate silence, not an oversight: `STAGE*`/`O02`-style kickoffs carry no
+    slice order, so there is nothing to compare them against. Ordering them by
+    invention would redden a naming scheme this repo has not adopted."""
+    _write(tmp_path, "docs/STAGE9_KICKOFF.md", gate.CURRENT_BANNER + "\n# stage 9\n")
+    _write(tmp_path, "docs/ADIM57_LANDED_KICKOFF.md", gate.HISTORICAL_BANNER + "\n# 57\n")
+    assert gate.check_classification(tmp_path) == []
+
+
 def test_a_history_record_may_never_be_marked_current(tmp_path: Path) -> None:
     _write(tmp_path, "docs/PROJECT_HISTORY.md", gate.CURRENT_BANNER + "\n# history\n")
     failures = gate.check_classification(tmp_path)

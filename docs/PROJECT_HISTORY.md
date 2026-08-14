@@ -9757,3 +9757,85 @@ kalem yapılMADI** — kapsam dışıydı; açık bırakıldı.
 - **Suite'ler yerelde koşulmadı** (`docs/` dışına diff yok; bu container'da Postgres yok)
   → **otorite CI**. Yerelde koşan: `generate_repository_facts.py --check` **OK**,
   `agent-config-gate.mjs` **OK**, `memory_index.mjs --check` **OK**.
+
+## ADIM 64 — kabul borcu sınıf B, parti 04 (Backtest Result satır değişmezliği, doc 16, PR #704)
+
+> **NUMARA NOTU — bu slice ÜÇ kez taşındı: 60 → 62 → 63 → 64.** ADIM 60 olarak yazıldı;
+> beklerken `#716` 60'ı, `#723` 61'i, `#712` 62'yi ve `#719` 63'ü **merge edilmiş adla** aldı.
+> Numaralar yeniden atanmaz, **merge edilmiş ad kazanır**. Dal `claude/acceptance-debt-class-b-o3tc84`.
+>
+> **Dal güncel main'den YENİDEN KURULDU** ve slice salt-additive uygulandı. Önceki turda
+> `5b7c6e7`'deki otomatik main merge'i **her belge çakışmasını bu dalın lehine çözüp**
+> main'in ADIM 59 kayıtlarını dört belgeden **silmişti** — CLAUDE.md'nin #590/#604 olarak
+> kaydettiği docs regresyonunun aynısı. Yeniden kurma bunu **onarımla değil yapı gereği**
+> imkânsız kılar: dört asıl dosyası (`test_result_row_immutability.py` + üç kabul artefaktı)
+> main'in hiçbir değişikliğiyle çakışmıyor (ölçüldü: `main:0`).
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Ürün kodu **DEĞİŞMEDİ**;
+migration yok, `ENGINE_VERSION`/OpenAPI sabit. **`partial` 111 → 106, `debt_class.B`
+80 → 75.** Kapananlar: **`RH-05` · `RH-10` · `RH-11` · `RH-12` · `RH-16`**.
+
+Tek tema: *bir Result satırı tarihsel kayıttır; onu okumak, karşılaştırmak, yeniden
+profillemek ya da üzerine inşa etmek satıra **dokunamaz** — ve ona meşru olarak dokunan
+iki işlem (soft delete, restore) denetim izi bırakmak ve artifact hash'lerini korumak
+zorundadır.* Suite bugüne dek **projeksiyon** tarafını kanıtlamıştı (History ne
+listeliyor, kim görebiliyor); **satırı komşu bir işlemden sonra geri okumak** hiç
+yapılmamıştı. Yeni modül her testte önce kolonları anlık görüntüler, sonra karşılaştırır.
+
+### Ölçüldü, varsayılmadı — iki olay adı sevk edilmemiş
+
+Doc 16 iki audit olayını `RESULT_SOFT_DELETED` ve `RESULT_RESTORED` diye adlandırıyor.
+**İkisi de yok.** Sevk edilenler: `backtest.result_soft_deleted` (komutun yazdığı) ve
+`trash.restored` (generic trash restore yolunun yazdığı — bu **ölçerek** bulundu, yeni
+kind'ları diff'leyerek). O-02/O-31 emsaline göre **sevk edilen ad kanoniktir**; belgenin
+adı tarihseldir. Restore assertion'ı ayrıca `target_entity_id`'yi sonuca pinliyor —
+yoksa test "herhangi bir trash etkinliği" ile geçerdi.
+
+### Bunu bir "delete smoke test"i olmaktan çıkaran şey
+
+`RH-11`'de satırın **tam olarak** `{deletion_state, row_version}` kümesinde hareket
+ettiği assert ediliyor (`moved == {...}`). Her iki refüz testi de (`RH-16`, `RH-10`)
+reddedilen çağrıdan **sonra** satırı yeniden okuyor: refüzün kendisi iddianın yarısı,
+diğer yarısı hiçbir şeyin değişmemesi. `RH-12.c3` artifact checksum'larını round-trip
+boyunca bit-bit karşılaştırıyor — yeniden türeten bir restore, sonraki her doğrulamayı
+sessizce geçersiz kılardı.
+
+### Negatif kontroller (dördü de düştü)
+
+Doğru token gönderilince `RH-16`'nın conflict beklentisi kayboluyor · `moved == set()`
+beklenince `RH-11` düşüyor · bozuk checksum tuple'ıyla `RH-12` düşüyor · doctored
+snapshot'la `RH-05` düşüyor.
+
+`ruff` **B017** ilk taslaktaki `pytest.raises(Exception)`'ı yakaladı — compare refüzü
+artık tipli (`CompareRequiresTwoDistinctResultsError`). Kör exception zaten zayıf bir
+assertion'dı; linter'ın kapsam içi bir kalite bulgusu.
+
+### ÖLÇÜLÜP ERTELENENLER (tesisat, davranışa şüphe değil)
+
+- **`RH-13.c2`** — `_digest_from_rows` **sabit** `KEY_METRIC_KEYS` üzerinden filtreliyor,
+  yani profil revizyonu digest'e ulaşamaz; ama kanıtlamak için metrik **registry**'sinin
+  seed'lenmesi gerekiyor (aksi halde `MetricCodeUnknownError`).
+- **`RH-14.c3`** — `create_analysis_artifact` capability-gated; kanıt registry'nin
+  Limited'a yürütülmesini ister (`_walk_to_limited`), o helper bu modülün principal'larıyla
+  çakışıyor.
+
+İkisi de sonraki partinin ilk iki kalemi. ADIM 54'teki `RD-09.c4` kararının aynısı:
+**yarım kanıtla işaretlemek yerine dürüst kapsam.**
+
+### Devreden bulgu
+
+**#703 açıldı** (ADIM 54'ün bulgusu): `revision.native_asset_id` üretimde **hiç
+yazılmıyor**, yalnız `queries/funding.py`'de okunuyor → funding-enabled backtest,
+uygulama içinde üretilmiş hiçbir research dataset ile çalışamıyor. Üç funding testi de
+satırı elle kurduğu için görünmemişti. **Ürün kodu değiştirilmedi**; `RD-09.c4` bu
+issue'ya bağlı ve açık.
+
+**Defterde altı açık bulgu var** (`TL-11.c3`, `TL-16`, `TL-01.c4`, `RD-01.c4`, `RD-05.c5`,
+`RD-11.c2`) + #703. **P1-Gate3 KAPANMADI** — A=1 · B=75 · C=6 · D=32, açık **114**.
+
+### Doğrulama (bu turda, güncel main üzerinde)
+
+Yeni modül **5 test** topluyor (import temiz). `acceptance_semantic_scan --ratchet`
+**geçti**: 106 partial / 8 uncovered, dondurulmuş tavanla birebir; sınıflar
+A=1 · B=75 · C=6 · D=32. **Postgres bu container'da yok** → integration testleri yerelde
+koşmadı; **otorite CI**.

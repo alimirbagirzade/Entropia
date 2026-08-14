@@ -6282,6 +6282,58 @@ atlamanın **yanıltıp yanıltmadığını** istiyor.
 5. **`/market-data` ayrı bir kusurdur** — sayı boşluğu değil **yanlış yuvalama**
    (`h1 → h4×4 → h3×3`). Ayrı kalem yapılmadı, açık bırakıldı.
 
+## Stage 64 — kabul borcu sınıf B, parti 04: Backtest Result satır değişmezliği (doc 16, PR #704) landed
+
+**Ne indi.** Doc 16 (Results History) kabul borcundan **beş kriter**: `RH-05` · `RH-10` ·
+`RH-11` · `RH-12` · `RH-16`. **`partial` 111 → 106**, **`debt_class.B` 80 → 75**.
+**Ürün kodu DEĞİŞMEDİ** — tek yeni dosya `backend/tests/integration/test_result_row_immutability.py`.
+Blocker sayısı **değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+**Tema:** bir Result satırı tarihsel kayıttır — okumak, karşılaştırmak, üzerine inşa etmek
+ona dokunamaz; dokunan iki işlem (soft delete, restore) denetlenir ve içerik hash'lerini korur.
+Suite bunu **projeksiyon** üzerinden kanıtlamıştı; satırı komşu işlemden sonra **geri okumayı**
+hiç yapmamıştı.
+
+### Reuse anchor'ları (tam adlarıyla)
+
+| Anchor | Ne için |
+|---|---|
+| `tests/integration/test_result_row_immutability.py::_snapshot` | Kolonları anlık görüntüler; "hiçbir şey değişmedi" iddiasının taşıyıcısı |
+| `…::_reread` | Komşu işlemden **sonra** satırı geri okur — bu modülün tüm değeri burada |
+| `…::_checksums` / `::_manifest_snapshot` | Artifact hash'lerinin round-trip boyunca bit-bit korunduğunu pinler |
+| `…::_count_result_audits` | Audit satırını `target_entity_id` ile pinler |
+
+### Pazarlıksız — bir sonraki parti bunları bilmeden dokunmasın
+
+1. **İki olay adı sevk edilmemiş.** Doc 16 `RESULT_SOFT_DELETED` / `RESULT_RESTORED` der;
+   sevk edilenler **`backtest.result_soft_deleted`** ve **`trash.restored`**. O-02/O-31
+   emsali: **sevk edilen ad kanoniktir**. Restore testi `target_entity_id`'yi pinler —
+   yoksa **herhangi bir** trash etkinliğiyle geçerdi.
+2. **`moved == {...}` kümesi tam olmalı.** `RH-11` satırın *tam olarak*
+   `{deletion_state, row_version}` kümesinde hareket ettiğini assert eder; gevşetmek testi
+   bir "delete smoke test"ine indirir.
+3. **Refüz testleri refüzden SONRA satırı geri okur.** Refüz iddianın yarısı; diğer yarısı
+   hiçbir şeyin değişmemesi.
+4. **`pytest.raises(Exception)` yazma** — `ruff` B017 yakalar ve kör exception zaten zayıf
+   bir assertion'dır. Compare refüzü tipli: `CompareRequiresTwoDistinctResultsError`.
+
+### Ölçülüp ERTELENENLER — sonraki partinin ilk iki kalemi
+
+- **`RH-13.c2`** — `_digest_from_rows` **sabit** `KEY_METRIC_KEYS` üzerinden filtreler
+  (profil revizyonu digest'e ulaşamaz); kanıt metrik **registry**'sinin seed'lenmesini ister,
+  yoksa `MetricCodeUnknownError`.
+- **`RH-14.c3`** — `create_analysis_artifact` capability-gated; kanıt registry'nin Limited'a
+  yürütülmesini ister (`_walk_to_limited`), o helper bu modülün principal'larıyla çakışır.
+
+**Yarım kanıtla işaretleme** — ADIM 54'ün `RD-09.c4` kararının aynısı.
+
+### Devreden
+
+**#703 açık:** `revision.native_asset_id` üretimde **hiç yazılmıyor**, yalnız
+`queries/funding.py`'de okunuyor → funding-enabled backtest, uygulama içinde üretilmiş
+hiçbir research dataset ile çalışamaz. `RD-09.c4` buna bağlı. **P1-Gate3 KAPANMADI**
+(A=1 · B=75 · C=6 · D=32, açık **114**).
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

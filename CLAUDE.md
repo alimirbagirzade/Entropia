@@ -223,13 +223,17 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
-> **HEAD `ac5cf50`** · **alembic head `0043_i08_registry_strategy_fks`** · `ENGINE_VERSION`
-> değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`. Test sayıları: **toplanan** için
+> **alembic head `0043_i08_registry_strategy_fks`** · **`ENGINE_VERSION` DEĞİŞTİ** →
+> `backtest-engine-v18-percent-sizing-per-fill-commission` (**#720**, 2026-08-14: #550/#551/#552
+> KAPANDI) · `SHARED_ALLOCATION_STATUS` = `future_dev`. Test sayıları: **toplanan** için
 > `docs/generated/repository_facts.md`, **geçen** için CI. **Son dalga — P-B (kapanış
 > uzlaştırması, DOCS-ONLY): ürün davranışı DEĞİŞMEDİ. Blocker 1 (yalnız A-08), BLOCKED.**
 > Üç W0 denetimi güncel main'e karşı uzlaştırıldı; DR-2/DR-3/DR-4 (bayat sayılar) onarıldı,
 > `_ItemStepper`'ın "hiç yazılmadı" iddiası son yerinde de kapatıldı, portfolio alt sistemi
-> ilk kez codemap'e girdi. **Next: P-C1 + P-C2.**
+> ilk kez codemap'e girdi. **AÇIK (insan):** #720 per-fill komisyonu **sevk etti** ama
+> `docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1 **İMZASIZ** ve `PD-2`
+> repoda **kayıtlı değil** → komisyon modeli yazılı adjudication'sız sevk edilmiş durumda.
+> **Next: P-C1 + P-C2.**
 > `docs/audit/final_closure_reconciliation_2026-08-13.md`.
 >
 > Öncesinde **HEAD `e547391`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·

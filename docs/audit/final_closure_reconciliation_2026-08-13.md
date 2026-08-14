@@ -5,6 +5,10 @@
 > **`historical` işareti bu belgenin bulgularını geçersiz kılmaz** — bu repoda her denetim
 > kaydı `historical`'dır (üç W0 denetimi dahil), çünkü `current` yalnız canlı kickoff'a
 > aittir ve `check_classification` bunu CI'da zorlar.
+>
+> **`main` bu belge açıkken İKİ KEZ ilerledi** (#709, sonra #720). Gövde `ac5cf50`'de
+> ölçüldüğü gibi bırakıldı; **ne bayatladığı §15'te ayrıca kayıtlıdır** — özellikle
+> #550/#551/#552'nin KAPANDIĞI ve `ENGINE_VERSION`'ın DEĞİŞTİĞİ. §4'ü okumadan önce §15'e bak.
 
 # P-B — Final closure reconciliation
 
@@ -46,7 +50,7 @@ this document describes `main`, not either branch:
 
 | PR / branch | What it would change | State |
 |---|---|---|
-| **#720** `feat/stage-58-sizing-commission-zero-size` | fixes #550 / #551 / #552; bumps `ENGINE_VERSION` to `backtest-engine-v18-percent-sizing-per-fill-commission` | **OPEN**, `mergeable_state: blocked`, 52 files, +1090 −226 |
+| **#720** `feat/stage-58-sizing-commission-zero-size` | fixes #550 / #551 / #552; bumps `ENGINE_VERSION` to `backtest-engine-v18-percent-sizing-per-fill-commission` | **OPEN** when measured — **MERGED 2026-08-14 07:48Z as `5e52465`. → §15** |
 | `fix/closure-e2-ready-check-batching` (P-E2) | batches the two residual Ready Check N+1 legs | **NOT MERGED** — 1 commit ahead of `ac5cf50` |
 
 > **`docs/decisions/closure_product_decisions_2026-08-13.md` ARRIVED WHILE THIS DOCUMENT WAS
@@ -186,7 +190,9 @@ That is the **ADR §16 human gate**, and it is in force.
 
 ## §4 — Implementation truth: financial semantics
 
-**All three defects are live on `ac5cf50`.** Re-verified this session at the exact line:
+**All three defects are live on `ac5cf50`.** Re-verified this session at the exact line.
+> **EXPIRED 2026-08-14 07:48Z — PR #720 merged and fixed all three. The measurement below
+> is left exactly as taken; its expiry is recorded separately in §15.**
 
 | # | Site on current `main` | Verbatim |
 |---|---|---|
@@ -606,9 +612,9 @@ containment being deliberate, or A-08's numbers.
 | `project_portfolio_run` | ADR §14 A4/A18 | `execution/portfolio_projection.py:513` — module has **0 importers** | — | **EXISTS and is UNWIRED** | #582 open | codemap §5.5 |
 | `build_portfolio_manifest` | doc 13 §13, ADR §10.1 | `execution/provenance.py:473` — module has **0 importers** | — | **EXISTS and is UNWIRED** | #582 open | codemap §5.5 |
 | `SHARED_ALLOCATION_STATUS` | ADR §10.4, doc 13 §14 | `capability.py:105` = `future_dev`; 2 enforcement points | sometimes read as a gap | **DELIBERATE FAIL-CLOSED CONTAINMENT** | — | §8 |
-| #550 sizing units | Master Ref §10.1 | `sizing.py:216` — **live** | — | live; option A decided, **unimplemented on `main`** | **OPEN** `reopened`, PR #720 open | §4 |
-| #551 phantom trade | Master Ref §10.1 | `engine.py:1462` — **live** | body's claim (b) refuted | live for metrics + fee; **(b) does NOT reproduce** | **OPEN** `reopened`, PR #720 open | body fix = human |
-| #552 commission | Master Ref 3110 / 7513 | `booking.py:93` — **live** | — | live; **split claimed decided by #720 (PD-2) but UNRECORDED; brief §Karar 1 unsigned; basis open** | **OPEN** `reopened`, PR #720 open | §7.1 — **human** |
+| #550 sizing units | Master Ref §10.1 | ~~`sizing.py:216`~~ — **FIXED by #720** | — | was live at `ac5cf50`; **option A now shipped** | **CLOSED `completed`** | §15 |
+| #551 phantom trade | Master Ref §10.1 | ~~`engine.py:1462`~~ — **FIXED by #720** | body's claim (b) refuted | was live; **(b) still does NOT reproduce** — #720 re-confirmed the refutation | **CLOSED `completed`** | body fix = **human** |
+| #552 commission | Master Ref 3110 / 7513 | ~~`booking.py:93`~~ — **per-fill shipped by #720** | — | **split now SHIPPED but still UNRECORDED (Karar 1 unsigned); basis + manifest publication open** | **CLOSED `completed`** | §15.1 — **human** |
 | #617 / #618 | — | repaired by `6da8a95` (**#681**) | *"#617/#618 açık kaldı"* (ADIM 46) | **CLOSED `completed` 2026-08-13 11:07Z.** #619 is the **measurement** PR, not the repair | **CLOSED** | `CLAUDE.md` repaired §6.2 |
 | Residual N+1 legs | — | `readiness_check.py:554`, `:749` — slope **1.0**, live | — | live; **P-E2 NOT merged** | **no issue exists** | file one = human |
 | #558 | doc 12 §9.1/§9.2 | `bundle_hash` invariant under policy change (measured) | — | live; **product decision** | **OPEN** `reopened`, `product-decision` | §7 |
@@ -618,6 +624,59 @@ containment being deliberate, or A-08's numbers.
 | DR-2 / DR-3 / DR-4 | `repository_facts.md` | 3545 collected · 716 call sites / 72 files | `2712` · `92.06%` · `84.67%` presented as current | **stale baseline; the generated artefact is the authority; only CI reports passes** | — | repaired §5.2 |
 | Product decisions | brief `#709` (2026-08-14) | — | *"no decision record exists"* (true at `ac5cf50`) | **brief EXISTS; all three signatures EMPTY. `PD-2`, cited by #720 as settling commission, is recorded NOWHERE** | #552/#558/#559 all OPEN | **human — §7.1** |
 | Codemap portfolio coverage | — | none | — | **structural gap — the coverage gate does not reach `domain/`** | — | filled §5.5 |
+
+---
+
+## §15 — Addendum: what changed on `main` after this document's base
+
+Everything above was measured at `ac5cf50` and is left **exactly as measured**. Between that
+base and this document merging, `main` advanced twice. Recorded here rather than edited in
+place, so the measurement and its expiry stay separately readable — the pattern P-A3 §I set.
+
+| Item | Measured at `ac5cf50` | State on `main` (`5e52465`) |
+|---|---|---|
+| **#550 / #551 / #552** | live, re-verified at `sizing.py:216`, `engine.py:1462`, `booking.py:93` | **FIXED.** PR **#720** merged 2026-08-14 07:48Z. All three issues **CLOSED `completed`**. The three sites no longer carry the defective statements |
+| **`ENGINE_VERSION`** | `backtest-engine-v18-gap-adjusted-stop-fill`, *"unchanged on `main`"* | **`backtest-engine-v18-percent-sizing-per-fill-commission`** (`manifest.py:145`) — the namespace shifted, as A15 discipline requires |
+| **PO-4** (bust-equity 0-size fill) | open | **answered** — the documented invariant was deliberately reversed and disclosed |
+| **PO-5** (transition gate) | open | **answered** — `STRATEGY_SIZING_SEMANTICS_UNCONFIRMED` **blocks** a pre-cutover revision |
+| **#709 decision brief** | Karar 1 / 2 / 3 all unsigned | **still unsigned** — `:283`, `:477`, `:717` unchanged |
+| Backend tests **collected** | 3545 in 338 files | **3552 in 338 files** |
+| Frontend call sites | 716 in 72 files | **717 in 72 files** |
+
+### 15.1 The PD-2 recording gap survived the merge — stated as fact, not as objection
+
+§7.1 recorded that PR #720 justified a money-changing change with a `PD-2` the repository does
+not record, while the brief for that same question sat unsigned. **#720 has since merged, and
+Karar 1's signature line is still empty.**
+
+**The merge decision belongs to the product owner and is not questioned here.** What is
+recorded is narrower and is a documentation-truth fact: **the commission model is now shipped
+behaviour with no written adjudication in the repository.** `grep` for `PD-2` across `docs/`
+and `CLAUDE.md` still returns zero.
+
+Two consequences a later reader needs, neither of which is a criticism of the choice:
+
+* **PO-6's *basis* half remains genuinely open** — canon (Master Ref line 3110) defines
+  commission as **bps on notional**; the shipped model is per-fill. #720 says so itself. Canon
+  line 7513 also still requires the `komisyon dağılımı` to be **published in the manifest**,
+  and line 7425 the currency and resolved default. Shipping per-fill did not discharge those.
+* **The brief is now partly overtaken by events.** Its Karar 1 offers options A/B/C/D as if the
+  question were open; option **A (per-fill) is now the shipped behaviour**. Signing it later
+  means ratifying what already ships, which is a different act from choosing. Whoever signs it
+  should say which of the two they are doing.
+
+### 15.2 What did NOT change
+
+* **Blocker count: 1 (A-08 only). Verdict: BLOCKED.** #720 touched nothing A-08 depends on.
+* **`SHARED_ALLOCATION_STATUS` is still `future_dev`**, both enforcement points intact.
+* **The whole of §3 stands** — `run_portfolio`, `ItemParticipant`, `project_portfolio_run` and
+  `build_portfolio_manifest` are still unwired; `_ItemStepper` is still production-active. #720
+  changed sizing, the zero-size guard and commission, none of which touches the island.
+* **P-E2 is still unmerged**, so both Ready Check N+1 legs are still live, still unfiled.
+* **§9b stands**, including its deference to the brief's Karar 3.
+* The six containment tripwires #720 updated moved **only** the `ENGINE_VERSION` literal. The
+  two assertions that pin the lift gate — `SHARED_ALLOCATION_STATUS` and the `5000.00` defect —
+  are untouched, which is exactly the discipline §8.1 asks for.
 
 ---
 

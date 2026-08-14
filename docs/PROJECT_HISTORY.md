@@ -9270,3 +9270,299 @@ GÜNCELLEME** — 85 dakikalık saati sıfırlar; koşu bitince güncelle. Bu sl
   ettiği çağrının **aynısı** (`main([…, "--check"]) == 0`) ayrıca koşuldu ve **exit 0** verdi.
 - **Kapı yalnız kickoff eksenini kapatır.** `ALWAYS_HISTORICAL_GLOBS` ve sayı kuralı
   değişmedi; numarasız kickoff'lar hâlâ sırasızdır.
+
+---
+
+## ADIM 61 — üç canlı finansal kusur KAPANDI: yüzde sizing, fill başına komisyon, sıfır-boyut reddi (PR #720)
+
+> **NUMARA NOTU — bu slice İKİ KEZ taşındı: 58 → 60 → 61.** Dal
+> `feat/stage-58-sizing-commission-zero-size`, commit mesajları `stage-58` yazar ve
+> **değiştirilmedi**. Kod PR'ı `#720` açıldığında main'in son kaydı ADIM 58'di; kapanış
+> yazılırken **ADIM 59** (`#718`) inmişti → kayıt ADIM 60 olarak yazıldı ve kapanış PR'ı
+> `#723` o adla açıldı. Sonra `#721` (**`docs(stage-59)`** adıyla) merge oldu ve
+> **`## ADIM 60` + `docs/ADIM60_LANDED_KICKOFF.md`**'i aldı → bu kayıt **ADIM 61**'dir.
+> Kural değişmedi: **numaralar yeniden atanmaz, merge edilmiş ad kazanır**; taşınan taraf
+> hep merge edilmemiş olandır.
+>
+> **Bu turda çakışma İKİ eksenliydi ve ders yeni.** Önceki taşımalar yalnız bir `## `
+> başlığını paylaşıyordu; bu sefer **dosya adı da** çakıştı
+> (`docs/ADIM60_LANDED_KICKOFF.md`), yani ikinci PR add/add çakışmasına düşer ve
+> `check_classification` kapısı iki `current` kickoff'u zaten kırmızıya çevirirdi.
+> **Sessiz bir yanlış merge mümkün değildi — kapı tuttu.** Ayrıca `#700` de bir ara ADIM
+> 60'a yeniden numaralanmıştı, yani **üç** PR aynı numaraya oynuyordu; kazanan üçüncüsü
+> oldu. **Ders: numarayı kapanış commit'ini YAZARKEN doğrulamak da YETMEZ — merge'den
+> hemen önce, kapanış PR'ı açıkken yeniden ölç, ve ölçtüğün şey kendi dalın değil
+> `origin/main`'in kendisi olsun.**
+
+**Bu slice ÜRÜN KODUNU DEĞİŞTİRİR ve FİNANSAL SONUÇLARI OYNATIR.** Önceki on bir slice'ın
+aksine bu bir denetim ya da belge işi değil: taban boyut, iki sınır, komisyon dağılımı ve
+sıfır-boyut kabulü değişti. Bu yüzden `ENGINE_VERSION`
+`backtest-engine-v18-gap-adjusted-stop-fill` → **`backtest-engine-v18-percent-sizing-per-fill-commission`**.
+**Migration yok** (alembic head `0043_i08_registry_strategy_fks` değişmedi),
+`SHARED_ALLOCATION_STATUS` `future_dev` kaldı, **blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+verdict BLOCKED**. Merge sha `5e52465`; 52 dosya, +1090 / −226.
+
+Kapanan issue'lar: **#550**, **#551**, **#552** (üçü de PD-6 ile 2026-08-13'te yeniden
+açılmıştı; ADIM 58/59'un denetimleri üçünü de *canlı* ölçmüştü).
+
+### Neden üçü tek slice
+
+Üçü de PnL'i oynatır, yani her biri tek başına bir `ENGINE_VERSION` bump'ı ve 46 golden
+digest'in yeniden üretimini ister. Ayrı sevk etmek **aynı senaryo kümesi üzerinde üç bump ve
+üç yeniden üretim** demekti; namespace kaymasının tek amacı "bu motorun çıktısı öncekiyle
+karşılaştırılamaz" demek olduğu için tek kayma üçünü de kapsar (INF-04/INF-05).
+
+### #550 — sizing bir birim sayısıydı, her yüzey ona yüzde diyordu
+
+`base_position_size` ve `position_size_limits` min/max sınırları **birebir miktar** olarak
+koşuyordu. Beş kaynak aksini söylüyor: sevk edilen form üçünü de `%` birimiyle basıyor
+(`StrategyConfigForm.tsx` — "Base position size", "Min position size", "Max position size"),
+doc 02'nin işlenmiş örneği *"Equity 10.000 USD ve Position Size %10 → 1.000 USD nominal"*,
+Master Ref §10.1 *"resolved capital'ın yüzdesi"*, V18 mockup ve doc 02'nin ⓘ paneli (%25 Max
+Single Position = equity'nin %25'i). Şema sessizdi, bu yüzden ayrışma sınırda hiç yakalanmadı.
+Sapma fiyatla **sınırsız** büyür: 10 yazan bir kullanıcı 102'de 1 020, 10 000'lik bir
+enstrümanda **100 000** nominal açıyordu.
+
+Sevk edilen çözüm:
+
+* **`execution/sizing.py::_percent_of_capital`** — tek dönüşüm, üç alan da ondan geçer, bu
+  yüzden taban ile iki sınır **ayrışamaz**. Motorun `_QTY` adımında kuantize eder:
+  `1 000 / 102` tam değildir ve adımsız bir sınır, cap bağladığı anda **temsil edilemeyen**
+  bir miktarı wire'a koyardı (bu, kuantizasyonun neden fonksiyonun İÇİNDE olduğunun cevabı).
+* **`_clamp_to_limits`** artık `equity` / `entry_price` alır. `min > max` fail-closed
+  karşılaştırması **yüzde tarafında**, dönüşümden ÖNCE kalır — böylece kullanılabilir bir
+  fiyata ihtiyacı yoktur. Sınırlar **leverage ve strength'ten SONRA** uygulanmaya devam eder:
+  %25'lik bir cap, fiilen kontrol edilen nominali sınırlar, ön-leverage rakamı değil.
+* **`execution/sizing.py::max_position_size_cap` (YENİ, public)** — aynı cap'in **bağladığı
+  her yerde aynı anlama gelmesi** için. Scaling merdiveni (`resolve_scale_rejection` yoluyla)
+  ve aynı-yön stacking tranche'ı saklanan sayıyı bir **miktarla** karşılaştırıyordu; ikisi de
+  artık bu fonksiyondan geçiyor. **Yeni bir yerde bu cap'i okursan bu fonksiyonu çağır** —
+  yüzdeyi miktarla karşılaştıran bir satır, giriş zincirinin bağladığı yerden başka bir yerde
+  bağlar. Allocation açıkken sermaye argümanı **sleeve**'dir, `led.equity` değil (giriş
+  boyutunun ölçüldüğü sermaye odur).
+
+**Kanon doğrulaması:** doc 02'nin örneği koşuldu — nominal 102, 1 000 ve 10 000 fiyatlarının
+**hepsinde** tam 1 000.00. Eski okuma 1 020 / 10 000 / 100 000 veriyordu.
+
+### #551 — pozitif olmayan boyut hayalet pozisyon açıyordu
+
+Kapı `if alloc_on and size <= _ZERO` okuyordu: **yalnız allocation altında** ateşleniyordu.
+Varsayılan bağımsız kipte 0-boyutlu pozisyon açılıp 0.00-PnL trade olarak kapanıyor,
+`total_trades`'e sayılıyor (win-rate paydası, ortalama trade ve expectancy sulanıyor) ve
+sıfır-notional bir `position_intervals` satırı yazılıyordu. Komisyon yapılandırılmışsa
+**para** da kaçıyordu: 0-birimlik bir pozisyon tam bir ücret ödüyordu.
+
+Kapı artık `if size <= _ZERO`. Aynı karşılaştırma **negatif** durumu da kapsar ve o
+**issue metninde yok**: saklanan bir `-5`, pozisyonun **lehine** hareket eden bir barda
+**zarar** yazdırıyordu, çünkü boyutun işareti fiyat farkını çarpar ve sonucun işaretini
+ters çevirir. Ayrı bir dal yoktur — tam da bu yüzden
+`test_a_negative_size_opens_nothing_rather_than_inverting_the_pnl_sign` pinlenmiştir:
+kapıyı `== 0`'a bölen bir refactor onu sessizce geri açardı.
+
+**#551'in "load-bearing" dediği sonuç ÇÜRÜTÜLDÜ, ve bu dal da bir ara onu tekrarladı.**
+İddia: 0-notional bir interval `BLOCK_OPPOSITE`'i sağlayıp sonraki item'ın girişini bloklar.
+`execution/rules.py::conflicts_with_prior` gerçekten yalnız `direction`'a bakar ve
+`peak_notional` okumaz — ama hayaleti **hiç görmez**: tek `PriorItemInterval` üreticisi
+`engine.py::build_prior_intervals`, pozitif olmayan notional'lı pencereyi kapıdan **önce**
+düşürür ve bu davranış
+`test_build_prior_intervals_fails_closed_on_bad_bounds_and_drops_zero_notional` ile zaten
+pinlidir. Bu dalın bir commit'i iddiayı hem engine yorumunda hem oracle docstring'inde
+tekrarlamıştı; `989c747` ikisini de ölçülen gerçekle değiştirdi. **Ders (ADIM 59'un P-A2
+kaydıyla aynı): iki okumanın anlaşması bağımsız doğrulama değildir — aynı okuma iki kez
+yapılmış olabilir.**
+
+**Bilerek tersine çevrilen belgelenmiş invariant (PO-4, ÜRÜN KARARI).** `_open`'ın
+docstring'i *"Independent mode books even a bust-equity 0-size fill (preserving the
+risk-based no-phantom-profit invariant)"* diyordu — bir gözden kaçma değil, **yazılı bir
+invariant**. `alloc_on` koşulunu düşürmek onu yanlış yapar. #700'ün gövdesi bunu insana
+bırakılan bir karar (**PO-4**) olarak adlandırmıştı; oturum sahibi iki kez ayrı ayrı soruldu
+ve **merge talimatıyla karara bağladı**. Gerekçe docstring'de kalıcı olarak yazılıdır: risk
+taşımayan bir pozisyon trade değildir ve **reddedilen bir giriş de hayalet kâr yazmaz** —
+invariant'ın koruduğu şey zaten kayıp değildir.
+
+### #552 — komisyon fill ile değil KAPANIŞ ile ölçekleniyordu
+
+`close_position` tam kapanışta `commission * 2`, kısmide `* 2 * fraction` alıyordu: bütün
+round trip **çıkışta** faturalanıyor, oransal bölünüyordu. Kendi docstring'i *"N partial lot
+tam olarak bir round-trip öder"* diyordu; aritmetik **`1 + Σ fraction`**'dı. Sonuç: üç adımlı
+bir scale-out **dört fill için 1.7 round trip** ödüyordu, ve ücret kapatılan **miktarı** değil
+`fraction` **parametresini** izliyordu — 50 birimi üç %25'lik lotla kapatan bir koşuda 12.5,
+9.375 ve 7.03 birim **aynı** ücreti ödüyordu.
+
+**PD-2 (2026-08-13, ürün kararı): per-FILL kanonik.** `commission_lot = costs.commission`.
+Giriş fill'inin ücreti `engine._do_open` içinde `led.equity`'ye yazılır — scale layer ve
+`absorb_remainder`'ın zaten kullandığı dikiş. Bu yüzden bir trade satırının `pnl`'i **kendi
+çıkış fill'ini** taşır, round trip'i değil; `net_profit` equity'den türetildiği için (satır
+toplamından DEĞİL) hesap toplamı yine doğrudur. İkisine birden yazmak çift sayardı.
+
+**Kapanmayan eksen, açıkça:** kanon (Master Ref `:3110`) komisyonu **notional üzerinden bps**
+tanımlıyor; sevk edilen alan `Decimal` "Per-trade fee" — para birimi olmayan **düz tutar**,
+ve manifest bir resolved default yayımlamıyor. PD-2 **bölüşümü** karara bağladı, **tabanı**
+değil. main'e #709 ile inen `docs/decisions/closure_product_decisions_2026-08-13.md`
+Karar 1'i üç seçenekle sunuyor (**A per-fill · B round-trip · C bps-on-notional**); bu slice
+**Seçenek A**'yı sevk eder, yani o belgenin Karar 1 bölümü artık **bayattır** — Seçenek C'nin
+sorduğu soru (sabit tutar mı, oran mı) **hâlâ açıktır**.
+
+### Geçiş kapısı — kayıtlı bir revizyon TAŞINAMAZ
+
+50 sayısı, 10 000'lik bir hesapta 102 fiyatında **%51**, 10 000 fiyatında **%5000**'dir; ve
+pinli market revizyonunun fiyatını okumak yazarın hangisini kastettiğini **geri getirmez**.
+Bu yüzden değişiklik uygulanmıyor, **bildiriliyor**:
+
+* `domain/strategy/config.py` → **`PositionSizing.size_semantics`**
+  (`Literal["percent_of_capital"] | None`) revizyonun yeni okuma altında yazıldığını kaydeder.
+* `domain/readiness/enums.py` + `validators.py` → **`STRATEGY_SIZING_SEMANTICS_UNCONFIRMED`**
+  blocker'ı, üç magnitude'dan birini taşıyıp bayrağı taşımayan revizyonu **RUN'a sokmaz**.
+  **Kapı, anlamı değişen ALANLARA bakar, metoda değil**: yalnız bir max cap taşıyan
+  risk-based bir strateji de aynı derecede açıktır, hiç magnitude taşımayan ise
+  **bloklanmaz** — insanın onaylayacağı bir şey yoktur ve bloklamak eyleme dönüşmeyen bir
+  gürültü olurdu. Negatif kontrolü `test_sizing_semantics_gate_is_silent_when_no_magnitude_changed_meaning`.
+* `frontend/src/lib/strategyForm.ts` → kaydetmek bayrağı basar; **temizleme yolu budur**.
+  Dürüst olmasının sebebi: form üç girdiyi de **her zaman** `%` birimiyle render etmişti,
+  yani kullanıcının yeniden onayladığı sayı ona yüzde olarak gösterilmişti. **Hiçbir sayı
+  dönüştürülmez.**
+
+### Golden taban — 46 → 50 senaryo, ve matris iki düzeltmeyi HİÇ göremiyordu
+
+46 digest'in **28'i** kaydı, hepsi #550'ye atfedilebilir. Ama #552 **46'nın 0'ını** oynattı —
+sebebi ölçüldü: **matris hiçbir yerde komisyon yapılandırmıyordu** (`grep commission
+tests/unit/test_backtest_engine_golden.py` boş dönüyordu). Bir ratchet göremediği bir
+değişikliği ratchet'leyemez, o yüzden dört senaryo eklendi:
+
+| Senaryo | Neyi görür |
+|---|---|
+| `costs.commission_round_trip` | iki fill'lik round trip |
+| `costs.commission_scale_ladder` | fill'leri kapanışlarından çok olan merdiven |
+| `sizing.base_percent_of_capital` | #550'nin yeniden okuduğu taban dalı |
+| `sizing.impossible_window_opens_nothing` | hiçbir şeye çözülen boyut |
+
+**Her ikisinin de negatif kontrolü kanıtlıdır** (bu, "senaryo ekledim" ile "senaryo bir şey
+ölçüyor" arasındaki fark): #552'nin düzeltmesi geri alındığında **tam olarak iki `costs.*`**
+satırı oynar, başka hiçbir şey; #551'inki geri alındığında **tam olarak iki sıfır-boyut**
+satırı oynar (`sizing.impossible_window_opens_nothing` + `sizing.allocation_absent`).
+
+### Test fixture'ları — sayıyı değil NİYETİ yeniden ifade etmek
+
+İlk ölçüm **124 kırmızı** verdi. Yol: çıktıyı yapıştırmak değil, fixture'ın ne demek
+istediğini yeniden ifade etmek. Maliyet, scaling, restriction, funding ve tick oracle'ları
+için **50 birimlik pozisyon bir GİRDİDİR**, konu değil; bu yüzden onlar artık aynı pozisyonu
+**risk-based** ifade ediyor (`1% × 10 000 / 2.00 = tam 50 birim`) — modellenen tek
+**fiyat-BAĞIMSIZ** yöntem, çünkü bir fiyat **seviyesine** değil bir stop **mesafesine** böler.
+
+**Yüzde sizing bunu yapamaz ve sebebi öğreticidir:** yüzde, **efektif** fill fiyatına böler,
+yani spread ya da slippage açıkken **boyutun kendisi oynar**. Bir maliyet oracle'ını, tam da
+o maliyetin bozduğu fiyattan boyutlandırmak, o dosyaların dayandığı **tek-knob-tek-delta**
+özelliğini yok ederdi: pnl farkı maliyeti bir boyut değişimiyle karıştırırdı.
+`stop_loss_point` yalnız sizing'i besler, **hiçbir stop kurmaz** (koruma stop'u ayrı bir
+config alanıdır) — yani bu yeniden ifade hiçbir fixture'a gizli bir çıkış sokmaz.
+
+Gerçekten kayan sayılar **yeniden hesaplandı ve sebebi yazıldı**, yamalanmadı: (a) bir zarar
+booked edildikten sonra açılan **ikinci** giriş artık yeni equity'den boyutlanır
+(`test_oracle_properties`, kontrol koşusu 50.00 → 49.74); (b) funding/scaling bıçak-sırtı
+fixture'ının katmanı **yeniden kesildi** (`add_size_value` 50 → 96), çünkü yüzde tabanlı
+boyutla %50'lik bir katman **her iki** headroom'un da altına sığıyor ve **hiçbir şey
+kanıtlamıyordu**.
+
+### Kapıların kendisi bu slice'ta iki kez konuştu
+
+* **gitleaks.** `engine_golden_digests.json`'daki iki SHA-256, motorun çıktısı değişince
+  `generic-api-key` entropi kuralını tetikledi: `contract.execution_key` "key" anahtar
+  kelimesinden, `sizing.base_percent_of_capital` ise **"c*api*tal"** içindeki "api"den.
+  Hangi digest'in tetikleyeceği **şans** işidir ve her meşru yeniden üretimde değişir, o
+  yüzden allowlist **fingerprint'e ya da yola değil, digest satırının ŞEKLİNE** bağlandı.
+  Ölçüldü: 50 girdinin 50'sini affeder, `"token": "<64 hex>"` · `"api_key": …` ·
+  `api_key = …` hâlâ yakalanır. Son ikisini kapatan şey anahtarın **NOKTALI** olma
+  zorunluluğudur (`"a.b": "<64 hex>"`); kalan boşluk `.gitleaks.toml`'a **yazıldı**, gizlenmedi.
+  (RE2 — lookaround yok, daraltma noktayla yapılır.)
+* **doc-truth gate.** Frontend testi eklendikten sonra `repository_facts` bir çağrı-yeri geride
+  kalmıştı (716 vs 717) ve CI kırmızı verdi. Kapı çalışıyordu; düzeltme yeniden üretmekti.
+
+### Süreç dersi — MERGE DEĞİL REBASE (yeni, ve kapıyı gevşetmeden)
+
+main bu dal açıkken **on birden fazla** kez ilerledi. `merge origin/main` denemesi
+`docs-history-guard` tarafından **bloklandı**: main
+`a11y_screen_reader_audit_checklist.md`'de bir `## ` başlığını yeniden adlandırmıştı
+("22 sayfa × 2 SR" → "**23 rota** × 2 SR = 46 koşu") ve bir merge bunu staged diff'te
+`-## ` **silme** olarak sahneler. Kapı haklıydı (#590/#604'te 400+ satır kayıt kaybı bu
+şekilde oldu), ama bu bir kayıp değildi — üç grep dosyanın `origin/main` ile **birebir aynı**
+olduğunu gösterdi.
+
+**Çözüm kapıyı kapatmak DEĞİL** (`ENTROPIA_HOOKS=off` denendi ve zaten çalışmaz: değişken
+komut dizesinin içinde, hook ise komuttan ÖNCE koşar). Kapının **kendi önerdiği yol**
+kullanıldı: **rebase**. Rebase'te bu dalın commit'leri main'in üstüne yeniden oynar, main'in
+kendi düzenlemesi hiç yeniden sahnelenmez, kapının itiraz edeceği bir şey kalmaz. Çakışan tek
+şey her seferinde **üretilmiş** üç dosyaydı (`README.md`, `docs/generated/repository_facts.*`)
+→ `git checkout --theirs` + yeniden üret.
+
+**İkinci yol — ve BU SLICE ONU ÇÜRÜTTÜ, kaydı buraya yazıyorum çünkü yanlış tavsiye
+birkaç saat boyunca bu belgelerde durdu.** `strict: true` yüzünden PR `behind` düştüğünde
+**`update_pull_request_branch`** (sunucu tarafı merge) çağrılabilir ve kod PR'ında (#720)
+sorunsuz çalıştı. Gerekçe olarak *"yerel commit olmadığı için `docs-history-guard` hiç
+koşmaz, o yüzden daha ucuz"* yazılmıştı. **Bu gerekçe tersine dönüyor: hook'un koşmaması
+avantaj değil, DELİĞİN KENDİSİ.**
+
+**Ölçüldü.** Kapanış PR'ı `#723` `behind` düşünce auto-merge sunucu tarafında main'i içeri
+aldı (`be4a082`). O merge, çakışan tarafları main lehine çözerek **bu slice'ın ADIM kaydının
+TAMAMINI düşürdü**:
+
+```
+git show be4a082:docs/PROJECT_HISTORY.md | grep -c "percent-sizing-per-fill-commission"
+0
+```
+
+Kickoff'u da gitmişti. Ve o hâliyle **her kapıdan geçerdi**: tek `current` kickoff vardı
+(main'inki), doc-truth gate yeşildi, `check_classification` yeşildi — çünkü **hiçbir CI
+kapısı `docs/` altında kayıt silinmesini okumaz**. Yani PR yeşil merge olacak ve bu kayıt
+hiç var olmamış gibi kalacaktı. Bu, #590 ve #604'ün regresyonunun aynısıdır ve
+`docs-history-guard`'ın **göremediği** bir yoldan geçmiştir.
+
+**Kural, düzeltilmiş hâliyle:** `update_pull_request_branch` yalnız dalın **main'in
+dokunmadığı** dosyaları değiştirdiği durumlarda güvenlidir (tipik kod PR'ı). **Belge
+ağırlıklı bir kapanış PR'ında ASLA kullanma** — orada main ile aynı dosyaların aynı
+bölgelerine yazılır ve sunucu merge'i sessizce bir tarafı seçer. Kapanış PR'ında `behind`
+düşersen **yerelde rebase et**, kaydı gözle doğrula
+(`git show <head>:docs/PROJECT_HISTORY.md | grep -c '<bu slice'e özgü bir dize>'`) ve
+`--force-with-lease` ile it.
+
+**Auto-merge yine çalıştı:** `#720` auto-merge (squash) ile, main defalarca ilerlemesine
+rağmen **numara taşımadan** indi.
+
+### Ölçüm — otorite CI, ama yerelde de koşuldu
+
+* Backend **tam suite tek çağrıda**: `EXIT=0`, **0 FAILED**, **4107 test toplandı / 338 dosya**,
+  coverage **%93.70** (kapı ≥90). pytest-randomly açıktı → sıra bağımlılığı da elendi.
+  (`repository_facts` **3552** yazar; o **statik** bir düğüm sayımıdır, koşulan sayı değil.)
+* Frontend: `eslint --max-warnings=0` · `tsc --noEmit` · vitest **727 passed / 72 dosya**.
+* `ruff check` · `ruff format --check` · `mypy src` (398 dosya) temiz.
+* `openapi_export --check` **drift yok** (strateji payload'ı şemada `dict` olarak yayımlanır,
+  bu yüzden `size_semantics` snapshot'ı hareket ettirmez).
+* `generate_repository_facts.py --check` · `schema_parity_gate.py` ·
+  `acceptance_semantic_scan --ratchet` (**111 partial / 8 uncovered**, tavan değişmedi).
+* CI: 22/22 yeşil.
+
+### Bu slice'ın DOKUNMADIKLARI
+
+**`docs/CODEMAPS/*` — kapanış ritüeli md. 5 UYGULANMADI, gerekçesiyle.** Madde yeni
+**endpoint / tablo / sayfa / job** eklenince tetiklenir; bu slice hiçbirini eklemedi
+(`check_codemap_coverage` kapısı da yalnız `application/` modüllerini ve dramatiq
+aktörlerini sayar, ikisi de değişmedi). Eklenen şey bir **domain** sembolüdür
+(`max_position_size_cap`) ve `BACKEND_LAYERS.md` `domain/backtest/execution` için **hiç
+satır taşımıyor** — o boşluğu doldurmak `#700`'ün açık PR'ında bekliyor, burada ikinci kez
+yazmak onunla çakışırdı. Sembol bunun yerine **handoff ve kickoff'un reuse anchor
+listelerinde** adlandırıldı, ki `CLAUDE.md` §Session START oraya yönlendirir.
+
+Migration · `SHARED_ALLOCATION_STATUS` · route yolları · OCC token biçimleri ·
+Idempotency-Key yüzeyleri · react-query key'leri · `app/nav.ts` · capability matrisi
+(62 satır sabit) · kabul borcu ratchet'i · A-08 defteri · #514 · #544 · #558 · #559.
+
+### Sıradaki için bilinmesi gerekenler
+
+1. **`max_position_size_cap` yeni bir public sözleşmedir.** Bu cap'i okuyan bir yer daha
+   eklersen ondan geçir; yüzdeyi miktarla karşılaştıran bir satır sessizce başka bir yerde
+   bağlar.
+2. **Yeni bir sizing magnitude alanı eklersen** readiness geçiş kapısını da genişlet
+   (`validators.py`, `carries_magnitude`) — kapı alan-tabanlıdır, metot-tabanlı değil.
+3. **Komisyon TABANI açık** (bps mi düz tutar mı). #709'un brief'i Karar 1 / Seçenek C.
+4. **Golden matrise senaryo eklerken negatif kontrolünü de üret** — aksi halde yeşil bir
+   ratchet, göremediği bir eksen için kanıt sanılır (bu slice'ın #552'de yaşadığı tam olarak
+   buydu).

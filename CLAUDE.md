@@ -223,6 +223,32 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
+> **HEAD `5e52465`** · **alembic head `0043_i08_registry_strategy_fks`** (migration yok) ·
+> **`ENGINE_VERSION` = `backtest-engine-v18-percent-sizing-per-fill-commission` (BUMP)** ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 61 (üç canlı finansal kusur
+> KAPANDI, PR #720, 2026-08-14): ÜRÜN KODU DEĞİŞTİ, FİNANSAL SONUÇLAR OYNADI.** #550 sizing
+> **yüzde** oldu (`_percent_of_capital` tek dönüşüm; **`max_position_size_cap` YENİ public** —
+> cap'i okuyan HER yer ondan geçer) · #551 pozitif olmayan boyut (**negatif dahil**) hiçbir
+> modda açmaz — *"load-bearing"* cross-item iddiası **ÇÜRÜTÜLDÜ** (`build_prior_intervals`
+> zaten düşürüyor) ve bust-equity invariant'ı **bilerek** tersine çevrildi (PO-4, ürün kararı) ·
+> #552 komisyon **fill başına** (PD-2). Kayıtlı revizyon **taşınamaz** → Ready Check
+> `STRATEGY_SIZING_SEMANTICS_UNCONFIRMED` (kapı **ALAN** tabanlı, metot değil); formdan
+> kaydetmek temizler. Golden **46 → 50** senaryo — #552 46'nın **0'ını** oynatmıştı, matris
+> komisyonu hiç yapılandırmıyordu; dört yeninin **negatif kontrolü kanıtlı**. **AÇIK: komisyon
+> TABANI** (kanon bps-on-notional ↔ sevk edilen düz tutar; #709 Karar 1/Seçenek C). Blocker
+> sayısı DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**. **Süreç: main'i içeri alırken MERGE DEĞİL
+> REBASE** (başlık yeniden adlandırması `docs-history-guard`'a kayıt silme gibi görünür;
+> kapıyı kapatma). **`update_pull_request_branch`'i BELGE PR'ında KULLANMA** — sunucu
+> tarafı merge bu slice'ta ADIM kaydını sessizce düşürdü ve **hiçbir kapı görmedi**
+> (guard yerel commit ister, CI `docs/` kayıt silmesini okumaz).
+> `PROJECT_HISTORY.md` §ADIM 61 · `docs/ADIM61_LANDED_KICKOFF.md`.
+>
+> Öncesinde **P-B (kapanış uzlaştırması, DOCS-ONLY, PR #722)** — main'in kendi bloğu
+> aşağıda **aynen** duruyor. Onun *"PD-2 repoda kayıtlı değil"* tespiti bu kapanışla
+> **kısmen** kapanır: `PROJECT_HISTORY.md` §ADIM 61 kararı ve gerekçesini yazılı hâle
+> getirir; `docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1'in kendisi
+> **hâlâ imzasızdır** ve komisyon **tabanı** açık kalır.
+>
 > **alembic head `0043_i08_registry_strategy_fks`** · **`ENGINE_VERSION` DEĞİŞTİ** →
 > `backtest-engine-v18-percent-sizing-per-fill-commission` (**#720**, 2026-08-14: #550/#551/#552
 > KAPANDI) · `SHARED_ALLOCATION_STATUS` = `future_dev`. Test sayıları: **toplanan** için
@@ -235,6 +261,20 @@ Before stopping a working session, produce **ALL** of the following:
 > repoda **kayıtlı değil** → komisyon modeli yazılı adjudication'sız sevk edilmiş durumda.
 > **Next: P-C1 + P-C2.**
 > `docs/audit/final_closure_reconciliation_2026-08-13.md`.
+>
+>
+> Öncesinde **HEAD `ac5cf50`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **Son dalga — ADIM 60 (doküman kapısı artık HANGİ kickoff'un canlı olduğunu doğruluyor,
+> PR #716, 2026-08-14): ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** `check_classification` sayıyı koruyordu, doğruluğu değil: **#697** ADIM 55'i,
+> **#714** ADIM 56'yı canlı bıraktı — ikisi de tek `current` taşıdığı için **yeşil geçti**.
+> Artık daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varken canlı işaret eski belgede
+> duramaz (`::_check_live_kickoff_is_newest`). **Numarasız kickoff'larda bilerek susar** —
+> `strict: true` altında yanlış kırmızı tüm merge'leri kilitler. **Kapı kendi PR'ını bir kez
+> kırmızıya çevirdi ve haklıydı:** üretilmiş olgular **test collection** sayısını taşır
+> (3541 → 3545) — **test ekleyen slice olguları TAZELEMELİ**. `PROJECT_HISTORY.md` §ADIM 60 ·
+> `docs/ADIM60_LANDED_KICKOFF.md`.
 >
 > Öncesinde **HEAD `e547391`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).

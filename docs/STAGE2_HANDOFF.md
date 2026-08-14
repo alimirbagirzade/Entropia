@@ -6163,6 +6163,60 @@ venv); testin assert ettiği çağrının aynısı (`--check`) ayrıca koşuldu 
 Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 60 · `docs/ADIM60_LANDED_KICKOFF.md`
 (paste-ready resume prompt en altta).
 
+## Stage 61 — üç canlı finansal kusur kapandı: yüzde sizing, per-fill komisyon, sıfır-boyut reddi (PR #720) landed
+
+**ÜRÜN KODU DEĞİŞTİ ve FİNANSAL SONUÇLAR OYNADI** — önceki on bir slice'ın aksine bu bir
+denetim değil. Kapanan: **#550** (`base_position_size` + min/max sınırları artık **resolved
+capital'ın YÜZDESİ**), **#551** (pozitif olmayan boyut — negatif dahil — hiçbir modda pozisyon
+açmaz), **#552** (komisyon **fill başına**, PD-2). `ENGINE_VERSION` →
+**`backtest-engine-v18-percent-sizing-per-fill-commission`**. **Migration yok**
+(head `0043_i08_registry_strategy_fks`), `SHARED_ALLOCATION_STATUS` `future_dev`,
+**blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED**. Merge sha `5e52465`, 52 dosya,
++1090/−226.
+
+**Reuse anchor'ları (tam sembol adlarıyla):**
+`execution/sizing.py::_percent_of_capital` (tek dönüşüm, `_QTY` adımında kuantize) ·
+`execution/sizing.py::max_position_size_cap` (**YENİ public** — cap'i okuyan her yer bundan
+geçer: scaling merdiveni + stacking tranche; allocation açıkken sermaye argümanı **sleeve**) ·
+`domain/strategy/config.py::PositionSizing.size_semantics` ·
+`ReadinessIssueCode.STRATEGY_SIZING_SEMANTICS_UNCONFIRMED` (kapı **ALAN** tabanlıdır, metot
+değil) · `frontend/src/lib/strategyForm.ts` (kaydetmek bayrağı basar = temizleme yolu).
+
+**Pazarlıksız notlar:**
+* **Kayıtlı revizyon TAŞINAMAZ** — 50, 102'de %51, 10 000'de %5000; hiçbir otomatik dönüşüm
+  doğru olamaz. Bu yüzden bildirilir, uygulanmaz.
+* **Golden 46 → 50.** #552 46'nın **0'ını** oynatmıştı: matris hiçbir yerde komisyon
+  yapılandırmıyordu. Dört yeni senaryonun **negatif kontrolü kanıtlı**. Yeni senaryo eklerken
+  negatif kontrolünü de üret.
+* **Oracle fixture'ları risk-based ifade edildi** (`1% × 10 000 / 2.00 = 50 birim`) — yüzde
+  **efektif** fill fiyatına böldüğü için maliyet oracle'ının boyutu maliyetle birlikte oynardı
+  ve tek-knob-tek-delta özelliği ölürdü. `stop_loss_point` yalnız sizing'i besler, stop kurmaz.
+* **#551'in "load-bearing" cross-item iddiası ÇÜRÜTÜLDÜ** — `build_prior_intervals` pozitif
+  olmayan notional'ı kapıdan önce düşürür. Bu dal bir ara iddiayı tekrarladı ve `989c747` ile
+  düzeltti. **İki okumanın anlaşması bağımsız doğrulama değildir.**
+* **PO-4 (bust-equity 0-size fill invariant'ı) bilerek tersine çevrildi** — ürün sahibi kararı;
+  gerekçe `_open` docstring'inde kalıcı.
+* **AÇIK: komisyon TABANI** (kanon bps-on-notional, sevk edilen düz tutar). #709'un brief'i
+  Karar 1 / Seçenek C. PD-2 **bölüşümü** kapattı, tabanı değil.
+
+**Süreç dersi (YENİ):** main'i içeri alırken **merge DEĞİL rebase** — main bir `## ` başlığı
+yeniden adlandırdığında merge onu staged diff'te `-## ` silme olarak sahneler ve
+`docs-history-guard` haklı olarak bloklar. Kapıyı kapatma; rebase et (kapının kendi önerisi).
+**`update_pull_request_branch`'i KAPANIŞ PR'ında KULLANMA.** Bu slice onu denedi ve
+sunucu tarafı merge (`be4a082`) bu slice'ın ADIM kaydının **tamamını sessizce düşürdü**
+(`grep -c percent-sizing-per-fill-commission` → **0**), üstelik **her kapıdan geçerek** —
+hiçbir CI kapısı `docs/` altında kayıt silinmesini okumaz ve `docs-history-guard` yerel
+commit olmadığı için hiç koşmaz. Kod PR'ında güvenli (main o dosyalara dokunmuyordu),
+belge PR'ında **değil**. Kapanış PR'ında `behind` düşersen yerelde rebase et, kaydı
+`grep` ile gözle doğrula, `--force-with-lease` ile it.
+**Auto-merge numara taşımasını bu turda ÖNLEMEDİ:** kapanış
+PR'ı `#723` açıkken `#721` merge oldu ve `## ADIM 60` ile
+`docs/ADIM60_LANDED_KICKOFF.md`'in ikisini birden aldı → kayıt **61**'e taşındı.
+Çakışma iki eksenliydi (başlık + dosya adı), o yüzden add/add çakışması ve
+`check_classification` sessiz bir yanlış merge'i imkânsız kıldı.
+
+`PROJECT_HISTORY.md` §ADIM 61 · `docs/ADIM61_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

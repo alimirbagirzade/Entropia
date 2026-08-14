@@ -6,13 +6,22 @@
 
 # Ekran okuyucu denetimi — checklist (A-08)
 
-> **Bu belge bir DENETİM DEĞİL, denetimin reçetesidir.** Denetim yapılmamıştır.
+> **Bu belge bir DENETİM DEĞİL, denetimin reçetesidir.** Denetim **BAŞLADI, BİTMEDİ** —
+> ve reçete ile sonuç asla aynı belge değildir: aşağısı ne yapılacağını söyler, ne
+> duyulduğunu **kanonik defter** söyler
+> ([`a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)).
 > `entropia_v18_remediation_status.md` A-08 satırı ve `v18_final_acceptance.md` §6
 > AÇIK kalır; bu belgenin varlığı hiçbir satırı Complete yapmaz.
 >
+> **Nerede duruyor (2026-08-13):** yalnız **SR-2** başladı — 2026-08-12, oturum 1,
+> **184 Section A hücresinin 2'si** (rota 1 `/`, A-1 + A-2), **0/10 akış**, 0 bulgu.
+> **SR-1 (NVDA/Firefox/Windows) HİÇ BAŞLAMADI.** Çıkış kriterleri **0/4** — ve kriter
+> 1 ile 2 tek bir kombinasyonla **kapatılamaz**: kusursuz, tam bir SR-2 koşusu bile
+> kriter 1'i `1/2`'de bırakır. Sayıların otoritesi defterin §5'idir, bu paragraf değil.
+>
 > **Takip issue'su GitHub #514 2026-08-12T11:08:58Z'de bir insan tarafından YENİDEN
-> AÇILDI (`reopened`) — denetim yine de koşulmadı.** Ne kapatma ne yeniden açma,
-> aşağıdaki reçetenin tek satırını bile karşılamaz; ikisi de issue'nun durumunu
+> AÇILDI (`reopened`).** Ne kapatma ne yeniden açma, aşağıdaki reçetenin tek satırını
+> bile karşılamaz; ikisi de issue'nun durumunu
 > değiştirdi, defterin içeriğini değil. Takip durumunun kanonik kaydı:
 > [`docs/audit/a11y_screen_reader_audit_results.md`](../audit/a11y_screen_reader_audit_results.md)
 > §STATUS ▸ *Tracking-issue state*.
@@ -48,13 +57,18 @@ görevi tamamlayabiliyor mu?** Bunun otomatik karşılığı yok, çünkü:
 
 | # | Ekran okuyucu | Tarayıcı | Platform | Durum |
 |---|---|---|---|---|
-| SR-1 | **NVDA** (son kararlı) | Firefox | Windows | ☐ yapılmadı |
-| SR-2 | **VoiceOver** | Safari | macOS | ☐ yapılmadı |
+| SR-1 | **NVDA** (son kararlı) | Firefox | Windows | ☐ **hiç başlamadı** — sıradaki iş |
+| SR-2 | **VoiceOver** | Safari | macOS | ◐ **başladı, bitmedi** — oturum 1 (2026-08-12): 2/184 hücre, 0/10 akış |
 | SR-3 (opsiyonel) | JAWS | Chrome | Windows | ☐ kapsam dışı |
 
 ---
 
-## A. Her sayfada koşulacak temel geçiş (22 sayfa × 2 SR)
+## A. Her sayfada koşulacak temel geçiş (**23 rota** × 2 SR = 46 koşu)
+
+> **22 değil 23.** Aşağıdaki "22 sayfa" sayısı **spec belgelerinin** sayısıdır; doc 19
+> **iki** rota verir (`/panel/management`, `/panel/logs`), o yüzden rota matrisi 23
+> uzundur. Bu, `test_section_a_row_count_is_23_not_22` ile pinlidir — "22 satır"
+> denetlemek bir Admin sayfasını **atlar**.
 
 Sayfa listesi = `frontend/e2e/utils/screenshotMatrix.ts::TARGET_PAGES` (axe taramasıyla
 **aynı** matris; iki denetim aynı yüzeyi konuşsun diye).
@@ -115,7 +129,8 @@ Statü                    : FIX / PO-APPROVE
 Denetim **tamamlandı** sayılabilmesi için:
 
 1. SR-1 ve SR-2 kombinasyonlarının **ikisi de** koşulmuş,
-2. A bölümü 22 sayfanın hepsinde, B bölümü 10 akışın hepsinde işaretlenmiş,
+2. A bölümü **23 rotanın** hepsinde (22 spec belgesi, doc 19 iki rota verir), B bölümü
+   10 akışın hepsinde işaretlenmiş — **her iki kombinasyon için**: 46 rota, 20 akış,
 3. Her bulgu FIX / PO-APPROVE statüsüyle kaydedilmiş,
 4. FIX bulguları landed **ya da** PO tarafından imzalı sapmaya çevrilmiş olmalı.
 

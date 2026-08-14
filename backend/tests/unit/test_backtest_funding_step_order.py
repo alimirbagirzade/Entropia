@@ -181,7 +181,12 @@ def test_same_bar_funding_binds_the_exposure_cap_of_the_scaling_ladder() -> None
     bars = _long_then(
         [_fu(22, "102", "102", "100", "100.5"), _fu(23, "100.5", "101", "100", "100.5")]
     )
-    cfg = _scale_config(scaling=_price_scaling(retracement="1.0", layers=3, add_size_value="50"))
+    # GH #550 re-sized this fixture. The sleeve is what the sizing chain sees under
+    # allocation, so the position is 77% * 10 000 = 7 700 of sleeve at 1% risk over a 2.00
+    # stop = 38.50 units (it was 50 while a base size was a unit count). The knife edge the
+    # test is built on had to be re-cut with it: a 50%-of-initial layer now fits under BOTH
+    # headrooms and would prove nothing, so the ladder adds 96% of the initial position.
+    cfg = _scale_config(scaling=_price_scaling(retracement="1.0", layers=3, add_size_value="96"))
     allocation = resolve_allocation_execution(
         _capexec(item_id="mbi_1", amount="10000.00", mode="COMPOUND_PORTFOLIO_EQUITY", share="77"),
         item_id="mbi_1",
@@ -200,18 +205,19 @@ def test_same_bar_funding_binds_the_exposure_cap_of_the_scaling_ladder() -> None
     off = _scale_run(None)
     on = _scale_run(_schedule((22, "0.03")))
 
-    # Sleeve = 77% of equity. Off: 7700 - 5100 = 2600 >= the 25 * 100.50 = 2512.50 candidate.
+    # Entry notional = 38.50 * 102 = 3927.00. Sleeve = 77% of equity.
+    # Off: 7700 - 3927.00 = 3773.00 >= the 36.96 * 100.50 = 3714.48 candidate.
     assert _bar_events(off, 22) == ["scale_layer_added"]
     added = next(e.detail for e in off.signal_events if e.event_type == "scale_layer_added")
-    assert added["new_size"] == "75.00000000"
+    assert added["new_size"] == "75.46000000"
 
-    # On: the bar-22 charge is 5100 * 0.03 = 153.00, so the sleeve is
-    # 77% * (10000 - 153) - 5100 = 2482.19 < 2512.50 -> the layer is refused, not trimmed.
-    assert on.summary["funding_paid"] == Decimal("153.00")
+    # On: the bar-22 charge is 3927.00 * 0.03 = 117.81, so the sleeve is
+    # 77% * (10000 - 117.81) - 3927.00 = 3682.29 < 3714.48 -> refused, not trimmed.
+    assert on.summary["funding_paid"] == Decimal("117.81")
     assert _bar_events(on, 22) == ["funding_charge", "scale_layer_rejected"]
     rejected = next(e.detail for e in on.signal_events if e.event_type == "scale_layer_rejected")
     assert rejected["reason"] == "sleeve_capacity"
-    assert rejected["cap"] == "2482.19"
+    assert rejected["cap"] == "3682.29"
 
 
 # --------------------------------------------------------------------------- #

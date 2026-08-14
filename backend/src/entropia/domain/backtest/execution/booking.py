@@ -79,9 +79,27 @@ def close_position(
     A partial close (fraction < 1, F-07c ``close_percentage``) realizes PnL on
     ``size * fraction`` as its own trade lot, reduces the position's size + notional in
     place, and leaves it OPEN — the caller must not null it and applies the aftermath.
-    Commission is charged proportional to the fraction so N partial lots summing to the
-    whole position pay exactly one round-trip. ``fraction >= 1`` is a full close, byte-
-    identical to pre-F-07c (same event type + detail)."""
+    ``fraction >= 1`` is a full close.
+
+    COMMISSION IS PER-FILL (GH #552, PD-2 decided 2026-08-13)
+    --------------------------------------------------------
+    This close is ONE fill and pays ONE ``commission``, whether it closes the whole
+    position or part of it. The entry paid its own at ``engine._do_open``; a scale layer
+    and an absorbed partial-fill remainder each already paid theirs at their own fill.
+
+    It used to charge ``commission * 2`` on a full close and ``* 2 * fraction`` on a
+    partial — a round trip billed entirely at the exit, prorated. That model matched
+    nothing: one partial plus a full close of the remainder paid ``1 + Σ fraction`` round
+    trips, so cost scaled with the number of partial CLOSES rather than with fills, and a
+    three-step scale-out paid 1.7 round trips for four fills. Per-FILL is what
+    ``costs.commission``'s own "Per-trade fee" schema description and Master Ref §8's
+    "the commission breakdown must be explicit in the engine manifest" ask for.
+
+    **What this does NOT put in the trade row.** The entry-side charge lands on
+    ``led.equity`` at entry time, not in this lot's ``pnl`` — the same seam the scale
+    layer and ``absorb_remainder`` already use. A trade row's ``pnl`` is therefore its
+    own exit cost, not a round trip, and the account total is right either way. Charging
+    it in both places would double-count."""
     is_full = fraction >= _ONE
     close_size = pos.size if is_full else pos.size * fraction
     is_long = pos.direction == "long"
@@ -90,7 +108,7 @@ def close_position(
     )
     sign = Decimal("1") if is_long else Decimal("-1")
     gross = (exit_eff - pos.entry_price) * close_size * sign
-    commission_lot = costs.commission * 2 if is_full else costs.commission * 2 * fraction
+    commission_lot = costs.commission
     pnl = (gross - commission_lot).quantize(_MONEY)
     equity_before = led.equity
     led.equity = (led.equity + pnl).quantize(_MONEY)

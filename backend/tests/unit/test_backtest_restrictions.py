@@ -73,7 +73,16 @@ def _config(
 
     Zero costs so fills land exactly on the resolved price; no protection stop so the
     conflict/exit paths (not a stop) govern the position's life."""
-    sizing: dict[str, Any] = {"method": "base_position_size", "base_position_size": "50"}
+    # GH #550 made ``base_position_size`` a PERCENT of resolved capital, so a base size is
+    # now entry-price dependent. These fixtures want the 50-unit position held fixed while
+    # the bars move — the size is their INPUT, not their subject — so it is stated as the
+    # risk-based equivalent: 1% of 10 000 across a 2.00 stop distance = exactly 50 units at
+    # any price. ``stop_loss_point`` feeds sizing only; it installs no stop, so the
+    # conflict/exit paths still govern the position's life as the docstring says.
+    sizing: dict[str, Any] = {
+        "method": "risk_based_sizing",
+        "risk_based": {"risk_percentage_per_trade": "1", "stop_loss_point": "2.00"},
+    }
     if position_size_limits is not None:
         sizing["position_size_limits"] = position_size_limits
     return StrategyConfig.model_validate(
@@ -533,17 +542,24 @@ def test_replace_existing_closes_and_reopens_on_second_signal() -> None:
 
 
 def test_stack_rejected_by_position_size_limit_never_trimmed() -> None:
-    # 50 + 50 breaches the 60 cap -> the stack candidate is REJECTED with a ledger
+    # 50 + 50 breaches the cap -> the stack candidate is REJECTED with a ledger
     # reason (never auto-trimmed); the position rides at its original size.
+    #
+    # GH #550: the cap is a PERCENT of resolved capital, and the stacking check converts it
+    # at the tranche's own price exactly as the entry sizing chain does — one field, one
+    # meaning. These bars trade at 12, so 9.6% of the 10 000 account is a 960.00 notional
+    # cap = 80 units: the 50-unit position fits under it and the 100-unit stacked total does
+    # not. It read a flat "60" while the same field was a unit count, which made the cap
+    # tighten or evaporate with the instrument's price.
     cfg = _config(
         conflict={**_STACK_CONFLICT, "same_direction_stacking": "allow_stacking"},
-        position_size_limits={"max_position_size": "60"},
+        position_size_limits={"max_position_size": "9.6"},
     )
     out = _run(cfg, _day_closes(_STACK_CLOSES), plan=_sma_plan(exit_on_opposite=False))
     rejected = _events(out, "stack_entry_rejected")
     assert len(rejected) == 1
     assert rejected[0]["reason"] == "position_size_limit"
-    assert rejected[0]["cap"] == "60"
+    assert rejected[0]["cap"] == "80.00000000"
     assert not _events(out, "stack_entry_added")
     assert out.trades[0].pnl == Decimal("50.00")
     assert out.diagnostics["stack_entries_rejected"] == 1

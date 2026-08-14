@@ -6217,6 +6217,35 @@ PR'ı `#723` açıkken `#721` merge oldu ve `## ADIM 60` ile
 
 `PROJECT_HISTORY.md` §ADIM 61 · `docs/ADIM61_LANDED_KICKOFF.md`.
 
+## Stage 62 — Ready Check'in son iki artık N+1'i batch'lendi (P-E2, PR #712) landed
+
+**Ne indi.** ADIM 46 (#617) market-data bacağındaki döngü-içi `get_dataset_root`'u
+kapatmıştı; **aynı şekil iki bacakta daha yaşıyordu** ve hiçbir izleme kaydı yoktu
+(#700'ün adli denetimi bunu **M-13** olarak kaydetmişti). İkisi de artık batch okur.
+
+**Davranış değişikliği YOK** — aynı issue kodları, severity, sıralama, `field_path`,
+`scope_id`, `root_active`. Migration yok, `ENGINE_VERSION` değişmedi, OpenAPI değişmedi,
+alembic tek head `0043_i08_registry_strategy_fks`.
+
+### Reuse anchor'ları (tam sembol adlarıyla)
+
+| Anchor | Ne için |
+|---|---|
+| `infrastructure/postgres/repositories/research_data.py::get_dataset_roots` | **YENİ.** Research Root'ları için çoğul okuyucu; `market_data.py::get_dataset_roots`'un alan-alan aynası. Boş girdi round-trip'siz kısa devre, `dict.fromkeys` ile tekilleştirme, `entity_type` yükümü **SQL'de** |
+| `infrastructure/postgres/repositories/market_data.py::get_dataset_roots` | **Yeniden kullanıldı, değiştirilmedi** — signal bacağı bunu çağırır |
+| `commands/readiness_check.py::_resolve_signal_market_data_issues` | Batch'lenmiş signal bacağı; Root map'i revision map'inden **sonra** kurulur |
+| `commands/readiness_check.py::_resolve_research_sources` | Batch'lenmiş research bacağı; yalnız RESOLVE OLAN revision'lar dereference edilir |
+| `docs/performance/query_budgets.json` → `readiness_check.signal_market_data_leg` / `.research_funding_leg` | İki yeni bütçe yüzeyi, ikisi de `per_item: 0`. **Tavanı yükseltme** — N+1 geri gelirse slope assertion'ı kırar |
+| `tests/integration/test_batched_dereference_equivalence.py` | 11 yeni eşdeğerlik testi (yabancı `entity_type`, soft-deleted Root, çözülemeyen pin, item sırası, paylaşılan pin) |
+
+### Yeni bir okuma yüzeyi eklerken
+
+Döngü içine `session.get` / `get_dataset_root` **koyma**; çoğul karşılığını yaz ve
+`query_budgets.json`'a bir yüzey ekle. **Bütçe sayacının ölçülmüş kör noktası var:**
+aynı session'da batch'in yüklediği bir PK için yeniden konan `session.get` **hiç SQL
+üretmez** ve sayaç bunu görmez (gerekçesi `_comment`'te, beş ölçülmüş şekliyle) — kokuyu
+kapıya bağlamak **sayaçla değil kaynak-düzeyi assertion'la** olur.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

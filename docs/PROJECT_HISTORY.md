@@ -9566,3 +9566,109 @@ Idempotency-Key yüzeyleri · react-query key'leri · `app/nav.ts` · capability
 4. **Golden matrise senaryo eklerken negatif kontrolünü de üret** — aksi halde yeşil bir
    ratchet, göremediği bir eksen için kanıt sanılır (bu slice'ın #552'de yaşadığı tam olarak
    buydu).
+
+## ADIM 62 — Ready Check'in son iki artık N+1'i batch'lendi (P-E2, PR #712)
+
+> **NUMARA NOTU — bu slice DÖRT kez taşındı: 57 → 58 → 59 → 60 → 62.** Yazıldığında ADIM 57'ydi;
+> beklerken `#698` 57'yi (K-3 / D-11), `#715` 58'i (plugin hook'ları), `#718` 59'u (P-A1),
+> `#716` 60'ı (doküman kapısı) ve `#723` 61'i (üç finansal kusurun kapanışı) **merge edilmiş
+> adla** aldı. Kural değişmedi: **numaralar yeniden atanmaz, merge edilmiş ad kazanır** —
+> taşınan taraf hep merge edilmemiş olandır. Dal adı (`fix/closure-e2-ready-check-batching`)
+> ve commit mesajları ADIM numarası taşımaz, o yüzden yeniden yazılmadı.
+> **YAPISAL SEBEP, kişisel değil:** `Backend` job'ı **43–53 dk** sürüyor, ruleset
+> `strict: true` ve main bugün ~30–60 dk'da bir PR aldı → her main hareketinde dal geride
+> kalıp CI sıfırlanıyor. Auto-merge bunu **kapatmaz** (yeşili fark etme gecikmesini kapatır,
+> kapının main'in landing aralığından uzun olmasını kapatmaz).
+>
+> **Bu dal bir kez daha KURULDU, merge edilmedi.** Önceki turlarda main'i alan merge'ler
+> main'in ADIM 57 kaydını `PROJECT_HISTORY.md` + `STAGE2_HANDOFF.md`'den düşürmüş,
+> kickoff'unu üzerine yazmıştı (CLAUDE.md §"Docs regresyonu ÜÇ KEZ oldu" — o **dördüncüsüydü**).
+> Bu turda dal güncel main'den yeniden kuruldu ve slice **salt-additive** yeniden uygulandı:
+> main'in hiçbir kaydı **yapı gereği** dokunulmadı, onarımla değil.
+> **Kontrol yöntemi önemli:** satır numaralı diff **yanıltır** (kayan satırlar her başlığı
+> "silinmiş" gösterir); doğrusu **başlık kümesi** karşılaştırmasıdır
+> (`comm -23 <(git show origin/main:F | grep '^## ') <(git show HEAD:F | grep '^## ')`).
+
+**Base SHA `3f4faa3`** · migration **yok** · `ENGINE_VERSION` **değişmedi** · OpenAPI
+**değişmedi** · **davranış değişikliği YOK**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+A-08), verdict BLOCKED** (bu slice A-08'i ölçmedi).
+
+### 1. Kusur — ölçüldü, iddia edilmedi
+
+ADIM 46 (#617) Ready Check'in market-data bacağındaki döngü-içi `get_dataset_root`'u
+kapatmıştı. **Aynı kusur iki bacakta daha duruyordu**, ikisi de revision'ları ZATEN batch
+okuyup Root'u tek tek dereference ediyordu:
+
+| Bacak | Kusur | Ölçülen (n=11) |
+|---|---|---|
+| Trading Signal OHLCV fallback | `readiness_check.py::_resolve_signal_market_data_issues` — `market_repo.get_dataset_root` döngü içinde | **12 statement, slope 1** |
+| Research funding | `readiness_check.py::_resolve_research_sources` — `research_repo.get_dataset_root` döngü içinde | **12 statement, slope 1** |
+
+İkisi de **2 statement / slope 0**'a indi (n=1 ve n=11'de aynı). `market_repo.get_dataset_roots`
+**yeniden kullanıldı**; research tarafında çoğul okuyucu yoktu → `research_data.py::get_dataset_roots`
+**market'inkini alan alan aynalayarak** eklendi (ikinci bir idiom icat edilmedi). Her iki Root
+batch'i de revision map'inden **SONRA** kurulur, çünkü bir Root ancak onu pinleyen revision
+üzerinden erişilebilir.
+
+**Filtre paritesi doğrulandı:** tekil `get_dataset_root` yalnız `entity_type`'a bakar
+(soft-delete filtresi yok), batch aynı yükümü **SQL'de** uygular → absent olan ve yabancı
+tipte olan Root eşit biçimde map'te yok, tekil okuyucunun `None`'ı ile birebir.
+
+### 2. Neden yeşil suite bunu görmedi
+
+`test_readiness_query_count.py` **tablo filtreliyor** (`market_dataset_revision`), artık
+okuma ise `entity_registry`'ye gidiyordu. Kapıyı kuran şey `test_query_budgets.py`'nin
+**her statement'ı** sayması; iki yeni yüzey (`readiness_check.signal_market_data_leg`,
+`readiness_check.research_funding_leg`) bu yüzden eklendi.
+
+### 3. Negatif kontrol — kapı kendi negatifini GEÇTİ
+
+İlk deneme **sahte bir negatifti ve bu ölçülerek görüldü**: döngü-içi okumayı geri koyup
+batch çağrısını yerinde bırakınca test **yeşil kaldı** (2 statement). Sebep: batch,
+identity map'i ısıtıyor ve sonraki `session.get` **hiç SQL üretmiyor**. Gerçek negatif
+kontrol pristine `readiness_check.py`'yi geri koymakla yapıldı → **12/12 statement,
+kapı KIRMIZI**.
+
+**Bu bir kapı zaafıdır ve `query_budgets.json` `_comment`'ine YAZILDI** (ölçülen beş şekil):
+aynı session'da batch'in yüklediği bir PK için yeniden konan `session.get` **görülmez** —
+ama o şekil production'da da bedava (komut tek-tx, `expire_on_commit=False`). Bedeli olan
+her şekil yakalanıyor: per-item `select()` **13**, batch'in yüklemediği bir id için okuma
+**11** (identity map **MISS'leri asla cache'lenmez**), batch'in kaldırılması **12**.
+
+### 4. Davranış eşdeğerliği — #617 emsali uzatıldı
+
+#617 **iki** dosya sevk etmişti: bütçe kapısı **ve** `test_batched_dereference_equivalence.py`
+("bütçe round-trip'in düştüğünü kanıtlar, aynı şeyi SÖYLEDİĞİNİ kanıtlayamaz"). Bu slice
+o borcu ödedi — **11 yeni eşdeğerlik testi**, tam da rewrite'ın dokunduğu Root dalları:
+yabancı `entity_type`, soft-deleted Root, çözülemeyen pin, item sırası, tek pin'i paylaşan
+iki item. **İki bacağın kendi suite'i bu dallara hiç ulaşmıyordu.** Bu testlerin de negatifi
+koşuldu: research `get_dataset_roots`'tan `entity_type` yükümü düşürülünce **yalnız**
+`test_research_leg_a_root_that_is_not_a_research_dataset_is_not_active` kırmızıya döndü.
+
+### 5. Taranan ama ALINMAYAN döngü-içi okumalar (dürüst sınır)
+
+Aynı dosyada dört döngü-içi okuma daha bulundu, **hiçbiri alınmadı** — gerekçeleri tek tek:
+
+| Yer | Neden bu PR'da değil |
+|---|---|
+| `_resolve_strategy_payload` | PK batch'i mümkün, **ama** helper `backtest_run.py` / `backtest_run_context.py` / `jobs/backtest_engine.py` tarafından da çağrılıyor → blast radius bu slice'ın dışı. Ayrıca `_resolve_external` batch'lenmeden kalırsa döngü O(n) kalır, **ölçülebilir kazanç sıfır**. |
+| `_resolve_external` | `.first()` + `work_object_revision_id` **UNIQUE DEĞİL** (indexli, nullable). Çoğul satırda bugünkü kazanan **tanımsız**; batch'e çevirmek tanımsız bir davranışı başka bir tanımsız davranışla değiştirirdi → önce ürün kararı. |
+| `find_approved_tick_revision_for_instrument` | **single-row read değil** — instrument başına `ORDER BY … LIMIT 1`. Batch'i `DISTINCT ON` ister ve tie-break semantiğini yeniden yazar. |
+| `resolve_indicator_plan` | **tek satır okuma değil**, çok sorgulu domain servisi (kendi içinde ADIM 46'da zaten batch'lendi). |
+
+**Hiçbiri "yok" diye değil, "bu teknikle aynı değil" diye dışarıda** — ölçüsüz kapatma yapılmadı.
+
+### 6. Doğrulama
+
+`ruff check` **0** · `ruff format --check` **0** (797 dosya) · `mypy src` **0** (398 dosya) ·
+`generate_repository_facts.py --check` bu değişiklikle **bayatladı** (collected
+`3552 → 3565`, +13 = 11 eşdeğerlik + 2 bütçe testi) → yeniden üretildi.
+**Postgres bu container'da yok** → integration suite yerelde koşmadı; **otorite CI**.
+
+### 7. Dürüst sınırlar
+
+- **Frontend'e dokunulmadı**, frontend suite koşulmadı (gerekmiyor).
+- Ready Check'in hata taksonomisi, ErrorBody yükseltme mantığı, route/OCC/Idempotency
+  yüzeyleri **el değmeden kaldı**.
+- Bacakların *kalan* maliyeti hâlâ **O(n)**: `_build_item_inputs` her item için okuma
+  yapıyor (§5). Bu slice o ekseni **ölçtü ve bıraktı**, kapatmadı.

@@ -393,6 +393,29 @@ async def get_dataset_root(session: AsyncSession, entity_id: str) -> EntityRegis
     return root
 
 
+async def get_dataset_roots(
+    session: AsyncSession, entity_ids: Sequence[str]
+) -> dict[str, EntityRegistry]:
+    """Resolve many research dataset Roots in ONE query, keyed by ``entity_id``.
+
+    The batch counterpart of :func:`get_dataset_root`, mirroring
+    ``market_data.get_dataset_roots`` field for field rather than inventing a second
+    idiom: an empty input short-circuits without a round trip and duplicate ids
+    collapse. The ``entity_type`` guard is applied in SQL rather than by the caller, so
+    a Root that is absent OR belongs to another entity type is equally ABSENT from the
+    map — the same ``None`` the per-id reader returns for both cases. A caller's
+    fail-closed branch therefore stays byte-identical to the ``session.get`` miss.
+    Never a per-item N+1.
+    """
+    ids = list(dict.fromkeys(entity_ids))
+    if not ids:
+        return {}
+    stmt = select(EntityRegistry).where(
+        EntityRegistry.entity_id.in_(ids), EntityRegistry.entity_type == ENTITY_TYPE
+    )
+    return {row.entity_id: row for row in (await session.execute(stmt)).scalars().all()}
+
+
 async def get_revision(session: AsyncSession, revision_id: str) -> ResearchDatasetRevision | None:
     return await session.get(ResearchDatasetRevision, revision_id)
 
@@ -498,6 +521,7 @@ __all__ = [
     "append_research_dataset_revision",
     "create_research_dataset",
     "get_dataset_root",
+    "get_dataset_roots",
     "get_market_link",
     "get_native_asset",
     "get_revision",

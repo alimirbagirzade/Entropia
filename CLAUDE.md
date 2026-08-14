@@ -223,7 +223,26 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
-> **HEAD `5e52465`** · **alembic head `0043_i08_registry_strategy_fks`** (migration yok) ·
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **Son dalga — ADIM 62 (Ready Check'in son iki artık N+1'i batch'lendi, P-E2, PR #712):
+> DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> ADIM 46 (#617) market-data bacağını kapatmıştı; **aynı şekil iki bacakta daha yaşıyordu
+> ve hiçbir issue onu izlemiyordu** (#700'ün denetiminde **M-13**). `signal_market_data_leg`
+> ve `research_funding_leg` artık **`per_item: 0`** — **ratchet, tavanı yükseltme**.
+> Yeni `research_data.py::get_dataset_roots`, `market_data`'nınkinin **alan-alan aynası**
+> (üçüncü idiom icat etme). **Filtre paritesi ölçüldü:** tekil okuyucu yalnız `entity_type`'a
+> bakar, batch aynı yükümü **SQL'de** uygular. **Bütçe sayacının ÖLÇÜLMÜŞ kör noktası var** —
+> batch'in ısıttığı identity map yüzünden aynı PK'ye konan `session.get` **hiç SQL üretmez**
+> ve sayaç görmez; gerekçe `query_budgets.json` `_comment`'inde beş şekliyle yazılı, kokuyu
+> kapıya bağlamak **kaynak-düzeyi assertion'la** olur. **Negatif kontrolü pristine dosyayla
+> koş** — ilk deneme sahte yeşil verdi. **Dört döngü-içi okuma bilerek ALINMADI**
+> (`_resolve_external`'ın `work_object_revision_id`'si **UNIQUE DEĞİL** → bugünkü kazanan
+> **tanımsız**, önce ürün kararı). **NUMARA: bu slice DÖRT kez taşındı** (57→58→59→60→**62**);
+> commit mesajları ADIM numarası taşımaz. `PROJECT_HISTORY.md` §ADIM 62 ·
+> `docs/ADIM62_LANDED_KICKOFF.md`.
+>
+> Öncesinde **HEAD `5e52465`** · **alembic head `0043_i08_registry_strategy_fks`** (migration yok) ·
 > **`ENGINE_VERSION` = `backtest-engine-v18-percent-sizing-per-fill-commission` (BUMP)** ·
 > `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 61 (üç canlı finansal kusur
 > KAPANDI, PR #720, 2026-08-14): ÜRÜN KODU DEĞİŞTİ, FİNANSAL SONUÇLAR OYNADI.** #550 sizing

@@ -1,5 +1,6 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 59 bu belgeden SONRA indi.** Kayıt olarak doğrudur; devam
+> noktası için `docs/ADIM59_LANDED_KICKOFF.md`'ye bak. Sayısal otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 58 landed — plugin hook'ları kurulumdan bağımsız, sıradaki oturum

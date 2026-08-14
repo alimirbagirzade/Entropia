@@ -218,9 +218,38 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
-> **HEAD `e0c25e6`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
-> **Son dalga — ADIM 58 (plugin hook'ları kurulumdan bağımsız oldu, 2026-08-13): ÜRÜN KODU
+> **HEAD `e547391`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **Son dalga — ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
+> ÜRÜN KODU DEĞİŞMEDİ (dört ağaçta 0 satır). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Kanıtlandı: `run_portfolio` (`portfolio_engine.py:531`),
+> `project_portfolio_run` ve `build_portfolio_manifest` üretimde **çağrısız** (son ikisinin
+> `backend/src`'te **sıfır importer'ı** var); `ItemParticipant`'ın üretim implementasyonu
+> **yok** (tek örnek test sahipli `_ScriptedParticipant`); ilk sapma **tek satır** —
+> `jobs/backtest_engine.py:299` `for prepared in prepared_items:`. **YENİ BULGU: §Next'in (a)
+> engeli ZATEN KAPALI** — `_ItemStepper` (`engine.py:756`) barı fazlara bölünmüş sevk ediyor
+> ve `E(t)` girişi `_phase_entry(bar, *, equity)` (`engine.py:2448`) olarak mevcut (#602'den
+> beri); **kalan tek engel (b)**: üç faz **book eder**, `ItemParticipant` **tarif** ister →
+> `run_engine`'in bar gövdesi → **ADR §16 kapısı yerinde**. **Containment-gate'in YEŞİLİ ters
+> okunur:** shared engine'in aktif olduğunu değil, üretimin `run_portfolio`'ya **ulaşmadığını**
+> kanıtlar (`assert callers == []`, ve `5000.00` fixture'ı fold hâlâ **yanlış** olduğu için
+> geçer). **E5 tripwire'ı DARALTIR, SİLMEZ**; `:225-233` ve `:103` E5'te **değişmez**.
+> **`combine_item_runs` bağımsız modun da yoludur** — hepsini faz döngüsüne yönlendiren bir
+> wiring bayraksız her bağımsız Result'ı yeniden fiyatlar. **Ortam tuzağı:** alt küme
+> koşusundan önce `uv sync --all-extras`, yoksa **exit 4** (`--no-cov` tanınmaz).
+> **NUMARA: bu slice 58 → 59 taşındı.** Denetim PR'ı `#707` ADIM 58 adıyla merge edildi;
+> kapanış PR'ı `#718` sıra beklerken main **`#715`**'i aldı ve o **`feat(adim-58)`** adıyla
+> indi. **Merge edilmiş ad kazanır**; dal/commit `stage-58` yazar, slice **ADIM 59**'dur.
+> **Auto-merge'ün kapatamadığı pencere ÖLÇÜLDÜ:** çare denetim PR'ında **çalıştı** (#707,
+> üç main ilerlemesi, taşıma yok), ama **kapanış** PR'ı `Backend`'in ~50 dk'sı boyunca açık
+> kalmak zorunda → paralel oturum o pencerede numarayı alabiliyor. **Numarayı kapanış
+> commit'ini YAZARKEN doğrula, merge'den hemen önce `grep '^## ADIM'` ile bir kez daha.**
+> `PROJECT_HISTORY.md` §ADIM 59 · `docs/ADIM59_LANDED_KICKOFF.md` ·
+> `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
+>
+>
+> Öncesinde **HEAD `e0c25e6`** ·
+> **ADIM 58 (plugin hook'ları kurulumdan bağımsız oldu, 2026-08-13): ÜRÜN KODU
 > DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > **Ölçüm: `enabledPlugins` KURULUM DEĞİLDİR** — `installed_plugins.json` bu container'da
 > **boş**, çünkü kurulum bir **onay istemi** ister ve remote etkileşimsizdir (yapılandırma
@@ -571,10 +600,14 @@ Before stopping a working session, produce **ALL** of the following:
 > artık `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` — main'de iptal KAPALI.
 > Tarihsel kayıt sabit kalır: `e8d1d48` (#633) ve `bc59dae` (#634) 0 job ile cancelled olmuş,
 > CI'ları HİÇ koşmamıştı. Yeni bir job eklerken **gerçekten koştuğunu job log'undan** doğrula.
-> **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:298` call site.
-> ADIM 35 §4.1'in **(c)** engelini kapattı (projeksiyon var); kalan **(a)** faz-bölünmüş bar ve
-> **(b)** book-etmeyen değerlendirme girişi `run_engine`'in gövdesine dokunur → **ADR §16 insan
-> kapısı + ADR amendment'ı** gerekir, o kapıdan geçmeden başlama.
+> **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site.
+> ADIM 35 **(c)**'yi (projeksiyon), **ADIM 58 (a)'yı** kapattı: faz-bölünmüş bar
+> `_ItemStepper` (`engine.py:756`) olarak **sevk edilmiş**, `E(t)` girişi
+> `_phase_entry(bar, *, equity)` (`engine.py:2448`). **Kalan tek engel (b):** üç faz
+> **book eder**, `ItemParticipant` arbitrasyon öncesi **tarif** ister — bu `run_engine`'in
+> bar gövdesine dokunur → **ADR §16 insan kapısı + ADR amendment'ı** gerekir, o kapıdan
+> geçmeden başlama. Ölçüm ve seam sıralaması:
+> `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de
 > değişmez. Henüz **uygulanmadı** — `STAGE2_HANDOFF.md` §Yarım-cent.

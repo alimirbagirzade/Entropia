@@ -222,7 +222,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ (dört ağaçta 0 satır). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
-> verdict BLOCKED.** Kanıtlandı: `run_portfolio` (`portfolio_engine.py:518`),
+> verdict BLOCKED.** Kanıtlandı: `run_portfolio` (`portfolio_engine.py:531`),
 > `project_portfolio_run` ve `build_portfolio_manifest` üretimde **çağrısız** (son ikisinin
 > `backend/src`'te **sıfır importer'ı** var); `ItemParticipant`'ın üretim implementasyonu
 > **yok** (tek örnek test sahipli `_ScriptedParticipant`); ilk sapma **tek satır** —

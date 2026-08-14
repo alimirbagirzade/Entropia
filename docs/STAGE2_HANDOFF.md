@@ -6046,7 +6046,7 @@ query-key / `ENGINE_VERSION` / feature flag / issue state:** değişmedi. **Bloc
 DEĞİŞMEDİ: 1 (yalnız A-08), verdict BLOCKED.** Sevk edilen tek şey
 `docs/audit/closure_w0_shared_portfolio_2026-08-13.md` (579 satır, `historical`).
 
-**Ne kanıtlandı.** `run_portfolio` (`portfolio_engine.py:518`), `project_portfolio_run`
+**Ne kanıtlandı.** `run_portfolio` (`portfolio_engine.py:531`), `project_portfolio_run`
 (`execution/portfolio_projection.py:513`) ve `build_portfolio_manifest`
 (`execution/provenance.py:473`) üretimde **çağrısız**; son ikisinin `backend/src`'te
 **sıfır importer'ı** var. `ItemParticipant`'ın üretim implementasyonu **yok** — depodaki

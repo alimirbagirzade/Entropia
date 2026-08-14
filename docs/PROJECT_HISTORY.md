@@ -9098,6 +9098,21 @@ ortam hatasıdır; önce sync, sonra koş.
 **İkisi de bu slice'ta düzeltilmedi**, çünkü (1) bir test dosyasına dokunmaktır ve bu
 denetim salt-okunurdu; (2) `#582` bir **insan** izleme kaydıdır.
 
+**EK (kapanış sırasında, `#711`):** aynı sapmanın **ÜÇÜNCÜ** bir örneği paralel bir
+oturumca bağımsız olarak bulundu ve düzeltildi — `portfolio_engine.py`'nin **modül**
+docstring'i de *"ADIM 16 stepper … was never written"* diyordu ve okuyucuya
+`grep -n "def step" engine.py` reçetesini veriyordu; o grep artık **isabet döndürür**, yani
+reçeteyi izleyen bir okuyucu containment'ın kalktığı sonucuna varırdı. `#711` paragrafı
+*"eksik olan ADAPTER'dır, stepper değil"* diye yeniden yazdı. **Aynı bayat cümlenin üç
+ayrı yerde yaşadığı böylece ölçüldü** (modül docstring'i — kapandı · test docstring'i
+`:146` — **açık** · GH #582 gövdesi — **açık**); bir düzeltme diğer ikisini kapatmaz.
+**Yan etki, kayda değer:** o docstring +17 satır büyüdü ve `portfolio_engine.py`'nin
+sembol satırlarını kaydırdı — `run_portfolio` **518 → 531**, `ItemParticipant`
+**238 → 251**. Şimdi-zamanlı belgeler (`CLAUDE.md`, handoff §Next, ADIM 59 kickoff'u)
+yeni değerlere güncellendi; **denetim belgesinin kendisi `0d8bf8f`'e pinlidir ve ESKİ
+numaraları taşımaya devam eder — bu bir hata değil, o belgenin sözleşmesidir.** Ders
+bunun kendisidir: **satır numarası bir kimlik değildir, ada güven.**
+
 ### E4/E5 için en riskli beş seam (sırayla)
 
 1. **`_ItemStepper`'ın fazları book ediyor** (`:1913`, `:2264`, `:2448`) — describe/book

@@ -46,8 +46,8 @@ değiştirmeyi hedeflemedi — salt-okunur bir denetim slice'ıydı.
 | `_ItemStepper` | `domain/backtest/engine.py:756` | adapter'ın oturacağı substrat (faz-bölünmüş bar) |
 | `_build_stepper` | `domain/backtest/engine.py:793` | stepper'ı kuran fabrika; `run_engine` (`:3279`) onun dokuz satırlık sürücüsü |
 | `_phase_carry` / `_phase_held` / `_phase_entry` | `engine.py:1913` / `:2264` / `:2448` | describe/book ayrımının **tam olarak** dokunacağı üç yer |
-| `ItemParticipant` | `domain/backtest/portfolio_engine.py:238` | adapter'ın karşılaması gereken üç hook |
-| `run_portfolio` | `domain/backtest/portfolio_engine.py:518` | faz döngüsü — üretimde **çağrısız** |
+| `ItemParticipant` | `domain/backtest/portfolio_engine.py:251` | adapter'ın karşılaması gereken üç hook |
+| `run_portfolio` | `domain/backtest/portfolio_engine.py:531` | faz döngüsü — üretimde **çağrısız** |
 | `_ScriptedParticipant` / `simulate` | `tests/unit/oracles/portfolio_harness.py:156` / `:210` | adapter'ın **şekil** referansı (davranış referansı DEĞİL) |
 | containment gate | `tests/unit/oracles/test_oracle_portfolio_containment_gate.py` | E5'in kıracağı beş assert: `:180` `:184` `:218` `:222` `:125`/`:129` |
 | iki fail-closed kapısı | `commands/backtest_run.py:542` · `domain/allocation/rules.py:154` | tek doğruluk kaynağı `domain/allocation/capability.py:105` |
@@ -138,6 +138,9 @@ Session START protokolünü uygula. Otorite sırası:
 DURUM (doğrula, kopyalama):
   - Blocker 1 (yalnız A-08), verdict BLOCKED. SHARED_ALLOCATION_STATUS = future_dev.
   - run_portfolio / project_portfolio_run / build_portfolio_manifest: üretimde ÇAĞRISIZ.
+  - SATIR NUMARASI UYARISI: portfolio_engine.py'nin docstring'i #711 ile büyüdü
+    (run_portfolio 518 -> 531, ItemParticipant 238 -> 251). Numaraya değil ADA güven;
+    denetim belgesi 0d8bf8f'e pinlidir ve ESKİ numaraları taşır, bu doğrudur.
   - ItemParticipant'ın üretim implementasyonu YOK.
   - İlk sapma: application/jobs/backtest_engine.py:299 (for prepared in prepared_items:)
   - CLAUDE.md §4.1 (a) KAPALI: _ItemStepper engine.py:756, E(t) girişi

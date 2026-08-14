@@ -77,12 +77,36 @@ Sayfa listesi = `frontend/e2e/utils/screenshotMatrix.ts::TARGET_PAGES` (axe tara
 |---|---|---|---|
 | A-1 | Sayfa yüklendiğinde başlık duyurusu | Sayfa adı duyulur; `<h1>` sayfa başına **bir** tane | rules §Semantic HTML |
 | A-2 | Landmark gezinimi (NVDA `D` / VO rotor) | **ÜÇ** landmark ayrı ayrı bulunur: `banner`, `navigation`, `main`. **`contentinfo` BEKLENMEZ** — Entropia footer sevk etmez; imzalı karar **D-11** (2026-08-13), bkz. `a11y_ci_ratchet_and_adjudication.md` §4b | rules §Semantic HTML + D-11 |
-| A-3 | Başlık gezinimi (NVDA `H` / VO rotor) | `h1→h2→h3` sırası atlamasız | rules §Semantic HTML |
+| A-3 | Başlık gezinimi (NVDA `H` / VO rotor) | Başlık listesi sayfanın yapısını **doğru** gösterir: hiçbir başlık ait olmadığı bir başlığın altında durmaz, hiçbir grup kayıp okunmaz. **Sayı atlamasını burada SAYMA** — `h1 → h3` atlamasını sonda zaten ölçüyor (**22 / 23 route**, K-5); senden istenen atlamanın **yanıltıp yanıltmadığı**. *"Atlama var"* bir cevap değildir (zaten biliniyor); *"fark etmedim"* de değildir (bkz. §A-3 notu) | rules §Semantic HTML + K-5 |
 | A-4 | Tüm etkileşimli öğeler sanal imleçle bulunabiliyor | Buton/link/alan listesi eksiksiz | rules §Keyboard |
 | A-5 | Buton mu link mi doğru duyuruluyor | Aksiyon = "button", gezinme = "link"; `div onClick` YOK | rules §Semantic HTML |
 | A-6 | Görsel etiketsiz kontrollerin erişilebilir adı anlamlı | "btn-3" / "düğme" değil, görevi anlatan ad | rules §ARIA |
 | A-7 | Tablolar `<th scope>` ile okunuyor | Hücre okunurken kolon başlığı duyulur | rules §Semantic HTML |
 | A-8 | Dekoratif görsel `alt=""`, anlamlı görsel `alt` dolu | Boş `alt` sessiz geçer | rules §Media |
+
+### §A-3 notu — soru neden yeniden yazıldı (2026-08-13)
+
+A-3'ün eski beklentisi *"`h1→h2→h3` sırası atlamasız"*tı. Bu bir **makine
+beklentisiydi**: `specs/20-a11y-prechecks.spec.ts` atlamayı zaten her rotada sayıyor
+(**22 / 23**, K-5) — insandan istenen, sondanın çıktısını elle tekrarlamaktı. Denetim
+bu hâliyle K-5'i **kapatamazdı**, çünkü soru kapatmayı sağlayacak bilgiyi hiç istemiyordu.
+
+Bunun somut bedeli **ölçüldü**: SR-2 oturum 1'de (rota 1, 2026-08-12) denetçi
+*"atlamayı fark etmedim"* dedi ve hücre `—` bırakıldı — çünkü bu cümle **iki ayrı
+şeyi ayırt etmiyor**: *"başlık listesini gezdim ve yanılmadım"* (K-5'e cevap) ile
+*"seviyelere hiç bakmadım"* (cevap değil). Yeni soru bu belirsizliği yapısal olarak
+kaldırıyor: sayı değil, **yanılma** soruluyor.
+
+**Bu bir gevşetme DEĞİLDİR ve K-5'i kapatmaz.** Precheck 22 / 23 saymaya devam eder,
+K-5 audit §6'da **Open** kalır, hiçbir advisory susturulmadı. D-11 gibi imzalı bir
+karar da **değildir** — D-10/D-11 bir **gözlemin dispozisyonunu** imzalar, bu ise
+**aracı** düzeltir; K-5 hakkında hiçbir uygunluk iddiası taşımadığı için sicile
+(`a11y_ci_ratchet_and_adjudication.md` §4) bir `D-xx` **yazılmadı**. Bir sonraki
+denetçi eski soruya göre `FAIL` yazarsa, yazdığı şey sondanın zaten bildiğidir.
+
+**Rota 1'in `—` hücresi `—` KALIR.** Eski cevap yeni soruya da cevap değil; o hücre
+ancak bir insan rotor'da başlık listesini gezip yapının yanıltıp yanıltmadığını
+söylediğinde dolar.
 
 ## B. Entropia'ya özgü akışlar (bu ürünün kritik yüzeyleri)
 

@@ -18,6 +18,7 @@ Geometry: long in at 102, out at 104 (end of data), zero costs — so pnl is exa
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 from entropia.domain.backtest.engine import EngineOutput, run_engine
 from entropia.domain.backtest.execution.portfolio_ledger import SLEEVE_ZERO_CAPACITY
@@ -363,9 +364,7 @@ def test_an_unallocated_item_gets_no_sleeve_and_therefore_no_fill() -> None:
     # notice — the value assertion below would still pass, because it never runs the engine.
     # Verified by mutation: forcing that branch to ``if True`` turns this red with
     # ``assert 'size_resolved_to_zero' == 'sleeve_zero_capacity'``.
-    reason = _blocked_reason(out)
-    assert reason == "sleeve_zero_capacity"
-    assert reason != SIZE_RESOLVED_TO_ZERO
+    assert _blocked_reason(out) == "sleeve_zero_capacity"
 
 
 def test_the_two_zero_size_refusal_tokens_are_pinned_by_value_and_stay_distinct() -> None:
@@ -390,3 +389,35 @@ def test_the_two_zero_size_refusal_tokens_are_pinned_by_value_and_stay_distinct(
     assert SIZE_RESOLVED_TO_ZERO == "size_resolved_to_zero"
     assert SLEEVE_ZERO_CAPACITY == "sleeve_zero_capacity"
     assert SIZE_RESOLVED_TO_ZERO != SLEEVE_ZERO_CAPACITY
+
+
+def test_the_zero_size_token_is_written_once_in_production_and_only_as_a_constant() -> None:
+    """The slice's own Definition of Done, enforced instead of grepped by hand.
+
+    Every other assertion in this file would stay green if the call site regressed to the
+    bare literal it was promoted from: the emitted string is identical either way, so no
+    behavioural test can see the difference. That made the deliverable a convention rather
+    than a ratchet, which is what this asserts against — the ONE occurrence in ``src`` must
+    be the definition, and every consumer must reach it through the name.
+
+    Source-level on purpose. A runtime check cannot distinguish a literal from a constant
+    holding the same value, and that is precisely the regression in question. Matched by
+    SYMBOL rather than by line number, so moving the definition within its module does not
+    turn this red for a reason that is not a regression."""
+    src = Path(__file__).resolve().parents[3] / "src" / "entropia"
+    hits = sorted(
+        (path.relative_to(src).as_posix(), line.strip())
+        for path in src.rglob("*.py")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if '"size_resolved_to_zero"' in line
+    )
+
+    assert hits == [
+        (
+            "domain/backtest/execution/sizing.py",
+            f'SIZE_RESOLVED_TO_ZERO = "{SIZE_RESOLVED_TO_ZERO}"',
+        )
+    ], (
+        "the zero-size refusal token must appear in production exactly once, as the "
+        f"SIZE_RESOLVED_TO_ZERO definition. Found: {hits}"
+    )

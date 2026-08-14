@@ -190,6 +190,21 @@ jobs:
         # was invalid JSON from #651 until this slice, and both hooks it declares
         # were silently dead the whole time. Replaying that exact file exits 1.
         run: node scripts/agent-config-gate.mjs
+      - name: Agent hook behaviour proof
+        # The gate above proves the WIRING (path exists, executable). It cannot
+        # prove the BEHAVIOUR: editing one `case` arm in guard-git.sh leaves every
+        # path valid while the guard silently stops blocking. This step fires both
+        # blocking guards with the stdin Claude Code sends them — six inputs they
+        # must REFUSE and thirteen they must let through, because a guard that
+        # blocks everything passes any positive-only test while being useless.
+        # Negative control run before wiring it (ADIM 57): neutering the docs gate,
+        # unregistering guard-git.sh from .claude/settings.json, and making
+        # guard-generated.sh block everything each turn it red.
+        #
+        # Also NOT a new job, for the same reason as the step above: ruleset
+        # 20765617 names 16 required checks by title, and a title that does not
+        # exist yet locks every merge (ADIM 49). Needs git + python3 only.
+        run: scripts/hook-guard-proof.sh
       - name: Memory index gate (derived slice records)
         # Pure markdown parse, no network, no agentmemory needed: asserts every
         # `## ` record in docs/PROJECT_HISTORY.md derives a memory record with a

@@ -83,6 +83,51 @@ the routes on the list.
 
 ---
 
+## 3b. NVDA in one screen — SR-1 only
+
+Skip this if you are an NVDA user; it is here because SR-2's session was run by
+someone who had never driven a screen reader, and SR-1 will most likely be too.
+**None of it tells you what to conclude** — it only stops the tooling from being
+the reason a cell stays `—`.
+
+**The NVDA key** is `Insert` (or `CapsLock` on the laptop layout). Written `NVDA+…`
+below. `NVDA+Q` quits.
+
+**Browse mode vs focus mode.** On a web page Firefox starts in *browse mode*, where
+the single-letter keys below jump around the document. Type into a text field and
+NVDA switches to *focus mode*, where those same letters are typed, not obeyed.
+**If a quick key suddenly does nothing, you are in focus mode — press `NVDA+Space`
+to go back.** This one confusion accounts for most "the shortcut is broken" reports.
+
+| Check | Keys | What you are listening for |
+|---|---|---|
+| **A-1** page title | `NVDA+T` after load | the page's own name, not "Entropia" alone |
+| **A-2** landmarks | `D` repeatedly, or `NVDA+F7` → *Landmarks* | **three**: banner, navigation, main. `contentinfo` is **not** expected (D-11) |
+| **A-3** headings | `H` (next), `Shift+H` (previous), `1`…`6` (by level), `NVDA+F7` → *Headings* | a jump from `h1` straight to `h3` — **K-5 is this question** |
+| **A-4** everything reachable | `Tab` through, then arrow-read the page in browse mode | anything you can see but never land on |
+| **A-5** button vs link | `B` (buttons), `K` (links) | an action announced as "link", navigation as "button" |
+| **A-6** accessible name | `NVDA+Tab` re-reports the focused control | "button 3", "düğme", a raw id — instead of the task |
+| **A-7** tables | `T` to the table, then `Ctrl+Alt+←↑→↓` between cells | the column header spoken with the cell |
+| **A-8** images | `G` (graphics) | decorative images should be **silent**, not "graphic" |
+| **B-8** focus trap | `Tab` past the last control in the modal; `Esc` | focus escaping to the page behind; Esc not returning focus to the trigger |
+
+**Read the whole page:** `NVDA+↓` (desktop layout) or `NVDA+A` (laptop).
+
+**Speech Viewer — use it, and know what it is.** *NVDA menu (`NVDA+N`) → Tools →
+Speech Viewer* opens a window transcribing everything NVDA speaks. Two reasons it
+matters here: it is the cheapest way to fill the worksheet's *"Session recording /
+audio evidence path"* field, and it is the only practical way to answer **K-7**
+(B-3 Ready Check verdict, B-4 the `queued→running→completed` transition, B-6 the
+409 conflict) — you watch whether *anything* arrives when the state changes.
+
+Its transcript is **not** automated output in the sense §6.1 forbids: it is the
+screen reader's own speech, which is precisely the evidence A-08 asks for, unlike a
+DOM scan. But it records what was *spoken*, not what was *heard* — it will not show
+you that one announcement cut another off, or that a `polite` region never got its
+turn because focus moved first. **Keep the sound on.**
+
+---
+
 ## 4. Order of work
 
 **Section A first, all 23 routes, then Section B.** Section A teaches you the shell;

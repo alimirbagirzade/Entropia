@@ -6117,6 +6117,52 @@ alabiliyor. **Numarayı kapanış commit'ini YAZARKEN doğrula, ve merge'den hem
 **Süreç:** ADIM 57'nin çaresi **ölçüldü** — auto-merge açıkken main #707 altında üç kez
 ilerledi, yeşilin ardından merge oldu, **numara taşınmadı**.
 
+## Stage — ADIM 60: doküman kapısı artık HANGİ kickoff'un canlı olduğunu doğruluyor (PR #716, `f54bbc7`)
+
+**Ürün kodu DEĞİŞMEDİ** (`backend/src`, `alembic`, `frontend/src` el değmedi). Migration yok,
+`ENGINE_VERSION`/OpenAPI aynı. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+**Kapı sayıyı koruyordu, doğruluğu değil.** `check_classification` **tam bir tane**
+`doc-status: current` istiyordu; **hangisi** olduğunu sormuyordu. Depo bunu iki kez sevk etti ve
+ikisi de yeşil geçti: **#697** kendi ADIM 56 kickoff'unu `historical` işaretleyip **ADIM 55'i
+canlı bıraktı**; **#714** ADIM 56'yı promote etti ama arada **ADIM 57 inmişti**. İkisinde de
+`current` sayısı **1**'di — yanlış olanı. Sonuç: §Session START md. 2'yi izleyen taze bir oturum
+**bir slice bayat** resume seed'ine düşüyordu.
+
+**Yeni kural:** `docs/ADIM<n>…KICKOFF.md` içindeki `<n>` slice sırasıdır; **daha yüksek numaralı
+bir kickoff varken canlı işaret o belgede duramaz.** Semboller:
+`generate_repository_facts.py::ADIM_KICKOFF_RE` · `::_adim_kickoff_number` ·
+`::_check_live_kickoff_is_newest` · `::KICKOFF_GLOBS`. Kontrol **sayı kuralı yerleştikten sonra**
+koşar; iki `current` varken susar (orada "hangisi"nin cevabı yok).
+
+**Bilerek dar:** canlı belge slice-numaralı değilse (`STAGE*`, `O02`, `K05` … — 76 kickoff'un
+**31'i**) kural **susar**. `strict: true` altında yanlış bir kırmızı **tüm merge'leri kilitler**;
+sırasız bir adlandırmayı uydurma sırayla kırmızıya çevirmek daha büyük risktir.
+
+**Negatifi kanıtlı — sekiz kurgu, dördü kırmızı dördü sessiz**, dördü test olarak indi
+(`test_repository_facts_guard.py::test_a_superseded_kickoff_cannot_stay_live` ve üç kardeşi).
+Gerçek ağaçta `check_classification(.)` → `[]` (45 slice-numaralı kickoff, maksimum 58).
+
+**KAPI BU PR'I BİR KEZ KIRMIZIYA ÇEVİRDİ — ve haklıydı.** Üretilmiş olgular **backend test
+collection** sayısını taşıyor; dört yeni test onu **3541 → 3545** yaptı ve üç artefakt bayatladı.
+**Kalıcı kural: test ekleyen her slice
+`cd backend && uv run python ../scripts/generate_repository_facts.py --root ..` koşmalıdır.**
+
+**`strict: true` bandı ölçüldü.** `ea3db15` **22/22 yeşil** oldu ama merge olmadı — dal main'in
+gerisine düşmüştü; auto-merge bir kez kendi güncelledi, main iki kez daha ilerledi.
+**Koşan bir `Backend` varken dalı GÜNCELLEME** (85 dk sıfırlanır); koşu bitince güncelle.
+Bu slice **üç** `Backend` turu harcadı — biri gerçek kusur, ikisi bant.
+
+**Yan kalemler:** **#705** (`e0c25e6`) ADIM 55'i indiren PR'ı adlandırdı; içindeki `CLAUDE.md`
+HEAD bump'ı bilerek **düşürüldü** (o blok artık ADIM 56'nındı). **#714 kapatıldı (obsolete)** —
+teşhis doğruydu ama `#698` aynı onarımı daha doğru yapmıştı.
+
+**Dürüst sınır:** `mypy` ve canlı-ağaç gate testi bu container'da **koşulamadı** (eklenti /
+venv); testin assert ettiği çağrının aynısı (`--check`) ayrıca koşuldu → **exit 0**. Otorite CI.
+
+Ayrıntı: `docs/PROJECT_HISTORY.md` §ADIM 60 · `docs/ADIM60_LANDED_KICKOFF.md`
+(paste-ready resume prompt en altta).
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

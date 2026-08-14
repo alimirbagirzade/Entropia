@@ -1,5 +1,9 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
+<!-- doc-status: historical -->
+> **SUPERSEDED — ADIM 60 (2026-08-14).** Canlı kickoff artık
+> `docs/ADIM60_LANDED_KICKOFF.md` (doküman kapısı artık HANGİ kickoff'un canlı olduğunu
+> doğruluyor). Aşağısı ADIM 59 kapanışındaki durumu kaydeder; **"nerede duruyoruz" ve
+> "sıradaki oturum" maddeleri BAYAT.** **Değişmeyen:** blocker sayısı 1 (yalnız A-08),
+> verdict BLOCKED. Sayısal gerçekler için otorite bu belge DEĞİL:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 59 LANDED — P-A1 shared portfolio erişilebilirlik denetimi · sıradaki slice için kickoff

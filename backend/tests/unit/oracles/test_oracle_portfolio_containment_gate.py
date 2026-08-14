@@ -142,10 +142,15 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
 
     That second half is what still holds the containment closed, and it is the honest gap:
     wiring the worker needs an ``ItemParticipant`` backed by the real engine — a per-item
-    replay advanceable to a given ``t``, which is ADR §12's **ADIM 16 stepper and was never
-    written**. So the worker keeps its item loop and ``combine_item_runs``, no request or retry
-    can reach a tick loop, and no shipped Result can change. When the participant lands, this
-    test is the one that must be updated deliberately.
+    replay advanceable to a given ``t``. **What is missing is that ADAPTER, not the stepper.**
+    The stepper ADR §12 calls ADIM 16 SHIPPED as PR #602 (see that ADR's own AMENDMENT, which
+    supersedes the SKIPPED paragraph above it): ``engine._build_stepper`` hands back an
+    ``_ItemStepper`` that can be entered one bar at a time, and ``run_engine`` is a short
+    driver over it on every single-item run today. The remaining gap is one of SHAPE — the
+    stepper's phases BOOK, while ``ItemParticipant`` needs them to DESCRIBE so the loop can
+    arbitrate first. So the worker keeps its item loop and ``combine_item_runs``, no request or
+    retry can reach a tick loop, and no shipped Result can change. When the participant lands,
+    this test is the one that must be updated deliberately.
 
     Every unified-clock module stays reachable ONLY through the phase loop: the per-module
     guards name their importers exactly, and this asserts the containing shape of that — the

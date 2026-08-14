@@ -127,6 +127,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `agent_lab` | `cursor`, `enums`, `state_machine`, `tool_gateway` | Analysis Lab durum makinesi + gateway sözleşmesi |
 | `allocation` | `capability`, `config`, `enums`, `rules` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar. **CONTAINMENT (ADIM 3):** `capability.py` shared capital'in bu build'de **çalışmadığını** ilan eden TEK kaynak (`SHARED_ALLOCATION_STATUS = "future_dev"`); `rules.py::validate_allocation` enabled planı `SHARED_MODE_NOT_IN_BUILD` BLOCKER'ı ile açar → Portfolio sayfası + revision freeze + Ready Check (`ALLOCATION_SHARED_MODE_NOT_IN_BUILD`) + `commands/backtest_run.py` admission guard aynı verdict'i okur. Independent mod etkilenmez. Kaldırma şartları: `docs/decisions/2026-08-03_shared_portfolio_containment.md` §6. **Portfolio-level cross-item kuralları burada tanımlı ve doc 13 §8.2'de YOK:** `config.py:118-119` iki alan · `enums.py:37-53` `CrossItemConflictPolicy` (`NET` / `BLOCK_OPPOSITE` / `KEEP_SEPARATE`) · `rules.py:164-186` `MAX_TOTAL_EXPOSURE_INVALID` (BLOCKER) + `CONFLICT_POLICY_NET_V1` (WARNING). Tam kayıt: `docs/PROJECT_HISTORY.md` §B-1 |
 
+| `backtest` | `engine`, `manifest`, `funding`, `portfolio_engine`, `portfolio_mode`, `execution/*` | Backtest motoru + çalıştırma manifest'i. **İKİ AYRI YOL taşır ve karıştırılmamalıdır:** (1) **sevk edilen tek-item yolu** — `engine.py::run_engine`, worker'ın `jobs/backtest_engine.py:859`'dan çağırdığı; (2) **unified-clock adası** — `portfolio_engine.py` + `execution/` alt paketi, **üretimde sıfır çağıranı olan** kapsanmış faz döngüsü. Ada haritası aşağıda §Unified-clock portfolio adası. `manifest.py:126` `ENGINE_VERSION`'ın tek kaynağı |
 | `capability` | `baseline`, `enums`, `lifecycle` | Future Dev capability registry durum makinesi + activation gate'leri |
 | `create_package` | `candidate`, `generator`, `source_scan`, `language_detect`, `validation`, `state_machine`, `policy`, `baseline`, `value_objects`, `enums` | CP + Pre-Check; deterministik candidate manifest (`GENERATOR_VERSION`). **Pre-Check fail-closed (K-05):** `source_scan` (`SOURCE_SCANNER_VERSION=source-lexer-2.0`) tanınmayan-token oranı + kapanmamış string/blok yorum sayar → `PARSE_UNSUPPORTED`; `language_detect` (`LANGUAGE_DETECTOR_VERSION`) içerik dil sinyali → seçimle çelişki `SOURCE_LANGUAGE_MISMATCH`, rakip kanıt `REQUIRES_CLARIFICATION`. Üçü de FAILED scan + `precheck_failed`, asla PASSED |
 | `deletion` | `state_machine` | Soft-delete/restore/purge geçiş kuralları |
@@ -149,3 +150,77 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 | `trade_log` | `compiler`, `config`, `records`, `enums` | Trade Log external work object (CR-01/TL-01) |
 | `trading_signal` | `compiler`, `config`, `events`, `enums` | Trading Signal external work object |
 
+
+---
+
+## `domain/backtest/` — Unified-clock portfolio adası (KAPSANMIŞ)
+
+> **Neden bu bölüm var:** 2026-08-14'e kadar `docs/CODEMAPS/` bu alt sistemin **hiçbir
+> sembolünü adlandırmıyordu** — `run_portfolio`, `ItemParticipant`, `project_portfolio_run`,
+> `build_portfolio_manifest` altı haritanın hiçbirinde geçmiyordu. Boşluk **yapısaldır**:
+> `generate_repository_facts.py::check_codemap_coverage` yalnız **application** modüllerini ve
+> dramatiq aktörlerini kapılar, `domain/` alt paketlerini değil. Yani hiçbir kapı bunu
+> yakalayamazdı. Tam gerekçe: `docs/audit/final_closure_reconciliation_2026-08-13.md` §5.5.
+
+**Bu tabloyu okurken PAZARLIKSIZ kural: "VAR" ile "BAĞLI" iki AYRI olgudur, ikisi birlikte
+yazılır.** Yalnız birini yazmak bu repoda tekrarlanan dokümantasyon hatasıdır — var olan bir
+sembolü "yok" saymak da (#582 gövdesi), bağlı olmayan bir sembolü "çalışıyor" saymak da yanlıştır.
+
+| Sembol | Tanım | Üretim çağıranı | Test çağıranı | Doğru tek cümle |
+|---|---|---|---|---|
+| `run_portfolio` | `portfolio_engine.py:531` | **SIFIR** | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** |
+| `ItemParticipant` | `portfolio_engine.py:251` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var; onu gerçekleyen üretim adapter'ı YOK.** |
+| `project_portfolio_run` | `execution/portfolio_projection.py:513` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_projection.py` | **Gerçeklenmiş ve bağlanmamış.** |
+| `build_portfolio_manifest` | `execution/provenance.py:473` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_provenance.py` | **Gerçeklenmiş ve bağlanmamış.** |
+| `_ItemStepper` | `engine.py:756` | **`run_engine` (`:3279`) → worker `jobs/backtest_engine.py:859`** | stepper + phase suite'leri | **Gerçeklenmiş ve ÜRETİMDE AKTİF** (PR #602'den beri). |
+| `_build_stepper` | `engine.py:793` (yapı `:3263`, çağrı `:3350`) | `run_engine` | aynı | **Üretimde aktif** — `run_engine`'in bar döngüsüne kadarki gövdesi. |
+| `_phase_entry(bar, *, equity)` | `engine.py:2448` | `run_engine` | oracles | **`E(t)` enjeksiyon noktası SEVK EDİLMİŞ**; bugün `equity=None` ile çağrılır. |
+
+> **"hiç yazılmadı / never written" YAZMA.** ADR §12'nin ADIM 16 stepper'ı **2026-08-05'te
+> PR #602 ile indi** (ADR'nin kendi **AMENDMENT**'ı `:713`, `:690`'ı geçersiz kılar).
+> `:690`'da durup `:713`'ü okumayan bir okur gerçeğin **tersini** çıkarır.
+
+### Kapsama (containment) — iki bağımsız zorlama noktası
+
+| # | Yer | Yüzey | Etki |
+|---|---|---|---|
+| 1 (sert kapı) | `application/commands/backtest_run.py:542` | run admission | `ALLOCATION_SHARED_MODE_NOT_IN_BUILD` ile reddeder. Snapshot yüklemesinden **sonra**, `build_run_manifest` (`:573`) öncesinde → **run yok, manifest yok, job satırı yok** |
+| 2 (teşhis kapısı) | `domain/allocation/rules.py:154` | `validate_allocation` | `SHARED_MODE_NOT_IN_BUILD` BLOCKER → Portfolio sayfası + revision freeze + Ready Check |
+
+Tek kaynak `domain/allocation/capability.py:105` (`SHARED_ALLOCATION_STATUS = "future_dev"`).
+**Bu bir eksik DEĞİL, BİLİNÇLİ FAIL-CLOSED KAPSAMADIR** — karar kaydı
+`docs/decisions/2026-08-03_shared_portfolio_containment.md`. **Independent mod etkilenmez.**
+
+### Sevk edilen yol vs kanonik yol — sapmanın TEK satırı
+
+> **`application/jobs/backtest_engine.py:299` — `for prepared in prepared_items:`**
+
+Dış döngü **item listesidir**, kanonun istediği **birleştirilmiş zaman ekseni** değil. Her tur
+`_replay_strategy` (`:323`) → `run_engine` (`:859`) çağırır ve o item'ın **tüm** bar eksenini
+tüketir; `combine_item_runs` (`:364`) bitmiş koşuları pin sırasında katlar.
+
+**`combine_item_runs` AYNI ZAMANDA bağımsız modun da yoludur** (doc 13 §1.1 bağımsız modu
+tam ve birinci sınıf ilan eder). Bayraksız bir wiring **her bağımsız kompozit Result'ı sessizce
+yeniden fiyatlar** — dal `alloc_probe is not None and shared_allocation_is_executable()`
+olmalı ve **tek** yerde karar verilmeli.
+
+### Kalan tek engel: ŞEKİL uyuşmazlığı (dosya eksikliği değil)
+
+| `ItemParticipant` ne istiyor | `_ItemStepper` ne sunuyor | Fark |
+|---|---|---|
+| `carry(view) -> CarryCharges \| None` | `carry(bar) -> None` | bir şey döndürmez; anında ücret keser |
+| `mandatory_exit(view, *, held) -> MandatoryExit \| None` | `held(bar) -> bool` | bayrak döner; çıkışı kendi book eder |
+| `entry(view, snapshot, *, held) -> ItemIntent \| None` | `entry(bar, *, equity) -> None` | bir şey döndürmez; arbitrasyonsuz book eder |
+
+Üç faz **book eder**, döngü ise arbitrasyon öncesi **tarif** ister. Bunu kapatmak `run_engine`'in
+bar gövdesine — **46 golden digest**'in kapsadığı ifadelere — dokunur → **ADR §16 insan kapısı**.
+
+### Kapsama kapısının YEŞİLİ ters okunur
+
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py` **negatif** assertion'lıdır
+(`assert callers == []`). Yeşil olması shared engine'in **çalıştığını değil**, üretimin
+`run_portfolio`'ya **ulaşamadığını** kanıtlar. `test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock`
+geçer **çünkü sevk edilen fold hâlâ YANLIŞ sayıyı (`5000.00`) raporlar** — `3000.00` raporladığı
+gün bu test kırılır ve **o kırılma kabul kanıtıdır**. E5 kapıyı **daraltır (authorised-caller
+allowlist), ASLA SİLMEZ**; `SHARED_ALLOCATION_STATUS` ile `5000.00`'ı pinleyen iki assertion
+E5'te **değişmez** (onlar *lift* kapısı = ADIM 20, *wiring* kapısı değil).

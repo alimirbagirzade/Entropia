@@ -42,7 +42,11 @@ Before stopping a working session, produce **ALL** of the following:
 2. **Kickoff + resume prompt** — create/refresh `docs/STAGE<next>_KICKOFF.md`: where we
    are, what the last slice **left behind (reuse anchors with exact symbol names)**, next
    design pointers, REUSE list, working-loop method, and a **paste-ready resume prompt
-   block** (the exact text to paste into a clean session to continue).
+   block** (the exact text to paste into a clean session to continue). **Yeni kickoff
+   `current`, bir önceki `historical` olur — ikisi birlikte yapılır.** Yalnız kendi
+   belgeni işaretlemek yetmez: #697 kendi kickoff'unu `historical` bırakıp öncekini canlı
+   bıraktı, #714 ise arada yeni bir slice indiği için yanlış belgeyi promote etti. İkisi de
+   tek `current` taşıdığı için sayı kuralından geçmişti; artık `check_classification` yakalar.
 3. **Tarihçe + özet — İKİSİ AYRI (context disiplini):**
    - **`docs/PROJECT_HISTORY.md`** → slice'ın **tam** kaydı buraya eklenir (ne landed,
      migration, OCC biçimi, test sayıları, honest boundary'ler).
@@ -210,7 +214,9 @@ Before stopping a working session, produce **ALL** of the following:
 > `SHARED_ALLOCATION_STATUS` iddiasını kırmızıya çevirir. Aşağısı **elle** yazılır ve
 > içindeki **HEAD sha'sı yapısal olarak bayattır** — kapanış commit'inin kendisi onu
 > değiştirir; sha'ya değil üretilmiş bloğa güven. Bir belgenin güncel mi tarihsel mi
-> olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler.
+> olduğunu ilk satırındaki `<!-- doc-status: … -->` işareti söyler. **Canlı kickoff EN YENİ
+> slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
+> daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
 > **HEAD `e0c25e6`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.

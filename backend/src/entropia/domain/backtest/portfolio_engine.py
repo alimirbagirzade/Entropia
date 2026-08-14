@@ -62,6 +62,25 @@ HONEST BOUNDARY — what this module does NOT do
    test_the_phase_loop_exists_but_no_production_path_reaches_it``. Only the reason changed:
    the remaining work is the ``ItemParticipant`` adapter over the stepper plus the call-site
    change, which ADR §16 puts behind a human gate.
+
+   What actually blocks the wiring, measured against THIS tree (not remembered):
+
+   * **(a)** *Closed.* The bar no longer has to be stepped atomically: ``_ItemStepper`` exposes
+     ``admit`` / ``carry`` / ``open_fills`` / ``held`` / ``entry`` / ``tail`` as separate
+     callables mapped to the ADR's phases, and ``entry`` already takes the shared ``E(t)`` as
+     its ``equity`` argument (``engine._phase_entry``). A caller owning a merged clock can
+     therefore split one bar across P1 → P3 → PV → P4 without calling ``step``.
+   * **(b)** **The remaining blocker.** Those phases BOOK. An ``ItemParticipant`` has to state
+     an intent that this loop — not the item — decides to apply, so it needs a hook that
+     DESCRIBES an entry without booking it, against the item-local indicator warmup that lives
+     in the stepper's closure.
+   * **(c)** *Closed at ADIM 35.* ``execution/portfolio_projection.py::project_portfolio_run``
+     projects a finished ``PortfolioRun`` into one composite ``EngineOutput``.
+
+   (b) reaches into ``run_engine``'s bar body, which re-opens the byte-identity question
+   PR #602 closed — which is why ADR §16's human gate also needs an ADR amendment. Do not
+   start it from this docstring. Measurement and seam ordering:
+   ``docs/audit/closure_w0_shared_portfolio_2026-08-13.md``.
 2. **P0 / P2 / P8 are not modelled.** Data admission is the clock's cursor (P0); pending fills
    (P2) and same-direction scaling (P8) belong to the item's own execution model. An admitted
    ``scale_in`` therefore raises :class:`UnsupportedIntentKindError` rather than being applied

@@ -225,7 +225,35 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
-> **Son dalga — ADIM 64 (kabul borcu sınıf B, parti 04 — Backtest Result satır
+> **Son dalga — ADIM 65 (adli denetim kaydı + #541'in iki blocker gerekçesi, PR #700,
+> DARALTILDI): FİNANSAL MANTIK OKUNDU, DOKUNULMADI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), verdict BLOCKED. Closes #541.** `capabilities.py`'nin scaling-timeframe grubundaki
+> iki `dependency` metni kanonu okuyunca **ayakta kalmıyordu** ve ikisi de ağaca karşı
+> **yeniden ölçüldü**: `indicators.py:544::_ReferenceSeries` resampled seriyi **kuruyor**
+> (yani *"replay kurmuyor"* yanlıştı; eksik olan **kanonik satır** — doc 02 §5.7'de düz
+> per-layer override yok) · doc 02 §6.1 rung'ı **sabitliyor** (*"bir üst timeframe'e"*,
+> 15m→30m→1h = `CANONICAL_TIMEFRAMES` index+1), yani *"ikiye katlama"* hiç alternatif
+> değildi — gerçek kalan merdivenin **TEPESİ** (`1D` sonrası: clamp/durdur/reddet **üç
+> ayrı ürün**). Hiçbir satırın `status`/`value`/`field_path`/`label`/`blocker_code`'u
+> değişmedi. **`dependency` metnini UZATMA** — `CapabilityNote.tsx:24` her `future_dev`
+> seçeneğin dependency'sini tek paragrafta birleştirir, bu grupta **on tane** var → uzun
+> metin kullanıcıya **on kez** gider; gerekçe **kaynak yorumuna** yazılır. `capabilities.py`
+> değişince **TS aynasını yeniden üret** (byte-parity pinli).
+> **KAPSAM BİLEREK DARALTILDI, ölçüm önce yapıldı:** `booking.py` docstring'i **ALINMADI
+> çünkü REGRESİFTİ** — main'in #720 sonrası *"COMMISSION IS PER-FILL, PD-2 decided"*
+> metnini silip *"PD-2 uygulanmadı"* yazardı, oysa **#720 onu uyguladı**; containment gate
+> + harness + `BACKEND_LAYERS.md` de alınmadı, main'in **#722** sürümü daha yeni.
+> **`git diff origin/main <dal>` bir kapsam kararı için KANIT DEĞİLDİR** (dalın gerisinde
+> kaldığı her şeyi "silinmiş" gösterir) — `merge-base`'e göre **iki tarafı da** ayrı say.
+> **Denetim belgeleri ölçtükleri anı DONDURUR:** §7/§13'ün #550/#551/#552 satırları "hâlâ
+> bozuk" der, `e2fa521`'de doğruydu, **#720 üçünü de sevk etti** → banner bunu açıkça
+> söyler, satırlar **bilerek güncellenmedi**. `PROJECT_HISTORY.md` §ADIM 65 ·
+> `docs/ADIM65_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **ADIM 64 (kabul borcu sınıf B, parti 04 — Backtest Result satır
 > değişmezliği, doc 16, PR #704): `RH-05` `RH-10` `RH-11` `RH-12` `RH-16` KAPANDI,
 > `partial` 111 → 106, `debt_class.B` 80 → 75. ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı
 > DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Tema: Result satırı **tarihsel

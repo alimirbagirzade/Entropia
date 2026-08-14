@@ -218,9 +218,21 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
-> **HEAD `e547391`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **Son dalga — ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
+> **HEAD `ac5cf50`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **Son dalga — ADIM 60 (doküman kapısı artık HANGİ kickoff'un canlı olduğunu doğruluyor,
+> PR #716, 2026-08-14): ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** `check_classification` sayıyı koruyordu, doğruluğu değil: **#697** ADIM 55'i,
+> **#714** ADIM 56'yı canlı bıraktı — ikisi de tek `current` taşıdığı için **yeşil geçti**.
+> Artık daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varken canlı işaret eski belgede
+> duramaz (`::_check_live_kickoff_is_newest`). **Numarasız kickoff'larda bilerek susar** —
+> `strict: true` altında yanlış kırmızı tüm merge'leri kilitler. **Kapı kendi PR'ını bir kez
+> kırmızıya çevirdi ve haklıydı:** üretilmiş olgular **test collection** sayısını taşır
+> (3541 → 3545) — **test ekleyen slice olguları TAZELEMELİ**. `PROJECT_HISTORY.md` §ADIM 60 ·
+> `docs/ADIM60_LANDED_KICKOFF.md`.
+>
+> Öncesinde **HEAD `e547391`** · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ (dört ağaçta 0 satır). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > verdict BLOCKED.** Kanıtlandı: `run_portfolio` (`portfolio_engine.py:531`),
 > `project_portfolio_run` ve `build_portfolio_manifest` üretimde **çağrısız** (son ikisinin

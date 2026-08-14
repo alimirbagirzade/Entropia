@@ -9155,3 +9155,118 @@ merge'idir.
 `SHARED_ALLOCATION_STATUS` · `ENGINE_VERSION` · kabul borcu ratchet'i
 (`acceptance_coverage_baseline.json`) · `docs/CODEMAPS/*` (yeni endpoint / tablo / sayfa /
 job yok, kapanış ritüeli md. 5 bu yüzden **uygulanmaz**).
+
+## ADIM 60 — doküman sınıflandırma kapısı artık HANGİ belgenin canlı olduğunu da doğruluyor (PR #716)
+
+**Tarih:** 2026-08-13/14 · **Base:** `origin/main` @ `916a49b` · **Merge:** PR #716, `main`
+üzerinde **`f54bbc7`**. **Ürün kodu DEĞİŞMEDİ** — `backend/src`, `alembic`, `frontend/src` el
+değmedi; migration yok, `ENGINE_VERSION` / OpenAPI / OCC / route / react-query key / SSE
+taksonomisi aynı. **A-08 blocker AÇIK, verdict BLOCKED — bu slice ölçmedi.**
+
+> **NUMARA — bu slice İKİ KEZ taşındı: 58 → 59 → 60.** Numarasız yazıldı (kod commit'leri
+> `feat(gate)` / `chore(gate)`); CI'da beklerken `#715` **ADIM 58**'i, sonra `#718` **ADIM 59**'u
+> merge edilmiş olarak aldı → kayıt adı **ADIM 60**. Kural değişmedi: numaralar yeniden
+> atanmaz, **merge edilmiş ad kazanır**, taşınan taraf merge edilmemiş olandır. **Kapanış dalı
+> ve commit'leri `stage-59` yazar** — emsal: ADIM 52'nin commit'leri `stage-49` yazar.
+
+### 1. Sorun: kapı sayıyı koruyordu, doğruluğu değil
+
+`scripts/generate_repository_facts.py::check_classification` **tam bir tane**
+`doc-status: current` belgesi olmasını şart koşuyordu. **Hangisi** olduğunu sormuyordu.
+Sonuç: yanlış belgeye konmuş bir promote CI'da **yeşil** kalır. Depo bunu iki kez sevk etti:
+
+| PR | Ne oldu | `current` sayısı | Kapı |
+|---|---|---|---|
+| **#697** (ADIM 56) | kendi kickoff'unu `historical` işaretledi, **ADIM 55'i canlı bıraktı** | 1 | yeşil |
+| **#714** | ADIM 56'yı promote etti, ama arada **ADIM 57 inmişti** | 1 | yeşil olurdu |
+
+Birincisinde §Session START md. 2'yi (*"latest kickoff"*) izleyen taze her oturum **bir slice
+bayat** bir resume seed'ine düşüyordu. İkincisi ölçüldüğü anda doğruydu, push edildiği anda
+bir slice geride — ve `#714` **kapatıldı** (obsolete), çünkü `#698` aynı onarımı **daha
+doğru** yapmıştı: ADIM 57'yi promote edip ADIM 55'i demote etmişti.
+
+**Kritik gözlem:** `main` bugün doğru, ama **#698'in yazarı öncekini elle demote ettiği için**
+— bir kapı istediği için değil. Bu slice o "elle"yi kaldırıyor.
+
+### 2. Kural
+
+`docs/ADIM<n>…KICKOFF.md` adındaki `<n>` slice sırasıdır. **Daha yüksek numaralı bir kickoff
+varken canlı işaret o belgede duramaz.**
+
+| Sembol | Ne yapar |
+|---|---|
+| `ADIM_KICKOFF_RE` | `^ADIM(\d+)\D.*KICKOFF\.md$` — 76 kickoff'un **45'ini** slice-numaralı olarak tanır |
+| `_adim_kickoff_number(path)` | slice numarası ya da `None` (numarasız adlandırma) |
+| `_check_live_kickoff_is_newest(root, rel)` | kuralın kendisi; daha yenileri **adlandırarak** listeler |
+| `KICKOFF_GLOBS` | `("docs/*KICKOFF*.md",)` — tarama kümesi tek yerde |
+
+Kontrol **sayı kuralı yerleştikten sonra** koşar (tam 1 `current`). İki `current` varken
+**susar**: orada *"hangisi"* sorusunun cevabı yoktur ve sayı kuralı kusuru zaten adlandırır.
+
+### 3. Bilerek dar tutuldu — ve bu bir taviz DEĞİL, ölçülmüş bir sınır
+
+Canlı belge slice-numaralı **değilse** (`STAGE*`, `O02`, `K05`, `POST_V1`, `G02`,
+`DOC_TRUTH_REPAIR` … — 76 kickoff'un **31'i**) kural **susar**. Karşılaştıracak bir sıra yok;
+uydurmak, deponun henüz benimsemediği bir adlandırmayı kırmızıya çevirirdi. Ruleset
+`20765617` `strict: true` altında **yanlış bir kırmızı TÜM merge'leri kilitler**;
+yanlış-ama-sırasız bir işaret daha küçük risktir. Kural yalnız **kanıtlanmış** regresyonun
+eksenini kapatır.
+
+### 4. Negatifi kanıtlı — sekiz kurgu, iki yön
+
+| Kurgu | Beklenen | Ölçülen |
+|---|---|---|
+| #697 regresyonu: ADIM 55 canlı, ADIM 56 var | kırmızı | ✓ |
+| #714 regresyonu: ADIM 56 canlı, ADIM 57 var | kırmızı | ✓ |
+| İki slice geride: ADIM 55 canlı, 56 + 57 var | kırmızı, **ikisini de listeler** | ✓ |
+| Farklı adlandırma yine sıralı: `ADIM20_BLOCKED` canlı, `ADIM26` var | kırmızı | ✓ |
+| En yeni canlı (ADIM 57), 55 + 56 historical | sessiz | ✓ |
+| Tek slice | sessiz | ✓ |
+| Numarasız belge canlı (`STAGE9`), ADIM 57 var | sessiz | ✓ |
+| Maksimumda beraberlik (`ADIM16` / `ADIM16_STEPPER`) | sessiz | ✓ |
+
+Dördü `backend/tests/contract/test_repository_facts_guard.py`'ye **test olarak** indi
+(`test_a_superseded_kickoff_cannot_stay_live`, `test_promoting_a_kickoff_that_is_already_behind_is_caught`,
+`test_the_newest_kickoff_may_be_live`, `test_an_unnumbered_live_kickoff_is_left_alone`).
+**Gerçek ağaç:** `check_classification(.)` → `[]`.
+
+### 5. Kapı bu PR'ı bir kez kırmızıya çevirdi — ve haklıydı
+
+İlk push (`2271420`) `Backend`'i düşürdü:
+
+```
+documentation-truth gate FAILED (3 finding(s)):
+  - docs/generated/repository_facts.json is STALE
+  - docs/generated/repository_facts.md is STALE
+  - README.md's generated block is STALE
+```
+
+Sebep: üretilmiş olgular **backend test collection** sayısını taşıyor; dört yeni test onu
+**3541 → 3545** yaptı. `a58aba1` yeniden üretti — **tek değişen satır sayının kendisi**
+(338 dosya sabit). **Ders, bu dosyada kalıcı olsun: test ekleyen her slice
+`cd backend && uv run python ../scripts/generate_repository_facts.py --root ..` koşmalıdır.**
+
+### 6. `strict: true` bandı — ölçülmüş süreç maliyeti
+
+`ea3db15` üzerinde **22/22 yeşil** oldu (`Backend` 22:08:14Z'de geçti) ama **merge olmadı**:
+dal main'in gerisine düşmüştü. Auto-merge dalı bir kez kendiliğinden güncelledi (20:58Z),
+sonra main iki kez daha ilerledi (#713, #715). Kapanış: **koşan bir `Backend` varken dalı
+GÜNCELLEME** — 85 dakikalık saati sıfırlar; koşu bitince güncelle. Bu slice toplam **üç**
+`Backend` turu harcadı (biri gerçek kusur, ikisi bant).
+
+### 7. Bu oturumun diğer iki kalemi
+
+- **PR #705** (`e0c25e6`) — ADIM 55'i indiren PR'ı adlandırma. İçindeki `CLAUDE.md` HEAD
+  bump'ı (`4d9a373` → `c4cd932`) **düşürüldü**: `#697` indikten sonra o blok ADIM 56'nındı,
+  `c4cd932` ise ADIM 55'in merge'ü — bir ADIM 55 sha'sını ADIM 56 dalgasına iliştirirdi.
+- **PR #714** — **kapatıldı (obsolete)**. Doğru teşhis, ama `#698` aynı onarımı daha doğru
+  yaptı; kalan içeriği yanlış bir promote'a dönüşmüştü.
+
+### 8. Dürüst sınırlar
+
+- **`mypy` bu container'da koşulamadı** (`pydantic.mypy` eklentisi yüklenmiyor) → otorite CI.
+- **`test_the_repository_itself_passes_the_documentation_truth_gate` koşulamadı** — proje
+  venv'inde `pytest` kurulu değil, global pytest `entropia`'yı göremiyor. Testin assert
+  ettiği çağrının **aynısı** (`main([…, "--check"]) == 0`) ayrıca koşuldu ve **exit 0** verdi.
+- **Kapı yalnız kickoff eksenini kapatır.** `ALWAYS_HISTORICAL_GLOBS` ve sayı kuralı
+  değişmedi; numarasız kickoff'lar hâlâ sırasızdır.

@@ -118,6 +118,53 @@ class CompileBundleRequest(BaseModel):
     run_request_id: str | None = None
 
 
+class BundleMemberModel(BaseModel):
+    """One pinned bundle member — ``jobs/research_data.py::_pin_member`` verbatim.
+
+    Documentation only: it is published via ``responses=``, NOT as a
+    ``response_model``, so FastAPI never filters or re-serializes the sealed body.
+    That matters because the body is what ``bundle_hash`` was computed over — a
+    response model that dropped or added a key would make the published bundle
+    disagree with its own hash.
+    """
+
+    research_revision_id: str
+    research_content_hash: str | None
+    usage_scope: str | None
+    market_dataset_revision_id: str | None
+    market_content_hash: str | None
+    available_time_policy: str | None
+    available_delay_seconds: int | None
+    event_time_semantics: str | None
+    frequency_policy: str | None
+    source_timezone_mode: str | None
+    source_timezone_iana: str | None
+    instrument_mapping_ref: str | None
+    feature_definition_ids: list[str]
+
+
+class SealedBundleResponse(BaseModel):
+    """The sealed bundle body (doc 12 §9.1/§9.2, GH #558 Karar 2 = A1+A2).
+
+    Published so the contract is VISIBLE in ``docs/openapi.json``: both handlers
+    return a bare ``dict``, which the drift guard renders as a free-form object, so
+    before this the timing pin could have changed shape with a zero-line schema
+    diff. ``alignment_policy_versions[]`` and ``missing_and_stale_policies[]`` are
+    the two §9.2 names deliberately NOT here — nothing in the backend produces them.
+    """
+
+    bundle_kind: str
+    members: list[BundleMemberModel]
+    compiler_version: str
+    available_time_policies: list[str]
+    instrument_mapping_revision_ids: list[str]
+    feature_definition_revision_ids: list[str]
+    resolved_at: str
+    bundle_hash: str
+    task_id: str | None = None
+    run_request_id: str | None = None
+
+
 @router.post("/research-datasets", status_code=201)
 async def create_dataset(
     body: CreateDatasetRequest,
@@ -389,7 +436,11 @@ async def get_detail(
     return detail
 
 
-@router.post("/research-datasets/bundles/agent")
+@router.post(
+    "/research-datasets/bundles/agent",
+    response_model=None,
+    responses={200: {"model": SealedBundleResponse}},
+)
 async def compile_agent_bundle(
     body: CompileBundleRequest,
     ctx: RequestContext = Depends(request_context),
@@ -402,7 +453,11 @@ async def compile_agent_bundle(
     )
 
 
-@router.post("/research-datasets/bundles/backtest-evidence")
+@router.post(
+    "/research-datasets/bundles/backtest-evidence",
+    response_model=None,
+    responses={200: {"model": SealedBundleResponse}},
+)
 async def compile_evidence_bundle(
     body: CompileBundleRequest,
     ctx: RequestContext = Depends(request_context),

@@ -55,7 +55,7 @@ _NON_CONSUMABLE_STATES = frozenset(
     {ResearchRevisionState.DEPRECATED, ResearchRevisionState.APPROVAL_REVOKED}
 )
 
-_BUNDLE_COMPILER_VERSION = "research-bundle-v1"
+_BUNDLE_COMPILER_VERSION = "research-bundle-v2"
 
 
 # --------------------------------------------------------------------------- #
@@ -503,16 +503,7 @@ async def compile_agent_data_bundle(
     members: list[dict[str, Any]] = []
     for revision_id in research_revision_ids:
         revision = await admit_bundle_member(session, actor, revision_id, for_execution=False)
-        link = await rd_repo.get_market_link(session, revision_id)
-        members.append(
-            {
-                "research_revision_id": revision.revision_id,
-                "research_content_hash": revision.content_hash,
-                "usage_scope": str(revision.usage_scope) if revision.usage_scope else None,
-                "market_dataset_revision_id": revision.linked_market_dataset_revision_id,
-                "market_content_hash": link.market_content_hash if link else None,
-            }
-        )
+        members.append(await _pin_member(session, revision))
     return _seal_bundle("agent_data_bundle", members, extra={"task_id": task_id})
 
 
@@ -535,29 +526,95 @@ async def compile_backtest_evidence_bundle(
     members: list[dict[str, Any]] = []
     for revision_id in research_revision_ids:
         revision = await admit_bundle_member(session, actor, revision_id, for_execution=True)
-        link = await rd_repo.get_market_link(session, revision_id)
-        members.append(
-            {
-                "research_revision_id": revision.revision_id,
-                "research_content_hash": revision.content_hash,
-                "usage_scope": str(revision.usage_scope) if revision.usage_scope else None,
-                "market_dataset_revision_id": revision.linked_market_dataset_revision_id,
-                "market_content_hash": link.market_content_hash if link else None,
-            }
-        )
+        members.append(await _pin_member(session, revision))
     return _seal_bundle(
         "backtest_evidence_bundle", members, extra={"run_request_id": run_request_id}
     )
 
 
+async def _pin_member(session: AsyncSession, revision: ResearchDatasetRevision) -> dict[str, Any]:
+    """Pin one revision into a bundle member (GH #558, Karar 2 = A1, 2026-08-14).
+
+    The timing block mirrors the Run manifest's ``revision`` sub-dict field for
+    field (``commands/backtest_run_context.py::_research_entries``) — the two
+    execution-evidence surfaces answer "which availability rule was this compiled
+    under?" with the SAME six keys, so a reader never has to learn two shapes.
+    Doc 12 §9.1 requires the Agent bundle to pin "usage scope and time policy";
+    §9.2 lists ``available_time_policies[]`` on the evidence bundle. Both compilers
+    call this one function, so neither surface can be the poorer of the two.
+
+    These fields enter the hashed body, so ``bundle_hash`` is no longer invariant
+    under a time-policy change: a bundle now attests its own timing provenance.
+    """
+    link = await rd_repo.get_market_link(session, revision.revision_id)
+    features = await rd_repo.list_feature_definitions(session, revision.revision_id)
+    return {
+        "research_revision_id": revision.revision_id,
+        "research_content_hash": revision.content_hash,
+        "usage_scope": _enum(revision.usage_scope),
+        "market_dataset_revision_id": revision.linked_market_dataset_revision_id,
+        "market_content_hash": link.market_content_hash if link else None,
+        # Timing provenance — the six the Run manifest already pins.
+        "available_time_policy": _enum(revision.available_time_policy),
+        "available_delay_seconds": revision.available_delay_seconds,
+        "event_time_semantics": _enum(revision.event_time_semantics),
+        "frequency_policy": _enum(revision.frequency_policy),
+        "source_timezone_mode": _enum(revision.source_timezone_mode),
+        "source_timezone_iana": revision.source_timezone_iana,
+        # The two §9.2 arrays that HAVE a shipped source, carried per member under
+        # their shipped names; ``_seal_bundle`` derives §9.2's top-level arrays
+        # from them (O-30 idiom: two names, one value, never divergent).
+        "instrument_mapping_ref": revision.instrument_mapping_ref,
+        "feature_definition_ids": [f.feature_definition_id for f in features],
+    }
+
+
+def _enum(value: Any) -> str | None:
+    """``str(enum)`` or ``None`` — the manifest's own coercion (``run_context::_enum``)."""
+    return None if value is None else str(value)
+
+
+def _derived(members: list[dict[str, Any]], key: str) -> list[str]:
+    """Sorted, de-duplicated, null-free projection of one member key.
+
+    Sorted because the list enters ``manifest_hash``: canonical JSON sorts object
+    keys but NOT array elements, so an unsorted projection would make the hash
+    depend on the caller's revision-id order.
+    """
+    values: set[str] = set()
+    for member in members:
+        value = member.get(key)
+        if isinstance(value, list):
+            values.update(str(item) for item in value if item is not None)
+        elif value is not None:
+            values.add(str(value))
+    return sorted(values)
+
+
 def _seal_bundle(
     bundle_kind: str, members: list[dict[str, Any]], *, extra: dict[str, Any]
 ) -> dict[str, Any]:
-    """Hash the pinned members into an immutable, content-addressed bundle."""
+    """Hash the pinned members into an immutable, content-addressed bundle.
+
+    The three ``*_ids`` / ``*_policies`` arrays are doc 12 §9.2's own field names
+    (Karar 2 = A2); their values are DERIVED from the members above, which stay
+    authoritative — §9.2's flat arrays cannot say which member a value belongs to,
+    so removing either half would lose information the other half carries.
+
+    Two §9.2 names are deliberately ABSENT: ``alignment_policy_versions[]`` and
+    ``missing_and_stale_policies[]`` have no shipped source anywhere in
+    ``backend/src`` (measured 2026-08-14, class D). Emitting them as empty arrays
+    would assert "there are none", which is a provenance LIE; omitting them leaves
+    a provenance GAP, which is what they actually are. Recorded as a signed
+    deviation in ``docs/decisions/closure_product_decisions_2026-08-13.md``.
+    """
     body = {
         "bundle_kind": bundle_kind,
         "members": members,
         "compiler_version": _BUNDLE_COMPILER_VERSION,
+        "available_time_policies": _derived(members, "available_time_policy"),
+        "instrument_mapping_revision_ids": _derived(members, "instrument_mapping_ref"),
+        "feature_definition_revision_ids": _derived(members, "feature_definition_ids"),
         **{k: v for k, v in extra.items() if v is not None},
     }
     bundle_hash = manifest_hash(body)

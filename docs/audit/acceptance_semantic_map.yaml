@@ -13261,7 +13261,10 @@ criteria:
     - backend/tests/integration/test_research_data_persistence.py::test_evidence_bundle_pins_exact_ids_and_enforces_scope
   - id: RD-11.c2
     text: The bundle also pins feature definitions, time policies and mapping ids.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_research_point_in_time_parity.py::test_all_three_artifacts_carry_the_same_timing_dict
+    - backend/tests/integration/test_research_point_in_time_parity.py::test_the_two_backed_92_arrays_carry_real_values
   - id: RD-11.c3
     text: Approving a new revision leaves a running or finished run's manifest unchanged.
     status: uncovered
@@ -13270,10 +13273,14 @@ criteria:
   - backend/src/entropia/domain/research_data/usage_scope.py
   test_evidence:
   - backend/tests/integration/test_research_data_persistence.py::test_evidence_bundle_pins_exact_ids_and_enforces_scope
+  - backend/tests/integration/test_research_point_in_time_parity.py::test_all_three_artifacts_carry_the_same_timing_dict
+  - backend/tests/integration/test_research_point_in_time_parity.py::test_the_two_backed_92_arrays_carry_real_values
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_research_data_persistence.py::test_evidence_bundle_pins_exact_ids_and_enforces_scope
+  - backend/tests/integration/test_research_point_in_time_parity.py::test_all_three_artifacts_carry_the_same_timing_dict
+  - backend/tests/integration/test_research_point_in_time_parity.py::test_the_two_backed_92_arrays_carry_real_values
   negative: []
   auth: []
   occ: []
@@ -13284,17 +13291,17 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The bundle member assertions cover exactly three fields — research_revision_id, research_content_hash
-    and market_dataset_revision_id — plus a non-empty bundle_hash. The doc row additionally names
-    feature definitions, time policies and mapping ids; none of those are read back from the bundle
-    by any test. The "new Approved revision does not change a running/finished manifest" clause has
-    no research-data test: nothing approves a successor revision mid-run and re-reads the manifest.
-    ADIM 54 FINDING — c2 is very likely MISCLASSIFIED and no test can close it. The clause wants the
-    bundle to pin feature definitions, time policies and mapping ids; jobs/research_data.py::_seal_bundle
-    writes members carrying exactly five fields (research_revision_id, research_content_hash, usage_scope,
-    market_dataset_revision_id, market_content_hash) and none of the three named is among them. c3
-    remains genuinely class B. Left at class B deliberately: splitting or moving it would RAISE a
-    ceiling.'
+  notes: 'c2 CLOSED by the P-E3 slice (GH #558, Karar 2 = A1+A2, signed 2026-08-14). The ADIM 54
+    finding recorded here was correct at the time and was resolved the only way it could be — by the
+    PRODUCT changing, not by reclassifying the row. jobs/research_data.py::_pin_member now carries all
+    three things the clause names: time policies (the six fields the Run manifest pins), mapping ids
+    (instrument_mapping_ref) and feature definitions (feature_definition_ids), with doc 12 §9.2''s
+    derived arrays on the sealed body. Both evidence nodes were negative-controlled: stripping the
+    timing block from _pin_member turns them red. c3 is UNTOUCHED and genuinely class B — nothing
+    approves a successor revision mid-run and re-reads the manifest — so RD-11 stays partial/B. Two
+    §9.2 names remain unshipped (alignment_policy_versions[], missing_and_stale_policies[]); they are
+    NOT part of this clause and are recorded as a signed class-D deviation in
+    docs/decisions/closure_product_decisions_2026-08-13.md.'
 - id: RD-12
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'

@@ -55,11 +55,24 @@ const BUNDLE_MEMBER = {
   usage_scope: "research_backtest",
   market_dataset_revision_id: "mrev_9",
   market_content_hash: "sha256:mh",
+  // Timing provenance — GH #558 / Karar 2 (A1). The stub mirrors the server body
+  // field for field; a fixture that lies about the shape hides a contract drift.
+  available_time_policy: "fixed_delay",
+  available_delay_seconds: 120,
+  event_time_semantics: "provider_event_timestamp",
+  frequency_policy: null,
+  source_timezone_mode: "utc",
+  source_timezone_iana: null,
+  instrument_mapping_ref: null,
+  feature_definition_ids: [],
 };
 const AGENT_BUNDLE = {
   bundle_kind: "agent_data_bundle",
   members: [BUNDLE_MEMBER],
-  compiler_version: "research-bundle-v1",
+  compiler_version: "research-bundle-v2",
+  available_time_policies: ["fixed_delay"],
+  instrument_mapping_revision_ids: [],
+  feature_definition_revision_ids: [],
   resolved_at: "2026-07-09T10:00:00+00:00",
   bundle_hash: "sha256:agent",
   task_id: "task_7",
@@ -67,7 +80,10 @@ const AGENT_BUNDLE = {
 const EVIDENCE_BUNDLE = {
   bundle_kind: "backtest_evidence_bundle",
   members: [BUNDLE_MEMBER],
-  compiler_version: "research-bundle-v1",
+  compiler_version: "research-bundle-v2",
+  available_time_policies: ["fixed_delay"],
+  instrument_mapping_revision_ids: [],
+  feature_definition_revision_ids: [],
   resolved_at: "2026-07-09T10:00:00+00:00",
   bundle_hash: "sha256:evidence",
   run_request_id: "run_3",

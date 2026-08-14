@@ -406,8 +406,20 @@ sabitleri **kendi sorgu katmanının uyguladığı** değerlerden ver. Sınırs�
 | DELETE `/{id}` (204) | `soft_delete:352` | `rd_cmd.soft_delete_research_dataset` | If-Match `rv-N` (`:365`) | — |
 | GET `` | `list_datasets:371` | `rd_query.list_research_dataset_revisions` | yok | — |
 | GET `/{id}` | `get_detail:382` | `rd_query.get_research_dataset_detail` | yok | — |
-| POST `/bundles/agent` | `compile_agent_bundle:393` | `rd_jobs.compile_agent_data_bundle` (**pure read**) | yok | — |
-| POST `/bundles/backtest-evidence` | `compile_evidence_bundle:406` | `rd_jobs.compile_backtest_evidence_bundle` (**pure read**) | yok | — |
+| POST `/bundles/agent` | `compile_agent_bundle` | `rd_jobs.compile_agent_data_bundle` (**pure read**) | yok | — · gövde **`SealedBundleResponse`** olarak yayımlanır |
+| POST `/bundles/backtest-evidence` | `compile_evidence_bundle` | `rd_jobs.compile_backtest_evidence_bundle` (**pure read**) | yok | — · gövde **`SealedBundleResponse`** olarak yayımlanır |
+
+**Yayımlanan bundle gövdesi (ADIM 66 / GH #558):** iki uç da
+`routes/research_data.py::SealedBundleResponse` + `::BundleMemberModel` şemasını yayımlar
+(`components.schemas`). **Bağlanma biçimi pazarlıksızdır:** `response_model=None` +
+`responses={200: {"model": ...}}` — `response_model` FastAPI'ye gövdeyi **yeniden
+serileştirtir** ve `_seal_bundle`'ın **düşürdüğü** `task_id`/`run_request_id`'yi `null` olarak
+geri ekler; düşürülmüş gövde **`bundle_hash`'in hesaplandığı gövdedir**, yani yayımlanan
+bundle kendi hash'iyle çelişirdi. `response_model=None` olmadan şema `$ref` + eski serbest
+alanlarla **birleşir** (ölçüldü). Şema ↔ gerçek gövde eşitliği
+`test_research_point_in_time_parity.py::test_the_sealed_body_matches_the_published_openapi_schema`
+ile **iki yönlü** pinlidir. Üye şekli tek yerden kurulur:
+`jobs/research_data.py::_pin_member` — yeni bir bundle yüzeyinde üyeyi elle kurma.
 
 ## esp.py — OCC: **`X-Registry-Version` düz int header** (`_REGISTRY_VERSION_HEADER:39`)
 

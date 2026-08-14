@@ -21,15 +21,15 @@
   ],
   "provenance": {
     "measured_by": "docs/audit/acceptance_semantic_scan.py --root .. --report",
-    "measured_at": "2026-08-13T13:30:00Z",
-    "slice": "ADIM 55 — RC §6.7 P1-Gate3 follow-through (class-B debt, batch 04: Backtest Result row immutability, doc 16)",
-    "base_commit": "4d9a373",
+    "measured_at": "2026-08-14T00:00:00Z",
+    "slice": "P-E3 — research timing provenance pinned into the bundle identity (GH #558, Karar 2 = A1+A2)",
+    "base_commit": "2a314ae",
     "conditions": "static scan; ast + title extraction against the live test tree; no database, no network, no test run",
-    "supersedes": "the ADIM 54 freeze (111 partial / 8 uncovered; A1 B80 C6 D32, base 2a90fe3). Nothing was reclassified and no criterion was deleted: this slice closed FIVE class-B criteria on the doc 16 Results History line (RH-05, RH-10, RH-11, RH-12, RH-16), so partial fell 111 -> 106 and class B fell 80 -> 75. RH-13 and RH-14 were measured and deferred — see their notes. The uncovered, A, C and D ceilings are untouched.",
+    "supersedes": "the ADIM 55 freeze (106 partial / 8 uncovered; A1 B75 C6 D32, base 4d9a373). NO CEILING MOVED and none could: this slice closed the CLAUSE RD-11.c2, and the ceilings count CRITERIA. RD-11 stays partial/B because c3 (a successor approval must not rewrite a live run manifest) is untouched. What changed is the clause ledger — uncovered clauses 124 -> 123, covered 1003 -> 1004 — and the REASON RD-11.c2 was open: the ADIM 54 finding said no test could close it because _seal_bundle carried five fields and none of the three the clause names. That was true, and it was resolved by the PRODUCT changing (jobs/research_data.py::_pin_member), not by moving the row to class D, which would have RAISED the D ceiling.",
     "clause_totals_at_freeze": {
-      "covered": 1003,
+      "covered": 1004,
       "partial": 9,
-      "uncovered": 124,
+      "uncovered": 123,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "product_decision_required": 0

@@ -9920,3 +9920,182 @@ verilmedi** — o görünüm dalın gerisinde kaldığı her şeyi "silinmiş" g
 - **Postgres bu container'da yok** → integration suite yerelde koşmadı. Yerelde koşan:
   `pytest -k capability_matrix` **79 geçti**, `ruff`/`format`/`mypy`, doc-truth kapısı.
   **Otorite CI.**
+
+## ADIM 66 — research timing provenance bundle KİMLİĞİNE pinlendi (P-E3, GH #558)
+
+> **NUMARA NOTU.** Yazıldığında main'in son kaydı **ADIM 65**'ti (`grep '^## ADIM'`,
+> base `2a314ae`). Kural değişmedi: **numaralar yeniden atanmaz, merge edilmiş ad kazanır**.
+> Dal adı (`fix/closure-e3-research-timing-provenance`) ve commit mesajları ADIM numarası
+> taşımaz, o yüzden bir çakışmada yeniden yazılmaları gerekmez.
+
+**Base SHA `2a314ae`** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · alembic head
+**`0043_i08_registry_strategy_fks`** (değişmedi) · **OpenAPI DEĞİŞTİ** (aşağıda §5) ·
+**ÜRÜN KODU DEĞİŞTİ** — bundle gövdesi ve `bundle_hash` **şekil değiştirdi**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED** (bu slice A-08'i ölçmedi).
+
+### 0. Ön koşul: karar İMZASIZDI ve slice durdurulmadan önce ölçüldü
+
+Paketin sert ön koşulu *"#558 PO kararı yoksa DUR"*du. Ölçüm: `closure_product_decisions_2026-08-13.md`
+§Karar 2 imza satırındaki **beş kutunun beşi de boştu**, `karar veren:` boştu, belgenin
+**tek** commit'i vardı (`c047511`), GH #558 `state=open` / `state_reason=reopened` /
+**sıfır yorum**. Yani karar hiçbir yerde verilmemişti.
+
+**Slice durduruldu ve karar ürün sahibine soruldu; oturum içinde imzalandı** (2026-08-14,
+`alimirbagirzade`). **Bu emsal önemlidir:** #720 per-fill komisyonu Karar 1 imzasızken
+sevk etti ve `CLAUDE.md` bunu hâlâ açık borç olarak taşıyor — aynı şey ikinci kez
+yapılmadı.
+
+**İmzada bir tutarsızlık vardı ve düzeltilerek imzalandı.** İstenen *"A1, A2, B ve C
+yapalım"*dı; bunlar birlikte imzalanamaz: **B = hiç pinleme** (A'nın tam tersi), **C = A1'in
+`available_delay_seconds`'sız alt kümesi** (A1 zaten içerir). İmzalanan okuma: *timing ekseni
+tam pinlenir (A1+A2, C içerilir) + pinlenemeyen kalan için B'nin biçiminde imzalı sapma
+kaydı*. Üçüncü alt-karar da **ölçümle daraltıldı** — §6.
+
+### 1. Kusur — ölçüldü, belgeden alınmadı
+
+Tasarım belgesi `0d8bf8f`'te ölçmüştü; main **81 commit** ilerlemişti, o yüzden her satır
+`2a314ae`'ye karşı **yeniden** okundu:
+
+| İddia | Yeniden ölçüm @ `2a314ae` |
+|---|---|
+| Üye beş alan taşıyor | **Doğru** — iki compiler da aynı beşi (`research_data.py:507`, `:539`) |
+| `_BUNDLE_COMPILER_VERSION` | **`research-bundle-v1`** (`:58`) |
+| Kalıcı `bundle_hash` tüketicisi yok | **Doğru** — `grep -rn bundle_hash src/` → **2 satır**, ikisi de `_seal_bundle` içinde |
+| Run manifest'i timing'i pinliyor | **Doğru** — altı alan (`backtest_run_context.py:384-389`) |
+| Tek strict xfail | **Doğru** — ağaçtaki dokuz `strict=True`'nun sekizi `zip(..., strict=True)` |
+
+Asıl kusur bir eksik alan değil, bir **kimlik** kusuruydu: `bundle_hash` üye listesi üzerinden
+hesaplanır, o listede zamanlama yoktur → **hash bir time-policy değişimi altında değişmezdi**.
+Yani bir bundle **kendi içeriğinden** hangi availability kuralı altında derlendiğini
+kanıtlayamıyordu. `content_hash` bunu kapatmaz: o **payload byte'larını** kapsar, revision'ın
+zamanlama metadata'sını değil.
+
+### 2. Sevk edilen (A1+A2)
+
+- **`jobs/research_data.py::_pin_member` (YENİ).** İki compiler da artık **tek** bu
+  fonksiyondan geçer — "en fakir yüzey" durumu yapı gereği imkânsız. Üye, Run manifest'inin
+  `revision` alt-sözlüğünü **alan alan** aynalayan altı timing alanını taşır
+  (`available_time_policy`, `available_delay_seconds`, `event_time_semantics`,
+  `frequency_policy`, `source_timezone_mode`, `source_timezone_iana`) + `instrument_mapping_ref`
+  + `feature_definition_ids[]`.
+- **`::_seal_bundle`** doc 12 §9.2'nin **kendi adlarıyla** üç üst düzey dizi yayımlar
+  (`available_time_policies[]`, `instrument_mapping_revision_ids[]`,
+  `feature_definition_revision_ids[]`), değerleri **üyelerden türetilir**. O-30 idiomu:
+  *iki ad, tek değer; biri kaldırılmaz, ikisi asla ayrışmaz.* Üye **otoritedir** — §9.2'nin
+  düz dizisi bir değerin hangi üyeye ait olduğunu söyleyemez.
+- **`::_derived` SIRALAR.** Canonical JSON **nesne anahtarlarını** sıralar ama **dizi
+  elemanlarını sıralamaz** (`shared/hashing.py::canonical_json`) → sıralanmamış bir
+  projeksiyon `bundle_hash`'i **çağıranın revision-id sırasına** bağlardı.
+- **`_BUNDLE_COMPILER_VERSION` → `research-bundle-v2`.** Gövdenin **içinde** olduğu için
+  hash'in de içinde; eski ve yeni hash uzaylarını **kendiliğinden** ayırır → ayrı bir
+  versioned-hash mekanizması, migration ve dual-read **gerekmedi** (kalıcı tüketici yok).
+
+### 3. Tek strict xfail KALDIRILDI (gevşetilmedi)
+
+`test_research_point_in_time_parity.py`'nin `xfail(strict=True)` marker'ı **silindi** ve test
+normal assert'e döndü. **Gevşetme değil:** `strict=False` yapılmadı, reason metni
+güncellenmedi — **ürün değişti**. Doğrulama elle sayımla değil **üretilmiş artefaktla**:
+`docs/generated/repository_facts.md` → `Backend xfail markers: 1 (1 strict)` → **`0 (0 strict)`**.
+Dosyanın modül docstring'i de düzeltildi: hâlâ *"marked `xfail(strict=True)`"* diyordu.
+
+### 4. Testler — hepsi negatif kontrolden geçti
+
+Beş yeni test (§T bölümü). **"İşaretlemek ≠ kapsamak"** kuralı uygulandı:
+
+| Test | Ne kanıtlar |
+|---|---|
+| `test_all_three_artifacts_carry_the_same_timing_dict` | Üç artefakt (Agent bundle / Evidence bundle / Run manifest) **aynı run için aynı timing sözlüğü** |
+| `test_the_bundle_hash_moves_when_the_available_delay_moves` | Kimlik iddiası: tek değişken (delay) oynayınca `bundle_hash` **oynar** |
+| `test_the_sealed_bundle_publishes_doc_12_92_arrays` | §9.2 dizileri, dedup + **sıralama**, üye sırası korunur, iki ad **yok** |
+| `test_the_two_backed_92_arrays_carry_real_values` | İki §9.2 dizisi **gerçek değer** taşır (varlık değil) |
+| `test_the_sealed_body_matches_the_published_openapi_schema` | Yayımlanan şema ile **gerçek gövde** anahtar anahtara eşit |
+
+**Negatif kontroller ölçüldü, iddia edilmedi:**
+1. `_pin_member`'dan altı timing alanı çıkarıldı → **dört test kırmızı** (hash testi dahil,
+   yani hash gerçekten o pine duyarlı, başka bir sebeple geçmiyor).
+2. `_derived`'ın `sorted()`'ı `list()` yapıldı → §9.2 dizileri testi **kırmızı**.
+3. Hash testinin **kendi içinde** negatif kontrolü var: değişmemiş revision'ı yeniden
+   derlemek hash'i **birebir** üretmeli — yoksa "hash oynadı" iddiası nondeterminizmle de
+   geçerdi (`resolved_at` hash'ten **sonra** eklenir, bu onu kanıtlar).
+
+**İki tuzak ölçülerek kapatıldı.** (a) Harness zone alanlarını **kurmuyor**; ilk yazımda üç
+artefakt `None` üzerinde anlaşıyordu — hiçbir yüzey alanı taşımasa da geçecek bir eşitlik.
+Test artık `custom` + `Europe/Istanbul` **kuruyor**. (b) İlk yazımda iki üye de aynı policy
+token'ını taşıyordu → tek elemanlı küme **her hâlde** sıralı görünür, yani sıralama hiç
+sınanmıyordu. Üçüncü üye **farklı** policy ile eklendi (`same_as_event_time`, doc 12 §5.2
+gereği `delay=None`).
+
+### 5. Yan bulgu: sözleşme ŞEMADAN GÖRÜNMÜYORDU (kapatıldı)
+
+Bu slice'ın **kendi değişikliği** `docs/openapi.json`'da **sıfır satır** diff üretecekti:
+iki bundle route'u bare `dict[str, Any]` döndürüyor, şema `{"type":"object",
+"additionalProperties":true}` olarak yayımlanıyordu → drift guard **yeşil kalırken** gövde
+şekli serbestçe değişebilirdi. Bu tam olarak O-30'un purge 202 için kapattığı tuzaktır.
+
+`SealedBundleResponse` + `BundleMemberModel` **yayımlandı**, ama `response_model` olarak
+**DEĞİL**: `response_model=None` + `responses={200: {"model": ...}}`. Sebep ölçülmüş —
+`response_model` FastAPI'ye gövdeyi **yeniden serileştirtir** ve `task_id`/`run_request_id`'yi
+`null` olarak **geri ekler**; oysa `_seal_bundle` None extra'yı **düşürür** ve düşürülmüş
+gövde **hash'lenen gövdedir**. Yayımlanan bundle kendi hash'iyle çelişemez.
+`response_model=None` olmadan şema `$ref` + eski serbest alanlarla **birleşiyordu** (ölçüldü);
+`None` ile temiz `$ref` çıkıyor.
+
+**Yayımlanan şema kendi başına bir iddiadır**, o yüzden `test_the_sealed_body_matches_the_published_openapi_schema`
+onu **gerçek veritabanından derlenmiş gövdeye** karşı iki yönlü karşılaştırır. Tek gövde
+şemayı kapsamaz (`task_id` yalnız Agent, `run_request_id` yalnız evidence bundle'da) →
+**birleşimleri** eşit olmalı, ikisi de **alt küme** olmalı.
+
+**`tests/contract/test_typed_contract_openapi.py`'nin `_TYPED_RESPONSES` listesine
+EKLENMEDİ ve nedeni var:** o modül *"her response alanı REQUIRED"* diye assert eder;
+bu gövdede `task_id`/`run_request_id` **gerçekten opsiyoneldir** (sunucu None ise anahtarı
+hiç yazmaz). Listeye eklemek ya kapıyı kırardı ya da gövde hakkında yanlış bir şey
+söyletirdi.
+
+### 6. §9.2'nin kalan dört adı — ikisi ölçülüp sınıf D olarak İMZALANDI
+
+İstenen *"hepsi içeri"*ydi. Ölçüm: `alignment_policy_versions[]` ve
+`missing_and_stale_policies[]` için **`backend/src`'te hiçbir kaynak yok** —
+`grep -rn "alignment_policy" src/` ve `grep -rni "missing_and_stale|stale_policy" src/`
+**sıfır**; revision modeli (`models/research_data.py:63-115`) böyle bir kolon taşımaz.
+Tasarım belgesi bunu *"doğrulanmadı"* diye bırakmıştı; **artık doğrulandı: sınıf D**.
+
+**Boş dizi olarak yayımlanmadılar.** Boş dizi *"böyle bir şey yok"* diye **beyan eder** —
+bir provenance **yalanı**; yokluk hiçbir şey beyan etmez — bir provenance **boşluğu**.
+Karar 2 §Seçenek B'nin *"yalan geri çekilir, eksiklik doldurulur"* ayrımı burada uygulandı.
+Yokluk **assert edilir**, yani arkasındaki alan bir gün sevk edildiğinde kapı **kırmızıya
+döner** ve karar bilerek verilir. Kayıt: `closure_product_decisions_2026-08-13.md` §Karar 2
+imza notu.
+
+### 7. Kabul borcu — bir CLAUSE kapandı, hiçbir TAVAN oynamadı
+
+`RD-11.c2` (*"bundle ayrıca feature definition'ları, time policy'leri ve mapping id'lerini
+pinler"*) `uncovered` → **`covered`**. Bu, ADIM 54'ün *"c2 çok muhtemelen YANLIŞ SINIFLANDI
+ve hiçbir test kapatamaz"* bulgusunun **doğru** olduğunu ve **tek doğru yoldan** — ürünün
+değişmesiyle — kapandığını kaydeder. Satırı sınıf D'ye **taşımak** D tavanını
+**YÜKSELTİRDİ**; yapılmadı.
+
+**Tavanlar `106 partial / 8 uncovered`, `A1 B75 C6 D32` — hiçbiri oynamadı ve oynayamazdı:
+tavanlar KRİTER sayar, kapanan şey bir CLAUSE.** `RD-11` **partial/B kalır** çünkü `c3`
+(*"yeni bir onay canlı bir run manifest'ini yeniden yazmaz"*) **el değmeden** duruyor.
+Oynayan tek şey clause defteri: **uncovered 124 → 123, covered 1003 → 1004**.
+
+### 8. Frontend — yalnız ayna, mantık yok
+
+`lib/researchData.ts::BundleMember`/`BundleResult` sunucu şeklini aynalar; sekiz yeni alan +
+üç dizi eklendi. **Route path, react-query key, OCC token, Idempotency-Key, hook, SSE
+taksonomisi ve veri mantığı ELLENMEDİ.** `researchDataLifecycle.test.tsx`'in stub'ları da
+tazelendi (`research-bundle-v1` yazıyorlardı) — sunucu şekli hakkında yalan söyleyen bir
+fixture tam olarak CLAUDE.md'nin uyardığı drift'tir.
+
+### 9. Dürüst sınırlar
+
+- **`RD-11.c3` KAPANMADI** ve bu slice onu denemedi.
+- **§9.2'nin iki adı sevk edilmedi** (sınıf D, imzalı sapma) — kapanmış sayılamaz.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.** Bu slice yalnız Karar 2'yi imzalattı;
+  #720'nin imzasız sevk ettiği komisyon **tabanı** açık kalır.
+- **A-08 DEĞİŞMEDİ** — defter 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **GH #558'e DOKUNULMADI.** Issue'nun durumu bir kanıt değildir; kapı imzalı karar + sevk
+  edilen kod + negatif kontrollü testlerdir. Kapatmak **insan kararıdır**.
+- **Postgres bu container'da paketli değildi ama binary'ler vardı** (`/usr/lib/postgresql/16`)
+  → küme `postgres` kullanıcısıyla ayağa kaldırıldı ve **integration testleri gerçekten
+  koştu**. Yine de **tam suite'in otoritesi CI'dır**.

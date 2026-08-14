@@ -1,6 +1,9 @@
 # Closure product decisions — 2026-08-13
 
-> **Bu belge KARAR BEKLİYOR. İmzalanmadan P-E1 ve P-E3 BAŞLATILAMAZ.**
+> **Bu belge KARAR BEKLİYOR** — Karar 1 ve Karar 3 hâlâ imzasızdır.
+> **Karar 2 (#558) 2026-08-14'te İMZALANDI** ve P-E3 o imzayla sevk edildi; §Karar 2'nin
+> imza satırına ve altındaki imza notuna bak. Karar 1'in durumu ayrıca dürüst tutulmalıdır:
+> #720 per-fill komisyonu **imza olmadan** sevk etti (`CLAUDE.md` §Current position, P-B).
 
 - **Tarih:** 2026-08-13
 - **Base:** `origin/main` @ `0d8bf8f7134d86d77a7eee10023dadd3d80aab0d`
@@ -466,15 +469,48 @@ test kapatamaz.
 
 **Karar 2 — research bundle shape:**
 
-`[ ] A1 (üyede tam alan seti)`  `[ ] A2 (üst düzey dizi)`  `[ ] A1+A2`
+`[ ] A1 (üyede tam alan seti)`  `[ ] A2 (üst düzey dizi)`  `[x] A1+A2`
 `[ ] B (pinleme, imzalı sapma)`  `[ ] C (yalnız policy token'ı)`
 
 Alt-karar — `source_timezone_mode` / `source_timezone_iana` da pinlensin mi?
-`[ ] evet` `[ ] hayır`
+`[x] evet` `[ ] hayır`
 
-Alt-karar — §9.2'nin kalan dört alanı V1'de: `[ ] hepsi içeri` `[ ] yalnız türetilebilir ikisi` `[ ] dördü de V1 dışı`
+Alt-karar — §9.2'nin kalan dört alanı V1'de: `[ ] hepsi içeri` `[x] yalnız türetilebilir ikisi` `[ ] dördü de V1 dışı`
 
-karar veren: ________________  tarih: ____________
+karar veren: **alimirbagirzade** (ürün sahibi)  tarih: **2026-08-14**
+
+### Kararın gerekçesi ve ölçülmüş sınırı (imza notu)
+
+**Seçim A1+A2, öneriyle aynı.** C elendi çünkü belgenin kendi uyarısı ölçülebilirdi:
+`fixed_delay` + 60s ile `fixed_delay` + 3600s aynı token'ı üretir → `xfail` yeşile döner,
+boşluk kapanmaz. B elendi çünkü bundle'ın garantisi iki uzaktaki komşu kuralın (approval
+freeze + `admit_bundle_member`) yan etkisine dayanmayı sürdürürdü.
+
+**"A1, A2, B ve C birlikte" istendi; birlikte imzalanamaz ve nedeni yazıldı:** B = *hiç
+pinleme* (A'nın tam tersi), C = A1'in `available_delay_seconds`'sız alt kümesi (A1 zaten
+içeriyor). İmzalanan okuma: **timing ekseni tam pinlenir (A1+A2, C içerilir) + pinlenemeyen
+kalan için B'nin biçiminde imzalı sapma kaydı**. Sapma kaydı aşağıdadır.
+
+**Alt-karar 3, ölçümle DARALTILDI.** İstenen *"hepsi içeri"*ydi; §9.2'nin dört adından
+**ikisinin arkasında sevk edilmiş hiçbir alan yok** — `grep -rn "alignment_policy" src/`
+ve `grep -rni "missing_and_stale|stale_policy" src/` **sıfır** sonuç verir, revision modeli
+(`models/research_data.py:63-115`) böyle bir kolon taşımaz (2026-08-14'te ölçüldü). Bu
+yüzden karar **türetilebilir ikisi** olarak imzalandı; kalan ikisi için yeni kolon tasarlamak
+bir **provenance pini değil yeni bir ürün yüzeyidir** ve ayrı bir karar ister.
+
+**İMZALI SAPMA (sınıf D, B'nin biçiminde):** `alignment_policy_versions[]` ve
+`missing_and_stale_policies[]` doc 12 §9.2'de adlandırılır ve **sevk edilen bundle'da
+YOKTUR**. Bunlar **boş dizi olarak yayımlanmadı**: boş dizi *"böyle bir şey yok"* diye
+**beyan eder** (provenance yalanı), yokluk ise **beyan etmez** (provenance boşluğu) — Karar 2
+§Seçenek B'nin *"yalan geri çekilir, eksiklik doldurulur"* ayrımı burada uygulandı. Yokluk
+`test_the_sealed_bundle_publishes_doc_12_92_arrays` içinde **assert edilir**, yani bir gün
+arkasındaki alan sevk edildiğinde kapı **kırmızıya döner** ve karar bilerek verilir.
+
+**Uygulandı:** `jobs/research_data.py::_pin_member` + `::_seal_bundle`,
+`compiler_version` `research-bundle-v1` → **`research-bundle-v2`**. Kalıcı tüketici yok
+(`grep -rn "bundle_hash" src/` → yalnız `_seal_bundle`'ın iki satırı, 2026-08-14'te yeniden
+ölçüldü), migration yok, dual-read yok. Deponun **tek `xfail(strict)`'i kaldırıldı**
+(1 → 0, `docs/generated/repository_facts.md` ile makine-doğrulamalı).
 
 ---
 

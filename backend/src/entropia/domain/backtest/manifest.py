@@ -123,7 +123,26 @@ from entropia.shared.manifest import manifest_hash
 # completes a shipped rule rather than inventing one where canon is silent. Every gapped
 # stop-out returns a different PnL, so the namespace must shift: a pre-fix Result can never
 # be idempotently reused for a re-RUN (INF-04/INF-05).
-ENGINE_VERSION = "backtest-engine-v18-gap-adjusted-stop-fill"
+# v18-percent-sizing-per-fill-commission (#550, #551, #552): three financial-logic fixes
+# land together because each of them alone moves PnL, and a single namespace shift covers
+# all three. (#550) ``base_position_size`` and the ``position_size_limits`` min/max caps are
+# PERCENTAGES of resolved capital, not unit counts — a strategy that stored 10 now opens 10%
+# of the account rather than 10 units, which is what the shipped UI's ``%`` suffix, doc 02's
+# worked example and Master Ref §10.1 have always said. The scaling ladder and the
+# same-direction stacking check convert the same cap the same way, so one config field has
+# one meaning everywhere it binds. (#551) a size that resolves to zero opens NOTHING in
+# independent mode too — the guard used to be reachable only under allocation, so a 0-size
+# phantom position was booked, counted in ``total_trades`` and written to
+# ``position_intervals`` where it could block another item's genuine entry. (#552) commission
+# is charged PER FILL, entry included, instead of billing a whole round trip at the exit —
+# which made cost scale with the number of partial CLOSES rather than fills, so a three-step
+# scale-out paid 1.7 round trips for four fills. Every one of the three returns a different
+# PnL for configs that were previously legal, so a pre-fix Result is never artifact-comparable
+# and must never be idempotently reused for a re-RUN (INF-04/INF-05). Ready Check refuses to
+# run a revision saved before the sizing cutover until a human re-confirms the magnitude
+# (``STRATEGY_SIZING_SEMANTICS_UNCONFIRMED``); nothing is converted automatically, because
+# the stored number does not say which reading its author meant.
+ENGINE_VERSION = "backtest-engine-v18-percent-sizing-per-fill-commission"
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 

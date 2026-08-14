@@ -234,7 +234,11 @@ def test_the_containment_flag_and_engine_version_are_both_untouched() -> None:
     co-simulation this package's oracles exercise only through a test-owned driver."""
     assert SHARED_ALLOCATION_STATUS == "future_dev"
     assert shared_allocation_is_executable() is False
-    assert ENGINE_VERSION == "backtest-engine-v18-gap-adjusted-stop-fill"
+    # The literal moves only when something OUTSIDE the contained work bumps the version;
+    # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
+    # the tripwire is unchanged by that: lifting containment still cannot happen without
+    # editing this line.
+    assert ENGINE_VERSION == "backtest-engine-v18-percent-sizing-per-fill-commission"
     assert "unified-clock multi-item co-simulation" in SHARED_ALLOCATION_DEPENDENCY
 
 

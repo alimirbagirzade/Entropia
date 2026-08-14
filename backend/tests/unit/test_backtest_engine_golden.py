@@ -284,7 +284,61 @@ def _scenarios() -> list[tuple[str, Any]]:
         )
     )
 
+    # -- costs ----------------------------------------------------------
+    # Added at #552. Until then the matrix configured NO commission anywhere — 46 scenarios
+    # and not one of them priced a fee — so the per-FILL fix moved 0 of 46 digests and this
+    # guard was structurally blind to the axis. A ratchet that cannot see a change cannot
+    # ratchet it. Two scenarios, because the defect was not in the fee itself but in what it
+    # scaled with: a two-fill round trip, and a ladder whose fills outnumber its closes.
+    add(
+        (
+            "costs.commission_round_trip",
+            lambda: scal._run(
+                scal._config(commission="7"),
+                scal._long_then(
+                    [
+                        scal._fu(22, "102", "108", "102", "107"),
+                        scal._fu(23, "107", "115", "106", "114"),
+                    ]
+                ),
+            ),
+        )
+    )
+    add(
+        (
+            "costs.commission_scale_ladder",
+            lambda: scal._run(
+                scal._config(scaling=scal._price_scaling(), commission="7"),
+                scal._long_then(
+                    [
+                        scal._fu(22, "102", "108", "102", "107"),
+                        scal._fu(23, "107", "115", "106", "114"),
+                    ]
+                ),
+            ),
+        )
+    )
+
     # -- sizing / leverage / allocation ---------------------------------
+    # Added at #550/#551: the base (percent-of-capital) sizing path and the fail-closed
+    # zero-size path. The matrix reached neither — its builders' DEFAULT sizing is
+    # risk-based, so nothing here exercised the field #550 re-read, and no scenario asked
+    # for a size that resolves to nothing.
+    add(
+        (
+            "sizing.base_percent_of_capital",
+            lambda: base._run(base._config(base_size="10"), base._long_breakout_then_stop()),
+        )
+    )
+    add(
+        (
+            "sizing.impossible_window_opens_nothing",
+            lambda: base._run(
+                base._config(base_size="50", min_size="80", max_size="20"),
+                base._long_breakout_then_stop(),
+            ),
+        )
+    )
     add(
         (
             "sizing.risk_based",

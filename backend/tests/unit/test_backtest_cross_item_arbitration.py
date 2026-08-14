@@ -1084,7 +1084,11 @@ def test_no_arbitration_field_ships_in_the_manifest_yet_and_the_engine_version_s
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
-    assert ENGINE_VERSION == "backtest-engine-v18-gap-adjusted-stop-fill"
+    # The literal moves only when something OUTSIDE the contained work bumps the version;
+    # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
+    # the tripwire is unchanged by that: lifting containment still cannot happen without
+    # editing this line.
+    assert ENGINE_VERSION == "backtest-engine-v18-percent-sizing-per-fill-commission"
     for field_name in ("arbitration_policy_version", "arbitration-policy-v1", "conflict_policy"):
         assert field_name not in manifest_src
 

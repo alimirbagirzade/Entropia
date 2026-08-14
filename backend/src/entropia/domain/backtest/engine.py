@@ -142,6 +142,7 @@ from entropia.domain.backtest.execution.sizing import (
     _sizing_is_honored,
     blocked_reason,
     leverage_is_modelled,
+    max_position_size_cap,
     planned_size,
     sleeve_capital,
 )
@@ -1430,9 +1431,15 @@ def _build_stepper(
         the SIGNAL bar's strength multiplier (F-07g, 1x unless volatility-adjusted
         sizing is active). Under allocation a 0-capacity sleeve (an unallocated item, or
         a compound pool busted below its reserve) yields no fill at all — ``None`` —
-        rather than a phantom 0-size trade (doc 13 §8.4 step 5/6). Independent mode
-        books even a bust-equity 0-size fill (preserving the risk-based
-        no-phantom-profit invariant), but an UNMODELLED sizing method (F-09), leverage
+        rather than a phantom 0-size trade (doc 13 §8.4 step 5/6). **Independent mode now
+        refuses it too (GH #551).** This sentence used to read "Independent mode books even
+        a bust-equity 0-size fill (preserving the risk-based no-phantom-profit invariant)",
+        and that WAS the shipped behaviour — a documented invariant, not an oversight. It is
+        deliberately reversed here: a position carrying no risk is not a trade, and booking
+        one polluted `total_trades`, the win-rate denominator, average trade and expectancy,
+        and wrote a zero-notional `position_intervals` row. Nothing about the risk-based
+        path needs the phantom fill to stay honest — a refused entry books no profit either.
+        An UNMODELLED sizing method (F-09), leverage
         configuration (F-07f), signal-strength mode (F-07g) or any ``future_dev`` capability
         selection (F-05) opens nothing at all — no phantom trade for a strategy the user
         never validly configured.
@@ -1459,7 +1466,37 @@ def _build_stepper(
         # ``_planned_size`` so the F-07i (C) partial-fill evidence comparison and the
         # booked size can never diverge.
         size = _planned_size(direction, fill_raw, strength)
-        if alloc_on and size <= _ZERO:
+        if size <= _ZERO:
+            # GH #551. This guard used to read ``if alloc_on and size <= _ZERO``, so it only
+            # fired under allocation, and independent mode — the DEFAULT — opened a phantom
+            # 0-size position that closed as a 0.00-PnL trade. The paths that reach a
+            # non-positive size without allocation: a ``min > max`` window (``_clamp_to_limits``
+            # fails closed to 0), a ``max`` of 0, ``base_position_size`` saved as 0 or NEGATIVE,
+            # a non-positive Kelly edge, and any method run on bust equity — ``risk_based_sizing``
+            # included, whose ``stop_loss_point`` is schema-guarded ``gt=0`` but whose EQUITY leg
+            # is not. ``<= _ZERO`` covers all of them, the negative case included: a stored
+            # ``-5`` used to open a -5-unit long and book a LOSS on a bar that moved in the
+            # position's favour, because the size's sign inverts the PnL.
+            #
+            # What this actually closes, measured rather than assumed: the trade count, the
+            # win-rate denominator, average trade and expectancy, the zero-notional
+            # ``position_intervals`` row, and — with a commission configured — real money, since
+            # a 0-unit position paid the same flat per-fill fee as a full one.
+            #
+            # It does NOT close a cross-item leak, and an earlier version of this comment
+            # claimed it did. ``execution/rules.py::conflicts_with_prior`` does read an interval
+            # by ``direction`` alone, but it never sees a phantom: the only producer of
+            # ``PriorItemInterval`` is ``build_prior_intervals`` above, which drops any window
+            # whose ``peak_notional`` is not positive before the gate runs. That filter is
+            # pinned by ``test_backtest_portfolio_rules.py``'s
+            # ``test_build_prior_intervals_fails_closed_on_bad_bounds_and_drops_zero_notional``.
+            #
+            # Under allocation the reason stays ``sleeve_zero_capacity`` (more specific, and
+            # already contracted) — the ladder in ``sizing.blocked_reason`` reaches it via
+            # ``ctx.alloc_on`` when nothing was handed over, so this sets the reason only for
+            # the independent case that previously reported the uninformative ``no_fill``.
+            if not alloc_on:
+                led.portfolio_block_reason = "size_resolved_to_zero"
             return None
         if rules_active and portfolio_cap_amount is not None and size > _ZERO:
             # Composition-wide Max Total Exposure: the entry may only deploy the
@@ -1540,6 +1577,19 @@ def _build_stepper(
             size_override=size_override,
         )
         if pos is not None:
+            if commission > _ZERO:
+                # GH #552 / PD-2: commission is PER-FILL, and this is the entry fill.
+                # It used to be free — the whole round trip was billed at the close — so
+                # equity only fell when the position closed. Charging it here is not a
+                # different total, it is a different TIME: equity drops at entry, which
+                # moves ``peak``, drawdown and every metric derived from them. That is
+                # why this change refreshes the equity curve and not only the trade rows.
+                #
+                # The same seam the scale ladder and ``absorb_remainder`` already use:
+                # the charge lands on equity, not in the trade row's pnl, so the exit's
+                # own ``commission`` in ``close_position`` is the only one that lot
+                # carries. Booking it in both places would double-count.
+                led.equity = (led.equity - commission).quantize(_MONEY)
             fill_detail: dict[str, Any] = {
                 "position_seq": pos.position_seq,
                 "fill_price": str(pos.entry_price),
@@ -2882,18 +2932,22 @@ def _build_stepper(
                         else:
                             tranche = _position_size(config, stack_eff, led.equity, stack_strength)
                         stacked_size = position.size + tranche
-                        size_limits = config.position_sizing.position_size_limits
+                        # GH #550: the configured cap is a PERCENT of resolved capital, so
+                        # it is converted at THIS tranche's price (and against the sleeve
+                        # when allocation is on, which is the capital the tranche itself
+                        # was sized against) before it can be compared with a quantity.
+                        stack_size_cap = max_position_size_cap(
+                            config,
+                            stack_eff,
+                            _sleeve_capital(led.equity) if alloc_on else led.equity,
+                        )
                         stack_reject: str | None = None
                         stack_cap: str | None = None
                         if tranche <= _ZERO:
                             stack_reject = "stack_size_not_positive"
-                        elif (
-                            size_limits is not None
-                            and size_limits.max_position_size is not None
-                            and stacked_size > size_limits.max_position_size
-                        ):
+                        elif stack_size_cap is not None and stacked_size > stack_size_cap:
                             stack_reject = "position_size_limit"
-                            stack_cap = str(size_limits.max_position_size)
+                            stack_cap = str(stack_size_cap)
                         elif alloc_on:
                             sleeve_remaining = _sleeve_capital(led.equity) - position.entry_notional
                             if (stack_eff * tranche) > sleeve_remaining:
@@ -3068,17 +3122,19 @@ def _build_stepper(
                     bar.close, is_buy=scale_long, half_spread=half_spread, slip=slippage
                 )
                 scaled_size = position.size + layer_size
-                size_limits = config.position_sizing.position_size_limits
                 # The composition-wide cap is a MONEY basis, distinct from the
                 # per-strategy size-units "max_total_exposure"; both bind here and
                 # the precedence order decides which name reaches the ledger.
+                # GH #550: the §6 cap is a PERCENT, converted at this layer's price (and
+                # against the sleeve under allocation) so the ladder binds it exactly
+                # where the entry sizing chain did.
                 reject_reason, reject_cap = resolve_scale_rejection(
                     layer_size=layer_size,
                     layer_notional=layer_eff * layer_size,
                     scaled_size=scaled_size,
                     max_total_size=scale_max_total,
-                    max_position_size=(
-                        size_limits.max_position_size if size_limits is not None else None
+                    max_position_size=max_position_size_cap(
+                        config, layer_eff, _sleeve_capital(led.equity) if alloc_on else led.equity
                     ),
                     sleeve_remaining=(
                         _sleeve_capital(led.equity) - position.entry_notional if alloc_on else None

@@ -188,6 +188,30 @@ describe("mergeFlatSections", () => {
     expect(fb.formula_params).toEqual({ W: 0.55, R: 2 });
   });
 
+  it("stamps size_semantics so a save clears the GH #550 transition blocker", () => {
+    // A revision saved before sizing became a percent of capital carries no
+    // `size_semantics`, and Ready Check BLOCKS it with
+    // STRATEGY_SIZING_SEMANTICS_UNCONFIRMED — the number cannot be migrated automatically
+    // because it does not say whether its author meant units or a percent. Saving through
+    // this form is the confirmation, so the stamp has to survive the merge; without it the
+    // blocker is unclearable and every pre-cutover strategy stays un-runnable.
+    const pre = { position_sizing: { method: "base_position_size", base_position_size: "50" } };
+    const form = extractFlatSections(pre);
+    const merged = mergeFlatSections(pre, form) as Record<string, Record<string, unknown>>;
+    expect(merged.position_sizing.size_semantics).toBe("percent_of_capital");
+    expect(merged.position_sizing.base_position_size).toBe("50"); // re-stated, never converted
+
+    // It is not tied to the base branch: the min/max limits moved to percentages too, so a
+    // risk-based strategy carrying only limits needs the same stamp.
+    const risk = extractFlatSections({});
+    risk.sizing.method = "risk_based_sizing";
+    risk.sizing.risk_percentage_per_trade = "1";
+    risk.sizing.risk_stop_loss_point = "2";
+    risk.sizing.max_position_size = "25";
+    const riskMerged = mergeFlatSections({}, risk) as Record<string, Record<string, unknown>>;
+    expect(riskMerged.position_sizing.size_semantics).toBe("percent_of_capital");
+  });
+
   it("edits Kelly formula params as typed fields, preserving unknown params", () => {
     const payload = {
       position_sizing: {

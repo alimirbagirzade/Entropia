@@ -200,8 +200,15 @@ def test_a_date_blackout_covering_the_signal_bar_blocks_the_entry() -> None:
 
 def test_a_consecutive_loss_filter_blocks_the_entry_after_its_nth_loss() -> None:
     """``max_losses = 1``: the bar-21 long stops out for -51.00, and the fresh cross on bar
-    23 is refused. Control (no filter) takes that second trade for +50.00, so the two runs
-    end at 9949.00 and 9999.00 — the filter is worth exactly the trade it prevented."""
+    23 is refused. Control (no filter) takes that second trade, so the two runs end apart by
+    exactly the trade the filter prevented.
+
+    The SECOND trade is smaller than the first, and that is the point of stating it here
+    (GH #550). Every modelled sizing method is a fraction of CAPITAL, so the -51.00 loss
+    shrinks the next position: 9 949 * 1% / 2.00 = 49.745 units against the first trade's
+    50, and the 1.00 move from 105 to 106 books 49.745 -> 49.74 at the money step. Control
+    ends at 9949.00 + 49.74 = 9998.74. Before the fix a base size was a constant unit count
+    that ignored the account it was traded in, and this second trade was a flat 50.00."""
     bars = [
         *flat_run(),
         _UP_CROSS,
@@ -226,9 +233,9 @@ def test_a_consecutive_loss_filter_blocks_the_entry_after_its_nth_loss() -> None
     control = run_oracle(oracle_config(direction="long", protection=_PCT_1), bars)
 
     assert [t.pnl for t in filtered.trades] == [Decimal("-51.00")]
-    assert [t.pnl for t in control.trades] == [Decimal("-51.00"), Decimal("50.00")]
+    assert [t.pnl for t in control.trades] == [Decimal("-51.00"), Decimal("49.74")]
     assert filtered.summary["final_equity"] == Decimal("9949.00")
-    assert control.summary["final_equity"] == Decimal("9999.00")
+    assert control.summary["final_equity"] == Decimal("9998.74")
 
 
 # --------------------------------------------------------------------------- #

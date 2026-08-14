@@ -65,6 +65,7 @@ from entropia.shared.errors import (
     TimePolicyInvalid,
     UsageScopeForbidden,
 )
+from entropia.shared.manifest import manifest_hash
 
 pytestmark = pytest.mark.integration
 
@@ -630,6 +631,11 @@ async def test_both_bundles_pin_the_available_time_policy(session) -> None:
 # (``commands/backtest_run_context.py::_research_entries``). A1 mirrors them
 # field for field, so this tuple is the parity contract itself: adding a seventh
 # to the manifest without adding it to the members re-opens #558.
+# The two keys ``_seal_bundle`` adds AFTER computing the hash. They cannot be inside
+# it: ``resolved_at`` is wall-clock (it would make an identical bundle hash differently
+# every compile) and ``bundle_hash`` cannot contain itself.
+_UNHASHED = frozenset({"resolved_at", "bundle_hash"})
+
 TIMING_KEYS = (
     "available_time_policy",
     "available_delay_seconds",
@@ -721,7 +727,13 @@ async def test_the_bundle_hash_moves_when_the_available_delay_moves(session) -> 
         session, ADMIN, research_revision_ids=[revision.revision_id]
     )
     assert again["bundle_hash"] == first["bundle_hash"]
-    assert again["resolved_at"] != "" and "resolved_at" not in ("bundle_hash",)
+    # ...and the reason it reproduces is that the two volatile keys sit OUTSIDE the
+    # hashed body. Recomputing over the body minus those two keys must return the
+    # published hash — which also pins that nothing else was excluded.
+    assert (
+        manifest_hash({k: v for k, v in first.items() if k not in _UNHASHED})
+        == (first["bundle_hash"])
+    )
 
     # Production CANNOT reach this mutation — ADIM 13 froze an approved revision's
     # policy (``time_policy.py::ensure_time_policy_mutable``) and ADIM 54 pinned

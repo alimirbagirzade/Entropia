@@ -41,7 +41,11 @@ from typing import Any
 import pytest
 from sqlalchemy import event
 
-from entropia.application.commands.readiness_check import _resolve_market_data_issues
+from entropia.application.commands.readiness_check import (
+    _resolve_market_data_issues,
+    _resolve_research_sources,
+    _resolve_signal_market_data_issues,
+)
 from entropia.application.queries import agent_workspace as agent_query
 from entropia.application.queries import library as library_query
 from entropia.application.queries import mainboard as mb_query
@@ -82,7 +86,13 @@ from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.pagination import PageParams
-from tests.integration.test_readiness_query_count import _market_revision, _package
+from tests.integration.test_readiness_query_count import (
+    _config,
+    _market_revision,
+    _package,
+    _research_revision,
+)
+from tests.integration.test_readiness_signal_market_data import _signal_payload
 
 pytestmark = pytest.mark.integration
 
@@ -334,6 +344,87 @@ async def test_ready_check_market_data_leg(session) -> None:
     await _measure(session, "readiness_check.market_data_leg", grow=grow, run=run)
 
 
+async def test_ready_check_signal_market_data_leg(session) -> None:
+    """Ready Check's Trading Signal OHLCV-fallback leg (K-08, doc 04 §5).
+
+    The same residual shape the market-data leg carried until #617: the pins were
+    already batched, then the Root each pinned revision names was dereferenced INSIDE
+    the item loop. ``test_readiness_query_count`` cannot see it — that file filters on
+    ``market_dataset_revision`` and this read is against ``entity_registry``.
+    """
+    items: list[ReadinessItemInput] = []
+
+    async def grow(count: int) -> None:
+        for _ in range(count):
+            revision_id = await _market_revision(session)
+            index = len(items)
+            items.append(
+                ReadinessItemInput(
+                    item_id=f"signal_{index}",
+                    kind=MainboardItemKind.TRADING_SIGNAL,
+                    root_id=f"root_{index}",
+                    revision_id=f"rev_{index}",
+                    available=True,
+                    payload=_signal_payload(
+                        f"srcast_{index}",
+                        f"nsr_{index}",
+                        {
+                            "source": "ohlcv_close_if_needed",
+                            "approved_market_data_revision_ref": revision_id,
+                        },
+                    ),
+                )
+            )
+
+    async def run() -> None:
+        issues = await _resolve_signal_market_data_issues(session, items)
+        # Seeded revisions are DRAFT, so every signal is still blocked — the budget is
+        # measured on the path that actually dereferences the Root.
+        assert len(issues) == len(items)
+
+    await _measure(session, "readiness_check.signal_market_data_leg", grow=grow, run=run)
+
+
+async def test_ready_check_research_funding_leg(session) -> None:
+    """Ready Check's Research funding leg (O-01, doc 12 §9.2).
+
+    Third instance of the same residual: batched revisions, then a per-item
+    ``get_dataset_root``. Every pin here RESOLVES, so each item reaches the branch that
+    dereferences the Root — a fixture of unresolvable pins would short-circuit to
+    ``found=False`` and measure a path the user never waits on.
+    """
+    items: list[ReadinessItemInput] = []
+
+    async def grow(count: int) -> None:
+        for _ in range(count):
+            revision_id = await _research_revision(session)
+            index = len(items)
+            items.append(
+                ReadinessItemInput(
+                    item_id=f"funded_{index}",
+                    kind=MainboardItemKind.STRATEGY,
+                    root_id=f"root_{index}",
+                    revision_id=f"rev_{index}",
+                    available=True,
+                    payload=_config(
+                        indicator_rev="pkg_x",
+                        condition_rev="pkg_y",
+                        reference_rev="pkg_z",
+                        leg_revs=[],
+                        market_rev="md_rev_budget",
+                        funding_revision_id=revision_id,
+                    ).model_dump(mode="json"),
+                )
+            )
+
+    async def run() -> None:
+        sources = await _resolve_research_sources(session, items)
+        assert len(sources) == len(items)
+        assert all(source.found for source in sources), "the budget must measure the resolved path"
+
+    await _measure(session, "readiness_check.research_funding_leg", grow=grow, run=run)
+
+
 # ------------------------------------------------- pinned resolver refs (doc 06 §7)
 
 
@@ -453,6 +544,8 @@ def test_every_registered_surface_has_a_budget() -> None:
         "library.list_packages",
         "results_history.list_backtest_results",
         "readiness_check.market_data_leg",
+        "readiness_check.signal_market_data_leg",
+        "readiness_check.research_funding_leg",
         "dependency_pins.ensure_pinned_resolvers_active",
         "agent_workspace.list_tasks",
         "audit_log.list_audit_events",

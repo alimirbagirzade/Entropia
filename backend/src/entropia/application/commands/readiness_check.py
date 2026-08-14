@@ -547,14 +547,18 @@ async def _resolve_signal_market_data_issues(
     # O-24b: one IN() read for every signal's OHLCV fallback pin. A revoked/purged pin is
     # absent from the map, so it still produces MARKET_DATA_DEPENDENCY_BLOCKED below.
     revisions = await market_repo.get_revisions(session, [ref for _item, _config, ref in signals])
+    # P-E2: the second leg, batched the same way as ``_resolve_market_data_issues``. Built
+    # AFTER the revision map because a Root is only reachable through the revision that
+    # pins it. A Root that is absent or is not a market dataset is absent from this map
+    # exactly as ``get_dataset_root`` returned ``None`` for it, so the
+    # MARKET_DATA_DEPENDENCY_BLOCKED branch below is unchanged.
+    roots = await market_repo.get_dataset_roots(
+        session, [revision.entity_id for revision in revisions.values()]
+    )
     for item, config, ref in signals:
         price = config.price_policy
         revision = revisions.get(ref)
-        root = (
-            await market_repo.get_dataset_root(session, revision.entity_id)
-            if revision is not None
-            else None
-        )
+        root = roots.get(revision.entity_id) if revision is not None else None
         approved = (
             revision is not None
             and revision.revision_state == MarketRevisionState.APPROVED
@@ -731,6 +735,15 @@ async def _resolve_research_sources(
     revisions = await research_repo.get_revisions(
         session, [revision_id for _item, _config, revision_id in funded if revision_id]
     )
+    # P-E2: the second leg, batched the same way. Built AFTER the revision map because a
+    # Root is only reachable through the revision that pins it, and only revisions that
+    # RESOLVED are dereferenced — an unresolvable feed still short-circuits to
+    # ``found=False`` below without ever asking for a Root. A Root that is absent or is
+    # not a research dataset is absent from this map exactly as ``get_dataset_root``
+    # returned ``None`` for it, so ``root_active`` is unchanged.
+    roots = await research_repo.get_dataset_roots(
+        session, [revision.entity_id for revision in revisions.values()]
+    )
     sources: list[ResearchSourceState] = []
     for item, config, revision_id in funded:
         field_path = "data.funding.source_revision_id"
@@ -746,7 +759,7 @@ async def _resolve_research_sources(
                 )
             )
             continue
-        root = await research_repo.get_dataset_root(session, revision.entity_id)
+        root = roots.get(revision.entity_id)
         sources.append(
             ResearchSourceState(
                 item_id=item.item_id,

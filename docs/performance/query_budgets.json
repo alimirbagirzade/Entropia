@@ -12,7 +12,19 @@
     "This file is a RATCHET. Coming in under budget prints a tighten-me line naming",
     "the new numbers (run with `pytest -s`); going over fails the build. Raising a",
     "budget or a slope is a deliberate edit with a written reason in `note`, the same",
-    "idiom as frontend/e2e/a11y-baseline.json."
+    "idiom as frontend/e2e/a11y-baseline.json.",
+    "",
+    "ONE HONEST BLIND SPOT, measured in P-E2 — do not read the slope as proving more",
+    "than it does. These are statement counts, so they cannot see a per-item",
+    "`session.get` for a PK a batch in the SAME session already loaded: the batch warms",
+    "SQLAlchemy's identity map and the read costs zero round trips. Measured: batch +",
+    "re-added per-item session.get = 2 statements, i.e. GREEN. The gate is not",
+    "under-reporting cost — that shape is genuinely free in production too, since the",
+    "command is one-tx-no-commit with expire_on_commit=False. What it cannot express is",
+    "the SMELL. It still catches every shape that costs anything: a per-item select()",
+    "(13 statements), a per-item read for an id the batch did not load (11 — identity-map",
+    "MISSES are never cached), and a batch that is removed or narrowed (12, slope 1).",
+    "Gating the smell itself needs a source-level assertion, not a counter."
   ],
   "measured_on": {
     "date": "2026-08-06",
@@ -51,6 +63,26 @@
       "queries_large": 2,
       "per_item": 0,
       "note": "Flat since ADIM 46 (#617). Two batched reads: one IN() over the pinned market_dataset_revision ids (O-24b), then one IN() over the Roots those revisions name (market_repo.get_dataset_roots). The root batch is built AFTER the revision map because a Root is only reachable through the revision that pins it. Before the repair this row was a live N+1 — 12 statements at 11 Strategy items, a slope of 1 — because _resolve_market_data_issues called get_dataset_root INSIDE the item loop. Re-introducing any per-item read on the page a user waits on fails HERE, on the slope, even when the small-n total is unchanged."
+    },
+    "readiness_check.signal_market_data_leg": {
+      "title": "Ready Check — Trading Signal OHLCV-fallback leg (doc 04 §5)",
+      "axis": "Trading Signal item declaring an OHLCV fallback pin",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 2,
+      "queries_large": 2,
+      "per_item": 0,
+      "note": "Flat since P-E2. The THIRD instance of the #617 shape, and the one the earlier repair missed: _resolve_signal_market_data_issues already batched the pins (O-24b) and then called market_repo.get_dataset_root INSIDE the item loop. Two batched reads now: one IN() over the pinned market_dataset_revision ids, then one IN() over the Roots those revisions name (market_repo.get_dataset_roots, reused — no second idiom). Measured at 12 statements / slope 1 before the repair, so the leg cost one extra round trip per Trading Signal on the page a user waits on. test_readiness_query_count could not see it: that file filters on market_dataset_revision and the residual read was against entity_registry."
+    },
+    "readiness_check.research_funding_leg": {
+      "title": "Ready Check — Research funding leg (doc 12 §9.2)",
+      "axis": "Strategy item with an enabled funding source",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 2,
+      "queries_large": 2,
+      "per_item": 0,
+      "note": "Flat since P-E2. Same residual as the signal leg: _resolve_research_sources batched the funding pins and then dereferenced each resolved revision's Root in the loop. research_repo.get_dataset_roots is NEW here — the research repo had no plural reader, so it mirrors market_data.get_dataset_roots field for field (entity_type guard in SQL, absent == the per-id None). Measured at 12 statements / slope 1 before the repair. Only pins that RESOLVE reach the Root branch, so an unresolvable-feed fixture would measure a path the user never waits on — the test asserts every source is found."
     },
     "dependency_pins.ensure_pinned_resolvers_active": {
       "title": "Approve Package — pinned ESP resolver re-validation (doc 06 §7)",

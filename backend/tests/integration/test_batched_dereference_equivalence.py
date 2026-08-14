@@ -1,5 +1,5 @@
-"""ADIM 46 (#617, #618) — the two batched dereferences must fail closed exactly as
-the per-item reads they replaced.
+"""ADIM 46 (#617, #618) + P-E2 — every batched dereference must fail closed exactly
+as the per-item read it replaced.
 
 ``test_query_budgets.py`` proves these two surfaces stopped costing a round trip per
 item; it cannot prove they still say the same thing. Collapsing a loop is where a
@@ -7,9 +7,14 @@ fail-closed check quietly becomes a fail-open one: a row that is absent from an
 ``IN()`` map looks the same as a row nobody asked about, so a careless batch turns
 "cannot confirm" into "fine". This file pins the behavior side.
 
-Both repairs share one shape — an id absent from the prefetched map is the same
-``None`` the per-id reader returned — so both are guarded here rather than in two
-files that would drift apart.
+All four repairs share one shape — an id absent from the prefetched map is the same
+``None`` the per-id reader returned — so they are guarded here rather than in files
+that would drift apart. P-E2 added the last two Ready Check legs (Trading Signal
+OHLCV fallback, Research funding); the budget file records their round-trip cost, and
+the sections below record what they still SAY. The Root branches are the ones the
+rewrite actually touched, and neither leg's own suite reached them: the signal suite
+never manufactures a soft-deleted or foreign-typed Root, and ``root_active=False`` was
+only ever fed straight into the pure validator.
 """
 
 from __future__ import annotations
@@ -18,7 +23,11 @@ from typing import Any
 
 import pytest
 
-from entropia.application.commands.readiness_check import _resolve_market_data_issues
+from entropia.application.commands.readiness_check import (
+    _resolve_market_data_issues,
+    _resolve_research_sources,
+    _resolve_signal_market_data_issues,
+)
 from entropia.application.queries.dependency_pins import (
     PIN_UNREADABLE,
     PINNED_REVISION_MISSING,
@@ -41,11 +50,20 @@ from entropia.domain.market_data.enums import MarketRevisionState
 from entropia.domain.package.enums import PackageValidationState
 from entropia.domain.readiness.enums import ReadinessIssueCode
 from entropia.domain.readiness.issues import ReadinessItemInput
-from entropia.infrastructure.postgres.models import EntityRegistry, MarketDatasetRevision
+from entropia.infrastructure.postgres.models import (
+    EntityRegistry,
+    MarketDatasetRevision,
+    ResearchDatasetRevision,
+)
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import DependencyUnresolved
-from tests.integration.test_readiness_query_count import _market_revision
+from tests.integration.test_readiness_query_count import (
+    _config,
+    _market_revision,
+    _research_revision,
+)
+from tests.integration.test_readiness_signal_market_data import _signal_payload
 
 pytestmark = pytest.mark.integration
 
@@ -308,3 +326,217 @@ async def test_one_bad_pin_among_good_ones_is_reported_alone(session) -> None:
 async def test_an_empty_snapshot_is_accepted_without_touching_the_database(session) -> None:
     """Both batches short-circuit on empty input — a description-route draft pins none."""
     assert await _defects(session, []) == []
+
+
+# ------------------------------ P-E2: Ready Check Trading Signal OHLCV-fallback leg
+
+
+def _signal_item(item_id: str, revision_id: str) -> ReadinessItemInput:
+    """One Trading Signal whose price fallback pins ``revision_id`` (doc 04 §5)."""
+    return ReadinessItemInput(
+        item_id=item_id,
+        kind=MainboardItemKind.TRADING_SIGNAL,
+        root_id=f"root_{item_id}",
+        revision_id=f"rev_{item_id}",
+        available=True,
+        payload=_signal_payload(
+            f"srcast_{item_id}",
+            f"nsr_{item_id}",
+            {
+                "source": "ohlcv_close_if_needed",
+                "approved_market_data_revision_ref": revision_id,
+            },
+        ),
+    )
+
+
+async def test_signal_leg_an_approved_pin_on_an_active_root_clears_the_blocker(session) -> None:
+    """The positive path. Without it the batch could return nothing at all and every
+    fail-closed assertion below would still pass."""
+    revision_id = await _market_revision(session)
+    await _approved(session, revision_id)
+    await session.commit()
+
+    assert (
+        await _resolve_signal_market_data_issues(session, [_signal_item("i0", revision_id)]) == []
+    )
+
+
+async def test_signal_leg_a_root_that_is_not_a_market_dataset_still_blocks(session) -> None:
+    """``get_dataset_root`` returned ``None`` for a foreign entity_type; the batch applies
+    that guard in SQL, so such a Root is ABSENT from the map — never 'approved'."""
+    revision_id = await _market_revision(session)
+    revision = await _approved(session, revision_id)
+    root = await session.get(EntityRegistry, revision.entity_id)
+    assert root is not None
+    root.entity_type = "research_dataset"
+    await session.flush()
+    await session.commit()
+
+    issues = await _resolve_signal_market_data_issues(session, [_signal_item("i0", revision_id)])
+
+    assert [issue.code for issue in issues] == [ReadinessIssueCode.MARKET_DATA_DEPENDENCY_BLOCKED]
+    assert issues[0].scope_id == "i0"
+    assert issues[0].field_path == "price_policy.approved_market_data_revision_ref"
+
+
+async def test_signal_leg_a_soft_deleted_root_still_blocks(session) -> None:
+    """The Root must still be ACTIVE — the batch reads the same column the per-id read did."""
+    revision_id = await _market_revision(session)
+    revision = await _approved(session, revision_id)
+    root = await session.get(EntityRegistry, revision.entity_id)
+    assert root is not None
+    root.deletion_state = DeletionState.SOFT_DELETED
+    await session.flush()
+    await session.commit()
+
+    issues = await _resolve_signal_market_data_issues(session, [_signal_item("i0", revision_id)])
+
+    assert [issue.code for issue in issues] == [ReadinessIssueCode.MARKET_DATA_DEPENDENCY_BLOCKED]
+
+
+async def test_signal_leg_only_defective_items_block_and_they_keep_item_order(session) -> None:
+    """The batch stays selective, and the issue list follows the ITEM order — not the
+    map's iteration order, and not the order the batch happened to fetch rows in."""
+    good_a = await _market_revision(session)
+    bad = await _market_revision(session)  # left DRAFT
+    good_b = await _market_revision(session)
+    await _approved(session, good_a)
+    await _approved(session, good_b)
+    await session.commit()
+
+    issues = await _resolve_signal_market_data_issues(
+        session,
+        [
+            _signal_item("i0", good_a),
+            _signal_item("i1", bad),
+            _signal_item("i2", good_b),
+            _signal_item("i3", "missing_rev"),
+        ],
+    )
+
+    assert [issue.scope_id for issue in issues] == ["i1", "i3"]
+
+
+async def test_signal_leg_two_items_sharing_one_pin_both_resolve(session) -> None:
+    """Duplicate ids collapse twice over (revision batch, then Root batch); both items
+    must still see the same answer."""
+    revision_id = await _market_revision(session)
+    await _approved(session, revision_id)
+    await session.commit()
+
+    issues = await _resolve_signal_market_data_issues(
+        session, [_signal_item("i0", revision_id), _signal_item("i1", revision_id)]
+    )
+
+    assert issues == []
+
+
+# ------------------------------------- P-E2: Ready Check Research funding leg (O-01)
+
+
+def _funded_item(item_id: str, revision_id: str) -> ReadinessItemInput:
+    """One Strategy whose funding source pins ``revision_id`` (doc 12 §9.2)."""
+    return ReadinessItemInput(
+        item_id=item_id,
+        kind=MainboardItemKind.STRATEGY,
+        root_id=f"root_{item_id}",
+        revision_id=f"rev_{item_id}",
+        available=True,
+        payload=_config(
+            indicator_rev="pkg_x",
+            condition_rev="pkg_y",
+            reference_rev="pkg_z",
+            leg_revs=[],
+            market_rev="md_rev_equiv",
+            funding_revision_id=revision_id,
+        ).model_dump(mode="json"),
+    )
+
+
+async def test_research_leg_a_resolved_pin_on_an_active_root_reports_it_active(session) -> None:
+    """The positive path — otherwise every ``root_active is False`` assertion is vacuous."""
+    revision_id = await _research_revision(session)
+    await session.commit()
+
+    sources = await _resolve_research_sources(session, [_funded_item("i0", revision_id)])
+
+    assert [(s.found, s.root_active) for s in sources] == [(True, True)]
+
+
+async def test_research_leg_a_root_that_is_not_a_research_dataset_is_not_active(session) -> None:
+    """The research batch applies its OWN ``entity_type`` guard in SQL. A Root retyped to
+    a market dataset is ABSENT from the map — exactly the ``None`` the per-id reader
+    returned — so the feed is still reported as un-backed rather than silently active."""
+    revision_id = await _research_revision(session)
+    revision = await session.get(ResearchDatasetRevision, revision_id)
+    assert revision is not None
+    root = await session.get(EntityRegistry, revision.entity_id)
+    assert root is not None
+    root.entity_type = "market_dataset"
+    await session.flush()
+    await session.commit()
+
+    sources = await _resolve_research_sources(session, [_funded_item("i0", revision_id)])
+
+    assert [(s.found, s.root_active) for s in sources] == [(True, False)]
+
+
+async def test_research_leg_a_soft_deleted_root_is_not_active(session) -> None:
+    """``root_active`` reads the same column it always did."""
+    revision_id = await _research_revision(session)
+    revision = await session.get(ResearchDatasetRevision, revision_id)
+    assert revision is not None
+    root = await session.get(EntityRegistry, revision.entity_id)
+    assert root is not None
+    root.deletion_state = DeletionState.SOFT_DELETED
+    await session.flush()
+    await session.commit()
+
+    sources = await _resolve_research_sources(session, [_funded_item("i0", revision_id)])
+
+    assert [(s.found, s.root_active) for s in sources] == [(True, False)]
+
+
+async def test_research_leg_an_unresolvable_pin_still_reports_not_found(session) -> None:
+    """A pin matching no row never reaches the Root branch at all — it must short-circuit
+    to ``found=False`` with its field path intact, not to 'found with an inactive root'."""
+    sources = await _resolve_research_sources(session, [_funded_item("i0", "rd_rev_missing")])
+
+    assert [(s.found, s.root_active) for s in sources] == [(False, False)]
+    assert sources[0].field_path == "data.funding.source_revision_id"
+
+
+async def test_research_leg_mixed_items_keep_item_order(session) -> None:
+    """One unresolvable feed among good ones resolves itself only, and the states still
+    follow the ITEM order."""
+    good_a = await _research_revision(session)
+    good_b = await _research_revision(session)
+    await session.commit()
+
+    sources = await _resolve_research_sources(
+        session,
+        [
+            _funded_item("i0", good_a),
+            _funded_item("i1", "rd_rev_missing"),
+            _funded_item("i2", good_b),
+        ],
+    )
+
+    assert [(s.item_id, s.found) for s in sources] == [
+        ("i0", True),
+        ("i1", False),
+        ("i2", True),
+    ]
+
+
+async def test_research_leg_two_items_sharing_one_pin_both_resolve(session) -> None:
+    """Duplicate ids collapse in both batches; both items must still see the same Root."""
+    revision_id = await _research_revision(session)
+    await session.commit()
+
+    sources = await _resolve_research_sources(
+        session, [_funded_item("i0", revision_id), _funded_item("i1", revision_id)]
+    )
+
+    assert [(s.found, s.root_active) for s in sources] == [(True, True), (True, True)]

@@ -727,8 +727,9 @@ type, test** with a PostgreSQL 16 service · **Frontend — lint, typecheck,
 build, test** · **Docker — build images**) — run it locally before pushing.
 
 Several of those steps are **gates that fail the build**, not reports: the
-backend suite enforces `--cov-fail-under=90` (measured: 92.06% — see
-`docs/audit/coverage_baseline.md`), `npm run coverage`
+backend suite enforces `--cov-fail-under=90` (the measured percentage is
+reported by a CI run, not pinned here — `docs/audit/coverage_baseline.md`
+records the historical calibration baseline), `npm run coverage`
 enforces the thresholds in `frontend/vite.config.ts`, and dependency advisories
 are checked by `pip-audit` (backend) and `scripts/npm-audit-gate.mjs` (npm). The
 npm gate fails on any high/critical advisory that is not a **recorded exception**

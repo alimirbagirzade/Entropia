@@ -99,8 +99,13 @@ Before stopping a working session, produce **ALL** of the following:
   sonra dosyayı koştur.** Davranış kapısı `scripts/hook-guard-proof.sh` (`Frontend` job'ında).
 - **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
   — `addopts` artık `--cov-fail-under=90` taşıyor, yani **tam suite** koşusu CI'daki coverage
-  kapısını da doğruluyor (**ölçülen toplam %92.06**, 2712 passed; frontend %84.67 line —
-  modül dökümü + kalibrasyon gerekçesi `docs/audit/coverage_baseline.md`).
+  kapısını da doğruluyor. **BURAYA SAYI YAZMA.** Toplanan (collected) sayıların tek otoritesi
+  `docs/generated/repository_facts.md` (üretilmiş, CI'da `--check` ile kapılı); **geçen
+  (passed) sayının ve coverage yüzdesinin tek otoritesi bir CI koşusudur** — üretilmiş
+  artefakt bunu bilerek taşımaz ("only a full CI run reports passes"). Eskiden burada duran
+  `%92.06 / 2712 passed / frontend %84.67` **ADIM dönemi tabanıydı**; `docs/audit/coverage_baseline.md`
+  (`doc-status: historical`) içinde **doğru**, burada present-tense okunduğu için **bayattı**
+  (P-B/DR-2). Kalibrasyon gerekçesi ve modül dökümü için o belgeye bak.
   **Alt küme koşarken `--no-cov` ekle:** tek
   dosyalık bir koşu paketin tamamını ~%4 ölçer ve kapı sahte kırmızı verir. Frontend karşılığı
   `npm run coverage` (eşikler `frontend/vite.config.ts`). İkisi de **kapıdır, rapor değil** —
@@ -218,21 +223,22 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
-> **HEAD `ac5cf50`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
-> **Son dalga — ADIM 60 (doküman kapısı artık HANGİ kickoff'un canlı olduğunu doğruluyor,
-> PR #716, 2026-08-14): ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
-> verdict BLOCKED.** `check_classification` sayıyı koruyordu, doğruluğu değil: **#697** ADIM 55'i,
-> **#714** ADIM 56'yı canlı bıraktı — ikisi de tek `current` taşıdığı için **yeşil geçti**.
-> Artık daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varken canlı işaret eski belgede
-> duramaz (`::_check_live_kickoff_is_newest`). **Numarasız kickoff'larda bilerek susar** —
-> `strict: true` altında yanlış kırmızı tüm merge'leri kilitler. **Kapı kendi PR'ını bir kez
-> kırmızıya çevirdi ve haklıydı:** üretilmiş olgular **test collection** sayısını taşır
-> (3541 → 3545) — **test ekleyen slice olguları TAZELEMELİ**. `PROJECT_HISTORY.md` §ADIM 60 ·
-> `docs/ADIM60_LANDED_KICKOFF.md`.
+> **alembic head `0043_i08_registry_strategy_fks`** · **`ENGINE_VERSION` DEĞİŞTİ** →
+> `backtest-engine-v18-percent-sizing-per-fill-commission` (**#720**, 2026-08-14: #550/#551/#552
+> KAPANDI) · `SHARED_ALLOCATION_STATUS` = `future_dev`. Test sayıları: **toplanan** için
+> `docs/generated/repository_facts.md`, **geçen** için CI. **Son dalga — P-B (kapanış
+> uzlaştırması, DOCS-ONLY): ürün davranışı DEĞİŞMEDİ. Blocker 1 (yalnız A-08), BLOCKED.**
+> Üç W0 denetimi güncel main'e karşı uzlaştırıldı; DR-2/DR-3/DR-4 (bayat sayılar) onarıldı,
+> `_ItemStepper`'ın "hiç yazılmadı" iddiası son yerinde de kapatıldı, portfolio alt sistemi
+> ilk kez codemap'e girdi. **AÇIK (insan):** #720 per-fill komisyonu **sevk etti** ama
+> `docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1 **İMZASIZ** ve `PD-2`
+> repoda **kayıtlı değil** → komisyon modeli yazılı adjudication'sız sevk edilmiş durumda.
+> **Next: P-C1 + P-C2.**
+> `docs/audit/final_closure_reconciliation_2026-08-13.md`.
 >
-> Öncesinde **HEAD `e547391`** · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
-> **ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
+> Öncesinde **HEAD `e547391`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> **Son dalga — ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ (dört ağaçta 0 satır). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > verdict BLOCKED.** Kanıtlandı: `run_portfolio` (`portfolio_engine.py:531`),
 > `project_portfolio_run` ve `build_portfolio_manifest` üretimde **çağrısız** (son ikisinin
@@ -606,7 +612,13 @@ Before stopping a working session, produce **ALL** of the following:
 > **P5/P6 ADIM 30'da yeniden ölçülüp COMMIT EDİLDİ** (`evidence/2026-08-10/`) — ama
 > ~~**`flows` CI'da koşmuyor**~~ **KAPANDI (ADIM 45)** — `e2e.yml::acceptance-flows` ·
 > **§6.6'nın #617/#618 KOD yarısı KAPANDI (ADIM 46)** — `per_item` ikisinde de ölçülen
-> **0**; izleme kaydı (issue durumu) **insan kararı**, #514/#558/#559 **açık kaldı** ·
+> **0**; izleme kaydı da **KAPANDI**: insan **2026-08-13 11:07Z**'de ikisini de `completed`
+> ile kapattı (**bu satır "açık kaldı" derken bayattı**, P-B/§6.2). **Tuzak:** GitHub #617'nin
+> closing PR'ı olarak **#619**'u gösterir, o **ölçüm** PR'ıdır — onarım `6da8a95` = **#681**,
+> ki #618'i de o onardı (bu yüzden #618'in hiç linkli PR'ı yok). **Linkage ≠ provenance.**
+> #514/#558/#559 **açık kaldı** · **Ready Check'in kalan İKİ N+1 bacağı hâlâ canlı**
+> (`readiness_check.py:554` sinyal, `:749` research; ölçülen slope **1.0**) — P-E2 **merge
+> EDİLMEDİ** ve ikisi için **hiç issue açılmadı** ·
 > **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde) ·
 > ~~**`ci.yml` concurrency kusuru**~~ **ONARILMIŞ** (ADIM 34'te doğrulandı): `ci.yml:9–14`
 > artık `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` — main'de iptal KAPALI.
@@ -650,7 +662,10 @@ Before stopping a working session, produce **ALL** of the following:
 - **Testler (backend 2026-08-10 / ADIM 31'de ölçüldü; frontend 2026-08-06 / ADIM 25):**
   **otorite CI'dır.** Backend tam suite **3987 passed / 1 xfailed / 0 failed**, coverage
   **%93.53** (kapı ≥90) — ADIM 31 frontend'e dokunmadı, o yüzden frontend sayıları ADIM 25
-  ölçümüdür ve yeniden koşulmadı: **721 passed / 70 dosya**, **%84.92 line**. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
+  ölçümüdür ve yeniden koşulmadı: **721 passed / 70 dosya**, **%84.92 line**.
+  **Bu iki sayı da ÖLÇÜM TARİHLİDİR, current truth DEĞİL** — dosya sayısı `repository_facts.md`'nin
+  ürettiği sayının (**72 dosya / 716 call site**) altında kaldığı için tek başına okunursa
+  yanıltır (P-B/DR-4). Toplanan sayı için üretilmiş artefakta, geçen sayı için CI'a bak. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
   koşusunda pytest'in özet satırı ve exit code'u yakalanmamıştı — çıktıyı dosyaya yaz, `$?`'i
   **ayrı** oku. **Bilinçli `xfail(strict)` sayısı 1'dir** (eskiden 4 yazıyordu — **bayat**):
   `test_research_point_in_time_parity.py:583`, tek issue **#558** (available-time policy pin'i

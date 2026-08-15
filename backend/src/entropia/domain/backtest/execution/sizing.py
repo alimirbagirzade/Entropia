@@ -411,6 +411,31 @@ def planned_size(
     return _position_size(ctx.config, entry_eff, sizing_equity, strength)
 
 
+SIZE_RESOLVED_TO_ZERO = "size_resolved_to_zero"
+"""The INDEPENDENT-mode refusal: the entry was wanted, the ladder above resolved it to a
+non-positive number, and nothing was opened (GH #551, ``engine.py``'s ``_open()``). Under
+allocation the more specific ``sleeve_zero_capacity`` wins instead — see the tail of
+:func:`blocked_reason` — so the two never describe the same refusal.
+
+An **F-10 restriction-trace** token, NOT an HTTP error: no request fails on this path, a run
+completes normally having declined an entry. No ``ErrorBody`` is emitted, so **O-02's
+``ErrorCategory`` deliberately does not apply**; declaring one would advertise ``retryable``
+semantics for something that never reaches an HTTP response.
+
+It is named HERE, beside the ladder that returns it, rather than beside the
+``SLEEVE_ZERO_CAPACITY`` constant in ``execution/portfolio_ledger.py``. That module is a
+CONTAINED phase-loop module whose production importers are an enumerated allowlist
+(``test_backtest_portfolio_ledger.py``, ``test_oracle_portfolio_containment_gate.py``), and
+the shipped single-item engine is deliberately not on it — importing it from ``engine.py``
+to reach a string would have traded a live containment tripwire for a stylistic adjacency.
+The dependency already runs the other way: that constant's own docstring records it as
+borrowed *from* this ladder.
+
+Master Ref §10.1 ``:7551`` (Base Position Size must be positive) and doc 02 ``:1014``
+(*"When selected, Position Size required >0"*) require the positivity; neither names a wire
+token for the runtime refusal, so the value is pinned by test rather than by canon."""
+
+
 def blocked_reason(ctx: _RunConfig, led: _Ledger) -> str:
     """Why a wanted entry produced NO fill (F-10 restriction trace)."""
     if led.portfolio_block_reason is not None:

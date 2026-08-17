@@ -580,3 +580,33 @@ describe("Research Data page", () => {
     });
   });
 });
+
+// --------------------------------------------------------------------------- #
+// RD-15.c4 — no raw display-name dependency on this page (doc 12 §15, F-07)     #
+// --------------------------------------------------------------------------- #
+
+describe("RD-15.c4 — identity never depends on a display name", () => {
+  afterEach(cleanup);
+
+  it("still identifies a dataset by its entity_id when the display name is null", async () => {
+    // The F-07 invariant: a display name is a MUTABLE label, so the page must not
+    // depend on one to say WHICH dataset a row is. The shipped fallback is
+    // `display_name ?? entity_id` (ResearchData.tsx). A row whose name is null is
+    // therefore still identifiable — which is the whole claim of this clause.
+    //
+    // Asserted through the rendered registry rather than by reading the source, so
+    // it fails if the fallback is ever dropped for a bare `display_name`.
+    const anonymous = { ...ROW_OI, entity_id: "rd_anon", display_name: null };
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /research-datasets": { data: [anonymous], meta: { cursor: null, has_more: false } },
+    });
+    renderPage();
+
+    const registryTable = within((await screen.findAllByRole("table"))[0]!);
+    // The id is shown in the name's place — not blank, not "—", not "undefined".
+    expect(registryTable.getByText("rd_anon")).toBeInTheDocument();
+    expect(registryTable.queryByText("undefined")).not.toBeInTheDocument();
+    expect(registryTable.queryByText("null")).not.toBeInTheDocument();
+  });
+});

@@ -84,6 +84,7 @@ from entropia.domain.backtest.execution.constants import (
 )
 from entropia.domain.backtest.execution.costs import (
     FillCosts,
+    FundingCharge,
     _cost_params,
     _effective_fill,
     due_funding_charges,
@@ -754,6 +755,65 @@ def _exit_proxy(position: _Position, bar: _Bar, window: deque[_Bar]) -> bool:
     return bar.close > max(b.high for b in window)
 
 
+@dataclass(frozen=True, slots=True)
+class _LedgerEffect:
+    """One ledger counter bump and, optionally, the trace event that explains it.
+
+    A describe half COMPUTES these and applies none of them; the matching booking half
+    replays them in order. Carrying them instead of applying them inline is what makes an
+    evaluation genuinely read-only — the pre-split code bumped three counters and emitted
+    ``filtered_no_entry`` while it was still only deciding, so "evaluate" and "write to the
+    ledger" could not be told apart (ADR-0002 §15 R-4)."""
+
+    counter: str
+    event: str = ""
+    direction: str | None = None
+    detail: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class _CarryPlan:
+    """P1 described: which funding records fire at this bar and what each costs.
+
+    ``next_index`` is the advanced cursor — it advances even when ``charges`` is empty,
+    because a record that becomes available while FLAT is consumed without a charge (the
+    perp convention ``due_funding_charges`` implements)."""
+
+    next_index: int
+    charges: tuple[FundingCharge, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _HeldDecision:
+    """P3 described: which protection/exit arm this bar takes against a held position.
+
+    ``branch`` names the arm of the former ``if``/``elif`` chain verbatim, so the booking
+    half reproduces the chain's exclusivity without re-deciding anything. ``"none"`` means
+    a position is held and no arm fired — distinct from ``_evaluate_held`` returning
+    ``None``, which means there is no position at all."""
+
+    branch: str
+    stop_outcome: _StopOutcome | None = None
+    executed_reason: str = ""
+    touch_level: Decimal | None = None
+    touched: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _EntryDecision:
+    """P4 described: the entry this bar wants, formed but not placed.
+
+    ``want`` is ``None`` when the signal was suppressed — the suppression's counter and
+    trace event travel in ``effects`` rather than having been written already. ``strength``
+    is the signal bar's multiplier (F-07g), computed once here and inherited verbatim by
+    whichever fill path the booking half executes."""
+
+    want: str | None
+    strength: Decimal
+    effects: tuple[_LedgerEffect, ...] = ()
+    entry_detail: dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass(frozen=True)
 class _ItemStepper:
     """One item's replay, suspended between bars instead of run to completion.
@@ -778,14 +838,38 @@ class _ItemStepper:
     """Phase (1): admit the bar and derive its decision inputs. Books nothing."""
     carry: Callable[[_Bar], None]
     """Phase (2) / ADR-0002 P1: funding and carry on a held position."""
+    compute_carry: Callable[[_Bar], _CarryPlan | None]
+    """P1 DESCRIBED: what carry is due, booked nowhere. ``None`` when the item has no
+    funding schedule at all. Read-only — safe to call before the pool has arbitrated."""
+    book_carry: Callable[[_Bar, _CarryPlan], None]
+    """P1 BOOKED: apply a plan ``compute_carry`` produced. Advances the funding cursor."""
     open_fills: Callable[[_Bar], None]
     """Phases (3)/(3b)/(3c): fills deferred to this bar's open, resting orders."""
     held: Callable[[_Bar], bool]
     """Phase (4) / P3: protection, stop and exit. Returns whether a position was held, which
     is what keeps the former ``if``/``elif`` exclusive once the two arms are called apart."""
+    evaluate_held: Callable[[_Bar], _HeldDecision | None]
+    """P3 DESCRIBED: which exit this bar forces, closed nowhere. ``None`` means flat.
+
+    Advances the position's trail anchor, and ONLY that: the anchor is a high-water mark of
+    the market, not a booking — it moves because the bar printed that extreme, whatever the
+    pool later admits, and ``max``/``min`` makes re-describing the same bar idempotent. The
+    stop level ``_resolve_stop`` reads is derived from it, so it must be current here."""
+    apply_held: Callable[[_Bar, _HeldDecision], None]
+    """P3 BOOKED: execute the arm ``evaluate_held`` chose. Closes, emits, clears state."""
     entry: Callable[..., None]
     """Phase (5) / P4: a fresh entry while flat, sized against ``equity`` when one is given —
     the SHARED ``E(t)`` for a portfolio participant, this item's own ledger otherwise."""
+    evaluate_entry: Callable[[_Bar], _EntryDecision | None]
+    """P4 DESCRIBED: the entry this bar wants, placed nowhere and sized nowhere.
+
+    ``None`` means the item is not open for a fresh entry (holding, committed, or a
+    fail-closed backstop is down). Genuinely read-only: it writes no ledger field, emits no
+    event and touches no lifecycle state, so a pool may call it, refuse what it hears and
+    leave the item exactly as it was (ADR-0002 §6)."""
+    apply_entry: Callable[..., None]
+    """P4 BOOKED: place what ``evaluate_entry`` described — resting order, deferred fill or
+    an immediate open sized against ``equity`` when one is given."""
     tail: Callable[[_Bar], None]
     """Phases (3d)/(6)/(7)/(8): close-deferred fill, stacking rules, scale ladder, snapshot."""
     ledger: _Ledger
@@ -1298,20 +1382,53 @@ def _build_stepper(
     def _blocked_reason() -> str:
         return blocked_reason(ctx, led)
 
-    def _signal_strength(bar: _Bar) -> Decimal:
-        """The strength multiplier at THIS signal bar (F-07g, §10.3).
+    def _strength_value(bar: _Bar) -> Decimal:
+        """The strength multiplier at THIS signal bar (F-07g, §10.3) — PURE.
 
         Computed at DECISION time from the bars already replayed (``window`` holds the
         prior look-back; the signal bar itself is complete at its close) — look-back
         only, no look-ahead. Inert (exactly 1x, zero extra work) unless the
-        ``volatility_adjusted`` mode is active, so every other mode stays
-        byte-identical. A non-neutral multiplier is counted for diagnostics."""
+        ``volatility_adjusted`` mode is active, so every other mode stays byte-identical.
+
+        The diagnostic counter lives in :func:`_signal_strength` rather than here, so a
+        describe half can price a signal it may never place without moving the ledger."""
         if not strength_active:
             return _ONE
-        multiplier = _volatility_strength((*window, bar))
+        return _volatility_strength((*window, bar))
+
+    def _signal_strength(bar: _Bar) -> Decimal:
+        """:func:`_strength_value`, plus the diagnostic count of a non-neutral multiplier.
+
+        The booking-side spelling, for the two ``_phase_tail`` callers that compute and
+        place a multiplier in one step. P4 splits the two (``_EntryDecision.effects``)."""
+        multiplier = _strength_value(bar)
         if multiplier != _ONE:
             led.strength_adjustments += 1
         return multiplier
+
+    def _book_effects(bar: _Bar, effects: tuple[_LedgerEffect, ...]) -> None:
+        """Apply the counter bumps and trace events a describe half deferred, in order.
+
+        The counter is dispatched explicitly rather than by ``setattr`` so that mypy sees
+        every field this can write and an unrecognised name fails loudly instead of
+        silently creating an attribute nothing reports."""
+        for effect in effects:
+            if effect.counter == "suppressed_entries":
+                led.suppressed_entries += 1
+            elif effect.counter == "entries_blocked_by_restriction":
+                led.entries_blocked_by_restriction += 1
+            elif effect.counter == "strength_adjustments":
+                led.strength_adjustments += 1
+            else:  # pragma: no cover — unreachable; the constructors are all above
+                raise AssertionError(f"unknown ledger effect counter '{effect.counter}'")
+            if effect.event:
+                _emit(
+                    effect.event,
+                    event_time=bar.timestamp,
+                    direction=effect.direction,
+                    bar_seq=led.bars_seen,
+                    detail=effect.detail,
+                )
 
     def _close(
         exit_time: str,
@@ -1963,8 +2080,17 @@ def _build_stepper(
 
     def _phase_carry(bar: _Bar) -> None:
         """P1 / doc 15 §9.3 step (2) — funding and carry, charged at the TOP of the bar."""
-        nonlocal funding_idx
+        plan = _compute_carry(bar)
+        if plan is not None:
+            _book_carry(bar, plan)
 
+    def _compute_carry(bar: _Bar) -> _CarryPlan | None:
+        """P1 DESCRIBED — which funding records fire here and what each costs.
+
+        Pure: ``due_funding_charges`` takes the cursor by value and hands back the advanced
+        one, so nothing moves until :func:`_book_carry` accepts the plan."""
+        if not funding_records:
+            return None
         # (2) K-03 / F-11 funding cost — doc 15 §9.3 step 2: funding/fee/carry is applied
         # at the TOP of the bar, BEFORE any fill, stop, exposure check, entry or scaling
         # of this bar. That ordering is not cosmetic: ``led.equity`` is what sizes an entry
@@ -2000,44 +2126,50 @@ def _build_stepper(
         # over-optimistic ZERO funding cost for the whole run. This deliberately differs
         # from the date-blackout precedent below, where a restrictive reading exists
         # (treat the bar as inside the window); a cost has no such reading.
-        if funding_records:
-            # ``due_funding_charges`` decides WHICH records fire and what each costs;
-            # applying them (equity/peak/counters + the decision event) stays here.
-            # Records that become available while FLAT are still consumed — the cursor
-            # advances even when nothing is charged.
-            funding_idx, due_charges = due_funding_charges(
-                funding_records,
-                start_index=funding_idx,
-                decision_time=resolve_funding_decision_time(bar.timestamp),
-                has_instrument_mapping=funding_has_mapping,
-                position_direction=position.direction if position is not None else None,
-                position_notional=(position.entry_notional if position is not None else _ZERO),
-            )
-            if position is not None:
-                for due in due_charges:
-                    rec = due.record
-                    charge = due.amount
-                    if charge != _ZERO:
-                        led.equity = (led.equity - charge).quantize(_MONEY)
-                        led.peak = max(led.peak, led.equity)
-                        led.funding_paid += charge
-                    led.funding_charges += 1
-                    _emit(
-                        "funding_charge",
-                        event_time=bar.timestamp,
-                        direction=position.direction,
-                        bar_seq=led.bars_seen,
-                        detail={
-                            "position_seq": position.position_seq,
-                            "rate": str(rec.rate),
-                            "charge": str(charge),
-                            "available_at": rec.available_at.isoformat(),
-                            "event_at": rec.event_at.isoformat(),
-                            "source_revision_id": (
-                                funding.source_revision_id if funding is not None else None
-                            ),
-                        },
-                    )
+        # ``due_funding_charges`` decides WHICH records fire and what each costs;
+        # applying them (equity/peak/counters + the decision event) stays in the booking
+        # half. Records that become available while FLAT are still consumed — the cursor
+        # advances even when nothing is charged.
+        next_index, due_charges = due_funding_charges(
+            funding_records,
+            start_index=funding_idx,
+            decision_time=resolve_funding_decision_time(bar.timestamp),
+            has_instrument_mapping=funding_has_mapping,
+            position_direction=position.direction if position is not None else None,
+            position_notional=(position.entry_notional if position is not None else _ZERO),
+        )
+        return _CarryPlan(next_index=next_index, charges=tuple(due_charges))
+
+    def _book_carry(bar: _Bar, plan: _CarryPlan) -> None:
+        """P1 BOOKED — charge the plan against equity and trace every record that fired."""
+        nonlocal funding_idx
+
+        funding_idx = plan.next_index
+        if position is not None:
+            for due in plan.charges:
+                rec = due.record
+                charge = due.amount
+                if charge != _ZERO:
+                    led.equity = (led.equity - charge).quantize(_MONEY)
+                    led.peak = max(led.peak, led.equity)
+                    led.funding_paid += charge
+                led.funding_charges += 1
+                _emit(
+                    "funding_charge",
+                    event_time=bar.timestamp,
+                    direction=position.direction,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "position_seq": position.position_seq,
+                        "rate": str(rec.rate),
+                        "charge": str(charge),
+                        "available_at": rec.available_at.isoformat(),
+                        "event_at": rec.event_at.isoformat(),
+                        "source_revision_id": (
+                            funding.source_revision_id if funding is not None else None
+                        ),
+                    },
+                )
 
     def _phase_open_fills(bar: _Bar) -> None:
         """Steps (3)/(3b)/(3c) — fills deferred to this bar's OPEN, resting limit orders and
@@ -2318,85 +2450,121 @@ def _build_stepper(
         Returns whether it took the branch, which is how the former ``if/elif`` chain keeps
         its exclusivity across the split: a bar that closes a position here must NOT then be
         offered a fresh entry by :func:`_phase_entry`, exactly as the ``elif`` guaranteed."""
+        decision = _evaluate_held(bar)
+        if decision is None:
+            return False
+        _apply_held(bar, decision)
+        return True
+
+    def _evaluate_held(bar: _Bar) -> _HeldDecision | None:
+        """P3 DESCRIBED — which protection/exit arm this bar takes, closing nothing.
+
+        Returns ``None`` while flat, which is what the caller turns back into the former
+        ``if``/``elif`` exclusivity. The arm is named rather than taken, so a pool can hear
+        what the item must do before it decides whether the item may do it (ADR-0002 §6).
+
+        The one thing this DOES write is the position's trail anchor, and deliberately: the
+        anchor is a high-water mark of the market, not a booking. It moves because the bar
+        printed that extreme — no arbitration can un-print it — and ``max``/``min`` makes
+        re-describing the same bar idempotent. ``_resolve_stop`` derives the trailing level
+        from it, so an un-advanced anchor would describe last bar's stop."""
+        if position is None:
+            return None
+        # (4) protection / stop / exit against this bar (intrabar touch).
+        if position.direction == "long":
+            position.trail_anchor = max(position.trail_anchor, bar.high)
+        else:
+            position.trail_anchor = min(position.trail_anchor, bar.low)
+        opp = "short" if position.direction == "long" else "long"
+        logic_triggered = [
+            f"logic:{spec.block_id}" for spec, ev in stop_pairs if ev.current_signal == opp
+        ]
+        stop_outcome = _resolve_stop(
+            config,
+            position,
+            bar,
+            logic_enabled=logic_enabled,
+            logic_triggered=logic_triggered,
+            ticks=bar_ticks,
+        )
+        stop_touched = stop_outcome is not None
+        # A fresh exit signal is evaluated only when no exit is already committed:
+        # a deferred exit from a prior bar (``pending``) — or a resting touch
+        # exit (F-07i C) — is pinned and cannot be pre-empted by a new signal;
+        # only an intrabar stop below can cancel it.
+        exit_wanted = (
+            pending is None
+            and exit_touch is None
+            and (
+                _plan_exit(position, entry_signal, exit_hit)
+                if plan_active
+                else _exit_proxy(position, bar, window)
+            )
+        )
+        if stop_touched and exit_wanted and exit_sched == "immediate":
+            # §5.9 same-bar Stop+Exit collision — only when the exit ALSO fills this bar
+            # (immediate timing). A deferred exit would fill strictly later, so an intrabar
+            # stop simply wins (the "stop" arm below). Only "exit_has_priority" changes the
+            # OUTCOME (close at close as an exit); the other three execute the stop.
+            return _HeldDecision(
+                branch="stop_exit_collision",
+                stop_outcome=stop_outcome,
+                executed_reason=(
+                    "exit_signal" if stop_exit_conflict == "exit_has_priority" else "stop_loss"
+                ),
+            )
+        if stop_touched:
+            return _HeldDecision(branch="stop", stop_outcome=stop_outcome)
+        if exit_touch is not None and led.bars_seen > exit_touch[1]:
+            # F-07i (C) ``intrabar_touch`` EXIT: the resting exit fills when price comes back
+            # to TOUCH the exit-signal level (a long SELLS at the level — prints at/above it;
+            # short mirror). Print-authoritative on a bar with prints; a print-less bar keeps
+            # the coarse bar-extreme touch. Never on the signal bar itself (the level IS that
+            # bar's close — an instant self-touch would just be a close fill). An intrabar
+            # stop the same bar wins above (the risk event pre-empts the resting exit, the
+            # deferred-exit precedent). The arm is taken whether or not price touched — that
+            # is what the former ``elif`` did — so ``touched`` carries the answer.
+            touch_level, _placed_seq = exit_touch
+            is_long_pos = position.direction == "long"
+            if bar_ticks:
+                touched = bool(_touching_ticks(bar_ticks, touch_level, is_buy=not is_long_pos))
+            else:
+                touched = bar.high >= touch_level if is_long_pos else bar.low <= touch_level
+            return _HeldDecision(branch="touch_exit", touch_level=touch_level, touched=touched)
+        if exit_wanted:
+            return _HeldDecision(branch="exit")
+        return _HeldDecision(branch="none")
+
+    def _apply_held(bar: _Bar, decision: _HeldDecision) -> None:
+        """P3 BOOKED — execute the arm :func:`_evaluate_held` named. Decides nothing."""
         nonlocal exit_touch, pending, position
 
-        if position is not None:
-            # (4) protection / stop / exit against this bar (intrabar touch).
-            if position.direction == "long":
-                position.trail_anchor = max(position.trail_anchor, bar.high)
+        assert position is not None  # a decision exists only for a held position
+        if decision.branch == "stop_exit_collision":
+            stop_outcome = decision.stop_outcome
+            executed_reason = decision.executed_reason
+            # F-10: the CONFLICT decision is ALWAYS traced (was only under
+            # record_both_reasons) — which rule executed, which also triggered, and
+            # the governing policy — so a reviewer can reconstruct the tie-break.
+            led.stop_exit_collisions += 1
+            _emit(
+                "stop_exit_collision",
+                event_time=bar.timestamp,
+                direction=position.direction,
+                bar_seq=led.bars_seen,
+                detail={
+                    "position_seq": position.position_seq,
+                    "executed": executed_reason,
+                    "also_triggered": (
+                        "stop_loss" if executed_reason == "exit_signal" else "exit_signal"
+                    ),
+                    "policy": stop_exit_conflict,
+                },
+            )
+            if stop_exit_conflict == "exit_has_priority":
+                _close(bar.timestamp, bar.close, "exit_signal", position, bar_seq=led.bars_seen)
             else:
-                position.trail_anchor = min(position.trail_anchor, bar.low)
-            opp = "short" if position.direction == "long" else "long"
-            logic_triggered = [
-                f"logic:{spec.block_id}" for spec, ev in stop_pairs if ev.current_signal == opp
-            ]
-            stop_outcome = _resolve_stop(
-                config,
-                position,
-                bar,
-                logic_enabled=logic_enabled,
-                logic_triggered=logic_triggered,
-                ticks=bar_ticks,
-            )
-            stop_touched = stop_outcome is not None
-            # A fresh exit signal is evaluated only when no exit is already committed:
-            # a deferred exit from a prior bar (``pending``) — or a resting touch
-            # exit (F-07i C) — is pinned and cannot be pre-empted by a new signal;
-            # only an intrabar stop below can cancel it.
-            exit_wanted = (
-                pending is None
-                and exit_touch is None
-                and (
-                    _plan_exit(position, entry_signal, exit_hit)
-                    if plan_active
-                    else _exit_proxy(position, bar, window)
-                )
-            )
-            if stop_touched and exit_wanted and exit_sched == "immediate":
-                # §5.9 same-bar Stop+Exit collision — only when the exit ALSO fills
-                # this bar (immediate timing). A deferred exit would fill strictly
-                # later, so an intrabar stop simply wins (handled by the elif below).
-                # Only "exit_has_priority" changes the OUTCOME (close at close as an
-                # exit); the other three execute the stop (the intrabar touch precedes
-                # the close-based exit), "record_both_reasons" logs both codes.
-                led.stop_exit_collisions += 1
-                executed_reason = (
-                    "exit_signal" if stop_exit_conflict == "exit_has_priority" else "stop_loss"
-                )
-                # F-10: the CONFLICT decision is ALWAYS traced (was only under
-                # record_both_reasons) — which rule executed, which also triggered, and
-                # the governing policy — so a reviewer can reconstruct the tie-break.
-                _emit(
-                    "stop_exit_collision",
-                    event_time=bar.timestamp,
-                    direction=position.direction,
-                    bar_seq=led.bars_seen,
-                    detail={
-                        "position_seq": position.position_seq,
-                        "executed": executed_reason,
-                        "also_triggered": (
-                            "stop_loss" if executed_reason == "exit_signal" else "exit_signal"
-                        ),
-                        "policy": stop_exit_conflict,
-                    },
-                )
-                if stop_exit_conflict == "exit_has_priority":
-                    _close(bar.timestamp, bar.close, "exit_signal", position, bar_seq=led.bars_seen)
-                else:
-                    assert stop_outcome is not None  # implied by stop_touched
-                    _close(
-                        bar.timestamp,
-                        stop_outcome.price,
-                        "stop_loss",
-                        position,
-                        bar_seq=led.bars_seen,
-                    )
-                    _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
-                position = None
-            elif stop_touched:
-                # An intrabar stop fires immediately and subsumes any deferred exit
-                # scheduled for later this bar (or a later bar) — the stop is hit first.
-                assert stop_outcome is not None  # implied by stop_touched
+                assert stop_outcome is not None  # implied by the collision arm
                 _close(
                     bar.timestamp,
                     stop_outcome.price,
@@ -2405,96 +2573,92 @@ def _build_stepper(
                     bar_seq=led.bars_seen,
                 )
                 _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
-                position = None
-                pending = None
-            elif exit_touch is not None and led.bars_seen > exit_touch[1]:
-                # F-07i (C) ``intrabar_touch`` EXIT: the resting exit fills when price
-                # comes back to TOUCH the exit-signal level (a long SELLS at the
-                # level — prints at/above it; short mirror). Print-authoritative on a
-                # bar with prints; a print-less bar keeps the coarse bar-extreme
-                # touch. Never on the signal bar itself (the level IS that bar's
-                # close — an instant self-touch would just be a close fill). An
-                # intrabar stop the same bar wins above (the risk event pre-empts
-                # the resting exit, the deferred-exit precedent).
-                touch_level, _placed_seq = exit_touch
-                is_long_pos = position.direction == "long"
-                if bar_ticks:
-                    exit_touched = bool(
-                        _touching_ticks(bar_ticks, touch_level, is_buy=not is_long_pos)
-                    )
+            position = None
+        elif decision.branch == "stop":
+            # An intrabar stop fires immediately and subsumes any deferred exit
+            # scheduled for later this bar (or a later bar) — the stop is hit first.
+            stop_outcome = decision.stop_outcome
+            assert stop_outcome is not None  # implied by the stop arm
+            _close(
+                bar.timestamp,
+                stop_outcome.price,
+                "stop_loss",
+                position,
+                bar_seq=led.bars_seen,
+            )
+            _emit_stop_resolution(stop_outcome, bar.timestamp, position.direction)
+            position = None
+            pending = None
+        elif decision.branch == "touch_exit":
+            touch_level = decision.touch_level
+            assert touch_level is not None  # the touch arm always names its level
+            if decision.touched:
+                led.touch_exit_fills += 1
+                if _close(
+                    bar.timestamp,
+                    touch_level,
+                    "exit_signal",
+                    position,
+                    bar_seq=led.bars_seen,
+                    fraction=close_fraction,
+                ):
+                    position = None
                 else:
-                    exit_touched = (
-                        bar.high >= touch_level if is_long_pos else bar.low <= touch_level
-                    )
-                if exit_touched:
-                    led.touch_exit_fills += 1
-                    if _close(
-                        bar.timestamp,
-                        touch_level,
-                        "exit_signal",
-                        position,
-                        bar_seq=led.bars_seen,
-                        fraction=close_fraction,
-                    ):
-                        position = None
-                    else:
-                        _apply_partial_aftermath(position, touch_level)
-                    exit_touch = None
-            elif exit_wanted:
-                if exit_sched == "immediate":
-                    # F-07c: an exit signal closes ``close_fraction`` and holds the
-                    # remainder under the aftermath; a full close (fraction 1) nulls it.
-                    if _close(
-                        bar.timestamp,
-                        bar.close,
-                        "exit_signal",
-                        position,
-                        bar_seq=led.bars_seen,
-                        fraction=close_fraction,
-                    ):
-                        position = None
-                    else:
-                        _apply_partial_aftermath(position, bar.close)
-                elif exit_sched == "touch":
-                    # F-07i (C): rest the exit as a TOUCH order at the signal bar's
-                    # close level; it fills only when a later bar's prints (or, on a
-                    # print-less bar, its extreme) come back to the level — resolved
-                    # by the touch branch above. Protection stops stay live on the
-                    # position throughout (the touch exit is opportunity, the stop is
-                    # risk).
-                    _emit(
-                        "exit_scheduled",
-                        event_time=bar.timestamp,
-                        direction=position.direction,
-                        bar_seq=led.bars_seen,
-                        detail={
-                            "position_seq": position.position_seq,
-                            "reason": "exit_signal",
-                            "timing": config.data.execution.exit_timing,
-                            "touch_level": str(bar.close),
-                        },
-                    )
-                    exit_touch = (bar.close, led.bars_seen)
+                    _apply_partial_aftermath(position, touch_level)
+                exit_touch = None
+        elif decision.branch == "exit":
+            if exit_sched == "immediate":
+                # F-07c: an exit signal closes ``close_fraction`` and holds the
+                # remainder under the aftermath; a full close (fraction 1) nulls it.
+                if _close(
+                    bar.timestamp,
+                    bar.close,
+                    "exit_signal",
+                    position,
+                    bar_seq=led.bars_seen,
+                    fraction=close_fraction,
+                ):
+                    position = None
                 else:
-                    # Defer the exit to the next bar's open / close (F-07a); trace the
-                    # scheduling decision so the two-phase timing is reconstructable.
-                    _emit(
-                        "exit_scheduled",
-                        event_time=bar.timestamp,
-                        direction=position.direction,
-                        bar_seq=led.bars_seen,
-                        detail={
-                            "position_seq": position.position_seq,
-                            "reason": "exit_signal",
-                            "timing": config.data.execution.exit_timing,
-                            "target_bar_seq": led.bars_seen + 1,
-                        },
-                    )
-                    pending = _Pending(
-                        "exit", exit_sched == "next_open", led.bars_seen + 1, "", "exit_signal"
-                    )
-            return True
-        return False
+                    _apply_partial_aftermath(position, bar.close)
+            elif exit_sched == "touch":
+                # F-07i (C): rest the exit as a TOUCH order at the signal bar's
+                # close level; it fills only when a later bar's prints (or, on a
+                # print-less bar, its extreme) come back to the level — resolved
+                # by the touch branch above. Protection stops stay live on the
+                # position throughout (the touch exit is opportunity, the stop is
+                # risk).
+                _emit(
+                    "exit_scheduled",
+                    event_time=bar.timestamp,
+                    direction=position.direction,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "position_seq": position.position_seq,
+                        "reason": "exit_signal",
+                        "timing": config.data.execution.exit_timing,
+                        "touch_level": str(bar.close),
+                    },
+                )
+                exit_touch = (bar.close, led.bars_seen)
+            else:
+                # Defer the exit to the next bar's open / close (F-07a); trace the
+                # scheduling decision so the two-phase timing is reconstructable.
+                _emit(
+                    "exit_scheduled",
+                    event_time=bar.timestamp,
+                    direction=position.direction,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "position_seq": position.position_seq,
+                        "reason": "exit_signal",
+                        "timing": config.data.execution.exit_timing,
+                        "target_bar_seq": led.bars_seen + 1,
+                    },
+                )
+                pending = _Pending(
+                    "exit", exit_sched == "next_open", led.bars_seen + 1, "", "exit_signal"
+                )
 
     def _phase_entry(bar: _Bar, *, equity: Decimal | None = None) -> None:
         """P4 / step (5) — flat and uncommitted: evaluate and place a fresh entry.
@@ -2502,23 +2666,26 @@ def _build_stepper(
         The former ``elif`` arm. Reached only when :func:`_phase_held` did not take its
         branch, so the condition below is evaluated in exactly the state it used to be.
 
-        ``equity`` is the valuation the entry is sized against, and it is scoped to THIS
-        call: set on the way in, cleared on the way out, so a later phase can never size
-        against a snapshot that has since been superseded. ``None`` — what ``_step`` passes —
-        leaves the sizing chain reading this item's own ledger, unchanged."""
-        nonlocal pending, position, sizing_equity, working_limit, working_stop
+        ``equity`` is the valuation the entry is sized against and is scoped to the BOOKING
+        half, which is the only half that sizes anything (``_planned_size`` is the lone
+        reader). Evaluation never consults it, so describing an entry costs nothing and
+        commits nothing."""
+        decision = _evaluate_entry(bar)
+        if decision is not None:
+            _apply_entry(bar, decision, equity=equity)
 
-        sizing_equity = equity
-        try:
-            _phase_entry_body(bar)
-        finally:
-            sizing_equity = None
+    def _evaluate_entry(bar: _Bar) -> _EntryDecision | None:
+        """P4 DESCRIBED — the entry this bar wants, placed nowhere and sized nowhere.
 
-    def _phase_entry_body(bar: _Bar) -> None:
-        """The former ``elif`` body. Separate only so the equity scope above is a ``finally``."""
-        nonlocal pending, position, working_limit, working_stop
+        Read-only, and that is the point of the split: every counter the pre-split code
+        bumped while it was still deciding (``suppressed_entries``,
+        ``entries_blocked_by_restriction``, ``strength_adjustments``) now travels in
+        ``effects`` for :func:`_apply_entry` to book, so a pool may hear this answer and
+        refuse it without having moved the item's ledger (ADR-0002 §6).
 
-        if (
+        ``None`` means the item is not open for a fresh entry at all — holding, already
+        committed, or a fail-closed backstop is down."""
+        if not (
             timing_ok
             and order_ok
             and partial_close_ok
@@ -2529,68 +2696,68 @@ def _build_stepper(
             and working_limit is None
             and working_stop is None
         ):
-            # Flat and uncommitted: evaluate a fresh entry, then open now (immediate),
-            # schedule a deferred fill (timing), or rest a limit order. ``timing_ok``,
-            # ``order_ok``, ``partial_close_ok``, ``scaling_ok``, ``restrictions_ok``
-            # and ``conflict_ok`` are the fail-closed backstops — an unsupported timing /
-            # order type / partial-close aftermath / scaling config / restriction filter /
-            # hedge policy opens nothing (F-07a / F-07b / F-07c / F-07d / F-07e).
-            want: str | None = None
-            if plan_active:
-                # (6a) real indicator entry, respecting the direction bias.
-                if entry_signal is not None:
-                    if (entry_signal == "long" and not long_ok) or (
-                        entry_signal == "short" and not short_ok
-                    ):
-                        led.suppressed_entries += 1
-                        _emit(
-                            "filtered_no_entry",
-                            event_time=bar.timestamp,
+            # Flat and uncommitted is the precondition. ``timing_ok``, ``order_ok``,
+            # ``partial_close_ok``, ``scaling_ok``, ``restrictions_ok`` and ``conflict_ok``
+            # are the fail-closed backstops — an unsupported timing / order type /
+            # partial-close aftermath / scaling config / restriction filter / hedge policy
+            # opens nothing (F-07a / F-07b / F-07c / F-07d / F-07e).
+            return None
+        effects: list[_LedgerEffect] = []
+        want: str | None = None
+        if plan_active:
+            # (6a) real indicator entry, respecting the direction bias.
+            if entry_signal is not None:
+                if (entry_signal == "long" and not long_ok) or (
+                    entry_signal == "short" and not short_ok
+                ):
+                    effects.append(
+                        _LedgerEffect(
+                            counter="suppressed_entries",
+                            event="filtered_no_entry",
                             direction=entry_signal,
-                            bar_seq=led.bars_seen,
                             detail={
                                 "reason": "direction_restriction",
                                 "direction_mode": config.position_entry_logic.direction_mode,
                             },
                         )
-                    else:
-                        want = entry_signal
-            elif len(window) == _BREAKOUT_WINDOW:
-                # (6b) breakout entry proxy, with a full look-back.
-                highest = max(b.high for b in window)
-                lowest = min(b.low for b in window)
-                want_long = bar.close > highest
-                want_short = bar.close < lowest
-                if (want_long and not long_ok) or (want_short and not short_ok):
-                    led.suppressed_entries += 1
-                    _emit(
-                        "filtered_no_entry",
-                        event_time=bar.timestamp,
+                    )
+                else:
+                    want = entry_signal
+        elif len(window) == _BREAKOUT_WINDOW:
+            # (6b) breakout entry proxy, with a full look-back.
+            highest = max(b.high for b in window)
+            lowest = min(b.low for b in window)
+            want_long = bar.close > highest
+            want_short = bar.close < lowest
+            if (want_long and not long_ok) or (want_short and not short_ok):
+                effects.append(
+                    _LedgerEffect(
+                        counter="suppressed_entries",
+                        event="filtered_no_entry",
                         direction="long" if want_long else "short",
-                        bar_seq=led.bars_seen,
                         detail={
                             "reason": "direction_restriction",
                             "direction_mode": config.position_entry_logic.direction_mode,
                         },
                     )
-                elif want_long or want_short:
-                    # long wins a same-bar tie (deterministic); sides are exclusive.
-                    want = "long" if want_long else "short"
-            if want is not None and restriction_specs:
-                # F-07e: the Restrictions/Filters ENTRY gate (Master Ref §12.1 "block
-                # entry"). Evaluated AFTER the signal + direction bias produced a wanted
-                # entry, so the trace shows a real signal the filters vetoed — never a
-                # phantom suppression. The gate runs at DECISION time (the signal bar);
-                # a deferred/limit fill inherits its signal bar's verdict (V1 boundary,
-                # engine-version-pinned).
-                active_filters = _active_restrictions(bar_date)
-                if _restrictions_block(active_filters):
-                    led.entries_blocked_by_restriction += 1
-                    _emit(
-                        "filtered_no_entry",
-                        event_time=bar.timestamp,
+                )
+            elif want_long or want_short:
+                # long wins a same-bar tie (deterministic); sides are exclusive.
+                want = "long" if want_long else "short"
+        if want is not None and restriction_specs:
+            # F-07e: the Restrictions/Filters ENTRY gate (Master Ref §12.1 "block
+            # entry"). Evaluated AFTER the signal + direction bias produced a wanted
+            # entry, so the trace shows a real signal the filters vetoed — never a
+            # phantom suppression. The gate runs at DECISION time (the signal bar);
+            # a deferred/limit fill inherits its signal bar's verdict (V1 boundary,
+            # engine-version-pinned).
+            active_filters = _active_restrictions(bar_date)
+            if _restrictions_block(active_filters):
+                effects.append(
+                    _LedgerEffect(
+                        counter="entries_blocked_by_restriction",
+                        event="filtered_no_entry",
                         direction=want,
-                        bar_seq=led.bars_seen,
                         detail={
                             "reason": "restriction_blocked",
                             "rule": restriction_rule,
@@ -2598,164 +2765,188 @@ def _build_stepper(
                             "context": "flat_entry",
                         },
                     )
-                    want = None
-            if want is not None:
-                # F-07g: the SIGNAL bar's strength multiplier, computed once at the
-                # decision point (after the restriction gate — a vetoed signal never
-                # computes strength) and inherited verbatim by whichever fill path
-                # executes (immediate / deferred / limit) — never re-priced later.
-                strength = _signal_strength(bar)
-                entry_detail: dict[str, Any] = {"rule": _entry_rule_snapshot(want)}
-                if strength_active:
-                    entry_detail["signal_strength"] = {
-                        "mode": strength_mode,
-                        "multiplier": str(strength),
-                    }
-                # F-10: the entry DECISION (signal fired + bias allowed), carrying the
-                # evaluated rule id(s) and each nested condition's pass/fail — distinct
-                # from the ``entry_fill`` execution event (doc 15 §16).
+                )
+                want = None
+        if want is None:
+            return _EntryDecision(want=None, strength=_ONE, effects=tuple(effects))
+        # F-07g: the SIGNAL bar's strength multiplier, computed once at the decision
+        # point (after the restriction gate — a vetoed signal never computes strength)
+        # and inherited verbatim by whichever fill path executes (immediate / deferred /
+        # limit) — never re-priced later.
+        strength = _strength_value(bar)
+        if strength != _ONE:
+            effects.append(_LedgerEffect(counter="strength_adjustments"))
+        entry_detail: dict[str, Any] = {"rule": _entry_rule_snapshot(want)}
+        if strength_active:
+            entry_detail["signal_strength"] = {
+                "mode": strength_mode,
+                "multiplier": str(strength),
+            }
+        return _EntryDecision(
+            want=want, strength=strength, effects=tuple(effects), entry_detail=entry_detail
+        )
+
+    def _apply_entry(bar: _Bar, decision: _EntryDecision, *, equity: Decimal | None = None) -> None:
+        """P4 BOOKED — place what :func:`_evaluate_entry` described. Decides nothing.
+
+        ``equity`` is scoped to THIS call: set on the way in, cleared on the way out, so a
+        later phase can never size against a snapshot that has since been superseded.
+        ``None`` — what ``_step`` passes — leaves the sizing chain reading this item's own
+        ledger, unchanged."""
+        nonlocal pending, position, sizing_equity, working_limit, working_stop
+
+        sizing_equity = equity
+        try:
+            _book_effects(bar, decision.effects)
+            want = decision.want
+            if want is None:
+                return
+            strength = decision.strength
+            # F-10: the entry DECISION (signal fired + bias allowed), carrying the
+            # evaluated rule id(s) and each nested condition's pass/fail — distinct
+            # from the ``entry_fill`` execution event (doc 15 §16).
+            _emit(
+                "entry_signal",
+                event_time=bar.timestamp,
+                direction=want,
+                bar_seq=led.bars_seen,
+                detail=decision.entry_detail,
+            )
+            if order_is_limit:
+                # F-07b: rest a limit order at the signal-derived price; it fills
+                # only on a later touch within the validity window (resolved by the
+                # (3b) block on subsequent bars), never on this signal bar.
+                limit = order_cfg.limit
+                assert limit is not None  # guaranteed by order_ok
+                offset = limit.price_offset or _ZERO
+                limit_level = _limit_price(limit.price_rule, bar.close, offset)
+                validity_bars = _VALIDITY_BARS[limit.validity]
+                working_limit = _WorkingLimit(
+                    direction=want,
+                    limit_price=limit_level,
+                    offset=offset,
+                    price_rule=limit.price_rule,
+                    unfilled_policy=limit.unfilled_policy,
+                    expires_seq=(None if validity_bars is None else led.bars_seen + validity_bars),
+                    strength=strength,
+                )
+                led.limit_orders_placed += 1
                 _emit(
-                    "entry_signal",
+                    "limit_order_placed",
                     event_time=bar.timestamp,
                     direction=want,
                     bar_seq=led.bars_seen,
-                    detail=entry_detail,
+                    detail={
+                        "limit_price": str(limit_level),
+                        "price_rule": limit.price_rule,
+                        "validity": limit.validity,
+                        "unfilled_policy": limit.unfilled_policy,
+                        "expires_bar_seq": working_limit.expires_seq,
+                    },
                 )
-                if order_is_limit:
-                    # F-07b: rest a limit order at the signal-derived price; it fills
-                    # only on a later touch within the validity window (resolved by the
-                    # (3b) block on subsequent bars), never on this signal bar.
-                    limit = order_cfg.limit
-                    assert limit is not None  # guaranteed by order_ok
-                    offset = limit.price_offset or _ZERO
-                    limit_level = _limit_price(limit.price_rule, bar.close, offset)
-                    validity_bars = _VALIDITY_BARS[limit.validity]
-                    working_limit = _WorkingLimit(
-                        direction=want,
-                        limit_price=limit_level,
-                        offset=offset,
-                        price_rule=limit.price_rule,
-                        unfilled_policy=limit.unfilled_policy,
-                        expires_seq=(
-                            None if validity_bars is None else led.bars_seen + validity_bars
-                        ),
-                        strength=strength,
-                    )
-                    led.limit_orders_placed += 1
-                    _emit(
-                        "limit_order_placed",
-                        event_time=bar.timestamp,
-                        direction=want,
-                        bar_seq=led.bars_seen,
-                        detail={
-                            "limit_price": str(limit_level),
-                            "price_rule": limit.price_rule,
-                            "validity": limit.validity,
-                            "unfilled_policy": limit.unfilled_policy,
-                            "expires_bar_seq": working_limit.expires_seq,
-                        },
-                    )
-                elif order_is_stop:
-                    # F-07h: rest a stop trigger at the signal-derived level; it fires
-                    # only on a later touch (resolved by the (1c) block on subsequent
-                    # bars), never on this signal bar. For a stop-limit the limit leg
-                    # is pre-computed HERE from the same signal close, so the armed
-                    # limit is signal-derived exactly like a plain limit order's.
-                    stop = order_cfg.stop
-                    assert stop is not None  # guaranteed by order_ok
-                    trigger_level = _limit_price(
-                        stop.activation_rule, bar.close, stop.trigger_offset or _ZERO
-                    )
-                    limit = order_cfg.limit  # present iff stop_limit_order
-                    limit_offset = (limit.price_offset or _ZERO) if limit else _ZERO
-                    place_detail: dict[str, Any] = {
-                        "trigger_price": str(trigger_level),
-                        "activation_rule": stop.activation_rule,
-                        "order_type": order_cfg.type,
-                    }
-                    stop_limit_level: Decimal | None = None
-                    if limit is not None:
-                        stop_limit_level = _limit_price(limit.price_rule, bar.close, limit_offset)
-                        place_detail["limit_price"] = str(stop_limit_level)
-                        place_detail["validity"] = limit.validity
-                        place_detail["unfilled_policy"] = limit.unfilled_policy
-                    working_stop = _WorkingStop(
-                        direction=want,
-                        trigger_price=trigger_level,
-                        limit_price=stop_limit_level,
-                        limit_offset=limit_offset,
-                        limit_rule=limit.price_rule if limit else "",
-                        unfilled_policy=limit.unfilled_policy if limit else "",
-                        validity_bars=(_VALIDITY_BARS[limit.validity] if limit else None),
-                        strength=strength,
-                    )
-                    led.stop_orders_placed += 1
-                    _emit(
-                        "stop_order_placed",
-                        event_time=bar.timestamp,
-                        direction=want,
-                        bar_seq=led.bars_seen,
-                        detail=place_detail,
-                    )
-                elif entry_sched == "touch":
-                    # F-07i (C) ``intrabar_touch`` ENTRY: rest a TOUCH order at the
-                    # signal price (the signal bar's close) and fill only when a
-                    # later bar's prints come back to the level — reusing the F-07b
-                    # working-limit machinery verbatim (entry-signal-price rule, no
-                    # offset, until-cancelled). With a limit/stop order type the
-                    # branches above already govern the fill (the order's own touch
-                    # semantics subsume the timing).
-                    working_limit = _WorkingLimit(
-                        direction=want,
-                        limit_price=bar.close,
-                        offset=_ZERO,
-                        price_rule="entry_signal_price",
-                        unfilled_policy="keep_until_validity_ends",
-                        expires_seq=None,
-                        strength=strength,
-                    )
-                    led.touch_orders_placed += 1
-                    _emit(
-                        "limit_order_placed",
-                        event_time=bar.timestamp,
-                        direction=want,
-                        bar_seq=led.bars_seen,
-                        detail={
-                            "limit_price": str(bar.close),
-                            "price_rule": "entry_signal_price",
-                            "mode": "intrabar_touch",
-                            "unfilled_policy": "keep_until_validity_ends",
-                            "expires_bar_seq": None,
-                        },
-                    )
-                elif entry_sched == "immediate":
-                    position = _do_open(
-                        want,
-                        bar,
-                        bar.close,
-                        bar_seq=led.bars_seen,
-                        deferred=False,
-                        strength=strength,
-                    )
-                else:
-                    _emit(
-                        "entry_scheduled",
-                        event_time=bar.timestamp,
-                        direction=want,
-                        bar_seq=led.bars_seen,
-                        detail={
-                            "timing": config.data.execution.entry_timing,
-                            "target_bar_seq": led.bars_seen + 1,
-                        },
-                    )
-                    pending = _Pending(
-                        "entry",
-                        entry_sched == "next_open",
-                        led.bars_seen + 1,
-                        want,
-                        "",
-                        strength,
-                    )
+            elif order_is_stop:
+                # F-07h: rest a stop trigger at the signal-derived level; it fires
+                # only on a later touch (resolved by the (1c) block on subsequent
+                # bars), never on this signal bar. For a stop-limit the limit leg
+                # is pre-computed HERE from the same signal close, so the armed
+                # limit is signal-derived exactly like a plain limit order's.
+                stop = order_cfg.stop
+                assert stop is not None  # guaranteed by order_ok
+                trigger_level = _limit_price(
+                    stop.activation_rule, bar.close, stop.trigger_offset or _ZERO
+                )
+                limit = order_cfg.limit  # present iff stop_limit_order
+                limit_offset = (limit.price_offset or _ZERO) if limit else _ZERO
+                place_detail: dict[str, Any] = {
+                    "trigger_price": str(trigger_level),
+                    "activation_rule": stop.activation_rule,
+                    "order_type": order_cfg.type,
+                }
+                stop_limit_level: Decimal | None = None
+                if limit is not None:
+                    stop_limit_level = _limit_price(limit.price_rule, bar.close, limit_offset)
+                    place_detail["limit_price"] = str(stop_limit_level)
+                    place_detail["validity"] = limit.validity
+                    place_detail["unfilled_policy"] = limit.unfilled_policy
+                working_stop = _WorkingStop(
+                    direction=want,
+                    trigger_price=trigger_level,
+                    limit_price=stop_limit_level,
+                    limit_offset=limit_offset,
+                    limit_rule=limit.price_rule if limit else "",
+                    unfilled_policy=limit.unfilled_policy if limit else "",
+                    validity_bars=(_VALIDITY_BARS[limit.validity] if limit else None),
+                    strength=strength,
+                )
+                led.stop_orders_placed += 1
+                _emit(
+                    "stop_order_placed",
+                    event_time=bar.timestamp,
+                    direction=want,
+                    bar_seq=led.bars_seen,
+                    detail=place_detail,
+                )
+            elif entry_sched == "touch":
+                # F-07i (C) ``intrabar_touch`` ENTRY: rest a TOUCH order at the
+                # signal price (the signal bar's close) and fill only when a
+                # later bar's prints come back to the level — reusing the F-07b
+                # working-limit machinery verbatim (entry-signal-price rule, no
+                # offset, until-cancelled). With a limit/stop order type the
+                # branches above already govern the fill (the order's own touch
+                # semantics subsume the timing).
+                working_limit = _WorkingLimit(
+                    direction=want,
+                    limit_price=bar.close,
+                    offset=_ZERO,
+                    price_rule="entry_signal_price",
+                    unfilled_policy="keep_until_validity_ends",
+                    expires_seq=None,
+                    strength=strength,
+                )
+                led.touch_orders_placed += 1
+                _emit(
+                    "limit_order_placed",
+                    event_time=bar.timestamp,
+                    direction=want,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "limit_price": str(bar.close),
+                        "price_rule": "entry_signal_price",
+                        "mode": "intrabar_touch",
+                        "unfilled_policy": "keep_until_validity_ends",
+                        "expires_bar_seq": None,
+                    },
+                )
+            elif entry_sched == "immediate":
+                position = _do_open(
+                    want,
+                    bar,
+                    bar.close,
+                    bar_seq=led.bars_seen,
+                    deferred=False,
+                    strength=strength,
+                )
+            else:
+                _emit(
+                    "entry_scheduled",
+                    event_time=bar.timestamp,
+                    direction=want,
+                    bar_seq=led.bars_seen,
+                    detail={
+                        "timing": config.data.execution.entry_timing,
+                        "target_bar_seq": led.bars_seen + 1,
+                    },
+                )
+                pending = _Pending(
+                    "entry",
+                    entry_sched == "next_open",
+                    led.bars_seen + 1,
+                    want,
+                    "",
+                    strength,
+                )
+        finally:
+            sizing_equity = None
 
     def _phase_tail(bar: _Bar) -> None:
         """Steps (3d)/(6)/(7)/(8) — the close-deferred fill, the stacking and opposite-signal
@@ -3324,9 +3515,15 @@ def _build_stepper(
         open_position=_open_position,
         admit=_phase_admit,
         carry=_phase_carry,
+        compute_carry=_compute_carry,
+        book_carry=_book_carry,
         open_fills=_phase_open_fills,
         held=_phase_held,
+        evaluate_held=_evaluate_held,
+        apply_held=_apply_held,
         entry=_phase_entry,
+        evaluate_entry=_evaluate_entry,
+        apply_entry=_apply_entry,
         tail=_phase_tail,
         ledger=led,
         ctx=ctx,

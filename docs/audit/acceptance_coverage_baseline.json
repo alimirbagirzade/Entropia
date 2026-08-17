@@ -21,15 +21,15 @@
   ],
   "provenance": {
     "measured_by": "docs/audit/acceptance_semantic_scan.py --root .. --report",
-    "measured_at": "2026-08-17T00:00:00Z",
-    "slice": "RD-11.c3 — a successor Approved revision does not rewrite a finished run manifest (doc 12 §14)",
-    "base_commit": "6902710",
+    "measured_at": "2026-08-17T08:00:00Z",
+    "slice": "acceptance batch 05 — doc 12 (Research Data): RD-09 and RD-15 closed, RD-12.c4/RD-13.c4 measured as class D",
+    "base_commit": "58db533",
     "conditions": "static scan; ast + title extraction against the live test tree; no database, no network, no test run",
-    "supersedes": "the P-E3 freeze (106 partial / 8 uncovered; A1 B75 C6 D32, base 2a314ae). This slice closed RD-11.c3, the criterion's LAST open clause, so RD-11 itself moved partial -> covered and lost its debt_class: partial 106 -> 105 and class B 75 -> 74. Both ceilings are lowered here, never raised. No criterion was reclassified and none was deleted. The clause needed a harness that did not exist — a COMPLETED Backtest Run pinning a research revision through an enabled funding policy — which is why it sat uncovered through four earlier batches; _ready_composition gained an optional funding_for callback (default None keeps every existing caller byte-identical) because the pin can only be built after the market revision exists.",
+    "supersedes": "the RD-11.c3 freeze (105 partial / 8 uncovered; A1 B74 C6 D32, base 58db533). Batch 05 took doc 12 and closed TWO criteria, so partial 105 -> 103 and class B 74 -> 72; both ceilings are lowered, never raised. RD-09.c4 needed NO new test — ADIM 54 had left it open saying it was closable only through a funding-enabled run, that harness landed in ADIM 67, and the test written there for RD-11.c3 asserts this clause literally (run manifest, RESULT snapshot and read surface all still name v1.0 after v1.1 is approved), so the existing node was cited. RD-15.c4 got a new frontend test, negative-controlled by removing the display_name ?? entity_id fallback. TWO findings were MEASURED AND RECORDED RATHER THAN ACTED ON: RD-12.c4 and RD-13.c4 both name UI behaviour that is not shipped (no job-status re-read on the page; no reload/compare/new-revision conflict affordance anywhere in the research frontend), so both read class D rather than B. NEITHER WAS RECLASSIFIED — B -> D raises the D ceiling and that is an adjudication, not a test slice's call. That makes seven such open findings across the ledger.",
     "clause_totals_at_freeze": {
-      "covered": 1005,
+      "covered": 1007,
       "partial": 9,
-      "uncovered": 122,
+      "uncovered": 120,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "product_decision_required": 0
@@ -48,12 +48,12 @@
   "ceilings": {
     "total_criteria": 383,
     "status": {
-      "partial": 105,
+      "partial": 103,
       "uncovered": 8
     },
     "debt_class": {
       "A": 1,
-      "B": 74,
+      "B": 72,
       "C": 6,
       "D": 32
     }

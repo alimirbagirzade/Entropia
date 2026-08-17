@@ -13122,7 +13122,9 @@ criteria:
     - backend/tests/integration/test_research_revision_immutability.py::test_approved_revision_content_survives_the_next_revision
   - id: RD-09.c4
     text: An existing run or result stays bound to v1.0 after v1.1 is approved.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_research_successor_manifest_immutability.py::test_a_successor_approval_leaves_a_finished_runs_manifest_unchanged
   production_paths:
   - backend/src/entropia/application/commands/research_data.py
   - backend/src/entropia/infrastructure/postgres/repositories/research_data.py
@@ -13132,6 +13134,7 @@ criteria:
     a revision under OCC (If-Match rv-4 + Idempotency-Key)
   - backend/tests/integration/test_research_data_persistence.py::test_soft_delete_preserves_revision_chain
   - backend/tests/integration/test_research_revision_immutability.py::test_approved_revision_content_survives_the_next_revision
+  - backend/tests/integration/test_research_successor_manifest_immutability.py::test_a_successor_approval_leaves_a_finished_runs_manifest_unchanged
   evidence_type:
   - backend_integration
   - frontend_component
@@ -13147,10 +13150,10 @@ criteria:
   idempotency: []
   async_recovery: []
   historical_integrity:
+  - backend/tests/integration/test_research_successor_manifest_immutability.py::test_a_successor_approval_leaves_a_finished_runs_manifest_unchanged
   - backend/tests/integration/test_research_revision_immutability.py::test_approved_revision_content_survives_the_next_revision
   agent_parity: []
-  status: partial
-  debt_class: B
+  status: covered
   notes: 'ADIM 54 closed c3: v1.0 is re-READ from the database after v1.1 is written (expire_all first,
     so the identity map cannot answer) and its content hash, available-time policy and delay, event-time
     semantics, linked market revision, payload and lifecycle state are each compared by NAME to their
@@ -13162,7 +13165,12 @@ criteria:
     additionally cross-checks that the funding revision is linked to the strategy''s OWN market revision,
     while the worker fail-closes (RUN_FAILED_FUNDING_SOURCE_INVALID) unless the revision''s native
     asset rows resolve. run_backtest already accepts load_funding_rows; wiring the whole path outgrew
-    this batch and was left open rather than marked on a half proof.'
+    this batch and was left open rather than marked on a half proof. CLOSED in batch 05: the
+    funding-enabled run this note asked for now EXISTS (ADIM 67 — _ready_composition''s funding_for
+    callback + _completed_funded_run), and the test written there for RD-11.c3 asserts this clause
+    literally: after v1.1 is approved the run manifest, the RESULT snapshot and the read surface all
+    still name v1.0. No new test was written here; the existing node was cited. The analysis above
+    stands as written — it was closable only through a funding-enabled run, and that is what changed.'
 - id: RD-10
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -13372,7 +13380,11 @@ criteria:
     with a fresh Idempotency-Key". So the server-side replay guard is real and proven (test_idempotent_analyze_returns_same_job),
     while the UI never actually exercises it: a double-click from the browser sends two different
     keys. The recovery clause (re-opening the UI shows the same job status/report) is untested on
-    either plane.'
+    either plane. MEASURED 2026-08-17 (batch 05), RECORDED not acted on: ResearchData.tsx holds a
+    useQueryClient but no job-status query — nothing on the page re-reads a job''s status or its
+    quality report, so "re-opening the UI shows the same job status" has no shipped surface to assert
+    against. Like RD-13.c4 this reads class D rather than B, and was NOT reclassified for the same
+    reason.'
 - id: RD-13
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -13429,7 +13441,14 @@ criteria:
   notes: 'The refusal is proven on two independent mutating surfaces, and the soft-delete case also
     asserts the non-effect (deletion_state still ACTIVE, no Trash entry) — which is the "first revision
     is preserved" half. The recovery-affordance clause is untested: no frontend test drives a 409
-    on the revision append and asserts a reload/compare/new-revision path is offered.'
+    on the revision append and asserts a reload/compare/new-revision path is offered.
+    MEASURED 2026-08-17 (batch 05), RECORDED not acted on: the affordance this clause names is NOT
+    SHIPPED. Grepping the whole frontend for ROW_VERSION_CONFLICT / STALE_REVISION / conflict finds the
+    verbatim-error path on Trash, Market Data, Library and Mainboard, but nothing on the Research Data
+    revision-append surface — neither ResearchData.tsx nor ResearchLifecycle.tsx renders a reload /
+    compare / new-revision recovery path. So this reads class D (an implementation gap), not class B.
+    It was NOT reclassified: B -> D RAISES the D ceiling, which is an adjudication rather than a test
+    slice''s call.'
 - id: RD-14
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'
@@ -13548,7 +13567,9 @@ criteria:
       the Admin denial verbatim on approve (403)
   - id: RD-15.c4
     text: No raw display-name dependency remains on this page.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - frontend/src/test/researchData.test.tsx > RD-15.c4 — identity never depends on a display name > still identifies a dataset by its entity_id when the display name is null
   production_paths:
   - frontend/src/pages/ResearchData.tsx
   - frontend/src/components/ResearchLifecycle.tsx
@@ -13566,9 +13587,11 @@ criteria:
     hides approve/revoke while /me is unavailable'
   - frontend/src/test/researchDataLifecycle.test.tsx > Research Data revision lifecycle > surfaces
     the Admin denial verbatim on approve (403)
+  - frontend/src/test/researchData.test.tsx > RD-15.c4 — identity never depends on a display name > still identifies a dataset by its entity_id when the display name is null
   evidence_type:
   - frontend_component
   positive:
+  - frontend/src/test/researchData.test.tsx > RD-15.c4 — identity never depends on a display name > still identifies a dataset by its entity_id when the display name is null
   - frontend/src/test/researchData.test.tsx > Research Data page > renders the registry with category,
     usage scope and revision states verbatim
   - frontend/src/test/researchData.test.tsx > Research Data page > refetches the registry when the
@@ -13588,8 +13611,7 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
+  status: covered
   notes: 'The three anti-patterns the row names (client-only registry, client status flip, client
     role guard) each have a direct asserting test, and the /me fail-closed case is the strongest of
     them. The auth axis is deliberately EMPTY: these are jsdom renders, and hiding a button is not

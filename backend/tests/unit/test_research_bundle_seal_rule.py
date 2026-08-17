@@ -32,7 +32,6 @@ from typing import Any
 
 from entropia.application.jobs.research_data import (
     _BUNDLE_COMPILER_VERSION,
-    _SEALED_BODY_KEYS,
     _seal_bundle,
 )
 from entropia.shared.manifest import manifest_hash
@@ -40,6 +39,29 @@ from entropia.shared.manifest import manifest_hash
 # The two keys written AFTER the hash. Duplicated from the integration module on
 # purpose: a shared constant would let one edit silence both surfaces at once.
 _UNHASHED = frozenset({"resolved_at", "bundle_hash"})
+
+# The always-present HASHED keys of a sealed body. `_seal_bundle` adds at most one
+# optional key on top — `task_id` for the Agent bundle, `run_request_id` for the
+# evidence bundle — and drops it entirely when it is `None`, so the FULL key set is
+# per-caller while this core is not.
+#
+# This lives in the test, not in production, and that placement was decided rather
+# than defaulted: as a module global in `jobs/research_data.py` it had zero
+# production readers, and CodeQL correctly flagged it as dead (alert 256 on #745).
+# The earlier justification — "declarative, compared by test, exactly as
+# MANIFEST_REVISION_KEYS is" — did not survive checking: that one is public and
+# listed in `__all__`, so it is an exported surface; this one was private and unused.
+# The gate never depended on it — the golden digests are what catch a shape change.
+_CORE_HASHED_KEYS = frozenset(
+    {
+        "bundle_kind",
+        "members",
+        "compiler_version",
+        "available_time_policies",
+        "instrument_mapping_revision_ids",
+        "feature_definition_revision_ids",
+    }
+)
 
 _MEMBERS: list[dict[str, Any]] = [
     {
@@ -97,16 +119,16 @@ def test_the_agent_bundle_shape_is_pinned_too() -> None:
 
 
 def test_the_core_hashed_key_set_is_exactly_what_the_constant_names() -> None:
-    """``_SEALED_BODY_KEYS`` must not rot into decoration.
+    """``_CORE_HASHED_KEYS`` must not rot into decoration.
 
     Asserted as the hashed key set MINUS the caller's optional extra, because that
     extra is per-caller by design while this core is invariant."""
     evidence_hashed = {k for k in _evidence() if k not in _UNHASHED}
     agent_hashed = {k for k in _agent() if k not in _UNHASHED}
 
-    assert evidence_hashed - {"run_request_id"} == _SEALED_BODY_KEYS
-    assert agent_hashed == _SEALED_BODY_KEYS
-    assert _UNHASHED.isdisjoint(_SEALED_BODY_KEYS)
+    assert evidence_hashed - {"run_request_id"} == _CORE_HASHED_KEYS
+    assert agent_hashed == _CORE_HASHED_KEYS
+    assert _UNHASHED.isdisjoint(_CORE_HASHED_KEYS)
 
 
 def test_resolved_at_and_bundle_hash_sit_outside_the_hashed_body() -> None:

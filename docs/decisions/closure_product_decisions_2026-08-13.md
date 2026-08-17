@@ -754,12 +754,182 @@ karar veren: ________________  tarih: ____________
 
 ---
 
+## Karar 4 — ADR-0002 §6/§8 amendment'ı: `settle` + `finalize` + P10 + `iter_portfolio` (kapı **G9**)
+
+> **Bu karar bir SLICE'ı değil, bir SÖZLEŞMEYİ açar.** `C2` (E4b) ADR §6'nın Protocol'üne iki
+> üye, §8'in faz sırasına bir faz ekler. ADR **`Accepted`** durumdadır; kabul edilmiş bir
+> sözleşmeyi değiştirmek onu kabul eden imzayı ister (ADR §16). İmza yoksa `C2` → `C3` → `C4`
+> zinciri ve dolayısıyla containment lift'i **başlamaz**.
+
+### Canonical ne diyor
+
+- **ADR §6** `ItemIntent` sözleşmesini ve item'ın loop'a ne söyleyebileceğini sabitler.
+  Bugünkü Protocol **yalnız sorar**: `carry` / `mandatory_exit` / `entry`.
+- **ADR §8** faz sırasını *"the versioned engine contract"* olarak sabitler ve `PHASE_ORDER`
+  bir **değer olarak yayımlanır**, ki bir test sözleşmeyi kaynağı yeniden okumadan assert
+  edebilsin.
+- **ADR §16** onay kapısının *"bir formalite olmadığını"* açıkça söyler.
+
+### Kod şu an ne yapıyor (file:line, güncel main `e865b96`'da ölçüldü)
+
+| Ne | Nerede | Durum |
+|---|---|---|
+| `ItemParticipant` Protocol | `domain/backtest/portfolio_engine.py:270` | **write-only** — `settle` yok, `finalize` yok |
+| `PHASE_ORDER` | `portfolio_engine.py:129` | `("P1","P3","PV","P4","P5","P6b","P7","P9")` — **sekiz faz, P10 yok** |
+| `run_portfolio` | `portfolio_engine.py:550` | tek çağrıda tüm tick'leri kurar; generator formu (`iter_portfolio`) **yok** |
+| stepper `finalize` | `engine.py:829` (gövde `:3441`) | item'ın kendi end-of-data kapanışı — **paylaşımlı defter bunu görmez** |
+| `_ScriptedParticipant` | `tests/unit/oracles/portfolio_harness.py:156` | amendment inerse no-op çift ekler |
+
+### Açık soru tam olarak nerede
+
+`settle` olmadan loop bir kaleme **neyin admitted olduğunu** söyleyemez. O zaman book
+edilebilecek tek yer `entry()`'nin içidir — yani **arbitrasyondan ÖNCE**, arkasında
+`PortfolioSnapshot` olmayan sermaye taahhüdü. `finalize` olmadan da run, pozisyonlar hâlâ
+açıkken biter ve kompozit final equity **yanlış** olur.
+
+**ADIM 71 (C1) bu kararın kapsamını DARALTTI:** *"üç faz book eder, Protocol tarif ister"*
+artık **yanlış** — describe yarıları (`_compute_carry` / `_evaluate_held` / `_evaluate_entry`)
+sevk edildi ve `_evaluate_entry`'nin **sıfır** etki yazdığı ölçüldü. Geriye kalan tek engel
+Protocol'ün kendisidir. Yani bu imza artık "seam'i tasarla" değil, **"var olan seam'e iki üye
+ekle"** kararıdır.
+
+### Seçenekler
+
+**A — Tasarlandığı gibi amend et (dördü birden).** `settle(view, decision) -> None` (P7),
+`finalize(view) -> MandatoryExit | None` (P10), `PHASE_ORDER`'a P10, ve `iter_portfolio`
+generator formu (`run_portfolio` iki satırlık wrapper olur).
+*Bedel:* ADR §6 ve §8 metni değişir; faz sırası testi **bilerek** güncellenir.
+*Kazanç:* `C2`→`C3`→`C4` açılır. `ENGINE_VERSION` **değişmez**, golden **oynamaz**.
+
+**B — Asgari amendment: yalnız `settle` + `finalize` + P10; `iter_portfolio` ERTELENSİN.**
+*Gerekçe:* generator formu bir **ergonomi** değişikliğidir (tick-strided cancellation
+checkpoint'i kolaylaştırır, A21); sözleşmesel zorunluluğu `C4`'e kadar doğmaz.
+*Bedel:* `C4` geldiğinde ikinci bir küçük amendment gerekir.
+
+**C — Amendment'ı REDDET; §6/§8'e dokunmayan bir seam aranır.**
+*Ölçülmüş bedel:* Böyle bir seam bilinmiyor. `hasattr`-yoklaması **fail-open**'dır (aşağıdaki
+alt-karar) ve `settle`'ı olmayan bir participant sessizce düz koşar. Reddetmek pratikte (D)'ye
+yakınsar.
+
+**D — Hiçbir şey yapma.** `C2`/`C3`/`C4` süresiz bloklu kalır; `run_portfolio` üretimden
+erişilemez olmayı sürdürür, containment `future_dev` kalır.
+*Bu meşru bir seçenektir* — paylaşımlı portföy V1 kapsamından çıkarılıyorsa maliyeti sıfırdır.
+
+### Alt-karar (ZORUNLU) — `settle`/`finalize` **zorunlu** Protocol üyesi mi?
+
+Tasarım **zorunlu** diyor: `hasattr`-yoklaması fail-open'dır, `settle`'ı unutan participant
+sessizce düz koşar; zorunlu üye **yapısaldır**, mypy o participant'ı yazan günü kırar.
+*Bedel:* `_ScriptedParticipant`'a bir no-op çift (`portfolio_harness.py:156`); hiçbir şey
+book etmediği için **21 portföy oracle'ı oynamaz** (11 `capital` + 10 `clock`, dosya adıyla
+sayıldı, `_capital`/`_clock` — plan §M-3'ün *"25"*'i hiçbir şekilde yeniden üretilemedi).
+
+### Önerilen seçenek + gerekçe (BU BİR ÖNERİDİR, KARAR DEĞİL)
+
+**A** ya da **B**; ikisi arasındaki fark yalnız `iter_portfolio`'nun zamanlamasıdır ve
+`C4`'ten önce gerekmez. **C** ölçülmüş bir alternatif sunmuyor. **D** ancak paylaşımlı
+portföy bilinçli olarak kapsam dışına alınıyorsa doğru.
+
+### İMZA SATIRI
+
+**Karar 4 — ADR §6/§8 amendment'ı (G9):**
+
+`[ ] A (dördü birden)`  `[ ] B (asgari: settle+finalize+P10, iter_portfolio ertelenir)`
+`[ ] C (amendment reddedilir)`  `[ ] D (hiçbir şey yapma — C2/C3/C4 süresiz bloklu)`
+
+Alt-karar — `settle`/`finalize` **zorunlu** Protocol üyesi mi?
+`[ ] evet (zorunlu, fail-closed)`  `[ ] hayır (opsiyonel/`hasattr` — fail-open, gerekçe: ______)`
+
+karar veren: ________________  tarih: ____________
+
+---
+
+## Karar 5 — P10 end-of-data equity noktası: **ekle** mi, **katla** mı? (kapı **G13**)
+
+> **Bu kararın imza bloğu bugüne kadar HİÇ YOKTU** — ölçüldü: karar dokümanında `P10`,
+> `equity point` ve `end-of-data` için sıfır eşleşme. Kapı, planın §2 tablosunda
+> *"UNDECIDED"* olarak duruyordu ama imzalanacak bir yer yoktu. Bu blok onu yaratır.
+> **Karar 4 (A veya B) imzalanmadan bu kararın konusu doğmaz** — P10 yoksa soru da yoktur.
+
+### Canonical ne diyor
+
+- **ADR §8** APPLY bandını bitirirken: *"P9: append exactly **ONE** EquityPoint(t)"* —
+  yani **bir değerleme noktası, bir equity noktası**.
+- **ADR §14 A5**: *"Composite equity curve is time-ordered **by construction**"*.
+
+### Kod şu an ne yapıyor (file:line)
+
+`stepper.finalize()` (`engine.py:829`, gövde `:3441`) resting order'ı iptal eder ve açık
+pozisyonu son barın kapanışında kapatır. Paylaşımlı yolda bu kapanış **paylaşımlı defterin
+görmesi gereken** parayı realize eder; `run_portfolio`'nun bunun için bir fazı **yok**.
+
+### ÖLÇÜLMÜŞ UYARI — A5'in bugünkü kapısı bu ihlali GÖRMEZ
+
+Tasarım *"aynı `t_ms`'e ikinci nokta A5'i kırar"* diyor. **Kapı öyle demiyor.** A5'in sevk
+edilmiş assertion'larının hepsi şu biçimde:
+
+```
+assert list(run.instants) == sorted(run.instants)
+```
+
+(`tests/unit/oracles/test_oracle_portfolio_clock.py:87`, `:284`;
+`test_oracle_portfolio_containment_gate.py:130`)
+
+`sorted()` **tekrarlara izin verir** — `[1,2,2,3] == sorted([1,2,2,3])` doğrudur. Yani
+**(B) seçilirse ihlal mevcut kapıdan görünmeden geçer.** Kırılan şey testin kendisi değil,
+ADR §8'in *"exactly ONE"* ifadesidir. Hangi seçenek imzalanırsa imzalansın, kapının
+`len(set(instants)) == len(instants)` biçimine güçlendirilmesi **ayrıca** kararlaştırılmalıdır
+(aşağıdaki alt-karar).
+
+### Seçenekler
+
+**A — KATLA (fold).** Kapanışlardan sonra **aynı** `t_ms`'te `commit_tick` → son nokta
+mutabık kalmış defteri yansıtır.
+*Kazanç:* "bir değerleme noktası, bir equity noktası" korunur; eğri uzamaz.
+*Bedel:* Son noktanın anlamı incelir — hem tick-sonu hem settle-sonu değeri aynı damgada.
+
+**B — EKLE (append), aynı `t_ms`'te.** Son tick'in damgasında yeni bir nokta.
+*Bedel:* Bir anda **iki nokta**; ADR §8'in *"exactly ONE"*'ı ihlal edilir — ve yukarıda
+ölçüldüğü gibi **mevcut kapı bunu yakalamaz**. Eğriyi okuyan her tüketici (metrikler,
+drawdown, frontend) çift damgayla karşılaşır.
+
+**C — EKLE, sentetik bir `t_ms`'te** (ör. `last_t_ms + 1`).
+*Kazanç:* Bir-nokta-bir-an korunur.
+*Bedel:* Eksende **var olmayan** bir zaman damgası üretilir; birleşik saat ekseninin
+*"her damga gerçek bir değerleme anıdır"* özelliği kaybolur.
+
+**D — P10 hiç olmasın.** *Ölçülmüş bedel:* run, pozisyonlar açıkken biter ve kompozit final
+equity **yanlış** olur. Bu bir seçenek olarak listelenir ama bedeli finansal doğruluktur.
+
+### Önerilen seçenek + gerekçe (BU BİR ÖNERİDİR, KARAR DEĞİL)
+
+**A (katla)** — P-C2 §C.3.10'un da önerisi. Bugün hiçbir sevk edilmiş sayıyı oynatmaz
+(paylaşımlı yol üretimden erişilemez), ama bir **sözleşme** kararıdır, uygulama ayrıntısı
+değil.
+
+### İMZA SATIRI
+
+**Karar 5 — P10 end-of-data equity noktası (G13):**
+
+`[ ] A (katla — aynı t_ms'te commit_tick)`  `[ ] B (aynı t_ms'e ikinci nokta ekle)`
+`[ ] C (sentetik t_ms'e ekle)`  `[ ] D (P10 yok)`
+
+Alt-karar — A5 kapısı `len(set(instants)) == len(instants)` biçimine güçlendirilsin mi?
+`[ ] evet`  `[ ] hayır (gerekçe: ______)`
+
+karar veren: ________________  tarih: ____________
+
+---
+
 ## Bu belgenin kapsamadıkları (dürüst sınır)
 
 - **Hiçbir kod değiştirilmedi.** Bu oturumda `backend/src`, `frontend/src`, migration ve test
   ağacına dokunulmadı.
 - **Hiçbir issue kapatılmadı, açılmadı, etiketlenmedi.** #552 / #558 / #559 olduğu gibi
   bırakıldı.
+- **Karar 4 ve Karar 5 (2026-08-17) yalnız İMZA BLOĞUDUR.** Hiçbiri karara bağlanmadı,
+  hiçbir seçenek işaretlenmedi, ADR-0002'ye **dokunulmadı** — §6 ve §8 olduğu gibi durur.
+  Bir ajan bu iki kapıyı kapatamaz (ADR §16); bu bloklar yalnız imzalanacak yeri yaratır.
+  **Karar 5'in konusu Karar 4'e bağlıdır**: P10 imzalanmazsa equity-noktası sorusu doğmaz.
 - **Suite koşulmadı.** Bu belge yalnız `docs/` ekler; `Backend`/`Frontend` job'ları için
   otorite CI'dır.
 - **Kabul borcu ratchet'i (`docs/audit/acceptance_coverage_baseline.json`) değişmedi** —

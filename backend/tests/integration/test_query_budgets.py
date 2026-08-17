@@ -29,6 +29,7 @@ PR-blocking gate. Latency lives in the nightly load run (``scripts/loadgen.py`` 
 
 from __future__ import annotations
 
+import ast
 import json
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
@@ -41,6 +42,8 @@ from typing import Any
 import pytest
 from sqlalchemy import event
 
+from entropia.application.commands import mainboard as mb_cmd
+from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.commands.readiness_check import (
     _resolve_market_data_issues,
     _resolve_research_sources,
@@ -99,6 +102,9 @@ pytestmark = pytest.mark.integration
 BUDGET_FILE = Path(__file__).resolve().parents[3] / "docs" / "performance" / "query_budgets.json"
 
 ADMIN = Actor(principal_id="admin_1", principal_type=PrincipalType.HUMAN, role=Role.ADMIN)
+#: The Ready Check runs as the composition's OWNER, not as an admin — the whole-operation
+#: row measures the path a normal user takes.
+_READINESS_USER = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
 PAGE = PageParams(limit=100)
 _BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -534,22 +540,108 @@ async def test_audit_event_page(session) -> None:
 # ---------------------------------------------------------------- the file itself
 
 
+async def test_ready_check_whole_operation(session) -> None:
+    """The WHOLE Ready Check, not one leg — the backstop the per-leg rows cannot be.
+
+    Every other readiness row here measures one leg through its own internal helper.
+    A leg can be flat while the operation that calls it grows, because the growth
+    lives between the legs — so a suite of green leg budgets can coexist with an
+    operation that is linear in the composition. This row closes that gap by
+    measuring ``run_readiness_check`` end to end.
+
+    **The axis is deliberately the EXTERNAL item kind.** The composition's per-item
+    cost is not uniform, and both halves were measured rather than assumed:
+
+    * a strategy-only composition is **FLAT at 9 statements** (n=1 and n=11 alike) —
+      every strategy in that fixture pins the same package revision, so the per-item
+      ``_resolve_strategy_payload`` read is absorbed by the identity map, which is the
+      blind spot the file header already names;
+    * a trade-log composition is **8 -> 18**, i.e. exactly **one statement per item**.
+
+    That one statement is ``_resolve_external`` (`readiness_check.py:341`), called
+    inside ``for item, available in enabled:`` and issuing
+    ``resolve_trade_log_batch`` / ``resolve_signal_revision`` per row. It is leg 3 of
+    P-C2 §D.1 and it is **live and unrepaired on purpose**: batching it changes which
+    row wins when two items pin the same ``work_object_revision_id``, which is not
+    UNIQUE — an undecided product question (gate G15). P3 measures; it does not repair.
+
+    Recording 0 here would be false, and omitting the row to avoid the number is the
+    silence this gate exists to break.
+    """
+    await _principal(session, "user_1")
+    await session.commit()
+    workspace_id = (await mb_query.get_default_mainboard(session, _READINESS_USER))["workspace_id"]
+    await session.commit()
+    seen = {"n": 0}
+
+    async def grow(count: int) -> None:
+        for _ in range(count):
+            seen["n"] += 1
+            work_object = await mb_cmd.create_work_object(
+                session,
+                _READINESS_USER,
+                object_kind="trade_log",
+                payload={"display_name": f"budget trade log {seen['n']}"},
+                available_time=_BASE_TIME,
+            )
+            await mb_cmd.attach_mainboard_item(
+                session,
+                _READINESS_USER,
+                workspace_id=workspace_id,
+                root_id=work_object["root_id"],
+                revision_id=work_object["revision_id"],
+                item_kind="trade_log",
+            )
+
+    async def run() -> None:
+        # Unpinned trade logs, so every item is NOT_READY — the budget is measured on
+        # the path that actually dereferences each item, exactly as the market-data
+        # leg is measured against DRAFT revisions.
+        await readiness_cmd.run_readiness_check(
+            session, _READINESS_USER, composition_id=workspace_id
+        )
+
+    await _measure(session, "readiness_check.run_readiness_check", grow=grow, run=run)
+
+
+def _measured_surfaces() -> set[str]:
+    """The surfaces this module actually measures, read from its OWN source.
+
+    Derived rather than hand-listed. The literal set this replaces could drift from
+    the tests in either direction: a surface measured but never added to the JSON, or
+    a name kept in both places after its test stopped calling ``_measure``. Reading
+    the call sites means the two can only agree by actually agreeing.
+
+    Static (``ast``) rather than runtime registration on purpose — a set populated as
+    tests execute would be empty under ``-k`` or a single-test run, and this gate
+    would then pass by measuring nothing.
+    """
+    tree = ast.parse(Path(__file__).read_text())
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Name) or func.id != "_measure":
+            continue
+        # _measure(session, "<surface>", grow=..., run=...)
+        surface = node.args[1] if len(node.args) >= 2 else None
+        assert isinstance(surface, ast.Constant) and isinstance(surface.value, str), (
+            "every _measure call must name its surface as a string literal, or this "
+            "gate cannot see it"
+        )
+        found.add(surface.value)
+    return found
+
+
 def test_every_registered_surface_has_a_budget() -> None:
     """The budget file and this module name the SAME surfaces.
 
     A surface silently dropped from the JSON would stop being gated while the suite
     stayed green — the failure mode this file exists to prevent.
     """
-    measured = {
-        "library.list_packages",
-        "results_history.list_backtest_results",
-        "readiness_check.market_data_leg",
-        "readiness_check.signal_market_data_leg",
-        "readiness_check.research_funding_leg",
-        "dependency_pins.ensure_pinned_resolvers_active",
-        "agent_workspace.list_tasks",
-        "audit_log.list_audit_events",
-    }
+    measured = _measured_surfaces()
+    assert measured, "no _measure call site was found — the derivation itself is broken"
     assert set(BUDGETS) == measured
 
 

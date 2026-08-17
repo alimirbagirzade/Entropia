@@ -56,6 +56,7 @@ from entropia.domain.readiness.issues import (
     ResearchSourceState,
 )
 from entropia.domain.readiness.validators import evaluate_readiness
+from entropia.domain.research_data.timing_provenance import TimingProvenance
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.domain.trading_signal.config import TradingSignalConfig
 from entropia.domain.trading_signal.enums import PriceSourceMode as SignalPriceSource
@@ -760,29 +761,31 @@ async def _resolve_research_sources(
             )
             continue
         root = roots.get(revision.entity_id)
+        # R1: read the timing vocabulary through the one value object the manifest
+        # also projects, so Ready Check cannot admit a run against one reading of the
+        # availability rules while ``backtest_run_context`` pins another. Ready Check
+        # consumes a SUBSET (it additionally needs ``validation_status``, which the
+        # manifest deliberately never carried) — the value object holds both and each
+        # surface projects what it publishes.
+        timing = TimingProvenance.from_row(revision)
         sources.append(
             ResearchSourceState(
                 item_id=item.item_id,
-                revision_id=revision.revision_id,
+                revision_id=timing.revision_id,
                 field_path=field_path,
                 found=True,
                 root_active=root is not None and root.deletion_state == DeletionState.ACTIVE,
-                revision_state=str(revision.revision_state),
-                usage_scope=_enum_value(revision.usage_scope),
-                available_time_policy=_enum_value(revision.available_time_policy),
-                available_delay_seconds=revision.available_delay_seconds,
-                linked_market_dataset_revision_id=revision.linked_market_dataset_revision_id,
-                instrument_mapping_ref=revision.instrument_mapping_ref,
-                validation_status=_enum_value(revision.validation_status),
+                revision_state=timing.revision_state,
+                usage_scope=timing.usage_scope,
+                available_time_policy=timing.available_time_policy,
+                available_delay_seconds=timing.available_delay_seconds,
+                linked_market_dataset_revision_id=timing.linked_market_dataset_revision_id,
+                instrument_mapping_ref=timing.instrument_mapping_ref,
+                validation_status=timing.validation_status,
                 strategy_market_dataset_revision_id=config.data.market_dataset_revision_id,
             )
         )
     return sources
-
-
-def _enum_value(value: Any) -> str | None:
-    """The raw persisted string of a nullable enum column (never a parsed object)."""
-    return None if value is None else str(value)
 
 
 async def _resolve_external(

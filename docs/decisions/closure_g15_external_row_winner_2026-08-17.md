@@ -291,19 +291,36 @@ blocker üretebilir.
 
 ### P3 ile ilişki — ölçüldü
 
-**`P3`'ün durumu (2026-08-17'de ölçüldü): MERGE OLMADI. PR #741 (`perf(closure-p3): add the
-whole-operation Ready Check budget and derive...`) AÇIK.**
+> **BU BÖLÜM YENİDEN ÖLÇÜLDÜ (2026-08-17, inceleme sırasında).** Belgenin tabanı `6ca478c`
+> `P3`'ü **açık** ölçmüştü; `P3` bu PR incelemedeyken **merge oldu** ve dal onun üstüne alındı.
+> Aşağısı **yeni ölçümdür**; eski ölçüm silinmedi, **tarihiyle** bırakıldı — çünkü belgenin
+> geri kalanı hâlâ `6ca478c` üzerinde okunmuştur ve **yeniden ölçülmemiştir**.
 
-Doğrulama: `docs/performance/query_budgets.json` içinde **sekiz** surface var ve
-`readiness_check.run_readiness_check` **aralarında değil**. Mevcut sekizin **hepsi**
-`per_item: 0`. `readiness_check` ailesinden yalnız üç leg ölçülü (`market_data_leg`,
-`signal_market_data_leg`, `research_funding_leg`) — üçü de `#712`'nin kapattıkları.
-`P1` ve `P2` de inmemiş (tick-data ve mirror-deref satırları yok).
+**İlk ölçüm (`6ca478c`, 2026-08-17): `P3` MERGE OLMAMIŞTI.** PR #741 açıktı;
+`docs/performance/query_budgets.json` **sekiz** surface taşıyordu, hepsi `per_item: 0`, ve
+`readiness_check.run_readiness_check` **yoktu**.
 
-**Bağ:** `P3` indiğinde `readiness_check.run_readiness_check` satırı **0 olmayan** bir `per_item`
-ile doğar ve `note`'u leg 3'ü **sebep göstererek** adlandırır (ordered plan `P3` §Acceptance IDs:
-*"Recording 0 to look clean fails the build"*). O satır **dürüstçe yüksek kalır** ve sırasıyla
-`P1` → `P2` ile **aşağı ratchet'lenir**. **G15 imzalanana kadar son artık leg 3'tür**; yani:
+**Yeniden ölçüm (bu dalın tabanı): `P3` MERGE OLDU** — PR **#741** → `e865b96`. Satır artık
+**var**:
+
+| alan | ölçülen değer |
+|---|---|
+| `axis` | *external work object item (trade_log / trading_signal) in the composition* |
+| `queries_small` / `queries_large` | **8** / **18** (`n_small=1`, `n_large=11`) |
+| **`per_item`** | **1** — yani **0 DEĞİL**, tam da planın öngördüğü gibi |
+
+Satırın kendi `note`'u leg 3'ü **adıyla** sebep gösteriyor: *"The slope is leg 3:
+`_resolve_external` … it is live and UNREPAIRED deliberately — batching it changes which row wins
+when two items pin the same `work_object_revision_id`, which is not UNIQUE, and that is an
+undecided product question (**gate G15**). P3 measures, it does not repair."*
+
+> **Yani bu belge, sevk edilmiş bir bütçe satırının `note`'unun işaret ettiği hedeftir.** `P3`
+> sorunu **ölçtü ve adlandırdı**; kararı vermek G15'in — bu belgenin — işidir. `P1` ve `P2` hâlâ
+> inmedi (tick-data ve mirror-deref satırları yok), dolayısıyla **`per_item: 1`'in tek artık
+> kaynağı leg 3'tür**.
+
+**Bağ:** satır **dürüstçe yüksek** doğdu ve sırasıyla `P1` → `P2` ile **aşağı ratchet'lenir**.
+**G15 imzalanana kadar son artık leg 3'tür**; yani:
 
 - `P3`'ün `note`'u G15'e bir **işaret** taşır ve bu belge o işaretin **hedefidir**.
 - Bir imza **A** veya **B** yönünde gelirse leg 3 batch'lenebilir hâle gelir ve satır **0'a**
@@ -483,6 +500,9 @@ karar veren: ________________  tarih: ____________
   probe'tan gelir. O probe **repoya girmedi** (test ağacında yeni dosya yok).
 - **Üretim duplikasyon sayısı ölçülmedi** ve tahmin edilmedi (§Ölçüm 3, gerekçesiyle).
 - **§Ölçüm 4'ün kusuru ölçüldü, kaydedildi, ÜZERİNE GİDİLMEDİ.**
-- **`P3` (#741) merge edilmedi** ve bu belge onu beklemiyor; ilişki §"P3 ile ilişki"de yazılı.
+- **`P3` (#741) bu belge yazıldıktan SONRA merge oldu** (`e865b96`); §"P3 ile ilişki"
+  bölümü **yalnız o bölüm** yeniden ölçülerek güncellendi. Belgenin geri kalanı hâlâ
+  `6ca478c` üzerinde okunmuştur ve **yeniden ölçülmemiştir**. `P3` ürün kodu değiştirmedi,
+  dolayısıyla buradaki diğer ölçümler bu taban üzerinde de geçerlidir (doğrulandı).
 - **A-08 bu belgeden etkilenmez.** Blocker sayısı **1** (yalnız A-08), verdict **BLOCKED**.
 - **Kabul borcu ratchet'i değişmedi** — hiçbir kriter kapanmadı, hiçbir sınıf taşınmadı.

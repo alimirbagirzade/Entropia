@@ -631,6 +631,19 @@ verification without 19 copies of the same block.
 
 #### `C5` — R-1: pin the allocation plan revision (narrow, and it can go early)
 
+> **STATUS CORRECTION (2026-08-17, measured at `dc2902f`): this slice's goal is ALREADY
+> SHIPPED — do not schedule it as work.** `_resolve_allocation` (`:856-861`) builds `config`
+> from the frozen revision and falls back to the draft **only** when `plan_revision_id` is
+> null; the byte-match assertion exists at
+> `tests/integration/test_allocation_revision_pin.py` and was proven load-bearing by a
+> negative control. E6 precondition **#19 is satisfied**. The row below is preserved as
+> written — it describes the state at `c49f5e7`, not the state now. **The RECORD is NOT
+> reconciled, deliberately:** ADR `0002` §15's `R-1` row still reads as an open risk and §10.2
+> still describes the defect in the present tense, because amending an `Accepted` ADR is a human
+> act and **the discharge is UNSIGNED** — the replacement row is written out ready to sign in the
+> measurement document rather than applied. Measurement, negative control and the proposed row:
+> `docs/audit/closure_c5_r1_allocation_pinning_measurement_2026-08-17.md`.
+
 | Field | Value |
 |---|---|
 | **Goal** | `_resolve_allocation` records `plan_revision_id` as a bare pointer while building `config` from **live draft rows**; `AllocationProvenance` demands the **frozen** record. |

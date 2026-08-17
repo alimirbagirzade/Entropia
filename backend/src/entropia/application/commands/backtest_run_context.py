@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from entropia.application.commands.readiness_check import _resolve_strategy_payload
 from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.research_data.timing_provenance import TimingProvenance
 from entropia.domain.strategy.config import FundingPolicy, StrategyConfig
 from entropia.domain.strategy.pins import SCALING_ROLE, iter_pinned_packages
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
@@ -372,28 +373,18 @@ async def _research_entries(session: AsyncSession, funding: FundingPolicy) -> li
             "root_id": funding.source_root_id,
             "revision_id": revision_id,
             "pinned_content_hash": funding.source_content_hash,
+            # R1: the timing vocabulary is spelled ONCE, in
+            # ``domain/research_data/timing_provenance.py``, and projected here. The key set
+            # and every per-field transformation are unchanged BY CONSTRUCTION — this
+            # dict is hashed into ``execution_key``, so a drifted key would re-partition
+            # the reuse namespace of every stored Result. Pinned by
+            # ``test_research_timing_provenance.py``.
             "revision": (
                 None
                 if revision is None
-                else {
-                    "entity_id": revision.entity_id,
-                    "revision_state": str(revision.revision_state),
-                    "category_key": revision.category_key,
-                    "usage_scope": _enum(revision.usage_scope),
-                    "content_hash": revision.content_hash,
-                    "available_time_policy": _enum(revision.available_time_policy),
-                    "available_delay_seconds": revision.available_delay_seconds,
-                    "event_time_semantics": _enum(revision.event_time_semantics),
-                    "frequency_policy": _enum(revision.frequency_policy),
-                    "source_timezone_mode": _enum(revision.source_timezone_mode),
-                    "source_timezone_iana": revision.source_timezone_iana,
-                    "linked_market_dataset_revision_id": (
-                        revision.linked_market_dataset_revision_id
-                    ),
-                    "instrument_mapping_ref": revision.instrument_mapping_ref,
-                    "field_definition_version": revision.field_definition_version,
-                    "feature_definitions": features,
-                }
+                else TimingProvenance.from_row(revision).as_manifest_revision(
+                    feature_definitions=features
+                )
             ),
         }
     ]

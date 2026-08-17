@@ -113,6 +113,16 @@
       "queries_large": 1,
       "per_item": 0,
       "note": "Flat, and a GUARD rather than a repair: the projection emits target_entity_id raw. Resolving a display label per row is the obvious next product request and the obvious next N+1 — it must arrive as one batched lookup, and this row is what forces that."
+    },
+    "readiness_check.run_readiness_check": {
+      "title": "Ready Check — the WHOLE operation (doc 14 §9.2/§11)",
+      "axis": "external work object item (trade_log / trading_signal) in the composition",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 8,
+      "queries_large": 18,
+      "per_item": 1,
+      "note": "NOT flat, and recorded that way on purpose (P3 / P-C2 §D.2). The per-leg rows above each measure one internal helper; growth that lives BETWEEN the legs is invisible to all of them, so this row measures run_readiness_check end to end and is the backstop for that gap. The slope is leg 3: _resolve_external (readiness_check.py:341) runs inside `for item, available in enabled:` and issues one resolve_trade_log_batch / resolve_signal_revision per external item. It is live and UNREPAIRED deliberately — batching it changes which row wins when two items pin the same work_object_revision_id, which is not UNIQUE, and that is an undecided product question (gate G15). P3 measures, it does not repair. The axis is the EXTERNAL kind because the cost is not uniform and both halves were measured: a strategy-only composition is FLAT at 9 statements (n=1 and n=11), since those items share one pinned package revision and the identity map absorbs the per-item read — the blind spot this file's header already names. Lowering per_item to 0 here would be a lie about the operation, not a repair of it."
     }
   }
 }

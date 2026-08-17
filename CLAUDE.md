@@ -225,7 +225,46 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 68 (kabul borcu batch 05, doc 12): İKİ KRİTER KAPANDI
+> `future_dev`. **Son dalga — ADIM 69 + ADIM 70 (kayıtsız inen İKİ slice'ın kapanış ritüeli:
+> P-D #728 ve F1 #729): ÜRÜN KODU DEĞİŞMEDİ — altı belge, `backend/src`'te sıfır satır.
+> Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** İkisi de main'deydi, ikisinin de
+> `PROJECT_HISTORY` kaydı, handoff satırı ve memory checkpoint'i **yoktu**; sebepleri ayrı:
+> #728'in promptu çıktıyı tek dosyaya kilitlemişti, #729 ritüeli *"post-merge docs PR'ına
+> ait"* diye **bilerek** ertelemişti. **NUMARALAR MERGE SIRASININ TERSİ ve bu slice DÖRT KEZ
+> taşındı:** 67 yazıldı → #730 66'yı, **#733 67'yi**, **#736 68'i** merge edilmiş adla aldı →
+> **69 + 70**. Dal/commit `stage-67` yazar; **merge edilmiş ad kazanır, numaralar yeniden
+> atanmaz.** Tablo `PROJECT_HISTORY.md` §ADIM 70 başında.
+> **ADIM 70'in kickoff'u YOK, bilerek** — geriye dönük kayıt, canlı seed `ADIM69`'unki;
+> `check_classification` numarayı **dosya adından** okur, o yüzden kapı bunu görmez ve sapma
+> üç yerde birden yazılı. **Planın kendisi düzeltildi (§0.5):** F1'in `Production files`
+> satırı sabiti `portfolio_ledger.py`'ye koymayı söylüyordu, o yerleşim **iki containment
+> kapısını kırıyor** → sabit `execution/sizing.py::SIZE_RESOLVED_TO_ZERO`'ya indi. **Ders:
+> bir tasarımın *"şu dosyaya koy"* talimatı ölçülmüş bir kısıt DEĞİLDİR — kapı kırmızıysa
+> kapıyı değil planı düzelt**; ve **davranışsal test bir sabit promosyonunu koruyamaz**
+> (çağrı yeri literal'e dönerse hepsi yeşil kalır) → kaynak düzeyi ratchet
+> `test_oracle_sizing.py:394`.
+> **BU KAPANIŞTA DÜZELTİLEN BAYAT İDDİA:** handoff'un `## Next:` bloğu *"`R1`/`R2` #730 ile
+> indi"* diyordu; plan `R1`'i (`final_closure_ordered_plan_2026-08-13.md:331`)
+> **`TimingProvenance` + byte-identity proof** olarak tanımlıyor, yani `R1` = **#734**,
+> #730 ise `P-E3`/bundle kimliğiydi. Blok ölçülmüş hâliyle yeniden yazıldı.
+> **DÜRÜST SINIR:** **#734 (R1) ve #735 (C1) main'de ama kendi ADIM kayıtları HENÜZ YOK** —
+> bu kapanış onların anlatısını uydurmadı, kaydı **sahiplerinin** yazması gerekir; ölçülen
+> tek şey `## Next:` tablosuna girdi. Hiçbir ürün sorusu karara bağlanmadı, hiçbir issue
+> durumu değişmedi. **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı,
+> **0/4**, #514 açık.
+> **KAPANIŞ YAZILIRKEN İNEN İKİ ÖLÇÜM PLANI DEĞİŞTİRDİ (§0.5 md. 3–4):** **`C1`'in stop
+> condition'ı ateşlendi** — `_phase_tail`'in scaling bölümü describe/book olarak ayrılabiliyor
+> ama **stacking book etmeden önce sıralanamıyor** → paylaşımlı run için *"ayrılamaz"* ile aynı
+> şey → **`G12` artık öneri değil ÖLÇÜLMÜŞ ZORUNLULUK** (planın `C6` satırı hâlâ nötr bir
+> *"blokla ya da modelle"* seçimi gibi çerçeveliyor; **G12 için o çerçeve yanlış**). Ve
+> **`C3`'ün önünde 17. bir kapı ölçüldü (#731):** Protocol'ün **altı tipinin altısı da**
+> `_PHASE_LOOP_MODULES` içinde → adaptör nereye konursa konsun importer kapısı tepki verir,
+> **allowlist genişletmesi İNSAN incelemesidir**. Sicil **16 → 17 kapı**, **16'sı açık**.
+> **Next: `P3` + `C5`** (`C1` ve `R1` indi). `PROJECT_HISTORY.md` §ADIM 69 + §ADIM 70 ·
+> `docs/ADIM69_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **ADIM 68 (kabul borcu batch 05, doc 12): İKİ KRİTER KAPANDI
 > (`RD-09`, `RD-15`), `partial` 105 → 103, `debt_class.B` 74 → 72 (ratchet AŞAĞI). ÜRÜN KODU
 > DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** **`RD-09.c4` YENİ TEST
 > YAZILMADAN kapandı:** ADIM 54 onu *"yalnız funding-enabled bir run ile kapanır"* diye

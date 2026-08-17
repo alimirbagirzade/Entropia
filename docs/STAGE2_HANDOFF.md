@@ -6509,7 +6509,158 @@ adjudication'dır. Defterde artık **yedi** böyle açık bulgu var.
 3. **Stub şeklini varsayma** (`{data, meta}`, `{items, next_cursor}` değil).
 4. **Frontend düğüm id'si `::` değil ` > `**; clause toplamlarını `--report`'tan oku.
 
+## Stage 69 — kalan V18 closure işi bağımlılık sırasına konuldu (P-D, PR #728) landed
+
+**Base `c49f5e7`** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · alembic head
+`0043_i08_registry_strategy_fks` · OpenAPI **değişmedi** · **ÜRÜN KODU DEĞİŞMEDİ**.
+Blocker sayısı **DEĞİŞMEDİ (1 — yalnız A-08)**, verdict **BLOCKED**.
+Tek çıktı: `docs/implementation/final_closure_ordered_plan_2026-08-13.md` (944 satır).
+
+**NUMARA: bu kayıt merge sırasını TERS ÇEVİRİR.** #728 (`2a314ae`) main'e #729/#730'dan
+**önce** indi ama kaydı yazılmadı; #730 aradan geçip **ADIM 66**'yı merge edilmiş adla aldı.
+Kapanış PR'ı (#732) sıra beklerken **#733 ADIM 67**'yi, **#736 ADIM 68**'i aldı.
+Numaralar yeniden atanmaz → bu **ADIM 69**'dur. Dal adındaki `stage-67` yazıldığı andaki
+tahmindir, kaydın numarası değil.
+
+**Ne indi:** AŞAMA C'nin iki tasarımı (#724, #725) **19 tek-sorumluluklu slice'a** bölündü —
+`F1–F3` financial · `R1–R4` research · `P1–P3` performance · `C1–C9` shared portfolio. Her
+slice on dokuz zorunlu alanı taşıyor; ayrıca mermaid bağımlılık grafiği, paralellik şeritleri,
+**16 maddelik insan-kapısı sicili** ve P11-1 merge ekonomisi.
+
+**Grafik körü körüne kabul EDİLMEDİ — üç düğüm değişti:**
+- **E2 landed DEĞİL, 2/5** — üç per-item okuma canlı (`readiness_check.py` `:472`, `:371`,
+  `:788`) ve **hiçbiri ölçülmüyor**; tamamlanmışlık kapısı elle yazılmış bir küme.
+- **E1, E4'ün önünde olmak ZORUNDA DEĞİL.** `_build_stepper` **tek ~2541 satırlık fonksiyon**,
+  o yüzden *"ikisi de engine.py'ye dokunuyor"* hiçbir şey kanıtlamaz. İç fonksiyon sahipleri
+  çözüldü: **A-2 `_open()`'da, E4a `_phase_carry/_held/_entry`'de → AYRIK**; **A-3 ile E4a
+  `_phase_tail()`'de ÇAKIŞIR**. Asıl kısıt **paylaşılan kabul artefaktı**:
+  `engine_golden_digests.json` E4a'nın tüm kapısı (*byte değişmedi*) ve A-3'ün zorunlu çıktısı
+  (*yeniden üret*) → **karşılıklı dışlama**, öncelik değil.
+- **E3 ve E6 çoklu slice** (imzanın gerektiği yerden bölündü; E6 = C5–C9).
+
+**Dört bayat sayı düzeltildi, biri kabul kapısıydı:** golden **46 → 50** (41 non-portfolio +
+9 `portfolio.*`) · A13 **37 → 41** · E4b'nin *"25 oracle"*ı **hiçbir okumada üretilmiyor**
+(11+10, ayrıca 5 containment) → kapı **sayıyla değil dosya adıyla** yazıldı.
+
+**İnsan kapıları: prompt 6 diyordu, ölçüm 16 buldu** — 15 açık, 14 fiilen bloklayan.
+**#550 (G5) TAHLİYE EDİLDİ** (kanonik seçenek issue gövdesinde kayıtlı, #720 sevk etti);
+yerine **G4** çıktı: cap taşması dispozisyonu **briflenmemiş, sahibi yok**. **İki kapının
+imzalanacak bloğu YOK: G4 ve G15** (leg 3'te hangi satır kazanır).
+
+**Merge ekonomisi:** tavan **3 açık PR** (≤2'si `backend/src`, `engine.py`/üretilmiş artefakta
+dokunan **TAM 1**; C4/C8/C9 sırasında **1**). Sıra: **en çok çakışan ÖNCE** — `strict` altında
+her arkadaki PR main'i zaten yutar, ağırı sona bırakmak ona her küçük merge'de 48–85 dk'lık
+`Backend` koşusunu **ve kendi kabulünü** yeniden ödetir.
+
+### Açık bırakılanlar (dürüst sınır)
+
+- **Hiçbir şey koşulmadı** — belgede tek bir test/coverage sayısı iddia edilmiyor; otorite CI.
+- **Hiçbir ürün sorusu karara bağlanmadı**, hiçbir issue durumu değiştirilmedi.
+- **`_phase_tail` ayrılabilirliği HÂLÂ ölçülmedi** — `C1`'in yazılı stop condition'ı yapıldı.
+- **Ready Check leg 3 bilerek programlanmadı** — `work_object_revision_id` UNIQUE değil → G15.
+- **PR #729 (F1) main'de ama HİÇBİR ADIM kaydı YOK** — ölçüldü ve §ADIM 69 md. 6'da kaydedildi;
+  kaydı **sahibinin** yazması gerekir, bu slice başkasının anlatısını uydurmadı.
+
+## Stage 70 — F1: sıfır-boyut reddinin gerekçesi adlandırılmış sabit oldu (PR #729) landed
+
+> **GERİYE DÖNÜK KAYIT, BAŞKA BİR OTURUMUN SLICE'I.** Kaynak: PR #729 gövdesi (birinci el) +
+> `600be00` diff'i + bağımsız yeniden ölçüm. Hangi iddianın yeniden ölçüldüğü
+> `PROJECT_HISTORY.md` §ADIM 70 md. 5'te ayrı ayrı işaretli. **Kendi kickoff'u YOK, bilerek** —
+> canlı devam noktası `docs/ADIM69_LANDED_KICKOFF.md` ve #729 onu değiştirmiyor.
+
+**Base `2a314ae`** · migration **YOK** · `ENGINE_VERSION` **DEĞİŞMEDİ** · alembic head
+`0043_i08_registry_strategy_fks` · OpenAPI **değişmedi** · **ÜRÜN KODU DEĞİŞTİ, DAVRANIŞ
+DEĞİŞMEDİ** (yayılan string byte-identical, yalnız tanım yeri taşındı).
+Blocker sayısı **DEĞİŞMEDİ (1 — yalnız A-08)**, verdict **BLOCKED**.
+
+**Ne indi:** ordered plan'ın **`F1`** slice'ı (tasarımda **A-2**) — `"size_resolved_to_zero"`
+çıplak literal'i **`execution/sizing.py:414` `SIZE_RESOLVED_TO_ZERO`** sabitine yükseltildi,
+değeri testle pinlendi, allocation yolunun hâlâ daha spesifik `sleeve_zero_capacity`
+raporladığı negatif kontrolle kanıtlandı.
+
+**Planın talimatına UYULMADI ve sapma DOĞRUYDU.** Tasarım da benim planım da sabiti
+`portfolio_ledger.py`'ye, `SLEEVE_ZERO_CAPACITY`'nin yanına koymayı söylüyordu; uygulayan
+oturum önce onu yaptı ve **iki containment kapısı kırıldı**
+(`test_the_shared_ledger_is_reachable_only_through_the_phase_loop` +
+`test_the_phase_loop_exists_but_no_production_path_reaches_it`). Sevk edilmiş `engine.py`'ın
+**bir string'e ulaşmak için** contained bir modülü import etmesi, canlı bir tripwire'ı
+stilistik komşuluğa takas ederdi. `sizing.py` yerleşimi **net yeni modül kenarı: sıfır**.
+`portfolio_ledger.py` `origin/main` ile **byte-identical** (bağımsız doğrulandı).
+**Ders: bir tasarımın *"şu dosyaya koy"* talimatı ölçülmüş bir kısıt DEĞİLDİR — kapı
+kırmızıysa kapıyı değil planı düzelt.**
+
+**Adversarial review'ın bulduğu gerçek boşluk:** çağrı yeri literal'e geri dönerse
+**davranışsal testlerin hepsi yeşil kalır** (yayılan string aynı) → teslimat bir convention'dı
+ve DoD'si elle bir `grep`'ti (**benim planımın DoD'si de oydu**). Kaynak düzeyi ratchet
+`test_oracle_sizing.py:394` bunu kapatıyor; **sembolle** eşleşiyor, satır numarasıyla değil;
+mutasyonla kanıtlı.
+
+**O-02 sınırı:** bu bir **F-10 restriction-trace** token'ı, HTTP hatası **değil** — hiç
+`ErrorBody` yayılmıyor, o yüzden `ErrorCategory` **bilerek uygulanmaz**; kategori bildirmek
+hiçbir yanıta ulaşmayan bir şey için `retryable` reklamı olurdu.
+
+### Açık bırakılanlar (dürüst sınır)
+
+- **Trace sözlüğü hâlâ sözleşme değil** — sekiz token daha literal, hiçbiri OpenAPI'de yok.
+  Takipte ölçülmüş kısıt: `test_backtest_item_intents.py` `blocked_reason`'ın kaynağını
+  regex'le tarayıp minimum sayı assert ediyor → yerinde sabite çevirmek **o testi kırar**.
+- **İki sabit ayrı modüllerde** — containment sınırının sonucu; birleştirmek ledger sabitini
+  dışarı taşımak demek, dört contained modüle dokunur, kendi slice'ını hak eder.
+- **Containment kapıları METİN eşleştirici** — dinamik/re-export import'u kaçırırlar (önceden var).
+- **F2 + F3 bloklu, P-E1 TAMAMLANMADI.** **A-08 DEĞİŞMEDİ** (0/4, #514 açık).
+- **Tam suite bu oturumda koşulmadı** — CI iddiaları PR #729'un koşusundan taşındı
+  (run `31841208114`: 4130 passed / 1 xfailed, coverage %93.72). **Otorite o koşudur.**
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+
+> **ADIM 69 sıralamayı belgeledi. BAŞLIK DEĞİŞMEDİ — PR B hâlâ kilometre taşıdır**; plan
+> onun ÖNÜNDEKİ işi sıraya koyar, onu değiştirmez.
+>
+> **W4-a/W4-b'nin durumu, bu kapanışta YENİDEN ÖLÇÜLDÜ** (kayıt yazıldığında iddia edilen
+> *"`R1`/`R2` #730 ile indi"* **YANLIŞTI** ve düzeltildi): planın `R1`'i
+> (`final_closure_ordered_plan_2026-08-13.md:331`) **`TimingProvenance` value object +
+> byte-identity proof**'tur, yani **#734**'tür — #730 ise `P-E3`/bundle kimliği idi, ayrı bir
+> slice. Merge edilmiş durum:
+>
+> | Slice | Durum |
+> |---|---|
+> | **`F1`** | landed — **#729** (bu kapanışta ADIM 70 olarak kaydedildi) |
+> | **`R1`** | landed — **#734** |
+> | **`C1`** | landed — **#735** (E4a describe/book split; 50 golden digest kıpırdamadı) |
+> | **`P3`** | **açılabilir** — whole-operation query budget backstop, kapısı olmayan tek Ready Check ölçümü |
+> | **`C5`** | **açılabilir** — R-1 allocation pinning; `C1`–`C4`'e bağlı DEĞİL, ayrık dosya kümesi |
+> | `R2` / `R4` | **G6 imzasını** bekler |
+>
+> **Tavan 3 eşzamanlı PR, `engine.py`/golden dosyaya dokunan TAM 1.** `C1` indiği için
+> `F3` artık o kısıt açısından serbesttir — ama `_phase_tail()` hâlâ paylaşılan yüzeydir
+> (`C1` ona **karakter karakter dokunmadı**, tam da `F3` talep ettiği için), `F3` ile `A-3`
+> aynı anda açılmaz.
+>
+> **`C1`'in stop condition'ı ateşlendi ve bir kapıyı ZORUNLU yaptı:** `_phase_tail`'in scaling
+> bölümü describe/book çifti olarak ayrılabiliyor ama **stacking book etmeden önce
+> sıralanamıyor** — paylaşımlı run için bu *"ayrılamaz"* ile aynı şey → **G12 (scaling
+> admission blocker) artık öneri değil, ölçülmüş zorunluluk**
+> (`docs/audit/closure_c1_phase_tail_scaling_separability_2026-08-17.md`). Planın `C6` satırı
+> G11/G12'yi hâlâ nötr bir *"blokla ya da modelle"* seçimi gibi çerçeveler; **G12 için o
+> çerçeve artık yanlıştır.**
+>
+> **`C3`'ün önünde planın bilmediği 17. bir kapı var (#731):** Protocol'ün ihtiyaç duyduğu
+> **altı tipin altısı da** `_PHASE_LOOP_MODULES` içinde → adaptör nereye konursa konsun
+> importer kapısı tepki verir ve **allowlist genişletmesi bir İNSAN incelemesidir**
+> (`docs/audit/closure_e4_adapter_precondition_measurement_2026-08-17.md`).
+> **`C2` de insan kapısında:** `G9` + `G13` imzasız.
+
+> **PR B (= plandaki `C2`→`C4` zinciri) HÂLÂ ADR §16 KAPISININ ARKASINDA ve kapı artık İKİYE
+> bölünmüş durumda:** **G9** `C2`'den önce (`settle`/`finalize`/P10/`iter_portfolio` ADR §6/§8'i
+> değiştirir), **G10** `C9`'dan önce (bayrak + bump). **`C1` (E4a) hiçbir ADR kapısı istemedi** —
+> saf refactor, sevk edilmiş hiçbir sayıyı değiştirmedi, kapısı yalnızca 50 digest'in
+> kıpırdamamasıydı ve kıpırdamadı (#735).
+> Aşağıdaki ADIM 59 ölçümü geçerliliğini korur: (a) engeli kapalı; **kalan tek engel (b)** üç
+> fazın book etmesiydi — **`C1` onu tarif/book olarak ikiye ayırdı**, dolayısıyla (b) artık
+> `ItemParticipant` adaptörünün yazılabilirliği sorusudur, ifade edilebilirliği değil.
+> #731 bu ön koşulları ölçtü ve adaptörün **hâlâ** `C2` + G9/G13 + importer-allowlist kararına
+> bağlı olduğunu kaydetti.
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli
 > (faz-bölünmüş bar) **KAPALI** — `_ItemStepper` `engine.py:756`, `E(t)` girişi

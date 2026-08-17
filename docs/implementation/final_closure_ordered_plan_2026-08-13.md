@@ -66,6 +66,66 @@ Everything else in both designs reproduced. In particular these five, each re-me
 
 ---
 
+## §0.5 — Correction, added after `F1` landed (PR #729, recorded as ADIM 70)
+
+**This plan told `F1` to put the constant in the wrong file, and the implementing slice was
+right to disobey it.** Recorded here rather than silently edited, because the *lesson* applies
+to the seventeen slices still unstarted.
+
+`F1`'s **Production files** row below names
+`domain/backtest/execution/portfolio_ledger.py` (new constant, beside `SLEEVE_ZERO_CAPACITY`),
+inheriting that placement from P-C1 §2.2. **Measured by the implementing session: that
+placement breaks two containment gates** —
+`test_backtest_portfolio_ledger.py::test_the_shared_ledger_is_reachable_only_through_the_phase_loop`
+(an *enumerated* production-importer allowlist for that module) and
+`test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it`
+(no production importer for any `_PHASE_LOOP_MODULES` member). Making the shipped `engine.py`
+import a **contained** module *to reach a string* would trade a live tripwire for a stylistic
+adjacency. The constant shipped instead at **`execution/sizing.py::SIZE_RESOLVED_TO_ZERO`**,
+beside `blocked_reason` — the ladder that already returns every one of these tokens, in a
+module `engine.py` already imports → **net new module edges: zero**.
+
+**Two rules this yields, and they bind every remaining slice:**
+
+1. **A design's "put it in file X" instruction is not a measured constraint.** Neither P-C1
+   nor this plan ran the placement against the gates. **Every `Production files` row below is
+   a starting hypothesis, not an authority** — if a gate turns red, fix the plan, not the gate.
+2. **A behavioural test cannot protect a constant promotion.** Every behavioural assertion
+   stays green if the call site regresses to the bare literal, because the emitted string is
+   identical either way. `F1`'s stated Definition of Done — *"`grep -c` returns 1"* — was a
+   **convention, not a ratchet**. The landed slice added a source-level assertion
+   (`test_oracle_sizing.py:394`, matched by **symbol** not line number, proven by mutation).
+   **Any future slice whose deliverable is "a name exists" owes the same source-level pin.**
+
+Nothing else in this document was altered by that landing. `F1`'s row is left as written so the
+correction stays visible; `PROJECT_HISTORY.md` §ADIM 70 carries the full record.
+
+### Two later measurements this plan got wrong, recorded the same way
+
+Both landed after this document did, and both are the plan's own stop conditions doing their job.
+
+3. **`C1`'s stop condition fired, and its answer turns a *recommendation* into an obligation.**
+   `C1` asked whether `_phase_tail`'s scaling section is separable, conceding P-C2 had asserted
+   it from the call graph. Measured
+   (`docs/audit/closure_c1_phase_tail_scaling_separability_2026-08-17.md`, landed with **#735**):
+   it **is** separable as a describe/book pair, but it **cannot be ordered before the stacking
+   section books** — and for a shared run that is the same as *not* separable. **So P-C2 §C.3.8
+   option (a) — block scaling-enabled Strategies on shared runs at admission — is no longer
+   "recommended"; it is required, and `G12` is a measured obligation rather than an open
+   choice.** `C6`'s row below still frames G11/G12 as a neutral "block or model" decision; for
+   **G12 that framing is now wrong** — "model P8" is the expensive branch, not the even one.
+4. **`C3` has a seventeenth gate this register never named.** This plan placed the adapter at
+   `domain/backtest/participant.py` *deliberately*, so the importer guard would turn red and the
+   allowlist would have to be widened under review. Measured
+   (`docs/audit/closure_e4_adapter_precondition_measurement_2026-08-17.md`, landed with **#731**):
+   **all six** Protocol types the adapter must name — `ItemBarStream`, `ItemTickView`,
+   `ItemIdentity`, `PortfolioSnapshot`, `ItemIntent`, `OpenPosition` — already live inside
+   `_PHASE_LOOP_MODULES`, so the gate reacts **wherever** the adapter sits, and widening the
+   allowlist is a **human review step, not an agent step**. §2's register lists **16** gates;
+   this is a **17th**, and it stands in front of `C3`.
+
+---
+
 ## §1 — The proposed graph, verified rather than accepted
 
 The prompt supplies a candidate graph (E1 → E2 → E3 → E4 → E5 → E6) and instructs that it be

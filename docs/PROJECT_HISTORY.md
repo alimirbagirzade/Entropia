@@ -10248,3 +10248,310 @@ var (`TL-11.c3`, `TL-16`, `TL-01.c4`, `RD-01.c4`, `RD-05.c5`, ve bu ikisi).
   bu partide **ele alınmadı**.
 - **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.** **A-08 DEĞİŞMEDİ** (2/184, 0/10, 0/4).
 - Codemap tazelenmedi ve gerekmedi: yeni endpoint / tablo / sayfa / job yok.
+
+## ADIM 69 — kalan V18 closure işi bağımlılık sırasına konuldu (P-D, PR #728)
+
+> **NUMARA NOTU — ve bu kez numara MERGE SIRASINI TERS ÇEVİRİYOR.** Bu slice `2a314ae`
+> olarak main'e **#729 ve #730'dan ÖNCE** indi (20:26:56Z), ama kaydı yazılmadı; aradan
+> geçen sürede #730 **ADIM 66**'yı merge edilmiş adla aldı. Kural değişmedi — **numaralar
+> yeniden atanmaz, merge edilmiş ad kazanır** — ve kayıtsız beklediği sürece bu slice
+> **iki kez daha taşındı**: kapanış PR'ı (#732) sıra beklerken **#733 ADIM 67**'yi,
+> **#736 ADIM 68**'i merge edilmiş adla aldı. Dolayısıyla bu kayıt **ADIM 69**'dur ve
+> tarihçedeki numara sırası bu slice'lar için merge sırası **değildir**. Dal adı
+> (`docs/stage-67-landed`) ve commit mesajı ADIM numarası taşımaz — dal adındaki `67`
+> yazıldığı andaki tahmindir, kaydın numarası değil.
+
+**Base SHA `c49f5e7`** (kapanış `6902710` üzerinde yazıldı) · migration **YOK** ·
+`ENGINE_VERSION` **değişmedi** · alembic head **`0043_i08_registry_strategy_fks`** (değişmedi) ·
+OpenAPI **değişmedi** · **ÜRÜN KODU DEĞİŞMEDİ — tek satır bile.**
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED** (bu slice A-08'i ölçmedi).
+
+Tek çıktı: `docs/implementation/final_closure_ordered_plan_2026-08-13.md` (944 satır).
+
+### 1. Ne yapıldı
+
+AŞAMA C'nin iki tasarımı (`closure_design_financial_research_2026-08-13.md` #724,
+`closure_design_portfolio_performance_2026-08-13.md` #725 — ikisi de main'de doğrulandı)
+**19 tek-sorumluluklu implementation slice'ına** bölündü: `F1–F3` (financial semantics),
+`R1–R4` (research provenance), `P1–P3` (performance), `C1–C9` (shared portfolio).
+Her slice **on dokuz zorunlu alanı** taşıyor; belge ayrıca mermaid bağımlılık grafiği,
+paralellik şeritleri, **16 maddelik insan-kapısı sicili** ve P11-1 merge ekonomisi içeriyor.
+
+### 2. Önerilen grafik KÖRÜ KÖRÜNE KABUL EDİLMEDİ — altı düğümün üçü ölçümle değişti
+
+**(a) E2 "landed" DEĞİL, 2/5.** #712 iki bacağı kapattı; `run_readiness_check` içinde **üç**
+per-item okuma canlı: `_resolve_tick_data_issues` (`:463` döngüsü →
+`find_approved_tick_revision_for_instrument` `:472`), `_resolve_strategy_payload` (`:371`) ve
+`_resolve_external` (`:788`). **Hiçbiri `query_budgets.json`'da ölçülmüyor** — dosya 8 satır
+taşıyor ve tamamlanmışlık kapısı (`test_query_budgets.py:543-553`) **elle yazılmış bir küme**,
+yani hiç eklenmemiş bir bacak suite yeşilken görünmez.
+
+**(b) E1'in E4'ten önce olması ZORUNLU DEĞİL — ve asıl bağ `engine.py` değil.** Prompt'un
+sorduğu soru buydu. `engine.py`'de ilgili aralıkta **yalnız üç** top-level sembol var
+(`class _ItemStepper` `:757`, `def _build_stepper` `:794`, `def run_engine` `:3335`), yani
+`_build_stepper` **tek başına ~2541 satırlık bir fonksiyon** ve E1 ile E4'ün **bütün** dokunuş
+noktalarını içeriyor → *"ikisi de engine.py'ye dokunuyor"* hiçbir şey kanıtlamaz. Her noktanın
+**iç içe** sahibi çözüldü:
+
+| İş | Nokta | Sahibi olan iç fonksiyon |
+|---|---|---|
+| A-2 (#551 artığı) | `portfolio_block_reason` ataması `:1499` | `_open()` (`:1416`) |
+| A-3 (#552) | giriş komisyonu `:1592` | `_do_open()` (`:1552`) |
+| A-3 | stacking `:3007` + scale layer `:3189` + üç bayat yorum | **`_phase_tail()` (`:2759`)** |
+| E4a | `_phase_carry` / `_phase_held` / `_phase_entry` bölünmesi | `:1963` / `:2314` / `:2498` |
+| E4a | `_phase_tail` scaling ayrılabilirliği | **`_phase_tail()` (`:2759`)** |
+
+Sonuç: **A-2 ile E4a gerçekten ayrık** (en yakın kenarda ~460 satır arayla, farklı iç
+fonksiyonlar) → öncelik gerekmiyor. **A-3 ile E4a ise çakışıyor**, ikisi de `_phase_tail()`'i
+yeniden yazıyor. **Ama bağlayıcı kısıt ne dosya ne anlam: PAYLAŞILAN BİR KABUL ARTEFAKTI.**
+`engine_golden_digests.json` E4a'nın *bütün* kapısı (*"byte değişmedi"*) ve A-3'ün *zorunlu
+çıktısı* (*"yeniden üret"*). **İki PR o dosyaya birden sahip olamaz.** Bu yüzden grafiğe
+**karşılıklı dışlama** kenarı olarak çizildi — öncelik kenarı olarak DEĞİL.
+
+**(c) E3 ve E6 tek slice değil.** E3, imzanın gerektiği yerden bölündü (R1/R3 serbest,
+R2/R4 #558'e bağlı); E6 ise 22 ön koşul taşıdığı için beşe bölündü (C5–C9), bayrak çevirme
+tek başına son PR'da kaldı ki *"kaldırma eylemi"* gözden geçirilebilir bir diff olsun.
+
+### 3. Dört bayat sayı düzeltildi — biri KABUL KAPISIYDI
+
+| # | Tasarımın dediği | `c49f5e7`'de ölçülen | Sonuç |
+|---|---|---|---|
+| M-1 | E4a kapısı: *"46 golden digest unmoved"* | **50 kayıt** (`engine_golden_digests.json`, `digests` anahtarı) | **E4a'nın kapısı 50'dir.** #720 dört `costs.commission_*` senaryosu ekledi; *"46 unmoved"* yazan bir PR artık 46 satırı olmayan bir dosyaya assert eder |
+| M-2 | ADR §14 A13: *"37 non-portfolio"* | **41 non-portfolio + 9 `portfolio.*`** | A13'ün bölünmesi **41/9** |
+| M-3 | E4b kapısı: *"25 portfolio oracle"* | `test_oracle_portfolio_capital.py` **11** + `test_oracle_portfolio_clock.py` **10** = 21, ayrıca containment gate **5** | **Sayı hiçbir okumada üretilmiyor.** Kapıya **sayı değil dosya adı** yazıldı — bu tam olarak niye |
+| M-4 | satır numaraları | ±1 kayıyor | Her slice **sembol adıyla** yazıldı |
+
+**Ders, kapanışa yazılacak kadar genel:** bir kabul kapısını *sayıyla* ifade etmek, sayının
+üreticisi başka bir slice olduğunda sessizce bayatlar. `engine_golden_digests.json`'ın kendi
+içindeki `engine_version` alanı bu yüzden var — bump'ı yakalayan **o**, sayı değil.
+
+### 4. İnsan kapıları: prompt altı diyordu, ölçüm ON ALTI buldu
+
+Sicil `§2`'de: **16 kayıtlı kapı**, **15'i açık**, **14'ü fiilen bir slice'ı ya da RC
+verdict'ini bloklar (G5 tahliye edildi, G7 kapsam dışı).** Prompt'un altı kapısının karşılığı:
+
+- **#552** → G1 (incidence) + G2 (**base — flat mı bps mi, #720 buna HİÇ dokunmadı**) + G3
+  (`execution_content.commission_model`, hangi model kazanırsa kazansın zorunlu). Üçü de
+  **imzasız**: `decisions:276`'da dört kutu boş, `karar veren:` boş. **GH #552 kapalı** —
+  *issue CLOSED ≠ çözüldü* harfi harfine uygulandı.
+- **#550** → **G5, TAHLİYE EDİLDİ**: kanonik seçenek issue gövdesinde kayıtlı (*"Decision
+  recorded in the comments: adopt canon (option A)"*) ve #720 ile sevk edildi. Ama artık
+  **G4** var: cap taşması dispozisyonu (§10.2 *"clamp değil"* der, motor sessizce clamp'ler,
+  hiçbir validator base'i cap'e karşı karşılaştırmıyor) — **BRİFLENMEMİŞ, sahibi YOK.**
+- **#558** → G6, imzasız (**bu kayıt yazılırken artık #730 ile imzalandı ve sevk edildi**).
+- **#559** → G8, imzasız. **Kapsam sorusu P-DEC'te cevaplanmış ve onay bekliyor:** hüküm (a),
+  #559 **yalnız mixed-zone kapsamını** bloklar, eksen aritmetiğini değil → **C9'un ön koşulu,
+  E4/E5'in değil.**
+- **ADR §16** → **iki ayrı kapı**: G9 (**C2'den önce** — `settle`/`finalize`/P10/`iter_portfolio`
+  §6/§8'i değiştirir, kabul edilmiş bir sözleşmeyi değiştirmek onu kabul eden imzayı ister) ve
+  G10 (C9, bayrak + bump). **E4a, E4c ve E5 hiçbir ADR kapısı istemez** — sevk edilmiş bir
+  sayıyı değiştirmiyorlar.
+- **containment lift PO kararları** → G11 (P2 deferred fill), G12 (P8 scaling), G13 (P10 equity
+  point), G14 (#544 NET).
+
+**İki kapının imzalanacak bloğu YOK: G4 (#550 cap taşması) ve G15 (Ready Check leg 3'te hangi
+satır kazanır).** O blokları oluşturmak bu planın insandan ilk istediği şey — plan onu
+**talep eder, yapmaz.**
+
+### 5. P11-1 merge ekonomisi: tavan 3, sıra "en çok çakışan ÖNCE"
+
+Aritmetik önce, tavsiye sonra: `strict: true` altında **N açık PR** → ilk merge diğer **N−1**'in
+güncelliğini düşürür → **≈ 1 paralel tur + (N−1) seri tur ≈ N × T** (`T` = 48–85 dk).
+**Yani CI duvar saati 3 PR açmakla 3'ü seri merge etmekle aşağı yukarı AYNI** — paralellik
+**yazma** eşzamanlılığı satın alır, CI eşzamanlılığı değil. Bu tek gerçek tavanı belirledi:
+
+- **3 açık PR**, bunların **en fazla 2'si `backend/src`'e dokunur**, `engine.py` ya da üretilmiş
+  bir artefakta dokunan **TAM 1**;
+- docs-only PR'lar tavana sayılmaz (16 check'i yine koşarlar ama çakışma riski ~0);
+- **C4, C8, C9 sırasında tavan 1.**
+
+**Merge sırası: en çok çakışan ÖNCE**, ve gerekçe asimetrik — `strict` altında **her** arkadaki
+PR zaten main'i içeri alır; sorusu *ne aldığı* ve *almanın ona neye mal olduğu*. Docs-only bir
+PR büyük bir `engine.py` değişikliğini **bedavaya** yutar; tersi durumda ağır PR her küçük
+merge'de 48–85 dk'lık `Backend` koşusunu **ve kendi kabulünü** (*50 digest hâlâ unmoved mu?*)
+yeniden öder — k küçük merge için **k kez**. Ağırı önce indirmek o vergiyi **bir kez**
+ödetir.
+
+### 6. Ölçülen belge borcu — BU SLICE'IN DEĞİL, ama kayda geçiyor
+
+**PR #729 (F1 — `size_resolved_to_zero` sabiti) main'de ama HİÇBİR ADIM kaydı, handoff satırı
+ya da kickoff'u yok.** Ölçüm (`600be00`): `sizing.py`, `engine.py`, `test_oracle_sizing.py`,
+`README.md` + üretilmiş olgular; 6 dosya, +99/−4. **Planın F1 kabulü karşılandı:**
+`grep -c size_resolved_to_zero backend/src` → **1**, o da bir sabit tanımı
+(`execution/sizing.py:414` `SIZE_RESOLVED_TO_ZERO`), `engine.py:140`'ta import edilip `:1500`'de
+kullanılıyor. **Planın önerdiği yerden SAPTI ve sapma iyi görünüyor:** plan sabiti kardeşi
+`SLEEVE_ZERO_CAPACITY`'nin yanına (`portfolio_ledger.py`) koymayı öneriyordu; inen sürüm
+`sizing.py:414`'e, yani `blocked_reason` merdiveninin yanına koydu. **Bu slice o kaydı yazmadı
+— başkasının slice'ının anlatısını uydurmak bu deponun yasakladığı şeydir.** Kaydı sahibinin
+yazması gerekir; buradaki satır yalnız **borcun var olduğunu** ölçülmüş biçimde kaydeder.
+
+### 7. Süreç: kapanış ritüeli P-D'nin KENDİ promptu tarafından yasaklanmıştı
+
+P-D prompt'u çıktıyı tek bir dosyaya kilitliyordu (*"YASAK: production code · tests · issue
+state"*, `ÇIKTI: docs/implementation/final_closure_ordered_plan_*.md`). Bu yüzden #728
+**bilerek** ritüelsiz indi ve bu kayıt onu **sonradan** kapatıyor. **Ders:** bir prompt kapanış
+ritüelini kapsam dışı bırakırsa, borç **aynı oturumda** ayrı bir kapanış PR'ı olarak
+planlanmalı — yoksa araya giren slice'lar numarayı alır (tam olarak burada olan şey).
+
+**Ayrıca:** #728 draft açıldı, **insan ready-for-review'a çevirip merge etti**; ajan merge
+etmedi. Squash merge olduğu için dal commit'i (`97d2edc`) main'in atası **değil** —
+`git merge-base --is-ancestor` **NO** döner ve bu bir sorun değildir; içerik `2a314ae`
+içindedir ve dosya üzerinden doğrulandı (944 satır, `doc-status: historical`).
+
+### 8. Açık bırakılanlar (dürüst sınır)
+
+- **Hiçbir şey koşulmadı.** Belgede tek bir test/coverage sayısı iddia edilmiyor; her iddia
+  `c49f5e7`'de sembol adıyla yapılmış bir kaynak ölçümü. **Koşan her şeyin otoritesi CI'dır.**
+- **Hiçbir ürün sorusu karara bağlanmadı** — 15 kapı açık.
+- **Hiçbir issue durumu değiştirilmedi**, açılmadı, kapatılmadı.
+- **E6'nın 22 ön koşulu P-C2'nin tasarım çıktısıdır, doğrulanmış bir checklist DEĞİL** —
+  taşındı, yeniden türetilmedi.
+- **`_phase_tail`'in ayrılabilirliği HÂLÂ ölçülmedi.** P-C2 bunu çağrı grafiğinden çıkarmıştı,
+  474 satırlık gövdeyi okumadan; plan o sınırı çözmüyor, **C1'in yazılı bir stop condition'ı**
+  hâline getiriyor.
+- **Ready Check leg 3 bilerek programlanmadı** — `work_object_revision_id` **UNIQUE DEĞİL**,
+  batch'lemek hangi satırın kazandığını değiştirir → **ürün kararı (G15)**, performans değişikliği
+  değil.
+- **A-08 DEĞİŞMEDİ** — defter 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+
+---
+
+## ADIM 70 — F1: sıfır-boyut reddinin gerekçesi adlandırılmış sabit oldu (PR #729)
+
+> **KAYNAK VE SINIR — bu kayıt GERİYE DÖNÜK ve BAŞKA BİR OTURUMUN slice'ıdır.** Kaydı
+> slice'ın sahibi yazmadı; PR #729 gövdesi (birinci el, ölçülmüş) + `600be00` diff'i +
+> bu oturumun **bağımsız yeniden ölçümü** kaynak alınarak yazıldı. PR'ın kendisi bunu
+> öngörüyordu: *"the closing-docs ritual is deliberately not in this PR … That belongs in
+> the post-merge `docs/` PR, per the repo's own convention."* **Aşağıda hangi iddianın
+> yeniden ölçüldüğü, hangisinin PR gövdesinden taşındığı ayrı ayrı işaretlidir.**
+
+> **NUMARA — bu slice'ların numarası merge sırasının TERSİ.** Ölçülen merge zamanları:
+>
+> | PR | merge | ADIM |
+> |---|---|---|
+> | **#730** (P-E3 research provenance) | 2026-08-15, #729'dan sonra | **66** |
+> | **#733** (RD-11.c3 successor manifest) | 2026-08-17 | **67** |
+> | **#736** (kabul borcu batch 05) | 2026-08-17 | **68** |
+> | **#728** (P-D ordered plan) | 2026-08-14 20:26:56Z | **69** |
+> | **#729** (F1, bu kayıt) | 2026-08-15 05:29:08Z | **70** |
+>
+> Sebep: #730 kapanış ritüelini **kendi oturumunda** yaptı ve **ADIM 66**'yı merge edilmiş
+> adla aldı; #728 ile #729 ritüelsiz indi ve numaraları sonradan verildi — bu kapanış PR'ı
+> (#732) sıra beklerken de #733 ve #736 araya girip 67 ile 68'i aldı. Kural değişmedi —
+> **numaralar yeniden atanmaz, merge edilmiş ad kazanır.** Tarihçedeki numara sırası bu
+> slice'lar için **kronoloji değildir**; bu tablo otoritedir.
+
+> **KICKOFF'U YOK, BİLEREK.** Kapanış ritüeli md. 2 her kapanış için bir kickoff ister; bu
+> geriye dönük bir kayıt ve canlı devam noktası **`docs/ADIM69_LANDED_KICKOFF.md`**, ki #729
+> onu değiştirmiyor (sıradaki iş hâlâ `P3` + `C1` + `C5`). Dakikalar önce yazılmış bir
+> kickoff'u aynı içerikle çoğaltıp demote etmek çalkantıdır. `check_classification` bu
+> sapmayı görmez — kural **dosya adından** numara okur ve ADIM69 en yeni kickoff **dosyası**
+> olarak kalır (`_check_live_kickoff_is_newest`).
+
+**Base `2a314ae`** (= #728) · **head `0701833`**, dal `claude/entropia-shared-agreement-m6fbo6` ·
+merge eden **insan** (self-merge bloklu) · migration **YOK** · `ENGINE_VERSION` **DEĞİŞMEDİ** ·
+alembic head `0043_i08_registry_strategy_fks` · OpenAPI **değişmedi** ·
+**ÜRÜN KODU DEĞİŞTİ ama DAVRANIŞ DEĞİŞMEDİ.**
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### 1. Ne indi
+
+`docs/implementation/final_closure_ordered_plan_2026-08-13.md`'nin **`F1`** slice'ı (tasarım
+belgesinde **A-2**) — planın *"imza gerektirmeyen tek Package A kalemi"* dediği iş.
+
+GH #551'in sıfır-boyut koruması doğruydu; **gerekçesi** değildi:
+`"size_resolved_to_zero"` **tek çağrı yerinde çıplak bir string literal**'di, kardeşi
+`sleeve_zero_capacity` ise modül sabiti. Kullanıcı bir F-10 restriction trace'inde ürünün
+hiçbir yerde tanımlamadığı ham bir token görüyordu.
+
+**Sevk edilen:** `execution/sizing.py:414` `SIZE_RESOLVED_TO_ZERO` (yeni sabit + gerekçeyi
+taşıyan docstring) · `engine.py:140` mevcut import bloğuna tek ad · `engine.py:1500` atama
+artık sabiti kullanıyor · `test_oracle_sizing.py` değer pini + distinctness + negatif kontrol
++ **kaynak düzeyi ratchet**. `README.md` ve üretilmiş olgular tazelendi.
+
+### 2. Planın talimatına UYULMADI — ve sapma DOĞRUYDU (bu slice'ın asıl dersi)
+
+Hem tasarım §2.2 hem benim ordered plan'ım sabiti **`execution/portfolio_ledger.py`'ye,
+`SLEEVE_ZERO_CAPACITY`'nin yanına** koymayı söylüyordu. Uygulayan oturum **önce onu yaptı** ve
+**iki containment kapısı kırmızıya döndü** (PR gövdesinden, adlarıyla):
+
+- `test_backtest_portfolio_ledger.py::test_the_shared_ledger_is_reachable_only_through_the_phase_loop`
+  — o modül için **numaralandırılmış** bir production-importer listesi assert eder;
+- `test_oracle_portfolio_containment_gate.py::test_the_phase_loop_exists_but_no_production_path_reaches_it`
+  — `_PHASE_LOOP_MODULES`'ün her üyesinin faz döngüsü dışında production importer'ı olmamasını
+  assert eder, ve `execution.portfolio_ledger` o kümede.
+
+**Tasarım bunu ölçmemişti. Ben de ölçmemiştim** — ordered plan `F1`'in production files satırına
+`portfolio_ledger.py` yazdı ve **yanlıştı**: sevk edilmiş `engine.py`'ın **bir string'e ulaşmak
+için** contained bir modülü import etmesi, canlı bir containment tripwire'ını stilistik bir
+komşuluğa takas ederdi. Sabit bunun yerine `sizing.py`'de, **onu zaten döndüren merdivenin**
+(`blocked_reason`) yanına kondu — `engine.py`'ın zaten import ettiği modül → **net yeni modül
+kenarı: sıfır**. Bağımlılık zaten bu yönde işliyordu: ledger sabitinin **kendi docstring'i** onu
+bu merdivenden *"Reused verbatim"* diye ödünç aldığını kaydediyor.
+
+> **Genel ders, planın kendisine karşı:** bir tasarım belgesinin *"şu dosyaya koy"* talimatı
+> **ölçülmüş bir kısıt değildir**. Uygulayan slice yerleştirmeyi ölçtü, kapıyı kırdı, geri aldı
+> (`portfolio_ledger.py` **`origin/main` ile byte-identical** — bu oturumda `git diff` ile
+> **bağımsız doğrulandı**) ve gerekçeyi hem docstring'e hem PR'a yazdı. **Doğru davranış budur:
+> kapı kırmızıysa kapıyı değil planı düzelt.**
+
+### 3. Adversarial review'ın bulduğu gerçek boşluk: ratchet ≠ convention
+
+Salt-okur bir gözden geçirme davranışın korunduğunu doğruladıktan sonra tek gerçek kusuru
+buldu: **çağrı yeri çıplak literal'e geri dönerse davranışsal testlerin HEPSİ yeşil kalır**,
+çünkü yayılan string iki durumda da aynı. Yani slice'ın teslimatı bir **convention**'dı ve tek
+Definition of Done'ı elle bir `grep`'ti — **benim planımın DoD'si de tam olarak o grep'ti.**
+
+`test_the_zero_size_token_is_written_once_in_production_and_only_as_a_constant`
+(`test_oracle_sizing.py:394`, bu oturumda **varlığı doğrulandı**) bunu kaynak düzeyinde
+kapatıyor: `src`'teki **tek** occurrence `SIZE_RESOLVED_TO_ZERO` tanımı olmak zorunda.
+**Sembolle eşleşiyor, satır numarasıyla değil** (depo kuralı). Mutasyonla kanıtlanmış: literal
+geri konduğunda iki suçlu satırı da adlandırarak kırmızı veriyor.
+
+### 4. O-02 sınırı: bu bir HTTP hatası DEĞİL, ve olmamalı
+
+`size_resolved_to_zero` bir **F-10 restriction-trace** token'ı. Bu yolda hiçbir istek
+başarısız olmaz — run normal biçimde tamamlanır, yalnız bir giriş açılmaz. Hiç `ErrorBody`
+yayılmadığı için **O-02'nin `ErrorCategory`'si bilerek uygulanMAZ**; bir kategori bildirmek,
+hiçbir zaman bir HTTP yanıtına ulaşmayan bir şey için `retryable` semantiği **reklam ederdi**.
+`shared/errors.py`'ye sınıf eklenmedi. (Bu, planın `F1` satırındaki no-touch kuralıyla birebir
+aynı — orada doğru yazılmıştı.)
+
+### 5. Ölçümler
+
+**Bu oturumda bağımsız yeniden ölçülenler:**
+
+| İddia | Yöntem | Sonuç |
+|---|---|---|
+| `engine_golden_digests.json` byte-identical | `git diff 600be00^ 600be00 -- …` | **boş** ✅ |
+| `portfolio_ledger.py` dokunulmadı | aynı | **boş** ✅ |
+| ratchet testi var | `grep -n` | `test_oracle_sizing.py:394` ✅ |
+| sabit tek tanım | `grep -rc size_resolved_to_zero backend/src` | **1** (`sizing.py:414`) ✅ |
+| import kenarı | `engine.py:140` mevcut bloğa tek ad | ✅ |
+
+**PR #729 gövdesinden TAŞINANLAR (bu oturumda yeniden koşulmadı — otorite o CI koşusu):**
+CI **22/22 yeşil, 0 failed**; `Backend` run `31841208114`, **48m11s**, **4130 passed /
+1 xfailed**, coverage **%93.72** (kapı ≥90), `sizing.py` **%97.8**; ruff/mypy/openapi/alembic
+hepsi exit 0; acceptance ratchet **oynamadı** (`106 partial / 8 uncovered`, `A1 B75 C6 D32`) —
+**bu slice hiçbir kabul kriteri kapatmıyor, o yüzden tavanın oynamaması DOĞRU**; iki mutasyon
+kanıtı; `engine_golden_digests.json` sha256 iki tarafta da `7e1c2ceb…`. Toplanan test sayısı
+bu slice ile **3570 → 3572** (+2); **bugünkü üretilmiş değer 3577'dir** (#730 sonrası) ve
+sayısal otorite `docs/generated/repository_facts.md`'dir, bu satır değil.
+
+### 6. Açık bırakılanlar (dürüst sınır — PR'ın kendi listesi + benim eklediğim)
+
+- **Trace sözlüğü HÂLÂ sözleşme olarak yayımlanmadı.** `sizing.blocked_reason` sekiz token
+  daha literal olarak döndürüyor ve hiçbiri `docs/openapi.json`'da yok. Tasarım bunun
+  *"yanında gelmemesini"* şart koştu, gelmedi. **Takip için ölçülmüş bir kısıt:**
+  `test_backtest_item_intents.py` `blocked_reason`'ın kaynağını
+  `re.findall(r'return "([a-z_]+)"')` ile tarayıp minimum sayı assert ediyor → o literalleri
+  yerinde sabite çevirmek **o testi kırar**.
+- **`SLEEVE_ZERO_CAPACITY` ile `SIZE_RESOLVED_TO_ZERO` artık ayrı modüllerde.** Bu containment
+  sınırının **sonucudur**, gözden kaçma değil; birleştirmek ledger sabitini **dışarı** taşımak
+  demek, dört contained modüle dokunur ve kendi slice'ını hak eder.
+- **Her iki containment kapısı da METİN eşleştiricidir** — dinamik ya da yeniden export edilmiş
+  bir import'u kaçırırlar. Önceden var, bu slice'ta ne eklendi ne istismar edildi.
+- **F2 ve F3 hâlâ bloklu; P-E1 TAMAMLANMADI** ve PR bunun aksini iddia etmiyor.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **Bu kayıt slice'ın sahibi tarafından yazılmadı.** Yukarıdaki §5'te yeniden ölçülmeyen her
+  şey PR #729 gövdesinin iddiasıdır ve otoritesi o CI koşusudur.

@@ -6664,10 +6664,60 @@ insan kapılarının arkasında; `C3` (adapter) hâlâ erişilemez. `PROJECT_HIS
 `docs/ADIM71_LANDED_KICKOFF.md`.
 
 
+## Stage 72 — kayıtsız inen İKİ slice'ın ritüeli: C5 (PR #740) ve E5 (PR #738) landed
+
+**Squash:** C5 `df7df92`, E5 `6ca478c` · base `6ba82a8` · migration **YOK** ·
+`ENGINE_VERSION` **değişmedi** · alembic head `0043_i08_registry_strategy_fks` · OpenAPI
+**değişmedi** · `SHARED_ALLOCATION_STATUS` **`future_dev`** (dokunulmadı).
+
+**İKİSİ DE SIFIR ÜRÜN SATIRI SEVK ETTİ** (`git diff -- backend/` boş). **Blocker sayısı
+DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+- **C5 — R-1 allocation pinning: yapılacak iş yoktu.** Plan `C5`'i koşulabilir diye
+  listeliyordu; ADR §10.2'nin üç yargısının üçü de yanlış çıktı.
+  `readiness_check.py::_resolve_allocation` config'i **dondurulmuş revizyondan** kurar; draft
+  yalnız `_pinned_revision(...) is None` dalında pinlenir ve orada `plan_revision_id` de
+  null'dur. **Negatif kontrol karar verdi:** kusur geri konunca
+  `test_allocation_revision_pin.py` **bayt-eşleşme satırında** kırmızı verdi (`5.000000` ↔
+  `35.000000`), geri alınınca 3 passed → testi yeşil tutan **ürün kodu**. **E6 ön koşulu #19
+  karşılanıyor.** Sevk edilen: ölçüm belgesi + plan satırı düzeltmesi. **Yeni test yazılmadı**
+  (mevcut assertion taşıyıcı, ikincisi ratchet yüzeyini boşuna yükseltirdi).
+  **ADR kaydı İMZASIZ kaldı — bilinçli:** imza verildi, uygulandı, sonra ürün sahibi commit'i
+  dalı yeniden yazarken **düşürdü**; main'in §15 `R-1` satırı **değişmedi**. Geri
+  uygulanmadı ve **uygulanmamalıdır**.
+- **E5 — C4 worker shared-path: kurulamaz, DURDURULDU.** `C4`'ün ön koşulu `C3`; `C3` yok
+  (`participant.py` yok, `backend/src`'te **sıfır** `ItemParticipant` impl'i — ikisi de test
+  sahipli), `C2` de yok (`settle`/`finalize`/`iter_portfolio` **0 hit**, `PHASE_ORDER` 8 faz).
+  Tasarımın E5 dalı üç çağrı; **ikisi mevcut değil**. **Containment gate değiştirilmedi** ve
+  negatif kontrol koşulmadı — değişiklik yok; tarif ettiği yol yokken gate'i yeniden yazmak
+  onu **kör eder**. E4'ün Blocker D'si (importer allowlist) **hâlâ canlı, insan incelemesi**.
+- **KAYDIN ASIL GÜNCELLEMESİ:** **`C1` (#735), P-E4 kaydının Blocker 1'ini KAPATTI.**
+  describe/book ayrımı `_ItemStepper`'ın **public** yüzeyinde. Yani **kritik yol artık kodla
+  değil bir İMZAYLA başlıyor** — ajanın kapatabileceği son mühendislik ön koşulu `C1`'di.
+  `closure_e4_adapter_precondition_measurement_2026-08-17.md` §2 **artık cite edilmemelidir**.
+- **Dersler:** parti seçmeden **önce ölç** (plan bayattı, kod değil) · merge sonrası
+  **yeniden ölç** (`#734` `readiness_check.py`'ye dokundu, satır numaraları **+3** kaydı →
+  ADR satırı sembol adlarına geçirildi) · bir kayıt kaybolmuş görünüyorsa **önce delile bak**
+  (geri alım tam ve tutarlıydı → kaza değil **karar**).
+- Kabul borcu tavanları **oynamadı**; codemap **tazelenmedi ve gerekmedi** (yeni endpoint /
+  tablo / sayfa / job yok).
+
+`PROJECT_HISTORY.md` §ADIM 72 · `docs/ADIM72_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:
 > `ItemParticipant.settle` + `.finalize`, P10, `iter_portfolio`.**
+
+> **ADIM 72 GÜNCELLEMESİ (2026-08-17).** `C5` **indi** (#740) — planın *"ikinci şerit
+> doldurucusu"* önerisi artık **tükendi**; ölçüm, R-1'in zaten sevk edilmiş olduğunu ve
+> yapılacak iş kalmadığını gösterdi. `E5` (#738) aynı gün **bağımsız olarak** aşağıdaki
+> engelleri yeniden ölçtü ve **doğruladı**: `C2` yok (`settle`/`finalize`/`iter_portfolio`
+> **0 hit**, `PHASE_ORDER` 8 faz), `C3` yok (`participant.py` yok, `backend/src`'te **sıfır**
+> `ItemParticipant` impl'i), `G9` **NOT REQUESTED**, `G13` **UNDECIDED**.
+> **Ajanın kapatabileceği mühendislik ön koşulu KALMADI — sıradaki hamle bir İMZADIR.**
+> Planın kalan koşulabilir kalemleri artık `C5` dışındakiler: bkz. §6 tablosu
+> (`R2`/`R3`/`P1`/`P2` hatları ve açık PR'lar #741 #742 #743).
 
 > **ADIM 71 (C1) §4.1'in (b) engelini DARALTTI ama KAPATMADI.** *"Üç faz book eder,
 > `ItemParticipant` tarif ister"* artık **yanlış**: describe yarıları

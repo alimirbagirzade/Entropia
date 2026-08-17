@@ -10099,3 +10099,92 @@ fixture tam olarak CLAUDE.md'nin uyardığı drift'tir.
 - **Postgres bu container'da paketli değildi ama binary'ler vardı** (`/usr/lib/postgresql/16`)
   → küme `postgres` kullanıcısıyla ayağa kaldırıldı ve **integration testleri gerçekten
   koştu**. Yine de **tam suite'in otoritesi CI'dır**.
+
+## ADIM 67 — RD-11.c3: successor onayı bitmiş/koşan run'ın manifest'ini yeniden yazmaz (doc 12 §14)
+
+> **NUMARA NOTU.** Yazıldığında main'in son kaydı **ADIM 66**'ydı (base `6902710`).
+> Dal `test/closure-rd11-c3-manifest-immutability`, commit mesajları ADIM numarası
+> **taşımaz** — çakışmada **merge edilmiş ad kazanır**, bu belge yeniden numaralanır.
+
+**Base SHA `6902710`** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · alembic head
+**`0043_i08_registry_strategy_fks`** · OpenAPI **değişmedi** · **ÜRÜN KODU DEĞİŞMEDİ**
+(tek satır bile). **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### 1. Kapanan şey ve neden dört partidir açıktı
+
+`RD-11.c3`: *"Approving a new revision leaves a running or finished run's manifest
+unchanged"* (doc 12 §14 "Backtest reproducibility": *"New Approved revision
+running/finished run manifestini değiştirmez"*). `uncovered` → **`covered`**.
+
+Bu clause ADIM 42'den beri açıktı ve **test tembelliğinden değil, harness yokluğundan**:
+kanıtı için *enabled funding policy üzerinden bir research revision pinleyen TAMAMLANMIŞ
+bir Backtest Run* gerekiyordu ve deponun hiçbir yerinde öyle bir şey yoktu — ölçüldü:
+`FundingPolicy` kullanan dört test dosyasının **hiçbiri** `run_backtest` çağırmıyordu.
+
+### 2. Kanıtın ŞEKLİ — asıl tasarım kararı burada
+
+Manifest **admission'da kalıcı yazılır** (`backtest_run_manifest`) ve Result'a
+**kopyalanır** (`result_manifest_snapshot`). Yani *"saklanan satır değişmedi"* tek başına
+**neredeyse totolojidir** — hiçbir şey onu yazmıyor ki değişsin. Kriterin gerçekten
+koruduğu kusur bir **OKUMA yüzeyinin** pini canlı yeniden çözmesidir (manifest root id
+saklayıp çıkışta "latest approved" dereference etmesi).
+
+Bu yüzden her saklanan-satır assertion'ı bir **okuma yolu** assertion'ıyla eşleştirildi:
+`queries/backtest_run.py::get_backtest_result` → `manifest_excerpt.research_data_revision_refs`
+(doc 16 §8.2'nin Results History provenance okuyucusu) hâlâ **orijinal** revision'ı
+bildirmeli. **Teeth bu satırdadır.**
+
+**İki negatif kontrol de kırmızı verdi (ölçüldü, iddia edilmedi):**
+1. Saklanan manifest JSON'u successor id ile **tahrif edildi** → saklanan-satır
+   assertion'ları kırmızı.
+2. `history.py::_research_revision_refs` `revision_id` yerine `root_id` yayımlayacak
+   şekilde bozuldu → **yalnız okuma-yolu assertion'ı** kırmızı, diğer ikisi yeşil kaldı.
+   Bu, üçüncü assertion'ın **ayırt edici** değer taşıdığının kanıtıdır.
+
+**Successor'ın gerçekten indiği de assert edilir** (yeni id + `approved` + root'un head'i)
+— yoksa test "olmayan bir onaydan sonra hiçbir şey değişmedi" derdi, ki bu vacuous geçer.
+
+### 3. "running OR finished" — clause'un KENDİ sözü, iki test
+
+Clause iki durum adlandırıyor; **ikisi de ayrı ayrı** kanıtlandı. Bitmiş run
+(`SUCCEEDED` + Result + snapshot + okuma yüzeyi) ve **QUEUED** run (worker hiç koşmadan,
+Result yokken). İkincisi çıkarımla geçiştirilmedi: *"latest approved'ı worker başlamadan
+önce yeniden çöz"* kusuru tam olarak o pencerede yaşar.
+
+### 4. Harness — paylaşılan yardımcıya İKİ opsiyonel parametre
+
+`_ready_composition` bir `funding_for` **callback**'i, `_strategy_payload` bir `funding`
+sözlüğü aldı. **Callback, literal değil**, çünkü funding pini ancak market revision
+**var olduktan sonra** kurulabilir: readiness, research revision'ın
+`linked_market_dataset_revision_id`'sinin stratejinin market pini ile **aynı** olmasını
+şart koşuyor (`validators._research_market_compatibility_issues`). Varsayılan `None`
+her mevcut çağıranın payload'ını **bayt bayt aynı** bırakır — harness'ı kullanan üç suite
+yeniden koşularak doğrulandı.
+
+**Fundable bir research revision'ın beş kapısı ölçüldü** ve her biri **farklı** bir
+yerden gelir: `category_key=funding_rate` + native asset (`queries/funding.py`),
+`usage_scope=research_backtest` + APPROVED (hem o kapı hem readiness), pozitif delay'li
+`fixed_delay` (readiness `_available_time_is_undefined`), market link eşitliği (readiness),
+`instrument_mapping_ref` (link ile **birlikte** var olmalı — `instrument_mapping_is_valid`
+coherence kuralı). Link **elle yazılmadı**: `create_research_dataset` onu DR3 gereği kendi
+pinliyor, test yalnız eşitliği assert ediyor.
+
+**Successor da DR3'e tabi:** `approve_research_dataset_revision` → `_ensure_market_link_active`
+linki olmayan revizyonu **reddediyor** (ilk koşuda bu `DependencyBlocked` ile düştü ve
+`market_entity_id` geçirilerek düzeltildi).
+
+### 5. Kabul borcu — İKİ tavan İNDİ
+
+`RD-11.c3` kapanınca kriterin **son açık clause'u** kapandı → `RD-11` kriteri
+`partial` → **`covered`** ve `debt_class`'ını **kaybetti** (scanner kapalı bir kriterin
+sınıf taşımasını reddeder). Tavanlar: `partial` **106 → 105**, `debt_class.B` **75 → 74**.
+**Ratchet yalnız aşağı indi**; hiçbir kriter yeniden sınıflandırılmadı, hiçbiri silinmedi.
+Clause defteri: covered **1004 → 1005**, uncovered **123 → 122**.
+
+### 6. Dürüst sınırlar
+
+- **Ürün kodu değişmedi** — bu bir kanıt slice'ıdır, davranış zaten doğruydu.
+- `alignment_policy_versions[]` / `missing_and_stale_policies[]` **hâlâ sınıf D**.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.**
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.

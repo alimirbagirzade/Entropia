@@ -20,7 +20,7 @@ cases plus test_admission_queues_run_and_worker_materializes_result.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from decimal import Decimal
 from typing import Any
 
@@ -135,6 +135,7 @@ def _strategy_payload(
     backtest_range: dict[str, str] | None = None,
     instrument_id: str = "BTCUSDT",
     costs: dict[str, str] | None = None,
+    funding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "strategy_root_id": "strat_root_seed",
@@ -160,7 +161,11 @@ def _strategy_payload(
                 else costs
             ),
             "intrabar_policy": {"tick_policy": "inherit"},
-            "funding": {"enabled": False},
+            # Funding OFF is the default every existing caller relies on. A caller that
+            # needs a run pinning a research revision passes the block explicitly — the
+            # pin can only be built once the market revision exists, which is why
+            # ``_ready_composition`` resolves it through a callback rather than a literal.
+            "funding": funding or {"enabled": False},
         },
         "position_entry_logic": {
             "signal_block": {"rule": "required_indicator_blocks_only"},
@@ -210,6 +215,7 @@ async def _ready_composition(
     strategy_instrument_id: str = "BTCUSDT",
     backtest_range: dict[str, str] | None = None,
     costs: dict[str, str] | None = None,
+    funding_for: Callable[[str, str], Awaitable[dict[str, Any]]] | None = None,
 ) -> tuple[str, str, str]:
     workspace_id = await _empty_composition(session, actor)
     # Slice B: the strategy pins a REAL market revision (FK-valid entity) and the
@@ -262,6 +268,16 @@ async def _ready_composition(
         approval_state=ApprovalState.APPROVED,
     )
     await session.flush()
+    # The funding pin can only be built AFTER the market revision exists, because
+    # readiness requires the research revision's ``linked_market_dataset_revision_id``
+    # to equal the strategy's market pin (``validators._research_market_compatibility_issues``).
+    # Hence a callback rather than a literal: the caller seeds its own research dataset
+    # against this exact revision and hands back the block to pin.
+    funding = (
+        await funding_for(market_root.entity_id, market_rev.revision_id)
+        if funding_for is not None
+        else None
+    )
     work_object = await mb_cmd.create_work_object(
         session,
         actor,
@@ -274,6 +290,7 @@ async def _ready_composition(
             backtest_range=backtest_range,
             instrument_id=strategy_instrument_id,
             costs=costs,
+            funding=funding,
         ),
     )
     await mb_cmd.attach_mainboard_item(

@@ -225,7 +225,20 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 71 (describe/book split, C1/E4a, PR #735): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 72 (kayıtsız inen İKİ slice'ın ritüeli: C5 #740 + E5 #738):
+> İKİSİ DE SIFIR ÜRÜN SATIRI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> `C5` = R-1 pinlemesi **zaten sevk edilmişti** (plan bayattı, kod değil; negatif kontrol
+> `test_allocation_revision_pin.py`'yi bayt-eşleşme satırında kırmızıya çevirdi) — sevk edilen
+> ölçüm + plan düzeltmesi, **ADR kaydı BİLEREK İMZASIZ** (imza verildi, uygulandı, ürün sahibi
+> geri aldı → **geri uygulama**). `E5` = `C4` **kurulamaz** (`C3` yok, `C2` yok, `G9`/`G13`
+> imzasız); containment gate **değiştirilmedi**, o yüzden negatif kontrol **koşulmadı**.
+> **ASIL SONUÇ: `C1` (#735) son mühendislik ön koşuluydu → kritik yol artık kodla değil bir
+> İMZAYLA başlıyor.** **DERS: parti seçmeden ÖNCE ÖLÇ** ve bir kayıt kaybolmuş görünüyorsa
+> **önce delile bak** (tam+tutarlı geri alım = kaza değil karar).
+> `PROJECT_HISTORY.md` §ADIM 72 · `docs/ADIM72_KICKOFF.md`.
+>
+>
+> Öncesinde **ADIM 71 (describe/book split, C1/E4a, PR #735): ÜRÜN
 > DAVRANIŞI DEĞİŞMEDİ — 50 golden digest BAYT BAYT AYNI (ADR §15 R-4). Blocker sayısı
 > DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Üç karar fazı çifte ayrıldı (`_compute_carry`/
 > `_book_carry`, `_evaluate_held`/`_apply_held`, `_evaluate_entry`/`_apply_entry`); `_step`

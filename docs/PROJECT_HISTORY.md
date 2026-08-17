@@ -10720,3 +10720,104 @@ vardır**. Bu, P-C2 §C.3.8 seçenek **(a)**'yı (admission'da blokla) *önerile
 - **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.**
 - Kabul borcu tavanları **oynamadı** — bu bir refactor slice'ı, kriter kapatmadı.
 - Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.
+
+---
+
+## ADIM 72 — kayıtsız inen İKİ slice'ın ritüeli: C5 (R-1 zaten sevk edilmiş, PR #740) ve E5 (C4 kurulamaz, PR #738)
+
+> **NUMARA NOTU.** Yazıldığı anda `PROJECT_HISTORY.md`'nin en yüksek kaydı **71** (#737),
+> uzakta `docs/stage-72-landed` dalı **yoktu** ve beş açık PR'ın (#739 #741 #742 #743 + #738)
+> **hiçbiri** kapanış ritüeli değildi → **72** ölçülerek seçildi. Kural değişmedi: **numaralar
+> yeniden atanmaz, merge edilmiş ad kazanır.** #741/#742/#743 kendi kapanışlarını benden önce
+> indirirse bu kaydın adı kayar; dal adı `docs/stage-72-landed` olarak **kalır**.
+
+**Squash SHA'lar** — C5 **`df7df92`** (#740), E5 **`6ca478c`** (#738) · base **`6ba82a8`** ·
+migration **YOK** · `ENGINE_VERSION` **değişmedi** · alembic head
+**`0043_i08_registry_strategy_fks`** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+**`future_dev`** (dokunulmadı).
+
+**İKİ SLICE DA SIFIR ÜRÜN SATIRI SEVK ETTİ** — `backend/src`'te tek satır değişmedi, ikisinde de
+`git diff -- backend/` **boş**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+İkisi de birer **ölçüm** kaydıdır; biri bir planı düzeltti, diğeri bir slice'ı durdurdu.
+
+### C5 (#740) — R-1 allocation pinning: yapılacak iş yoktu
+
+Plan (`final_closure_ordered_plan_2026-08-13.md` §6) `C5`'i **ön koşulsuz ve koşulabilir** diye
+listeliyordu; kanonik kaynağı ADR §10.2 kusuru **şimdiki zamanda** anlatıyor. **Üç yargısının
+üçü de yanlıştı:** `readiness_check.py::_resolve_allocation` config'i **dondurulmuş
+revizyondan** kurar, canlı draft'a **yalnız** `_pinned_revision(...) is None` dalında düşer (ve
+o dalda `plan_revision_id` de null'dur → pointer ile config çelişemez), `::_pinned_config_hash`
+revizyonun **saklanmış** `config_hash`'ini yeniden hesaplamaya tercih eder.
+
+**NEGATİF KONTROL kararı verdi.** Kriterin adını taşıyan yeşil bir test kanıt değildir
+(ADIM 48). R-1 öncesi kusur çalışma ağacına **geri kondu** → `test_allocation_revision_pin.py`
+**tam olarak bayt-eşleşme satırında** kırmızı verdi (draft `5.000000` ↔ dondurulmuş
+`35.000000`), geri alınınca **3 passed**. Yani testi yeşil tutan şey **ürün kodu**, testin lafzı
+değil. Test **kendi anti-vacuity guard'ını** da taşıyor (`assert live != revision.config`).
+Üç `C5` artefaktı da yerinde; **E6 ön koşulu #19 karşılanıyor**.
+
+**Sevk edilen:** ölçüm belgesi + planın `C5` satırına tarihli düzeltme notu (özgün satır
+**korundu**). **Yeni test YAZILMADI** — R-1'in istediği assertion zaten var ve taşıyıcı olduğu
+kanıtlandı; ikincisi kabul-ratchet yüzeyini hiçbir şey kapatmadan yükseltirdi.
+
+**ADR KAYDI İMZASIZ KALDI — ve bu bilinçlidir.** Oturum içinde ürün sahibi §15'in `R-1` satırını
+imzaladı, satır uygulandı ve push edildi; sonra **ürün sahibi imza commit'ini dalı yeniden
+yazarken bilerek düşürdü** ve plan notunu *"**the discharge is UNSIGNED**"* diyecek şekilde
+yeniden yazdı. **main'in §15 `R-1` satırı DEĞİŞMEDİ**, §10.2 hâlâ kusuru şimdiki zamanda
+tarif ediyor. Bu bir kayıp DEĞİL: düşen commit **tam ve temizdi** (audit belgesinin ve plan
+notunun imza-öncesi metni de birlikte geri geldi), kazaların bıraktığı yarım hâl — ADR düşer
+ama belgeler "SIGNED" demeye devam eder — **yoktu**. **Geri uygulanmadı ve uygulanmamalıdır.**
+
+### E5 (#738) — C4 worker shared-path: kurulamaz, DURDURULDU
+
+`C4`'ün ön koşulu planın kendi tablosunda tek kelime: **`C3` merged**. Ölçüldü:
+`domain/backtest/participant.py` **yok**; `backend/src`'te **sıfır** `ItemParticipant`
+implementasyonu var (ikisi de test sahipli: `portfolio_harness.py` ve containment gate testi);
+`settle` / `finalize` / `iter_portfolio` **0 grep hit**, `PHASE_ORDER` **8 faz** → **`C2` de
+inmemiş**. `G9` **NOT REQUESTED**, `G13` **UNDECIDED**. Tasarım dokümanının E5 dalı (§C.5) üç
+çağrıdır; **ikisi mevcut değil**. Prompt *"gerçek `ItemParticipant`'lar"* istiyordu — sıfır
+tane var, yani bu tabanda her wiring üretim yolunu bir **test fixture'ına** bağlardı, ki
+prompt'un kendi durdurma koşulu tam olarak budur.
+
+**Kaydın asıl değeri bir güncelleme:** **`C1` (#735) P-E4 kaydının Blocker 1'ini KAPATTI.**
+describe/book ayrımı `_ItemStepper`'ın **public** yüzeyinde sevk edilmiş
+(`compute_carry`/`book_carry`, `evaluate_held`/`apply_held`, `evaluate_entry`/`apply_entry`) →
+bu prompt'un adlandırdığı **(a) faz-bölünmüş bar** ve **(b) book-etmeyen değerlendirme girişi**
+engellerinin **ikisi de** kapalı. **Sonuç: kritik yol artık kodla değil bir İMZAYLA başlıyor** —
+bir ajanın kapatabileceği her mühendislik ön koşulu kapandı, `C1` sonuncusuydu.
+`closure_e4_adapter_precondition_measurement_2026-08-17.md` §2 artık **bu yüzden cite
+EDİLMEMELİDİR**.
+
+**Containment gate DEĞİŞTİRİLMEDİ** ve **negatif kontrol koşulmadı — çünkü değişiklik yok.**
+Gate'in assertion'ları shared path'in erişilemez olduğunun kaydıdır; tarif ettikleri yol
+mevcut değilken onları yeniden yazmak guard'ı **tatmin etmez, kör eder**. E4'ün Blocker D'si
+ilk elden yeniden ölçüldü ve **hâlâ canlı**: importer kontrolü yalnız
+`domain/backtest/portfolio_engine.py`'yi allowlist'ler ve yalnız `execution/` altındakileri
+muaf tutar → `participant.py` **yapı gereği** kırmızı verir, allowlist genişletmesi **insan
+incelemesidir**.
+
+### Dersler
+
+- **Parti seçmeden ÖNCE ÖLÇ.** `C5` bir plan satırı yüzünden işe alındı; iş **zaten bitmişti**.
+  Plan 2026-08-14'te yazıldı, düzeltme ondan önce sevk edilmişti — **plan bayattı, kod değil.**
+- **Merge sonrası YENİDEN ÖLÇ.** `#734` slice ortasında dala girdi ve **`readiness_check.py`'ye
+  dokundu**. Allocation yolu etkilenmemişti (**0 hit**), ama **satır numaraları +3 kaydı** →
+  imzalanan ADR satırı, imzalandığı gün yanlış satır alıntılayacaktı. Satır numaraları atıldı,
+  **sembol adlarına** geçildi (CLAUDE.md'nin kendi kuralı).
+- **Bir kaydın kaybolduğunu görünce önce DELİLE bak.** İmza commit'i dalda yoktu; ilk okuma
+  "docs regresyonu, geri yükle" idi. Ölçüm bunu **çürüttü**: geri alım tam ve içsel olarak
+  tutarlıydı → **kaza değil karar**. Yanlış geri yükleme, imzalı sayılan bir ADR değişikliğini
+  sahibinin iradesine rağmen sevk ederdi.
+- **Bir ölçüm slice'ı bir kaydı imzalayamaz.** İmza istendi, verildi, sonra geri alındı — ve
+  ajanın işi bunu **olduğu gibi kaydetmek**, tekrar denemek değil.
+
+### Dürüst sınırlar
+
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **`G9` ve `G13` HÂLÂ İMZASIZ** → `C2` → `C3` → `C4` zinciri bloklu.
+- **`R-1`'in ADR kaydı imzasız**; §10.2 var olmayan bir kusuru şimdiki zamanda tarif etmeye
+  devam ediyor. Bunun **bilinçli** olduğu merge edilen plan notunda yazılı.
+- **Karar 1 (#552) ve Karar 3 (#559) hâlâ imzasız.**
+- Kabul borcu tavanları **oynamadı** — ikisi de kriter kapatmadı.
+- Codemap **tazelenmedi ve gerekmedi**: iki slice da yeni endpoint / tablo / sayfa / job
+  eklemedi.

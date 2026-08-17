@@ -40,6 +40,7 @@ from entropia.domain.research_data.time_policy import (
     resolve_event_time_column,
     time_policy_is_valid,
 )
+from entropia.domain.research_data.timing_provenance import TimingProvenance
 from entropia.domain.research_data.usage_scope import ensure_allows_evidence_bundle
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
@@ -535,43 +536,31 @@ async def compile_backtest_evidence_bundle(
 async def _pin_member(session: AsyncSession, revision: ResearchDatasetRevision) -> dict[str, Any]:
     """Pin one revision into a bundle member (GH #558, Karar 2 = A1, 2026-08-14).
 
-    The timing block mirrors the Run manifest's ``revision`` sub-dict field for
-    field (``commands/backtest_run_context.py::_research_entries``) — the two
-    execution-evidence surfaces answer "which availability rule was this compiled
-    under?" with the SAME six keys, so a reader never has to learn two shapes.
     Doc 12 §9.1 requires the Agent bundle to pin "usage scope and time policy";
     §9.2 lists ``available_time_policies[]`` on the evidence bundle. Both compilers
     call this one function, so neither surface can be the poorer of the two.
 
-    These fields enter the hashed body, so ``bundle_hash`` is no longer invariant
-    under a time-policy change: a bundle now attests its own timing provenance.
+    These fields enter the hashed body, so ``bundle_hash`` is not invariant under a
+    time-policy change: a bundle attests its own timing provenance.
+
+    R2: the member shape is projected from
+    ``domain/research_data/timing_provenance.py::TimingProvenance``, the same object
+    the Run manifest and Ready Check read. Until R2 this function re-derived the
+    columns by hand and its docstring claimed the timing block "mirrors the Run
+    manifest field for field" — a claim nothing checked. It is now true by
+    construction rather than by assertion, and the emitted bytes are unchanged
+    (pinned by ``tests/unit/test_research_bundle_member_projection.py``, which is
+    why ``_BUNDLE_COMPILER_VERSION`` does NOT move).
+
+    The two values a revision row cannot answer stay here, where the session is:
+    the market link's hash and the feature-definition ids.
     """
     link = await rd_repo.get_market_link(session, revision.revision_id)
     features = await rd_repo.list_feature_definitions(session, revision.revision_id)
-    return {
-        "research_revision_id": revision.revision_id,
-        "research_content_hash": revision.content_hash,
-        "usage_scope": _enum(revision.usage_scope),
-        "market_dataset_revision_id": revision.linked_market_dataset_revision_id,
-        "market_content_hash": link.market_content_hash if link else None,
-        # Timing provenance — the six the Run manifest already pins.
-        "available_time_policy": _enum(revision.available_time_policy),
-        "available_delay_seconds": revision.available_delay_seconds,
-        "event_time_semantics": _enum(revision.event_time_semantics),
-        "frequency_policy": _enum(revision.frequency_policy),
-        "source_timezone_mode": _enum(revision.source_timezone_mode),
-        "source_timezone_iana": revision.source_timezone_iana,
-        # The two §9.2 arrays that HAVE a shipped source, carried per member under
-        # their shipped names; ``_seal_bundle`` derives §9.2's top-level arrays
-        # from them (O-30 idiom: two names, one value, never divergent).
-        "instrument_mapping_ref": revision.instrument_mapping_ref,
-        "feature_definition_ids": [f.feature_definition_id for f in features],
-    }
-
-
-def _enum(value: Any) -> str | None:
-    """``str(enum)`` or ``None`` — the manifest's own coercion (``run_context::_enum``)."""
-    return None if value is None else str(value)
+    return TimingProvenance.from_row(revision).as_bundle_member(
+        market_content_hash=link.market_content_hash if link else None,
+        feature_definition_ids=[f.feature_definition_id for f in features],
+    )
 
 
 def _derived(members: list[dict[str, Any]], key: str) -> list[str]:

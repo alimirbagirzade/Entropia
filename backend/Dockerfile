@@ -83,6 +83,41 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
+# Debian security updates for the base image's own OS packages — the layer the
+# scanner reads first, and the one nothing else in this file touched.
+# CVE-2026-53615 (integer overflow in libblkid's DOS partition parser) arrived as
+# NINE fixable HIGHs at once because the whole util-linux family ships from one
+# source package: bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1,
+# libuuid1, login, mount, util-linux — all 2.41-5, all fixed in 2.41.5-0+deb13u1.
+#
+# Measured before writing this, because a scan failure on a PR looks like the PR's
+# fault: it is not a property of any branch. A dispatched `security.yml` run
+# against plain `main` (600be00) reproduced the identical nine-line list, and that
+# same commit's scheduled scan had passed two days earlier — only the advisory data
+# moved. The gap is structural: the image inherited whatever Debian packages
+# `python:3.13-slim` was baked with and never applied a security update, so every
+# future Debian advisory became a release blocker until Docker Hub happened to
+# rebuild the tag. That is the actual defect this fixes; the CVE is the symptom.
+#
+# `upgrade`, not `dist-upgrade`: upgrade never installs a NEW package, so the
+# surface can only shrink or stay flat. Unpinned deliberately, and it is the one
+# input in this file that SHOULD move — the digests and the lockfile are pinned
+# because a resolver changing underneath a build is undetectable, whereas security
+# packages that stop moving are the failure mode. Pinning `2.41.5-0+deb13u1` would
+# break the build the day Debian supersedes it. What keeps this honest is external
+# and already exists: the Trivy allowlist gate fails on any fixable CRITICAL/HIGH,
+# so a regression here surfaces in CI rather than by someone re-reading this file.
+#
+# Runtime stage only. The builder is discarded and never scanned, and it
+# apt-installs nothing, so the "same base, no system library present there and
+# missing here" symmetry that makes the venv copy safe is untouched: an upgrade
+# adds no library the builder stage needed.
+RUN set -eux; \
+    apt-get update; \
+    apt-get upgrade -y --no-install-recommends; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
 # Drop the SYSTEM pip, which is where the two HIGHs actually live. Measured, and
 # it is not what PR #660 concluded: the vulnerable metadata is neither installed
 # in site-packages nor embedded in the uv binary. `python:3.13-slim` ships pip

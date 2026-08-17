@@ -21,15 +21,15 @@
   ],
   "provenance": {
     "measured_by": "docs/audit/acceptance_semantic_scan.py --root .. --report",
-    "measured_at": "2026-08-17T08:00:00Z",
-    "slice": "acceptance batch 05 — doc 12 (Research Data): RD-09 and RD-15 closed, RD-12.c4/RD-13.c4 measured as class D",
-    "base_commit": "58db533",
+    "measured_at": "2026-08-17T14:22:11Z",
+    "slice": "acceptance batch 06 — doc 07 (Pre-Check), BACKEND surface: PC-07, PC-09 and PC-11 closed; PC-20.c3 measured as class D",
+    "base_commit": "df7df92",
     "conditions": "static scan; ast + title extraction against the live test tree; no database, no network, no test run",
-    "supersedes": "the RD-11.c3 freeze (105 partial / 8 uncovered; A1 B74 C6 D32, base 58db533). Batch 05 took doc 12 and closed TWO criteria, so partial 105 -> 103 and class B 74 -> 72; both ceilings are lowered, never raised. RD-09.c4 needed NO new test — ADIM 54 had left it open saying it was closable only through a funding-enabled run, that harness landed in ADIM 67, and the test written there for RD-11.c3 asserts this clause literally (run manifest, RESULT snapshot and read surface all still name v1.0 after v1.1 is approved), so the existing node was cited. RD-15.c4 got a new frontend test, negative-controlled by removing the display_name ?? entity_id fallback. TWO findings were MEASURED AND RECORDED RATHER THAN ACTED ON: RD-12.c4 and RD-13.c4 both name UI behaviour that is not shipped (no job-status re-read on the page; no reload/compare/new-revision conflict affordance anywhere in the research frontend), so both read class D rather than B. NEITHER WAS RECLASSIFIED — B -> D raises the D ceiling and that is an adjudication, not a test slice's call. That makes seven such open findings across the ledger.",
+    "supersedes": "the batch-05 freeze (103 partial / 8 uncovered; A1 B72 C6 D32, base 58db533). Batch 06 took doc 07 and ONE surface (backend), and closed THREE criteria, so partial 103 -> 100 and class B 72 -> 69; both ceilings are lowered, never raised. Each criterion was picked because its LAST open clause was backend, so closing one clause settles the whole row. PC-07.c3 (RESOLVER_SIGNATURE_MISMATCH had only ever been observed at /resolve, never on a scan), PC-09.c2 (the registry ARM of _enforce_precheck_gate was an untested branch — the only test reaching PrecheckStale moved context_hash instead) and PC-11.c3 (run_precheck accepted an idempotency_key that no test ever passed). All three were negative-controlled by REMOVING the behaviour from backend/src and observing the specific assertion go red: signature_matches -> return True gives 'passed' == 'blocked'; the registry branch -> `if False` gives DID NOT RAISE PrecheckStale; key=None inside run_precheck alone makes job_id and request_version diverge. ONE finding was MEASURED AND RECORDED RATHER THAN ACTED ON: PC-20.c3 ('a restored package REQUEST comes back stale') names behaviour that is NOT SHIPPED — restore runs the generic _restore_registry_target, which flips deletion_state only and touches neither context_hash nor current_scan_id, while get_current_scan reads current_scan_id with no deletion filter, so a restored request PASSES the Send gate. Doc 07 §5 does demand it, so it is a product gap (class D), not test debt. NOT RECLASSIFIED — B -> D raises the D ceiling and that is an adjudication, not a test slice's call. That makes EIGHT such open findings across the ledger.",
     "clause_totals_at_freeze": {
-      "covered": 1007,
+      "covered": 1010,
       "partial": 9,
-      "uncovered": 120,
+      "uncovered": 117,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "product_decision_required": 0
@@ -43,17 +43,18 @@
     "class_B_batches_are_deliberately_small": "101 open class-B criteria cannot be closed in one pass without the review degenerating into a rubber stamp — and a criterion marked covered by a test that does not actually prove it is worse than one honestly left partial. Batches are therefore scoped to one page document and one surface (batch 01 = doc 05, backend). Each closed clause cites a node that fails when the behaviour is removed; where the assertion could plausibly pass vacuously it was negative-controlled by hand (see the notes on TL-03, TL-15 and TL-17 in acceptance_semantic_map.yaml).",
     "TL_11_c3_is_very_likely_class_C_not_B": "ADIM 49 finding, recorded rather than acted on. TL-11.c3 names a run over an ALLOCATION-ENABLED composition. Shared capital allocation is fail-closed at ADMISSION in this build (domain/allocation/capability.py SHARED_ALLOCATION_STATUS = 'future_dev'; commands/backtest_run.py raises ALLOCATION_SHARED_MODE_NOT_IN_BUILD before any run, manifest or job exists), so the run the clause describes cannot be constructed and NO test can close it. That is the class C definition, not class B. It was NOT moved: B -> C would RAISE the C ceiling, and ceilings only fall except by adjudication. ADIM 48's kickoff recommended this row as closable; that was wrong. Two such findings are now open — this and TL-16 (c4 wants a 409 field that does not exist, so class D).",
     "three_more_doc12_clauses_look_misclassified": "ADIM 54 findings, recorded rather than acted on — the same shape as the TL-11.c3 finding of ADIM 52. RD-01.c4 wants an ANALYSIS-time DEPENDENCY_BLOCKED gate that does not exist and is not needed (market_entity_id is required at create). RD-05.c5 wants an Agent research draft/analysis tool; ToolName exposes none. RD-11.c2 wants the evidence bundle to pin feature definitions, time policies and mapping ids; _seal_bundle members carry five fields and none of those three. None was moved: B -> C/D RAISES a ceiling, and ceilings only fall except by adjudication. FIVE such findings are now open across the ledger (TL-11.c3, TL-16, TL-01.c4 and these three clauses), which is itself the signal: ADIM 42 classified from each record's own notes without re-reading product code, and said so.",
+    "PC_20_c3_restored_request_staleness_is_class_D": "ADIM 72 finding, recorded rather than acted on — the eighth of this shape. PC-20.c3 says 'a restored package REQUEST comes back stale'. Doc 07 §5's 'deleted / restored request' lifecycle row does demand it ('restored request current dependencies için stale kabul edilir'), but NOTHING IMPLEMENTS IT. Measured on base df7df92: a package request IS a trashable registry root (entity_type='package_request'), so the scenario is constructible and this is not class C. Restore, however, goes through commands/deletion.py::_restore_registry_target — the generic branch — which only returns deletion_state to ACTIVE and clears deleted_at/deleted_by/delete_reason. There is no package-request branch (the typed ones are backtest_result, manual_document, hypothesis_artifact). cp_repo.get_current_scan then reads detail.current_scan_id through a plain session.get with NO deletion filter, so the pre-delete PASSED scan survives intact, and _enforce_precheck_gate compares only context_hash and registry_fingerprint — neither of which a delete/restore cycle moves. A restored request therefore passes the Send gate instead of coming back stale. Closing this needs a restore-time staleness marker (product work), so the row is class D, not test debt. It was NOT moved: B -> D would RAISE the D ceiling, and ceilings only fall except by adjudication.",
     "doc16_event_names_are_shipped_names": "ADIM 55. Doc 16 names two audit events RESULT_SOFT_DELETED and RESULT_RESTORED. Neither string exists: the shipped kinds are `backtest.result_soft_deleted` (written by the command) and `trash.restored` (written by the generic trash restore path). Settled the O-02 / O-31 way — the SHIPPED name is canonical and the document's is historical — and the restore assertion additionally pins target_entity_id to the result id, so it proves THIS result's restore was audited rather than that some trash activity occurred. Renaming shipped event kinds to match a document sentence would break every consumer for a spelling."
   },
   "ceilings": {
     "total_criteria": 383,
     "status": {
-      "partial": 103,
+      "partial": 100,
       "uncovered": 8
     },
     "debt_class": {
       "A": 1,
-      "B": 72,
+      "B": 69,
       "C": 6,
       "D": 32
     }

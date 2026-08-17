@@ -252,11 +252,11 @@ one has no owner at all.
 | **G6** | **#558 research bundle shape** (A1 / A2 / A1+A2 / B / C) + 2 sub-decisions | **UNSIGNED.** `decisions:467-477` all boxes `[ ]`. GH #558 **OPEN**, `product-decision` | PO / maintainer | `decisions §Karar 2`; doc 12 §9.1/§9.2 | signature block `decisions:467-477` | **R2, R4** |
 | **G7** | **§9.2's two class-D fields** (`alignment_policy_versions[]`, `missing_and_stale_policies[]`) | **UNSIGNED**, and **out of scope regardless** — measured 0 hits in `backend/src`, `frontend/src`; no column exists | PO / maintainer | `decisions:472` sub-decision | same signature block | nothing (excluded) |
 | **G8** | **#559 DST fold/gap — is it required for shared mixed-zone?** | **UNSIGNED.** GH #559 **OPEN**, labelled `blocks-mixed-zone-axis`. **P-DEC answered the scoping question and it awaits ratification:** the decision doc's *hüküm (a)* is that #559 blocks the **mixed-zone scope only, not the axis arithmetic** — with its own `[ ] evet / [ ] hayır` box at `decisions:706-717` | PO / maintainer | `decisions §Karar 3`, ADR §12 | signature block `decisions:706-717` | **C9 only** (E6 precondition #21). **Not E4, not E5** — under fail-closed admission no shared run can reach a mixed-zone axis |
-| **G9** | **ADR §16 Gate 1** — amend ADR §6/§8 to add `settle`, `finalize`, P10, `iter_portfolio` | **NOT REQUESTED.** ADR is `Accepted`; amending an accepted contract needs the signature that accepted it | PO / maintainer | `docs/adr/0002…md` §6, §8, §16 | an ADR amendment entry, same shape as the §13.1 table | **C2** |
+| **G9** | **ADR §16 Gate 1** — amend ADR §6/§8 to add `settle`, `finalize`, P10, `iter_portfolio` | ✅ **SIGNED 2026-08-17** by the PO; amendment applied as ADR `0002` **§13.2** (§6 clauses 6–7, §8.2 phase P10). No product code shipped with it | PO / maintainer | `docs/adr/0002…md` §6, §8, §16 | an ADR amendment entry, same shape as the §13.1 table | **C2** |
 | **G10** | **ADR §16 Gate 2** — flag flip + `ENGINE_VERSION` bump | **NOT REQUESTED.** §16: *"should hold for ADIM 20, which is the first slice that changes a shipped number"* | PO / maintainer | ADR §14 acceptance matrix, §16 | ADR §16 approval record | **C9** |
 | **G11** | **P2 — deferred fills / resting limits on shared runs** (block at admission, or model P2) | **UNDECIDED, unbriefed.** P-C2 §C.3.7 recommends (a) block | PO / maintainer | P-C2 §C.3.7; doc 14 §9.1 taxonomy | needs a new admission blocker code + a decision entry | **C6** |
 | **G12** | **P8 — scaling on shared runs** (block at admission, or model P8) | **UNDECIDED, unbriefed.** `run_portfolio` currently raises `UnsupportedIntentKindError` | PO / maintainer | P-C2 §C.3.8 | as G11 | **C6**, and the size of **C1** |
-| **G13** | **P10 end-of-data equity point** — append a new point at the last `t_ms`, or fold into it | **UNDECIDED.** P-C2 §C.3.10 recommends fold; appending would put two points on one instant and break A5 | PO / maintainer | P-C2 §C.3.10; ADR §14 A5 | ADR amendment alongside G9 | **C2** |
+| **G13** | **P10 end-of-data equity point** — append a new point at the last `t_ms`, or fold into it | ✅ **DECIDED 2026-08-17: FOLD** (`commit_tick` at the same `t_ms` after the closes). Appending was rejected — it would break A5's by-construction claim. Recorded in ADR `0002` §13.2 | PO / maintainer | P-C2 §C.3.10; ADR §14 A5 | ADR amendment alongside G9 | **C2** |
 | **G14** | **#544 NET cross-item conflict semantics** | GH #544 **OPEN**, `product-decision` + `blocks-adim-19` | PO / product | ADR §9.4 | GH #544 | **C9** (E6 precondition #20) |
 | **G15** | **Ready Check leg 3 — which row wins** (`work_object_revision_id` is **not UNIQUE**, so today's per-item winner is undefined) | **UNDECIDED, unbriefed.** Batching changes readiness answers | PO / product | `CLAUDE.md` §ADIM 62 measurement; P-C2 §D.1 leg 3 | needs a decision entry | **nothing in this plan** — leg 3 has no slice by design |
 | **G16** | **A-08 human screen-reader audit** (#514) | **OPEN, in progress.** 2/184 Section A cells, 0/10 flows, SR-1 never started, exit criteria **0/4** | **human auditor only** (`human-only` label) | `docs/audit/a11y_screen_reader_audit_results.md` §5 exit criteria | that ledger | **the final RC verdict** |
@@ -574,7 +574,7 @@ verification without 19 copies of the same block.
 | Field | Value |
 |---|---|
 | **Goal** | Close the write-only-Protocol hole and make the loop drivable tick by tick. |
-| **Prerequisites** | **C1 merged** + **G9 (ADR §16 Gate 1) signed** + **G13 (P10 equity-point rule) decided** |
+| **Prerequisites** | ✅ **ALL MET as of 2026-08-17.** **C1 merged** (#735) + **G9 signed** + **G13 decided (FOLD)** — both recorded in ADR `0002` §13.2. **`C2` is runnable.** |
 | **Canonical source** | ADR §6, §8 (both **being amended** — that is what G9 is); P-C2 §C.2 Gap 2, §C.3.9, §C.3.10 |
 | **Production files** | `domain/backtest/portfolio_engine.py` — two new **required** Protocol members, `_phase_10_finalize`, `PHASE_ORDER` gains P10, `iter_portfolio` generator with `run_portfolio` as its two-line wrapper |
 | **Test files** | `tests/unit/oracles/portfolio_harness.py::_ScriptedParticipant` gains a **no-op pair** (books nothing, returns `None`) · the phase-order test updated **deliberately** |
@@ -980,7 +980,7 @@ order does not rescue two writers. See §1.2 and P1/P2/P3's `Parallel?` fields.
 | `P2` | leg 2 mirror deref batch | ⏳ | P1 | no | no |
 | `P3` | whole-operation budget backstop | ✅ | — | no | no |
 | `C1` | E4a describe/book split | ✅ | — | **no — that is the slice** | no |
-| `C2` | E4b Protocol + P10 + generator | ❌ | C1 + **G9 + G13** | no | no |
+| `C2` | E4b Protocol + P10 + generator | ✅ | — (C1 merged; G9 + G13 signed 2026-08-17) | no | no |
 | `C3` | E4c adapter | ⏳ | C2 | no | no |
 | `C4` | E5 worker branch + tripwire | ⏳ | C3 | no | no |
 | `C5` | R-1 allocation pinning | ✅ | — | no | no |

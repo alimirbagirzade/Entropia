@@ -322,6 +322,21 @@ Contract:
 5. `no_op` and `blocked` are first-class: a suppressed intent must be *emitted and traced*, never
    silently dropped.
 
+> **AMENDED 2026-08-17 (G9, signed by the PO — see §13.2).** Clauses 6 and 7 below are added.
+> They do not alter clauses 1–5: `form_intent` stays pure and the intent stays a *proposal*.
+
+6. **`settle` — the admission callback.** `ItemParticipant.settle(view, admitted) -> None` is how the
+   loop tells an item *"your intent was admitted, in this form"*, after P5/P6 have arbitrated. It is
+   the ONLY point at which an item may book capital against an intent it formed. Without it the item
+   would have to book inside `entry()`, i.e. **before arbitration**, committing capital the pool may
+   then refuse — the silent-degradation shape P-C2's `C6` stop condition names. `settle` is a
+   **required** Protocol member, never probed with `hasattr`: probing is fail-open, and a participant
+   that forgot `settle` would silently run flat.
+7. **`finalize` — the end-of-data close.** `ItemParticipant.finalize(view) -> MandatoryExit | None`
+   returns the close that end-of-data forces on a still-open position, or `None`. It is a *mandatory*
+   event in the sense of clause 4 — not an intent — and it is executed by **P10** (§8.2), after the
+   tick loop has ended. Also a required member.
+
 ---
 
 ## 7. Shared ledger and portfolio snapshot
@@ -463,6 +478,25 @@ the sequence in which already-admitted work is applied.
 | P7 | Schedule / execute admitted orders per execution model | per item | **yes** | M12 §9.2/104; doc 15 (6) |
 | P8 | Same-direction scaling | per item | **yes** | M12 §9.2/105; doc 15 (7) |
 | P9 | Append **one** equity point at `t`; state snapshot, decision trace, diagnostics | global | **yes** | doc 13 §8.4/7; M12 §9.2/106 |
+| **P10** | **End-of-data finalize: close still-open positions, then FOLD into the last equity point** | global, once | **yes** | **G9 + G13, §13.2** |
+
+> **AMENDED 2026-08-17 (G9 + G13, signed by the PO — see §13.2).** `P10` is added, and
+> `PHASE_ORDER` (`portfolio_engine.py`) becomes
+> `("P1","P3","PV","P4","P5","P6b","P7","P9","P10")`. That constant is published *as a value so a
+> test can assert the contract without re-reading the source*, so the phase-order test moves with
+> it, deliberately.
+>
+> **P10 runs ONCE, after the tick loop, not per tick.** For each participant in
+> `(pin_ordinal, item_id)` order it calls `finalize(view)` (§6 clause 7); a non-`None` result closes
+> the position and books the trade.
+>
+> **G13 — the equity point folds, it does not append.** After the closes, `commit_tick` is called at
+> the **same** `t_ms` as the last tick, so the final point reflects the settled book. Appending a
+> *new* point at that instant was the alternative and was **rejected**: it would put two points on
+> one `t_ms` and break **A5**'s *by-construction* time-ordering claim (§14), turning a structural
+> invariant into something that needs a runtime check. Folding changes no shipped number today —
+> nothing calls `run_portfolio` — but it fixes the contract before anything can depend on the other
+> reading.
 
 Two adjudications were required to build this table:
 
@@ -790,6 +824,28 @@ declarative strings published through `build_portfolio_manifest`, which nothing 
 that carries it exists would advertise a decision no artifact records. **ADIM 20 owns both
 flips**, together with R-5 (*"must not merge until every OD is recorded in the manifest as a
 versioned policy"*) — which this table is now the input to, not a substitute for.
+
+### 13.2 Amendment table — the ADIM 20 contract additions (2026-08-17)
+
+**Signed by the PO (`alimirbagirzade`), 2026-08-17.** This is §16's **Gate 1**, requested and
+granted in session. It amends **§6** (two new Protocol members) and **§8.2** (one new phase);
+§13.1's 2026-08-05 resolutions are untouched.
+
+| ID | Question | Resolution | Effect |
+|---|---|---|---|
+| **G9** | Amend §6/§8 to add `settle`, `finalize`, P10 and `iter_portfolio` to the `ItemParticipant` / phase-loop contract | **APPROVED as stated.** §6 gains clauses 6–7; §8.2 gains P10; `iter_portfolio` is admitted as the tick-drivable generator form of `run_portfolio` (same phase order, no second booking policy). | Unblocks `C2` (E4b). **No product code ships with this amendment** — it fixes the contract that `C2` will implement. |
+| **G13** | P10 end-of-data equity point: **append** a new point at the last `t_ms`, or **fold** into it | **FOLD.** `commit_tick` at the same `t_ms` after the closes. | **A5 survives as a by-construction claim.** Appending was rejected: two points on one instant would demote a structural invariant to a runtime check. |
+
+**What this amendment does NOT do.** It ships no code, moves no digest, and flips no flag —
+`SHARED_ALLOCATION_STATUS` stays `future_dev` and the containment gate is untouched. It also does
+**not** discharge §16's **Gate 2** (lifting containment), which remains unrequested. Three
+downstream gates stay open and are unaffected: the importer-allowlist review for
+`domain/backtest/participant.py`, **G11** (P2) and **G12** (P8).
+
+**Honest boundary on ordering.** §16 records that ADIM 15–19 landed while this ADR was still
+`Proposed`, and argues the gate *"should hold for ADIM 20, which is the first slice that changes a
+shipped number"*. This amendment is granted **before** `C2` is written, which is the order §16
+asked for. It is the first gate in this ADR's history to be honoured in sequence.
 
 ---
 

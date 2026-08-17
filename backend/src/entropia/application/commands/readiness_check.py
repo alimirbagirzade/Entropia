@@ -441,6 +441,33 @@ async def _resolve_market_data_issues(
     return issues
 
 
+def _tick_data_demands(
+    items: list[ReadinessItemInput],
+) -> list[tuple[ReadinessItemInput, StrategyConfig]]:
+    """Every Strategy item that DEMANDS tick data ('Use Tick Data' = Yes).
+
+    Split out of the resolver loop so the instrument lookups can be batched, and so the
+    four deliberate silences stay in ONE place: a non-Strategy or unavailable item is
+    not this leg's subject, a config that does not parse is left to
+    ``STRATEGY_CONFIG_INVALID``, and a strategy whose ``tick_policy`` is ``inherit`` or
+    ``disable`` never required tick data at all. None of the four is a defect this
+    resolver reports, and each one also means the item contributes NO instrument to the
+    batch below.
+    """
+    demands: list[tuple[ReadinessItemInput, StrategyConfig]] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        try:
+            config = StrategyConfig(**item.payload)
+        except PydanticValidationError:
+            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
+        if not tick_data_required(config):
+            continue
+        demands.append((item, config))
+    return demands
+
+
 async def _resolve_tick_data_issues(
     session: AsyncSession, items: list[ReadinessItemInput]
 ) -> list[ReadinessIssue]:
@@ -461,19 +488,18 @@ async def _resolve_tick_data_issues(
     later intrabar gate (sub-slice B) and this blocker never diverge.
     """
     issues: list[ReadinessIssue] = []
-    for item in items:
-        if not item.available or item.kind != MainboardItemKind.STRATEGY:
-            continue
-        try:
-            config = StrategyConfig(**item.payload)
-        except PydanticValidationError:
-            continue  # STRATEGY_CONFIG_INVALID already surfaces this in the validators.
-        if not tick_data_required(config):
-            continue
-        revision = await market_repo.find_approved_tick_revision_for_instrument(
-            session, config.data.instrument_id
-        )
-        if revision is not None:
+    demands = _tick_data_demands(items)
+    # P1: one IN() read for every instrument a require-tick strategy names, replacing the
+    # per-item lookup this loop used to issue. An instrument with no APPROVED tick/trade
+    # revision on an ACTIVE root is absent from the map, exactly as the per-instrument
+    # reader returned ``None`` for it, so the fail-closed branch below is unchanged. The
+    # batch picks the SAME row per instrument: the per-item order was total
+    # (``created_at DESC, revision_id DESC``), so ``DISTINCT ON`` cannot choose differently.
+    revisions = await market_repo.find_approved_tick_revisions_for_instruments(
+        session, [config.data.instrument_id for _item, config in demands]
+    )
+    for item, config in demands:
+        if revisions.get(config.data.instrument_id) is not None:
             continue
         issues.append(
             ReadinessIssue(

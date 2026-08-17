@@ -395,6 +395,56 @@ async def find_approved_tick_revision_for_instrument(
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def find_approved_tick_revisions_for_instruments(
+    session: AsyncSession, instrument_ids: Sequence[str]
+) -> dict[str, MarketDatasetRevision]:
+    """Resolve many instruments' newest APPROVED tick revision in ONE query, keyed by
+    ``instrument_id`` (P1).
+
+    The batch counterpart of :func:`find_approved_tick_revision_for_instrument`,
+    mirroring :func:`get_dataset_roots`: an empty input short-circuits without a round
+    trip and duplicate ids collapse. Every guard the per-instrument reader applies —
+    tick/trade type, APPROVED revision, market-dataset entity type, ACTIVE root — stays
+    in SQL rather than moving to the caller, so an instrument with no qualifying
+    revision is equally ABSENT from the map: the same ``None`` the per-instrument reader
+    returns. A caller's fail-closed branch therefore stays byte-identical. Never a
+    per-item N+1.
+
+    ``DISTINCT ON (instrument_id)`` returns *exactly* the row the per-instrument
+    ``ORDER BY created_at DESC, revision_id DESC LIMIT 1`` returns, because that order
+    is **total**: ``revision_id`` breaks every ``created_at`` tie, so "the newest" is a
+    single well-defined row per instrument and there is no ordering ambiguity for a
+    batch to resolve differently. (Contrast the external-import leg, whose readers key
+    on a column that is not UNIQUE and carry no ``ORDER BY`` at all — batching THAT is
+    a product decision about which row wins, not a performance change.)
+    """
+    ids = list(dict.fromkeys(instrument_ids))
+    if not ids:
+        return {}
+    stmt = (
+        select(MarketDatasetRevision)
+        .join(EntityRegistry, EntityRegistry.entity_id == MarketDatasetRevision.entity_id)
+        .where(
+            MarketDatasetRevision.market_data_type == MarketDataType.TICK_TRADES,
+            MarketDatasetRevision.revision_state == MarketRevisionState.APPROVED,
+            MarketDatasetRevision.instrument_id.in_(ids),
+            EntityRegistry.entity_type == ENTITY_TYPE,
+            EntityRegistry.deletion_state == DeletionState.ACTIVE,
+        )
+        .distinct(MarketDatasetRevision.instrument_id)
+        .order_by(
+            MarketDatasetRevision.instrument_id,
+            MarketDatasetRevision.created_at.desc(),
+            MarketDatasetRevision.revision_id.desc(),
+        )
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    # ``instrument_id`` is nullable on the model, but ``IN ()`` never matches NULL, so
+    # every row reaching here carries one. The narrowing exists for the type checker; it
+    # is NOT a second guard and cannot drop a row the SQL admitted.
+    return {row.instrument_id: row for row in rows if row.instrument_id is not None}
+
+
 async def get_dataset_root(session: AsyncSession, entity_id: str) -> EntityRegistry | None:
     """Return the registry Root iff it is a market dataset."""
     root = await session.get(EntityRegistry, entity_id)

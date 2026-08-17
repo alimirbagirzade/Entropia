@@ -225,7 +225,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 69 + ADIM 70 (kayıtsız inen İKİ slice'ın kapanış ritüeli:
+> `future_dev`. **Son dalga — ADIM 71 (describe/book split, C1/E4a, PR #735): ÜRÜN
+> DAVRANIŞI DEĞİŞMEDİ — 50 golden digest BAYT BAYT AYNI (ADR §15 R-4). Blocker sayısı
+> DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Üç karar fazı çifte ayrıldı (`_compute_carry`/
+> `_book_carry`, `_evaluate_held`/`_apply_held`, `_evaluate_entry`/`_apply_entry`); `_step`
+> **karakter karakter aynı**. Kazanım: değerlendirme artık **gerçekten salt-okur** — üç
+> sayaç (`suppressed_entries`, `entries_blocked_by_restriction`, `strength_adjustments`)
+> karar nesnesinde `_LedgerEffect` olarak taşınıp yalnız `_book_effects`'te uygulanır.
+> **`_phase_tail` scaling AYRILAMAZ** (guard'ı `position` + `led.trades` okur, stacking
+> ikisini de yazar) → **G12 sözleşme sorusu**, P-C2 §C.3.8 (a) **zorunlu**. **DERS: geçen
+> bir negatif kontrol, testin iyi olduğunu değil YOLUN HİÇ KOŞULMADIĞINI söyler.**
+> **`C2` hâlâ BLOKLU — G9 + G13 imzasız.** **NUMARA: bu slice İKİ KEZ taşındı** — ADIM 68
+> yazıldı, `#736` onu aldı, sonra `#732` iki kaydı birden indirip 69 ve 70'i aldı → **71**;
+> dal `docs/stage-68-landed` adında kalır. `PROJECT_HISTORY.md` §ADIM 71 ·
+> `docs/ADIM71_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **ADIM 69 + ADIM 70 (kayıtsız inen İKİ slice'ın kapanış ritüeli:
 > P-D #728 ve F1 #729): ÜRÜN KODU DEĞİŞMEDİ — altı belge, `backend/src`'te sıfır satır.
 > Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** İkisi de main'deydi, ikisinin de
 > `PROJECT_HISTORY` kaydı, handoff satırı ve memory checkpoint'i **yoktu**; sebepleri ayrı:

@@ -6704,6 +6704,45 @@ DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 
 `PROJECT_HISTORY.md` §ADIM 72 · `docs/ADIM72_KICKOFF.md`.
 
+## Stage 73 — kabul borcu batch 06 (doc 07 backend): üç kriter kapandı, bir sınıf-D bulgusu landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**, containment `future_dev`. Blocker sayısı
+**değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+Parti **tek sayfa belgesi (doc 07, Pre-Check) + tek yüzey (backend)** ile sınırlandı. Üç
+kriter seçildi çünkü **son açık clause'ları backend'di**, yani tek clause kapatmak satırın
+tamamını kapatıyor:
+
+| Kriter | Kapanan clause | Neden açıktı |
+|---|---|---|
+| `PC-07` | `.c3` | `RESOLVER_SIGNATURE_MISMATCH` yalnız `/resolve` ucunda gözlenmişti, **scan'de hiç** |
+| `PC-09` | `.c2` | `_enforce_precheck_gate`'in **registry kolu** test edilmemiş daldı (tek test `context_hash`'i oynatıyordu) |
+| `PC-11` | `.c3` | `run_precheck` `idempotency_key` **kabul ediyordu ama hiçbir test göndermiyordu** |
+
+**Tavanlar İNDİ:** `partial` **103 → 100**, `debt_class.B` **72 → 69**. Açık kabul borcu
+**111 → 108** (A=1 · B=69 · C=6 · D=32). Clause düzeyinde `covered` **1007 → 1010**,
+`uncovered` **120 → 117**. `total_criteria` **383** (taban, değişmedi).
+
+**Üçü de NEGATİF KONTROLDEN geçti** — davranış üründen kaldırıldı, test kırmızıya döndü:
+`signature_matches` → `return True` verince `assert 'passed' == 'blocked'`; registry dalı →
+`if False` verince `DID NOT RAISE PrecheckStale`; `run_precheck` içinde `key=None` verince
+`job_id` ve `request_version` ayrışıyor.
+
+**BULGU — `PC-20.c3` sınıf D, kapatılmadı.** "Restore edilen bir package REQUEST bayat
+döner" **sevk edilmemiş**: restore generic `_restore_registry_target`'tan geçer, yalnız
+`deletion_state`'i ACTIVE'e çevirir; `context_hash`'e de `current_scan_id`'ye de dokunmaz,
+`get_current_scan` ise deletion filtresi olmadan okur → restore edilen istek Send kapısını
+**geçer**. Doc 07 §5 bunu talep ediyor, yani ürün boşluğu. **YENİDEN SINIFLANDIRILMADI**
+(B → D **D tavanını yükseltir**, bu bir adjudication'dır). Defterde artık **SEKİZ** böyle
+açık bulgu var.
+
+**Açık kaldı:** `PC-01` backend-only bir partiyle kapanamaz — `.c3` backend ama `.c2`
+(`Not Checked` pill) frontend, ikisi birden gerekiyor. `PROJECT_HISTORY.md` §ADIM 73 ·
+`docs/ADIM72_LANDED_KICKOFF.md`.
+
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:

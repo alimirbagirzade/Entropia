@@ -45,7 +45,7 @@ from entropia.domain.lifecycle.enums import (
     VisibilityScope,
 )
 from entropia.domain.package.enums import PackageValidationState
-from entropia.infrastructure.postgres.models import PackageRequest, Principal
+from entropia.infrastructure.postgres.models import DependencyScan, PackageRequest, Principal
 from entropia.infrastructure.postgres.models.audit import AuditEvent
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
@@ -315,4 +315,73 @@ async def test_stale_scan_refusal_leaves_a_durable_precheck_stale_audit(
     assert metadata["old_scan_id"] == scan["scan_id"]
     assert metadata["old_context_hash"] == old_context_hash
     assert metadata["new_context_hash"] == "sha256:" + "c" * 64
+    assert metadata["trigger"] == "candidate_generation_gate"
+
+
+async def test_registry_move_under_a_passed_scan_is_stale_on_the_registry_arm(
+    session: AsyncSession,
+) -> None:
+    """PC-09.c2: the Send gate's REGISTRY arm, which the sibling test never reaches.
+
+    The test above moves ``context_hash`` — the request's own text changed under it.
+    Here the request is untouched and an Admin DEPRECATES the resolver the passed
+    scan pinned, so only ``registry_fingerprint`` moves. That is a genuinely
+    different failure mode: an ESP the user never edited changing underneath a
+    request that is still byte-identical to the one that scanned green.
+
+    Both arms raise the same ``PrecheckStale``, so the exception alone cannot tell
+    them apart. The discriminator is the audit: the context arm records
+    ``new_registry_fingerprint`` as None, this arm names the recomputed fingerprint.
+    """
+    await _seed_principals(session)
+    await _seed_python_resolver(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_request(session, family_id=family_id, deps=[_RSI_DEP])
+    await session.commit()
+
+    queued = await cp_cmd.run_precheck(session, OWNER, request_id=created["request_id"])
+    await session.commit()
+    scan = await cp_jobs.run_create_package_job(session, queued["job_id"])
+    await session.commit()
+    assert scan["status"] == str(PrecheckScanStatus.PASSED)
+
+    detail = await session.get(PackageRequest, created["request_id"])
+    assert detail is not None
+    unchanged_context_hash = detail.context_hash
+    scan_row = await session.get(DependencyScan, scan["scan_id"])
+    assert scan_row is not None
+    pinned_fingerprint = scan_row.registry_fingerprint
+
+    # The registry moves under the passed scan. The request itself is NOT touched.
+    entry = await esp_repo.get_registry_by_key(session, "ta.rsi")
+    assert entry is not None
+    esp_repo.set_trust_state(
+        entry,
+        trust_state=ResolverTrustState.DEPRECATED,
+        updated_by_principal_id="user_admin",
+    )
+    await session.commit()
+
+    with pytest.raises(PrecheckStale):
+        await cp_cmd.submit_candidate_generation(
+            session,
+            OWNER,
+            request_id=created["request_id"],
+            audit_session_factory=_audit_factory(session),
+        )
+    await session.rollback()  # exactly what TransactionBoundaryMiddleware does on 4xx
+
+    events = await _events(session, "precheck_stale")
+    assert len(events) == 1
+    metadata = events[0].event_metadata or {}
+    assert metadata["old_scan_id"] == scan["scan_id"]
+    # The context arm cannot have fired: the request's hash is still the scan's.
+    assert metadata["old_context_hash"] == unchanged_context_hash
+    assert metadata["new_context_hash"] == unchanged_context_hash
+    # So the refusal came from the registry arm, and it names the fingerprint the
+    # gate recomputed against the one the scan pinned (the context arm writes None).
+    assert metadata["old_registry_fingerprint"] == pinned_fingerprint
+    assert metadata["new_registry_fingerprint"] is not None
+    assert metadata["new_registry_fingerprint"] != pinned_fingerprint
     assert metadata["trigger"] == "candidate_generation_gate"

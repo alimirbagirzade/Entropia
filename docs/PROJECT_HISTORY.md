@@ -10821,3 +10821,131 @@ incelemesidir**.
 - Kabul borcu tavanları **oynamadı** — ikisi de kriter kapatmadı.
 - Codemap **tazelenmedi ve gerekmedi**: iki slice da yeni endpoint / tablo / sayfa / job
   eklemedi.
+
+## ADIM 73 — kabul borcu batch 06 (doc 07 backend): üç kriter kapandı, bir sınıf-D bulgusu
+
+> **NUMARA NOTU.** Bu slice'ın kickoff'u tabanı *"ADIM 68 sonrası"* diye tarif ediyordu ve
+> `df7df9220d668b75423d07b237d6a483459814d6` SHA'sını veriyordu. **SHA doğru, etiket
+> bayattı:** o commit'te son kayıt **ADIM 71**'dir (ADIM 69 = P-D/#728, ADIM 70 = F1/#729,
+> ADIM 71 = C1/#735 arada indi). Kickoff'un *"FARKLIYSA durma, farkı raporla, her ölçümü
+> yeniden yap"* talimatı uygulandı: taban SHA doğrulandı, tüm sayılar yeniden ölçüldü —
+> kabul defteri sayıları ADIM 68'den beri **oynamamıştı** (69/70/71 kriter kapatmadı), o
+> yüzden kickoff'un B=72 / partial=103 rakamları hâlâ geçerliydi.
+>
+> **NUMARA BİR KEZ DAHA TAŞINDI:** kayıt **ADIM 72** olarak yazılmıştı, ama bu PR (#749)
+> sıra beklerken **#746** (C5/#740 + E5/#738'in kapanış ritüeli) `a39d48e` olarak indi ve
+> **ADIM 72**'yi merge edilmiş adla aldı — üstelik `docs/ADIM72_KICKOFF.md`'yi de yarattı.
+> Kural değişmedi: **numaralar yeniden atanmaz, merge edilmiş ad kazanır** → bu kayıt
+> **ADIM 73**'tür ve kickoff'u `docs/ADIM73_LANDED_KICKOFF.md`'dir. Dal adı
+> (`test/closure-acceptance-batch-06`) numara taşımaz.
+
+Base **`df7df92`** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · alembic head
+**`0043_i08_registry_strategy_fks`** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+`future_dev` **değişmedi**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+Ürün kodu **değişmedi** — bu bir test + defter slice'ıdır.
+
+### 1. Parti nasıl seçildi (ölçerek, iddiaya güvenmeden)
+
+Kickoff iki yoğun aday veriyordu: doc 05 (TL) ve doc 07 (PC). Doc 05'in üç satırı zaten
+"şüpheli" işaretliydi (`TL-01`, `TL-11`, `TL-16`), o yüzden **doc 07** alındı ve **tek
+yüzeyle (backend)** sınırlandı.
+
+Doc 07'nin sekiz sınıf-B satırı clause clause okundu. Kritik ayrım: **dört** kriterin son
+açık clause'u backend'di (`PC-07`, `PC-09`, `PC-11`, `PC-20`) — yani tek clause kapatmak
+satırın tamamını kapatır ve **tavanı indirir**. `PC-01`'in `.c3`'ü de backend, ama `.c2`
+(`Not Checked` pill) frontend olduğu için satır backend-only bir partiyle **kapanamaz**;
+alınmadı.
+
+Dördünün de adlandırdığı davranış `backend/src` içinde **grep'le doğrulandı**. Üçü sevk
+edilmişti; **dördüncüsü değildi** (§4).
+
+### 2. Kapanan üç clause
+
+| Kriter | Clause | Neden açıktı | Yeni düğüm |
+|---|---|---|---|
+| `PC-07` | `.c3` | kod yalnız `/resolve` ucunda gözlenmişti, **scan'de hiç** | `test_create_package_precheck_worker.py::test_signature_mismatched_resolver_blocks_the_scan` |
+| `PC-09` | `.c2` | gate'in **registry kolu** test edilmemiş dal | `test_precheck_audit_events.py::test_registry_move_under_a_passed_scan_is_stale_on_the_registry_arm` |
+| `PC-11` | `.c3` | `idempotency_key` kabul ediliyor, **hiç gönderilmiyordu** | `test_create_package_precheck_worker.py::test_same_idempotency_key_replays_one_admission` |
+
+**`PC-09.c2` bir ayrım problemiydi, bir kapsam problemi değil.** Gate'in iki kolu
+(`context_hash` ve `registry_fingerprint`) **aynı** `PrecheckStale`'i fırlatır, yani
+exception onları **ayırt edemez**. Test bu yüzden isteği bayt bayt aynı bırakıp yalnız
+resolver'ı `DEPRECATED` yapar ve **durable audit'i** okur: `old_context_hash ==
+new_context_hash` (context kolu **kanıtlanabilir şekilde** çalışmadı) ve
+`new_registry_fingerprint` **null değil** ve scan satırının sakladığı fingerprint'ten
+**farklı** — context kolu oraya `None` yazar. Okuma yolu da assert edildi: karşılaştırma
+`DependencyScan` satırından geri okunan fingerprint'e karşı yapılıyor.
+
+`PC-07.c3` da saklanan satırı geri okur: `resolved_refs == []` ve
+`missing_calls[0].code == RESOLVER_SIGNATURE_MISMATCH` — bir uyuşmazlık **asla**
+resolution olarak pinlenemez.
+
+### 3. Üç negatif kontrol, üçü de kırmızı
+
+Davranış **üründen kaldırıldı**, testin kırmızıya döndüğü ve **hangi assertion'da**
+döndüğü kaydedildi:
+
+| Clause | Kaldırılan davranış | Gözlenen kırmızı |
+|---|---|---|
+| `PC-07.c3` | `domain/esp/resolver.py::signature_matches` → `return True` | `assert 'passed' == 'blocked'` |
+| `PC-09.c2` | `scan.registry_fingerprint != current_fingerprint` dalı → `if False` | `Failed: DID NOT RAISE PrecheckStale` |
+| `PC-11.c3` | `run_precheck` içinde `key=idempotency_key` → `key=None` | `job_id` ve `request_version` ayrıştı |
+
+`PC-07.c3`'ün kontrolü ayrıca **senaryonun o yolu gerçekten koştuğunu** kanıtlıyor (ADIM 71
+dersi): imza kontrolü etkisizleştirilince scan **PASSED**'a düşüyor, yani vaka daha erken
+bir undeclared-call / lifecycle reddine takılmıyordu. Her kontrolden sonra dosya
+`git checkout` ile geri alındı; üründe **hiçbir kalıntı yok** (`git status` temiz).
+
+### 4. BULGU — `PC-20.c3` sınıf D, KAPATILMADI
+
+Dördüncü aday ölçüldü ve **sevk edilmemiş** çıktı. Clause: *"restore edilen bir package
+REQUEST bayat döner"*. Doc 07 §5'in "deleted / restored request" satırı bunu **gerçekten
+talep ediyor** (*"restored request current dependencies için stale kabul edilir"*).
+
+Ölçüm (`df7df92`):
+
+- Package request **trash'lenebilir bir registry root**'tur
+  (`repositories/create_package.py`, `entity_type="package_request"`) → senaryo
+  **kurulabilir**, yani sınıf C değil.
+- Restore `commands/deletion.py::_restore_registry_target`'tan geçer — **generic** dal.
+  Yalnız `deletion_state`'i ACTIVE'e döndürür ve `deleted_at/deleted_by/delete_reason`'ı
+  temizler. Package-request'e özel dal **yok** (tipli dallar: `backtest_result`,
+  `manual_document`, `hypothesis_artifact`).
+- `cp_repo.get_current_scan` `detail.current_scan_id`'yi **deletion filtresi olmadan**
+  düz `session.get` ile okur → silme öncesi PASSED scan **sağlam döner**.
+- `_enforce_precheck_gate` yalnız `context_hash` ve `registry_fingerprint` karşılaştırır —
+  **ikisini de** delete/restore döngüsü oynatmaz.
+
+**Sonuç: restore edilen istek Send kapısını GEÇER, bayat dönmez.** Kapatmak için
+restore-zamanı bir bayatlık işareti gerekir — **ürün işi**, test borcu değil. Satır
+**YENİDEN SINIFLANDIRILMADI**: B → D taşımak **D tavanını yükseltir** ve bu bir
+adjudication'dır, bir test slice'ının kararı değil. Bulgu kriterin `notes` alanına ve
+`acceptance_coverage_baseline.json` §adjudication'a ölçümüyle birlikte yazıldı. Defterde
+artık **SEKİZ** böyle açık bulgu var (`TL-11.c3`, `TL-16`, `TL-01.c4`, `RD-01.c4`,
+`RD-05.c5`, `RD-12.c4`, `RD-13.c4`, `PC-20.c3`).
+
+### 5. Ratchet — tavanlar İNDİ
+
+```
+status.partial      103 -> 100
+debt_class.B         72 ->  69
+```
+
+Açık kabul borcu **111 → 108** (A=1 · B=69 · C=6 · D=32). Clause düzeyinde `covered`
+**1007 → 1010**, `uncovered` **120 → 117**; toplam **1175** ve `total_criteria` **383**
+(taban) **değişmedi**. Sayılar tahmin edilmedi, `--report` çıktısından okundu. Defter
+`--write-ledger` ile yeniden üretildi.
+
+### 6. Dürüst sınırlar
+
+- **`PC-01` açık kaldı ve bu bilinçli:** `.c3` backend ama `.c2` (`Not Checked` pill)
+  frontend; backend-only bir parti satırı kapatamaz, tavana da dokunamaz.
+- **`PC-02.c2`, `PC-17.c4`, `PC-21.c2/.c3` incelenmedi** — hepsi frontend yüzeyi, parti
+  kapsamı dışı. `PC-21.c3` ayrıca bir **negatif kapsam** iddiasıdır (yüzey repaint /
+  validation / approval hakkında hiçbir şey **iddia etmemeli**) ve bugünkü suite'te bunu
+  koruyan hiçbir şey yok.
+- **Ürün kodu değişmedi** — dolayısıyla containment, `ENGINE_VERSION`, golden digest'ler ve
+  A-08 bu slice'tan **etkilenmedi**.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ**; `C2`'nin **G9/G13** kapıları imzasız.
+- Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.

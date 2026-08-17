@@ -8023,8 +8023,9 @@ criteria:
     - backend/tests/integration/test_esp_lifecycle_resolution.py::test_signature_mismatch_still_reports_its_own_code
   - id: PC-07.c3
     text: A Pre-Check SCAN over a signature-mismatched resolver lands BLOCKED carrying RESOLVER_SIGNATURE_MISMATCH.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_create_package_precheck_worker.py::test_signature_mismatched_resolver_blocks_the_scan
   production_paths:
   - backend/src/entropia/domain/esp/resolver.py
   - backend/src/entropia/application/queries/esp.py
@@ -8035,6 +8036,7 @@ criteria:
   - backend/tests/unit/test_esp_resolver.py::test_incompatible_adapter_reports_adapter_incompatible
   - backend/tests/contract/test_esp_contract.py::test_resolve_signature_mismatch_returns_typed_code
   - backend/tests/integration/test_esp_lifecycle_resolution.py::test_signature_mismatch_still_reports_its_own_code
+  - backend/tests/integration/test_create_package_precheck_worker.py::test_signature_mismatched_resolver_blocks_the_scan
   evidence_type:
   - backend_unit
   - backend_contract
@@ -8046,19 +8048,23 @@ criteria:
   - backend/tests/unit/test_esp_resolver.py::test_incompatible_adapter_reports_adapter_incompatible
   - backend/tests/contract/test_esp_contract.py::test_resolve_signature_mismatch_returns_typed_code
   - backend/tests/integration/test_esp_lifecycle_resolution.py::test_signature_mismatch_still_reports_its_own_code
+  - backend/tests/integration/test_create_package_precheck_worker.py::test_signature_mismatched_resolver_blocks_the_scan
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: '`RESOLVER_SIGNATURE_MISMATCH` appears in exactly one test in the repo (`contract/test_esp_contract.py:288`)
-    and that test hits the /resolve endpoint, not the Pre-Check scan. `jobs/create_package.py::_RESOLVE_ERRORS`
-    does include `ResolverSignatureMismatch`, and the equivalent path is proven end-to-end for RESOLVER_NOT_ACTIVE
-    (`test_deprecated_resolver_blocks_with_resolver_not_active`), so the mechanism is exercised —
-    but this row''s own code is never observed on a scan.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 06 (ADIM 72). The code had been proven only at the /resolve endpoint
+    and in the pure resolver unit tests; the SCAN plane — this row''s own sentence — is now asserted by
+    `test_signature_mismatched_resolver_blocks_the_scan`, which declares a 3-parameter `ta.rsi` against
+    the 2-parameter seeded contract (name matches, arity does not) and reads the DURABLE scan row back:
+    status BLOCKED, state precheck_blocked, `missing_calls[0].code == RESOLVER_SIGNATURE_MISMATCH` and
+    `resolved_refs == []`, so a mismatch can never be pinned as a resolution. NEGATIVE CONTROL: making
+    `domain/esp/resolver.py::signature_matches` return True unconditionally turns the scan green and the
+    test fails `assert ''passed'' == ''blocked''` — which also proves the scenario actually reaches the
+    signature check rather than being blocked earlier by an undeclared-call or lifecycle refusal.'
 - id: PC-08
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'
@@ -8118,8 +8124,9 @@ criteria:
     - backend/tests/integration/test_esp_lifecycle_resolution.py::test_root_soft_delete_changes_the_registry_fingerprint
   - id: PC-09.c2
     text: The candidate command's recheck returns PRECHECK_STALE on a registry mismatch specifically.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_precheck_audit_events.py::test_registry_move_under_a_passed_scan_is_stale_on_the_registry_arm
   - id: PC-09.c3
     text: The old scan is retained as immutable historical evidence (a re-run appends a new attempt).
     status: covered
@@ -8131,12 +8138,14 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_esp_lifecycle_resolution.py::test_root_soft_delete_changes_the_registry_fingerprint
   - backend/tests/integration/test_create_package_persistence.py::test_scan_is_immutable_evidence
+  - backend/tests/integration/test_precheck_audit_events.py::test_registry_move_under_a_passed_scan_is_stale_on_the_registry_arm
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_esp_lifecycle_resolution.py::test_root_soft_delete_changes_the_registry_fingerprint
   - backend/tests/integration/test_create_package_persistence.py::test_scan_is_immutable_evidence
-  negative: []
+  negative:
+  - backend/tests/integration/test_precheck_audit_events.py::test_registry_move_under_a_passed_scan_is_stale_on_the_registry_arm
   auth: []
   occ: []
   idempotency: []
@@ -8144,13 +8153,17 @@ criteria:
   historical_integrity:
   - backend/tests/integration/test_create_package_persistence.py::test_scan_is_immutable_evidence
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: '`_enforce_precheck_gate` does compare the live registry fingerprint, and the fingerprint''s
-    sensitivity to both registry and root-lifecycle change is proven. But the only test that actually
-    reaches `PrecheckStale` gets there by mutating `context_hash`, not by moving the registry under
-    a Passed scan — so the registry arm of the gate is an untested branch. That is a genuinely different
-    failure mode (an ESP the request never touched changing underneath it).'
+  status: covered
+  notes: 'CLOSED in acceptance batch 06 (ADIM 72). The registry ARM of `_enforce_precheck_gate` was an
+    untested branch: the only test reaching `PrecheckStale` got there by mutating `context_hash`.
+    `test_registry_move_under_a_passed_scan_is_stale_on_the_registry_arm` leaves the request byte-identical
+    and has an Admin DEPRECATE the resolver the passed scan pinned, so only `registry_fingerprint` moves.
+    Because BOTH arms raise the same `PrecheckStale`, the exception cannot discriminate them — the test
+    therefore reads the durable `precheck_stale` audit and asserts `old_context_hash == new_context_hash`
+    (context arm provably did NOT fire) while `new_registry_fingerprint` is non-null and differs from the
+    fingerprint the scan row actually stored (the context arm records None there). NEGATIVE CONTROL:
+    replacing the `scan.registry_fingerprint != current_fingerprint` branch with `if False` fails the test
+    with `DID NOT RAISE PrecheckStale`.'
 - id: PC-10
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'
@@ -8215,8 +8228,9 @@ criteria:
   - id: PC-11.c3
     text: Re-submitting the SAME Idempotency-Key to run_precheck replays the same accepted result
       and creates one scan/job/audit.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_create_package_precheck_worker.py::test_same_idempotency_key_replays_one_admission
   production_paths:
   - backend/src/entropia/application/commands/create_package.py
   - backend/src/entropia/application/jobs/create_package.py
@@ -8224,10 +8238,12 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_is_redelivery_idempotent
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
+  - backend/tests/integration/test_create_package_precheck_worker.py::test_same_idempotency_key_replays_one_admission
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_is_redelivery_idempotent
+  - backend/tests/integration/test_create_package_precheck_worker.py::test_same_idempotency_key_replays_one_admission
   negative:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
   auth: []
@@ -8235,20 +8251,25 @@ criteria:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
   idempotency:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_is_redelivery_idempotent
+  - backend/tests/integration/test_create_package_precheck_worker.py::test_same_idempotency_key_replays_one_admission
   async_recovery:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_is_redelivery_idempotent
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The precheck worker module docstring claims PC-11, but the two planes must not be conflated:
-    `test_worker_is_redelivery_idempotent` proves the WORKER replays, while the row is about the ADMISSION
-    key. `run_precheck` accepts `idempotency_key` and wraps in `run_idempotent`, yet no test passes
-    one — and the suite''s other admission test (`test_precheck_audit_events.py::test_second_admission_announces_attempt_two`)
-    shows a second keyless admission legitimately creating attempt 2. Note the frontend sends a FRESH
-    key per click, so a real duplicate click is protected by the OCC version guard (c2), not by the
-    key.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 06 (ADIM 72). The two planes must not be conflated:
+    `test_worker_is_redelivery_idempotent` proves the WORKER replays a durable outcome, while this row
+    is about the ADMISSION key. `run_precheck` accepted `idempotency_key` and wrapped in `run_idempotent`,
+    but no test ever passed one. `test_same_idempotency_key_replays_one_admission` now admits twice under
+    the same key and asserts the second call returns the STORED response verbatim, with exactly one Job
+    row, one `precheck_started` audit and — after driving the single job — one DependencyScan. The
+    keyless case legitimately does the opposite (`test_precheck_audit_events.py::test_second_admission_announces_attempt_two`
+    admits attempt 2), so the key is the only thing that can produce this. NEGATIVE CONTROL: passing
+    `key=None` inside `run_precheck` alone makes the second admission enqueue its own job and bump
+    request_version again, and the test fails on `job_id` / `request_version` differing. Note the frontend
+    sends a FRESH key per click, so a real duplicate click is protected by the OCC version guard (c2),
+    not by the key — this row proves the server honours the key it accepts.'
 - id: PC-12
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'
@@ -8716,7 +8737,23 @@ criteria:
     but deliberately leaves the trust pointer closed, so a restored resolver cannot silently start
     resolving again. c3 has no test — nothing asserts that a restored package REQUEST comes back with
     a stale Pre-Check; `test_restore_keeps_identity_marks_entry_and_audits` covers identity/audit
-    for the generic restore, not request staleness.'
+    for the generic restore, not request staleness. ADIM 72 FINDING — c3 is very likely MISCLASSIFIED
+    and no test can close it as written. The clause names a behaviour that IS NOT SHIPPED, not merely
+    untested. MEASURED on this base: a package request IS a trashable registry root
+    (`repositories/create_package.py` registers it as `entity_type="package_request"`), so the scenario
+    is constructible — but restore runs `commands/deletion.py::_restore_registry_target`, which only
+    flips `deletion_state` back to ACTIVE and clears `deleted_at/deleted_by/delete_reason`. It touches
+    neither the request''s `context_hash` nor its `current_scan_id`, and there is no
+    package-request-specific restore branch at all (the typed branches are backtest_result,
+    manual_document and hypothesis_artifact). `cp_repo.get_current_scan` then reads
+    `detail.current_scan_id` through a plain `session.get` with NO deletion filter, so the old PASSED
+    scan comes back intact, and `_enforce_precheck_gate` compares only context_hash and
+    registry_fingerprint — both unchanged by a delete/restore cycle. A restored request therefore PASSES
+    the Send gate rather than coming back stale. Doc 07 §5 (the "deleted / restored request" lifecycle
+    row) does demand "restored request current dependencies için stale kabul edilir", so this is a
+    genuine product gap: it needs a restore-time staleness marker, i.e. class D, not test debt. NOT
+    RECLASSIFIED — B -> D would RAISE the D ceiling and that is an adjudication, not a test slice''s
+    call. This makes EIGHT such open findings across the ledger.'
 - id: PC-21
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'

@@ -1,4 +1,5 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM73_LANDED_KICKOFF.md`'dir.**
 > **CANLI KICKOFF.** Bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
 > `historical`a demote edilir ve yerine yenisi geçer (`check_classification` CI'da doğrular).
 

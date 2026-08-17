@@ -225,7 +225,24 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 72 (kayıtsız inen İKİ slice'ın ritüeli: C5 #740 + E5 #738):
+> `future_dev`. **Son dalga — ADIM 73 (kabul borcu batch 06, doc 07 backend): ÜRÜN KODU
+> DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Doc 07'nin **son açık clause'u backend olan** üç kriteri kapandı: `PC-07.c3` (tipli
+> `RESOLVER_SIGNATURE_MISMATCH` artık **scan düzleminde** gözleniyor), `PC-09.c2`
+> (`_enforce_precheck_gate`'in **registry kolu** — context kolundan durable audit'teki
+> `new_registry_fingerprint` ile ayrıştırılıyor) ve `PC-11.c3` (admission `idempotency_key`
+> replay'i: bir Job + bir audit + bir scan). **Üçü de negatif kontrolden geçti** (davranış
+> üründen kaldırıldı → kırmızı). **Tavanlar İNDİ: `partial` 103 → 100, `debt_class.B`
+> 72 → 69**; açık borç **111 → 108** (A=1 · B=69 · C=6 · D=32), clause `covered`
+> 1007 → 1010. **BULGU: `PC-20.c3` sınıf D** — "restore edilen request bayat döner" **sevk
+> edilmemiş** (restore yalnız `deletion_state`'i çevirir; restore edilen istek Send kapısını
+> **geçer**); **yeniden sınıflandırılmadı**, defterde artık **sekiz** böyle bulgu var.
+> **DERS: kickoff'un taban ETİKETİNE değil SHA'sına güven** — bu slice'ın kickoff'u tabanı
+> "ADIM 68 sonrası" sanıyordu, o commit'te son kayıt **ADIM 71**'di. **`C2` hâlâ BLOKLU —
+> G9 + G13 imzasız.** `PROJECT_HISTORY.md` §ADIM 73 · `docs/ADIM73_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **ADIM 72 (kayıtsız inen İKİ slice'ın ritüeli: C5 #740 + E5 #738):
 > İKİSİ DE SIFIR ÜRÜN SATIRI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > `C5` = R-1 pinlemesi **zaten sevk edilmişti** (plan bayattı, kod değil; negatif kontrol
 > `test_allocation_revision_pin.py`'yi bayt-eşleşme satırında kırmızıya çevirdi) — sevk edilen

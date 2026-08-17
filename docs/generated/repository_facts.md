@@ -27,7 +27,7 @@ static walk. Only a full CI run reports passes.
 | `ENGINE_VERSION` | `backtest-engine-v18-percent-sizing-per-fill-commission` |
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3607 in 343 files |
+| Backend tests **collected** (static, not a pass count) | 3610 in 343 files |
 | Backend `xfail` markers | 0 (0 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 718 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |
@@ -38,8 +38,8 @@ static walk. Only a full CI run reports passes.
 
 | Level | covered | deliberate_future_dev | not_applicable | partial | uncovered |
 |---|---|---|---|---|---|
-| Criteria | 257 | 8 | 7 | 103 | 8 |
-| Clauses | 1007 | 27 | 12 | 9 | 120 |
+| Criteria | 260 | 8 | 7 | 100 | 8 |
+| Clauses | 1010 | 27 | 12 | 9 | 117 |
 
 ## HTTP operations by method
 

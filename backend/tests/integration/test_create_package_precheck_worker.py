@@ -55,6 +55,7 @@ from entropia.infrastructure.postgres.models import (
     OutboxEvent,
     Principal,
 )
+from entropia.infrastructure.postgres.models.audit import AuditEvent
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import rationale as rationale_repo
@@ -74,6 +75,19 @@ _INDICATOR_OUTPUT = {"kind": "directional_signal"}
 
 async def _count(session, model) -> int:
     return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
+
+
+async def _audit_count(session, event_kind: str) -> int:
+    """How many audit rows of one kind exist (in-session; these are not durable-tx)."""
+    return int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.event_kind == event_kind)
+            )
+        ).scalar_one()
+    )
 
 
 async def _seed_principals(session) -> None:
@@ -340,6 +354,53 @@ async def test_worker_is_redelivery_idempotent(session) -> None:
     assert await _count(session, DependencyScan) == 1
 
 
+async def test_same_idempotency_key_replays_one_admission(session) -> None:
+    """PC-11.c3: the ADMISSION key plane, not the worker's redelivery plane.
+
+    ``test_worker_is_redelivery_idempotent`` above proves the WORKER replays a
+    durable outcome for one already-admitted job. This is the other half of PC-11:
+    two ADMISSIONS carrying the same Idempotency-Key must collapse into one job,
+    one announced attempt and one scan, and the second call must hand back the
+    stored response rather than admit again.
+
+    The keyless case legitimately does the opposite — ``test_precheck_audit_events
+    .py::test_second_admission_announces_attempt_two`` admits attempt 2 — so the
+    key is the only thing that can produce this behaviour.
+    """
+    await _seed_principals(session)
+    await _seed_python_resolver(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
+    await session.commit()
+
+    first = await cp_cmd.run_precheck(
+        session,
+        OWNER,
+        request_id=created["request_id"],
+        idempotency_key="pc11-precheck-key",
+    )
+    await session.commit()
+    second = await cp_cmd.run_precheck(
+        session,
+        OWNER,
+        request_id=created["request_id"],
+        idempotency_key="pc11-precheck-key",
+    )
+    await session.commit()
+
+    # The stored response is returned verbatim. A genuine second admission could not
+    # look like this: it would enqueue its own job and bump request_version again.
+    assert second == first
+    assert await _count(session, Job) == 1
+    assert await _audit_count(session, "precheck_started") == 1
+
+    # ...and the one admitted job still produces exactly one immutable scan.
+    await cp_jobs.run_create_package_job(session, first["job_id"])
+    await session.commit()
+    assert await _count(session, DependencyScan) == 1
+
+
 async def test_stale_delivery_is_superseded(session) -> None:
     """A Pre-Check delivery that arrives after the request advanced past the
     Pre-Check states records nothing (an illegal transition otherwise)."""
@@ -541,6 +602,51 @@ async def test_deprecated_resolver_blocks_with_resolver_not_active(session) -> N
     assert result["state"] == str(CreatePackageState.PRECHECK_BLOCKED)
     assert result["missing"][0]["code"] == "RESOLVER_NOT_ACTIVE"
     assert result["missing"][0]["call"] == "ta.rsi"
+
+
+async def test_signature_mismatched_resolver_blocks_the_scan(session) -> None:
+    """PC-07.c3 / doc 07 §12 RESOLVER_SIGNATURE_MISMATCH observed ON A SCAN.
+
+    The code was already proven at the /resolve endpoint and in the pure resolver
+    unit tests. This is the Pre-Check plane: a resolver that matches BY NAME but
+    whose contract signature disagrees with the declared call must land the scan in
+    BLOCKED carrying its own code.
+
+    Distinct from RESOLVER_NOT_ACTIVE above, which is a LIFECYCLE refusal. Here the
+    resolver is trusted-active, validated and approved — only the contract
+    disagrees, which is precisely the case a name-only match would silently Pass.
+    """
+    await _seed_principals(session)
+    await _seed_python_resolver(session)  # the contract is the 2-parameter _RSI_SIG
+    family_id = await _seed_family(session)
+    await session.commit()
+    # Same canonical key, THREE parameters: the name matches, the arity does not.
+    mismatched_dep = {
+        "key": "ta.rsi",
+        "signature": {
+            "params": [
+                {"name": "source", "type": "series"},
+                {"name": "length", "type": "int"},
+                {"name": "offset", "type": "int"},
+            ],
+            "return": "series",
+        },
+    }
+    created = await _create_indicator_request(session, family_id=family_id, deps=[mismatched_dep])
+    await session.commit()
+
+    result = await _run_precheck(session, created["request_id"])
+
+    assert result["status"] == str(PrecheckScanStatus.BLOCKED)
+    assert result["state"] == str(CreatePackageState.PRECHECK_BLOCKED)
+    assert result["missing"][0]["call"] == "ta.rsi"
+    assert result["missing"][0]["code"] == "RESOLVER_SIGNATURE_MISMATCH"
+    # Read the durable scan back: a mismatch must never be PINNED as a resolution,
+    # or the Send gate would carry a resolver whose contract it never satisfied.
+    scan = await session.get(DependencyScan, result["scan_id"])
+    assert scan is not None
+    assert scan.resolved_refs == []
+    assert scan.missing_calls[0]["code"] == "RESOLVER_SIGNATURE_MISMATCH"
 
 
 async def test_clean_pinescript_still_passes(session) -> None:

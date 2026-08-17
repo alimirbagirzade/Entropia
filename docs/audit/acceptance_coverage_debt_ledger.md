@@ -36,10 +36,10 @@ argument in `acceptance_semantic_map.yaml` before planning any row.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 72 |
+| B | 69 |
 | C | 6 |
 | D | 32 |
-| **open total** | **111** |
+| **open total** | **108** |
 
 ## Class A (1)
 
@@ -47,7 +47,7 @@ argument in `acceptance_semantic_map.yaml` before planning any row.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (72)
+## Class B (69)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -83,9 +83,6 @@ argument in `acceptance_semantic_map.yaml` before planning any row.
 | `CP-13` | 06 | partial | Supervisor/Agent may request approval but only Admin executes publish and the ESP registry transition; the backend guard holds regardless of UI state. | The prohibition half is proven on both surfaces and for both principals. The permission half — "Supervisor veya Agent valid candidate için approval request oluşturabilir" — is not: no test drives `request_approval` (or the create-package equivalent) with a SUPERVISOR or AGENT actor; the permission unit tests only exercise owner/foreign-user/admin. So the row's affirmative clause is unproven. |
 | `PC-01` | 07 | partial | The initial Pre-Check surface reads Not Checked with request state requested, and rendering the UI persists no Package Revision. | `Not Checked` exists exactly once in the tree (`pages/CreatePackage.tsx:973`) and no frontend test asserts it — grepping the string across `frontend/src/test` returns nothing. c3 is likewise unasserted: `test_fresh_request_projects_an_empty_chain` looks like the right test but it drives the request to a DRAFT first, so it proves an empty revision CHAIN, not "a rendered surface writes no revision". |
 | `PC-02` | 07 | partial | An empty source starts no scan job, the UI shows the final empty-input text, and Send separately rejects the empty request. | In the shipped design an empty source never becomes a request at all — `EMPTY_SOURCE` fires in `normalize_request`, at the route, before the DB — so "no scan job starts" and "Send rejects the empty request" collapse into the same proven guard. The UI half is unproven: `PreCheck.tsx` renders "No Pre-Check scan yet for this request." for the no-scan case and no test asserts that string, nor is th… |
-| `PC-07` | 07 | partial | A resolver matching by name but with wrong arity/runtime/signature is blocked with RESOLVER_SIGNATURE_MISMATCH, never passed. | `RESOLVER_SIGNATURE_MISMATCH` appears in exactly one test in the repo (`contract/test_esp_contract.py:288`) and that test hits the /resolve endpoint, not the Pre-Check scan. `jobs/create_package.py::_RESOLVE_ERRORS` does include `ResolverSignatureMismatch`, and the equivalent path is proven end-to-end for RESOLVER_NOT_ACTIVE (`test_deprecated_resolver_blocks_with_resolver_not_active`), so the m… |
-| `PC-09` | 07 | partial | A registry change under a Passed scan is caught by the candidate command's recheck as PRECHECK_STALE while the old scan stays historical evidence. | `_enforce_precheck_gate` does compare the live registry fingerprint, and the fingerprint's sensitivity to both registry and root-lifecycle change is proven. But the only test that actually reaches `PrecheckStale` gets there by mutating `context_hash`, not by moving the registry under a Passed scan — so the registry arm of the gate is an untested branch. That is a genuinely different failure mod… |
-| `PC-11` | 07 | partial | A duplicate Pre-Check click / same Idempotency-Key creates only one scan/job/audit and the replay returns the same result. | The precheck worker module docstring claims PC-11, but the two planes must not be conflated: `test_worker_is_redelivery_idempotent` proves the WORKER replays, while the row is about the ADMISSION key. `run_precheck` accepts `idempotency_key` and wraps in `run_idempotent`, yet no test passes one — and the suite's other admission test (`test_precheck_audit_events.py::test_second_admission_announc… |
 | `PC-17` | 07 | partial | Closing the modal or refreshing during a check does not cancel the job; refresh rehydrates job/status from the server and creates no duplicate scan. | The durability half is strong. The UI half is not asserted: the closest test, `createPackage.test.tsx > … > opens Pre-Check in an accessible modal dialog and closes on Escape`, checks aria-modal, in-context controls and focus restoration — it makes no claim about requests NOT being sent on close, and nothing in the suite re-mounts the page mid-check to prove rehydration from the server. |
 | `PC-20` | 07 | partial | Only Admin restores or permanently deletes from Trash; a restored request must be stale and a restored ESP needs active registry policy before resolving. | c2 is the strongest part of this row and is proven precisely: restore reactivates the ROOT but deliberately leaves the trust pointer closed, so a restored resolver cannot silently start resolving again. c3 has no test — nothing asserts that a restored package REQUEST comes back with a stale Pre-Check; `test_restore_keeps_identity_marks_entry_and_audits` covers identity/audit for the generic res… |
 | `PC-21` | 07 | partial | With no TA dependency found the state is PRECHECK_PASSED and the surface claims nothing about repaint, future leak, validation or approval. | The state half is proven. The UI copy is not: `PreCheck.tsx` renders "Pre-Check passed. Dependency manifest is ready for candidate generation." and no test asserts that string — `preCheck.test.tsx` asserts the Resolved/Missing row text and the stale line only. c3 is a negative-scope claim (the surface must NOT assert repaint/validation/ approval verdicts); nothing in the suite guards against su… |

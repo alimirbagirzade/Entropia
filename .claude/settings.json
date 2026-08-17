@@ -30,7 +30,34 @@
       "mcp__github__search_code",
       "mcp__github__actions_list",
       "mcp__github__actions_get",
-      "mcp__github__get_me"
+      "mcp__github__get_me",
+
+      "Bash(uv run ruff check .)",
+      "Bash(uv run ruff format --check .)",
+      "Bash(uv run mypy src)",
+      "Bash(uv run pytest -q)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run coverage)",
+      "Bash(node scripts/memory_index.mjs --check)",
+      "Bash(node scripts/memory_index.mjs --emit)",
+
+      "mcp__codebase-memory-mcp__search_graph",
+      "mcp__codebase-memory-mcp__trace_path",
+      "mcp__codebase-memory-mcp__get_code_snippet",
+      "mcp__codebase-memory-mcp__get_architecture",
+      "mcp__codebase-memory-mcp__search_code",
+      "mcp__codebase-memory-mcp__query_graph",
+      "mcp__codebase-memory-mcp__list_projects",
+      "mcp__codebase-memory-mcp__index_status",
+      "mcp__codebase-memory-mcp__check_index_coverage",
+      "mcp__codebase-memory-mcp__get_graph_schema",
+
+      "mcp__Claude_Code_Remote__get_session",
+      "mcp__Claude_Code_Remote__list_sessions",
+      "mcp__Claude_Code_Remote__list_repos",
+      "mcp__Claude_Code_Remote__list_environments",
+      "mcp__Claude_Code_Remote__list_triggers"
     ]
   },
   "hooks": {

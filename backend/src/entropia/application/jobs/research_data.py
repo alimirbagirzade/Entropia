@@ -58,6 +58,39 @@ _NON_CONSUMABLE_STATES = frozenset(
 
 _BUNDLE_COMPILER_VERSION = "research-bundle-v2"
 
+_SEALED_BODY_KEYS: frozenset[str] = frozenset(
+    {
+        "bundle_kind",
+        "members",
+        "compiler_version",
+        "available_time_policies",
+        "instrument_mapping_revision_ids",
+        "feature_definition_revision_ids",
+    }
+)
+"""The always-present HASHED keys of a sealed bundle body (R3).
+
+``_seal_bundle`` adds at most one optional key on top of these — ``task_id`` for the
+Agent bundle, ``run_request_id`` for the evidence bundle — and drops it entirely when
+it is ``None``, so the full key set is per-caller while this core is not.
+``resolved_at`` and ``bundle_hash`` are deliberately ABSENT: both are written AFTER
+the hash is computed.
+
+**The rule this constant exists to make enforceable:** a change to the sealed shape
+MUST move ``_BUNDLE_COMPILER_VERSION`` with it. Two bundles compiled under different
+field sets would otherwise share a ``compiler_version`` while being non-comparable,
+which is the same defect doc 12 §9.2 raised against a bundle that could not attest
+its own timing rule. Nothing enforced this before R3: the tests pinned individual
+keys and the version's literal VALUE, so a seventh key could be added and every test
+would stay green.
+
+``tests/unit/test_research_bundle_seal_rule.py`` closes that by pinning the
+``bundle_hash`` of a fixed input as a golden digest. If it moves, exactly two
+outcomes are legitimate — revert the shape change, or bump the version AND
+re-pin the golden in the same commit. Editing the golden alone is the one thing
+that must not happen quietly.
+"""
+
 
 # --------------------------------------------------------------------------- #
 # Analysis job

@@ -920,12 +920,122 @@ karar veren: ________________  tarih: ____________
 
 ---
 
+## Karar 6 — Paylaşımlı koşuda scaling: admission'da **blokla** mı, P8'i **modelle** mi? (kapı **G12**)
+
+> **Bu kapı bir TERCİH olmaktan çıktı.** ADIM 71 (C1, PR #735) `_phase_tail`'in scaling
+> bölümünü **okudu** — plan onu *"çağrı grafiğinden varsayıldı, 474 satırlık gövde
+> OKUNMADI"* diye işaretlemişti — ve seçenek (b)'nin bedelinin bir uygulama ayrıntısı değil
+> **ADR §8 değişikliği** olduğunu ölçtü. Aşağıdaki (b) satırı bu ölçüme dayanır.
+
+### Canonical ne diyor
+
+- **ADR §8** APPLY bandını `P7 schedule/execute -> P8 same-direction scaling -> P9 commit`
+  olarak sabitler — yani P8 sözleşmede **vardır**.
+- **ADR §8** tick başına **tek** arbitraj turu tanımlar: `P4 form intents` → `P5 conflict /
+  exposure arbitration` → `P6a/P6b sizing + sleeve cap` → APPLY.
+
+### Kod şu an ne yapıyor (file:line, güncel main `001a4c7`'de ölçüldü)
+
+| Ne | Nerede | Durum |
+|---|---|---|
+| `scale_in` reddi | `portfolio_engine.py:495` | `UnsupportedIntentKindError` — **koşma anında**, döngünün içinde |
+| Reddin gerekçesi | aynı yer | `set_position` tutulan boyutu layer boyutuyla **DEĞİŞTİRİR** ve pozisyonu sessizce küçültür |
+| Admission'da scaling kapısı | `application/commands/backtest_run.py` | **YOK** — `scaling` için sıfır eşleşme |
+| Scale ladder | `engine.py:3253`–`:3411` | `_phase_tail` (`:2951`–`:3424`, **474 satır**) içinde |
+
+### ADIM 71'in ölçümü — (b)'nin gerçek bedeli
+
+Scale ladder'ın guard'ı (`engine.py:3253`) şunları **okur**:
+
+```python
+position is not None  and  scaling_active  and  pending is None
+and len(led.trades) == trades_before_bar
+and position.layers_filled < scale_max_layers
+```
+
+Stacking bölümü (`:2998`–`:3252`) bunlardan **ikisini birden yazar**: `position`
+(`:3098` `_do_open`, `:3221` `None`) ve `led.trades` (`:3091`, `:3098`, `:3220`). İkisi
+**tek** bir bar-başı trade bütçesini paylaşır (`trades_before_bar`, `_phase_admit:1981`).
+
+**Sonuç: bir scaling intent'i, o barın stacking sonucu BOOK EDİLMEDEN oluşturulamaz.**
+Kalemin kendi sıralı zaman çizgisinde bu zararsızdır (bugünkü sıra zaten budur). Paylaşımlı
+koşuda ise P4 **tüm** intent'leri arbitrajdan **önce** toplar — dolayısıyla P8'i modellemek
+bar başına **İKİNCİ bir arbitraj turu** ister:
+
+```
+P4  entry/stack intent'leri topla -> arbitraj -> book
+P8  scale intent'leri topla (artık P4 book etti) -> arbitraj -> book
+```
+
+**ADR §8'de bir tane var.** Yani (b) *"daha çok refactor"* değil, **versiyonlanmış motor
+sözleşmesinin değişmesi** ve `PortfolioSnapshot`'ın *"tick başına tek değerleme"*
+varsayımının yeniden açılmasıdır.
+
+### Seçenekler
+
+**A — Admission'da blokla** (P-C2 §C.3.8'in önerisi). Scaling-enabled bir Strategy içeren
+**paylaşımlı** koşu, koşmadan önce reddedilir.
+*Bedel:* doc 14 §9.1 taksonomisinde yeni bir blocker (kod + mesaj + `field_path`), **ve**
+`_phase_tail`'in bölünmesi — adaptör scaling bölümünü **hiç çağırmamalı**, yalnız
+scaling-dışı kısımları (close-deferred fill, stacking, snapshot) çağırmalı. ADIM 71 bunun
+yapılabilir olduğunu ölçtü: dört bölüm bitişik üst-düzey bloklar (`:2959`, `:2998`, `:3253`,
+`:3412`), yani "3253–3411 hariç" yapısal olarak ifade edilebilir.
+*Kazanç:* ADR §8 **değişmez**. Bağımsız koşular etkilenmez — scaling orada çalışmaya devam eder.
+
+**B — P8'i modelle.** `scale_in` intent kind'ı, `ledger.add_to_position` (replace değil **add**),
+eklenen notional için arbitraj — **ve ölçülmüş olarak** bar başına ikinci arbitraj turu.
+*Bedel:* **ADR §8 amendment'ı** (G9'dan ayrı ve ondan daha büyük); `PortfolioSnapshot`
+kimliği ve A5'in *"tick başına tek değerleme"* iddiası yeniden açılır.
+*Kazanç:* Paylaşımlı koşularda scaling tam işlevsel olur.
+
+**C — Hiçbir şey ekleme; koşma-anı reddi tek koruma kalsın.**
+*Ölçülmüş bedel:* `UnsupportedIntentKindError` **döngünün içinde**, koşu başladıktan sonra
+patlar — kullanıcı reddedilmiş bir koşu değil, **çökmüş** bir koşu görür. Bir Ready Check
+blocker'ı değildir, sayfada görünmez. Fail-late'tir, fail-closed değil.
+
+**D — Paylaşımlı koşularda scaling'i kapsam dışı ilan et ve `C6`'yı bu haliyle kapat.**
+*(A) ile farkı:* (A) bir blocker **inşa eder**; (D) kararı yazıya döker ama kodu ertelemez —
+pratikte (A)'nın gerekçesidir, tek başına yeterli değildir.
+
+### Alt-karar (ZORUNLU, yalnız A seçilirse) — ret nerede görünür?
+
+`[ ] Ready Check blocker` (koşudan önce, Portfolio/Ready Check sayfasında görünür) ·
+`[ ] admission reddi` (`request_backtest_run` anında, `ALLOCATION_*` ailesiyle aynı desen) ·
+`[ ] ikisi de`
+
+doc 14 §9.1 her yeni blocker için **kod + mesaj + `field_path`** ister; sevk edilen emsal
+`ALLOCATION_SHARED_MODE_NOT_IN_BUILD` (`backtest_run.py`) ve `SHARED_MODE_NOT_IN_BUILD`
+(`domain/allocation/rules.py`) çiftidir — biri sert kapı, diğeri teşhis.
+
+### Önerilen seçenek + gerekçe (BU BİR ÖNERİDİR, KARAR DEĞİL)
+
+**A** — ADR §8'i açmadan fail-closed bir sınır çizer ve bağımsız koşulara dokunmaz. **B**
+paylaşımlı scaling'i gerçekten istiyorsanız doğru, ama bedeli sözleşmedir ve `C9`'dan (lift)
+önce bitmesi gerekir. **C** fail-late olduğu için bir koruma sayılmaz. **D** tek başına
+`C6`'yı kapatmaz.
+
+### İMZA SATIRI
+
+**Karar 6 — paylaşımlı koşuda scaling (G12):**
+
+`[ ] A (admission'da blokla)`  `[ ] B (P8'i modelle — ADR §8 amendment'ı dahil)`
+`[ ] C (yalnız koşma-anı reddi)`  `[ ] D (kapsam dışı ilan et)`
+
+Alt-karar (A seçildiyse) — ret nerede görünür?
+`[ ] Ready Check blocker`  `[ ] admission reddi`  `[ ] ikisi de`
+
+karar veren: ________________  tarih: ____________
+
+---
+
 ## Bu belgenin kapsamadıkları (dürüst sınır)
 
 - **Hiçbir kod değiştirilmedi.** Bu oturumda `backend/src`, `frontend/src`, migration ve test
   ağacına dokunulmadı.
 - **Hiçbir issue kapatılmadı, açılmadı, etiketlenmedi.** #552 / #558 / #559 olduğu gibi
   bırakıldı.
+- **Karar 6 (G12) da yalnız İMZA BLOĞUDUR** — hiçbir blocker yazılmadı, `_phase_tail`
+  bölünmedi, `portfolio_engine.py:495`'teki koşma-anı reddine dokunulmadı.
 - **Karar 4 ve Karar 5 (2026-08-17) yalnız İMZA BLOĞUDUR.** Hiçbiri karara bağlanmadı,
   hiçbir seçenek işaretlenmedi, ADR-0002'ye **dokunulmadı** — §6 ve §8 olduğu gibi durur.
   Bir ajan bu iki kapıyı kapatamaz (ADR §16); bu bloklar yalnız imzalanacak yeri yaratır.

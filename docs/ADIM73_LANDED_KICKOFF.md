@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 > **CANLI KICKOFF.** Bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
 > `historical`a demote edilir ve yerine yenisi geçer (`check_classification` CI'da doğrular).
 

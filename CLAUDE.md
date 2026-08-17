@@ -237,7 +237,29 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 73 (kabul borcu batch 06, doc 07 backend): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 74 (R2 + R3, PR #742 + #745): ÜRÜN DAVRANIŞI DEĞİŞMEDİ —
+> `bundle_hash` kıpırdamadı, `_BUNDLE_COMPILER_VERSION` `research-bundle-v2`'de kaldı.
+> Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `R2` research timing sözlüğünün
+> **üçüncü elle kopyasını** sildi (`_pin_member` → `TimingProvenance.as_bundle_member()`;
+> `_enum` **kaldırıldı**) — iki projeksiyon **kasıtlı olarak farklı ad** taşır, sabit kalması
+> gereken **değerdir**. `R3` sealed body'nin şeklini `compiler_version`'a **golden digest**
+> ile kilitledi; `resolved_at` yarısı **zaten #730'da inmişti** ve planın durdurma koşulu
+> **tetiklenmedi**. **R3'ün golden'ları R2'nin ALTINDAN geçti** (R2 öncesi pinlendi, R2'li
+> tabanda değişmeden tuttu) → aynı şeklin iki bağımsız türetimi. **`R4` için iş YOKTU** —
+> iki teslimatı da #730'da inmişti → **PACKAGE R BİTTİ**. **CodeQL alert 256 HAKLIYDI**,
+> savunma gerekçem yanlıştı (`_SEALED_BODY_KEYS` private + ölü; `MANIFEST_REVISION_KEYS`
+> public + `__all__`) → sabit kaldırıldı, kural yoruma indi. **DERS: `strict: true` bir
+> MERDİVENDİR** — R3'ün dalında **onbir CI koşusu** yapıldı (6 yeşil, 5 supersede), head on
+> kez oynadı, PR **~14 saat** açık kaldı ve ürün kodu hiç değişmedi; tam suite üç kez yeşil
+> indi, ilk ikisi **gene de** merge edilemedi. Kapı green değil **güncelliktir**. **İKİNCİ DERS:
+> "CodeQL kırmızı" tek başına hiçbir şey demez** — LOG'a bak: bulgu mu üretti (gerçek), yoksa
+> init'te mi öldü ("No server is currently available" = kesinti, çare rerun). Bu dalgada
+> **ikisi de** yaşandı, aynı PR'da. **ÜÇÜNCÜ DERS: yeşil exit code kanıt değildir** —
+> entegrasyon suite'i Postgres'siz `exit 0` + **39 skipped** verdi. **NUMARA: bu kayıt ÜÇ kez
+> taşındı** (72 → 73 → **74**; #746 72'yi, #749 kendi 72 iddiasını 73'e renumber edip aldı).
+> `PROJECT_HISTORY.md` §ADIM 74 · `docs/ADIM74_LANDED_KICKOFF.md`.
+>
+> Öncesinde **ADIM 73 (kabul borcu batch 06, doc 07 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Doc 07'nin **son açık clause'u backend olan** üç kriteri kapandı: `PC-07.c3` (tipli
 > `RESOLVER_SIGNATURE_MISMATCH` artık **scan düzleminde** gözleniyor), `PC-09.c2`

@@ -10949,3 +10949,189 @@ Açık kabul borcu **111 → 108** (A=1 · B=69 · C=6 · D=32). Clause düzeyin
 - **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
 - **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ**; `C2`'nin **G9/G13** kapıları imzasız.
 - Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.
+
+## ADIM 74 — R2 + R3: bundle yüzeyi tek okumaya bağlandı, sealed şekil sürüme kilitlendi (PR #742 + #745)
+
+> **NUMARA NOTU — bu kayıt ÜÇ kez numara değiştirdi ve üçü de ölçülerek.** İnsan "ADIM 72"
+> dedi; yazarken `origin/docs/stage-72-landed` **72**'yi C5 (#740) + E5 (#738) için çoktan
+> yazmıştı → **73**'e taşındı. Sonra #746 gerçekten indi (72) **ve** #749 kendi 72 iddiasını
+> **73**'e renumber edip indi (`b761128`) → bu kayıt **ADIM 74**'tür. Kural değişmedi:
+> **merge edilmiş ad kazanır, numaralar yeniden atanmaz.** Dal adları
+> `claude/entropia-shared-agreement-m6fbo6` (R2) ve `feat/closure-r3-seal-rule-standalone`
+> (R3) ADIM numarası **taşımaz**; kapanış dalı `docs/stage-74-landed`.
+
+**İKİ SLICE, TEK KAPANIŞ.** R2 ve R3 aynı dosyaya (`jobs/research_data.py`) dokunduğu ve
+plan onları ardışık sıraladığı için birlikte kaydedilir. **Ürün davranışı DEĞİŞMEDİ** —
+`bundle_hash` kıpırdamadı, `_BUNDLE_COMPILER_VERSION` `research-bundle-v2`'de kaldı,
+`ENGINE_VERSION`/`execution_key`/golden digest'ler elleniLMEDİ, migration yok, OpenAPI
+değişmedi. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### R2 — üçüncü elle kopya kaldırıldı (PR #742)
+
+ADIM'lar 66/71'in ardından `_pin_member` hâlâ research revizyonunun timing kolonlarını
+**elle** türetiyordu — üstelik kendi docstring'i *"mirrors the Run manifest's `revision`
+sub-dict field for field"* diye **iddia ediyor**, hiçbir şey bu iddiayı kontrol etmiyordu.
+R1 (#734) manifest ile Ready Check'i tek `TimingProvenance` okumasına bağlamış, bundle
+compiler'larını plana uyarak **bilerek** dışarıda bırakmıştı; R2 o borcu kapatır.
+
+- `domain/research_data/timing_provenance.py::as_bundle_member()` (YENİ) + `BUNDLE_MEMBER_KEYS`.
+  Üyenin **13 anahtarının 11'i** value object'ten gelir; ikisi (`market_content_hash`,
+  `feature_definition_ids`) **parametre kalır**, çünkü session ister ve domain katmanı I/O yapmaz.
+- `_enum` **SİLİNDİ** — aynı iki satırlık coercion'ın **üçüncü** kopyasıydı
+  (`run_context._enum` ve R1'de kaldırılan `readiness_check._enum_value`'dan sonra); beş
+  çağrısının beşi de `_pin_member` içindeydi.
+- **İki projeksiyon KASITLI olarak farklı ad kullanır.** Bundle `research_revision_id` /
+  `research_content_hash` / `market_dataset_revision_id` der, çünkü üyeleri *market*
+  üyelerinin yanında durur ve hangi tarafa ait olduğunu söylemek zorundadır; manifest'in
+  alt-sözlüğü zaten bir research feed'inin altında yuvalıdır. **Birini diğerine uydurmak
+  temizlik değil wire değişikliğidir** ve her `bundle_hash`'i yeniden hash'lerdi. Sabit
+  kalması gereken **değerdir**;
+  `test_the_two_projections_disagree_on_names_but_never_on_values` bunu alan alan karşılaştırır.
+- Bundle `revision_state` / `category_key` / `field_definition_version` / `validation_status` /
+  `entity_id` **taşımaz**. Value object her yüzeyin **birleşimini** tuttuğu için ayakta duran
+  cazibe "taşıdığı her şeyi yansıtmak"tır; bu, refactor kılığında bir `bundle_hash`
+  değişikliği olurdu.
+
+**R1'den TERS kural, ve slice'ın kritik noktası:** R1'de hedef `execution_key`'e
+**dokunmamaktı**; burada `bundle_hash` **zaten bilerek bir kez oynatılmıştı** (Karar 2, #730,
+v1 → v2). Bu slice onu **tekrar oynatmamalıydı** — hash uzayını yeniden bölen bir refactor,
+refactor değildir.
+
+### R3 — "şekil değişirse sürüm bump'lanır" kuralı zorlanabilir oldu (PR #745)
+
+Planın R3'e verdiği **iki teslimattan biri zaten inmişti** ve ölçülerek öyle bırakıldı:
+`resolved_at` hash'in **dışındadır** (`_seal_bundle` önce hash'ler, sonra yazar) ve #730'un
+testi `manifest_hash(gövde − {resolved_at, bundle_hash}) == yayımlanan hash` diyerek hem bunu
+hem de **başka hiçbir şeyin dışlanmadığını** pinler. Planın durdurma koşulu (*"pinleme
+`resolved_at`'ın hash'in İÇİNDE olduğunu ortaya çıkarırsa DUR, bu bir kusurdur"*) **kontrol
+edildi ve tetiklenmedi**.
+
+Eksik olan diğer yarıydı: testler tek tek anahtar varlığını (`"instrument_mapping_revision_ids"
+in forward`) ve sürümün **literal değerini** pinliyordu. Hiçbiri sealed body'ye **yedinci** bir
+anahtar eklenmesini fark etmez — bu boşluk, farklı alan kümeleriyle derlenmiş iki bundle'ın
+**karşılaştırılamaz olduğu hâlde** aynı `compiler_version`'ı paylaşmasına izin verir; doc 12
+§9.2'nin kendi timing kuralını beyan edemeyen bundle'a yönelttiği itirazın aynısı.
+
+Çözüm motorun kendi idiomu: **golden digest** (`engine_golden_digests.json` gibi).
+`_seal_bundle` senkron ve session'sız olduğu için digest **girdisinin yanına literal** olarak
+pinlendi. İki compiler ayrı ayrı pinlidir (`bundle_kind` ve taşıdıkları opsiyonel anahtar
+farklı). Opsiyonel ek iki yönde de kapsanır: `task_id=None` **hiç anahtar bırakmamalı**
+(eksik anahtar ile null anahtar farklı hash'lenir), verildiğinde kimliği **değiştirmeli**.
+
+**Kural:** bir golden oynarsa meşru iki sonuç vardır — ya şekli geri al, ya sürümü bump'la
+**ve** golden'ı **aynı commit'te** yeniden pinle. Golden'ı tek başına düzenlemek, sessizce
+olmaması gereken tek harekettir.
+
+**R3'ün golden'ları R2'nin ALTINDAN geçti ve bu slice'ın en bilgilendirici ölçümü budur.**
+Golden'lar R2 inmeden **önce**, literal üyelerden bağımsız olarak pinlenmişti; R3 `f5b08c2`
+üzerine rebase edildikten sonra **değişmeden tuttular** (41 unit + 39 research entegrasyon,
+canlı Postgres, iki gerçek compiler üzerinden `_pin_member` uçtan uca). Yani aynı sealed
+şeklin **iki bağımsız türetimi** birbirini doğruladı. R2 şekli tek anahtar oynatsaydı kırmızı
+tam olarak burada çıkardı — ve o durumda meşru cevap yukarıdaki kuraldı, golden'ı düzenlemek
+değil.
+
+### CodeQL haklıydı, gerekçem yanlıştı (alert 256)
+
+R3 ilk hâlinde `_SEALED_BODY_KEYS` adında bir üretim sabiti ekliyordu ve PR metni onu
+*"`MANIFEST_REVISION_KEYS` ile tam olarak aynı: declarative, test tarafından karşılaştırılan"*
+diye savunuyordu. CodeQL onu **kullanılmayan global** olarak işaretledi. Ölçüldü: ad
+`backend/src` içinde **tam olarak bir kez** geçiyordu — kendi tanımı, sıfır üretim okuyucusu.
+**Emsal de yanlıştı:** `MANIFEST_REVISION_KEYS` public ve `__all__`'da listeli, yani dışa
+açılan bir yüzey; bu ise private ve ölü.
+
+Sabit **kaldırıldı**, anahtar kümesi onu zaten tüketen testin içine (`_CORE_HASHED_KEYS`)
+taşındı. **Kapı hiç ona dayanmıyordu** — şekil değişikliğini yakalayan golden'dır ve
+dokunulmadı; iki mutation proof da kaldırma sonrası hâlâ kırmızı verdi. Sabitin gerçekten
+kazandırdığı tek şey — kuralı editörün tanım yerinde görmesi — `_BUNDLE_COMPILER_VERSION`
+üstündeki yoruma taşındı, ki sürümü değiştiren kişinin baktığı yer zaten orasıdır.
+
+**Ders:** bir statik analiz bulgusunu savunmadan önce ölç. Bu depoda kural *"her CRITICAL/HIGH
+bulguyu ampirik doğrula"* — doğrulama bazen **bulguyu değil kendi gerekçeni** çürütür.
+
+### Kanıt
+
+Her iki slice de aynı deseni izler: **teslimat nesne değil kanıttır.**
+
+| | R2 | R3 |
+|---|---|---|
+| Tanık | `_MAIN_INLINE_MEMBER` — ekstraksiyon öncesi literal'in **birebir transkripsiyonu** | golden digest, girdisinin yanında |
+| Transkripsiyon doğrulaması | `origin/main` kaynağına karşı **programatik**: 13 anahtar, aynı küme, **aynı sıra** | — |
+| Mutation proof | anahtar düşür **14** · manifest-only alan ekle **13** · `None → ""` **18** | anahtar ekle **3** · sürüm bump **2** · `resolved_at` içeri **5** |
+| Üretim kanıtı | **39 research entegrasyon testi değişmeden geçti** (#730'un kendi `bundle_hash` assertion'ları dahil) | seal-rule **10 passed**, hem R2'siz hem R2'li tabanda |
+
+Elle transkripsiyon **bilerek**: yeni kodu yeni kodla test etmek yalnız fonksiyonun kendine
+eşit olduğunu kanıtlar.
+
+### Süreç — bu dalgada ödenen bedeller
+
+- **`strict: true` bir MERDİVENDİR ve bu dalganın ÖLÇÜLMÜŞ bedeli şudur: R3'ün dalında
+  ONBİR CI koşusu yapıldı — 6 yeşil, 5 supersede edilip iptal — ve ürün kodu bu on bir
+  koşunun hiçbirinde değişmedi.** Head on kez oynadı (`bda6f8a` → `26a4a06` → `3a32740` →
+  `6a9cd28` → `76f4ba0` → `175afca` → `7115977` → `6ba37c1` → `0992d1d` → `1812301` →
+  `bbccefb`), taban altı kez (`dfcc31a` → `e865b96` #741/P3 → `f5b08c2` #742/R2 →
+  `a39d48e` #746 → `b761128` #749 → `001a4c7` #750 → …). PR 14:57Z'de açıldı, **04:59Z'de**
+  merge edildi: **~14 saat**, tek bir satır kod değişmeden. Tam suite **üç kez yeşil indi ve
+  ilk ikisi gene de merge edilemedi** (`4173 passed`, sonra `4190 passed / %93.77`), çünkü
+  green'in kendisi değil **güncelliği** kapıdır. Her rebase'in içerik-nötrlüğü `diff <(git diff <eski taban> <eski head>)
+  <(git diff <yeni taban> <yeni head>)` ile **kanıtlandı**; artefakt çakışmaları **yeniden
+  üretilerek** çözüldü (`3596/342 → 3607/343 → 3617/344 → 3620/344`), sayı **elle
+  yazılmadı** — delta her seferinde tam olarak **+10 test / +1 dosya**, yani yeni seal-rule
+  suite'i. **Ders: paralel oturumlar main'e inerken tek bir PR'ı yeşile "yetiştirmek"
+  yarıştır; kazanan taraf her zaman en son merge edendir.**
+- **Paylaşılan dal head'i altımdan defalarca değişti** (R2'de üç kez, R3'te bir kez — sonuncusu
+  başka bir oturumun `b761128` üzerine yaptığı rebase). Her seferinde **ölçüldü**: aynı iş mi,
+  backend diff'i bayt-aynı mı, artefakt yeniden mi üretilmiş. Hepsi meşru çıktı ve hiçbiri
+  geri alınmadı. **Kural: push öncesi `git ls-remote --heads origin <dal>`, ve force-push
+  daima beklenen eski SHA'ya `--force-with-lease` ile pinli.**
+- **CodeQL iki kez ÇÖKTÜ ve ikisi de bulgu değildi.** Log kesin: *"Encountered an error while
+  trying to determine feature enablement: HttpError: No server is currently available"* +
+  *"Debugging artifacts are unavailable since the 'init' Action failed before it could produce
+  any"* — yani analiz **hiç koşmadı**. İkinci olayda **iki dil birden** aynı anda düştü, bu da
+  servis kaynaklı olduğunu doğrular. Çare **yeniden koşturmaktı** ve ikisi de kod
+  değişmeden yeşile döndü. **Ayrım kritiktir:** aynı PR'da alert 256 **gerçek** bir bulguydu
+  ve kod silinerek düzeltildi; bu ikisi altyapıydı ve rerun'la geçildi. Farkı **log söyler**
+  (bulgu mu üretti, yoksa init'te mi öldü) — "CodeQL kırmızı" tek başına hiçbir şey demez.
+- **`guard-git.sh` bir kez YANLIŞ POZİTİF verdi.** main'i merge ederken ledger'dan
+  `## Class B (75)` kaybolduğu için commit bloklandı. Ölçüldü: birleşmiş ledger main'inkiyle
+  **byte-aynıydı**, benim commit'im o dosyaya hiç dokunmamıştı, düşüş #733'ün **meşru ratchet
+  inişiydi** (RD-11 kapandı, B 75→74). Guard bayat dal kopyasına karşı diff alıyordu. Onay
+  isteyerek aşmak yerine CLAUDE.md'nin zaten karara bağladığı yol izlendi: **merge değil rebase**.
+- **Stacked PR'ın HİÇ CI'ı yoktu ve bu yapısaldı** — workflow'lar yalnız `main`'i hedefleyen
+  PR'larda tetikleniyor. #743 (base = R2'nin dalı) taslaktan çıkarıldığında bile
+  `mergeable_state` `blocked` kaldı. R3 main'e rebase edilip **#745** olarak yeniden açıldı;
+  #743 kapatıldı. **Ders: base'i `main` olmayan bir PR yeşile dönemez.**
+- **İki sahte kırmızı ve bir sahte YEŞİL, üçü de teşhis edildi.** Kırmızılar:
+  `test_research_data_persistence.py`'de iki upload testi, sebebi bir önceki tam suite'in
+  **aynı veritabanına paralel koşuyor** olmasıydı (CLAUDE.md: *"suite koşarken `uv run`
+  çalıştırma"*). Yeşil daha tehlikeliydi: aynı entegrasyon suite'i `exit 0` verdi ama çıktısı
+  `sssss…` idi — **39 skipped**, çünkü container'da Postgres düşmüştü ve suite ulaşılamayan
+  DB'de fail değil **skip** eder. `pg_ctlcluster 16 main start` sonrası gerçek **39 passed**
+  alındı. **Exit code tek başına kanıt değildir; nokta mı `s` mi, ona bak.**
+
+### Dürüst sınırlar
+
+- **R4 için yazılacak iş YOKTU** ve uydurulmadı. Planın iki teslimatı da #730'da inmişti:
+  strict xfail **0** (kaldırıldı, gevşetilmedi — üretilmiş olguyla doğrulandı) ve
+  `test_all_three_artifacts_carry_the_same_timing_dict` mevcut. O test zayıf bir sürüm de
+  değil: üç artefaktın **tüm timing sözlüğünü** karşılaştırıyor ve non-default zone/delay ile
+  **değerleri de** pinliyor, yani "hepsi `None`" vacuity tuzağına düşmüyor. **PACKAGE R bitti.**
+- **`_derived()` dokunulmadı.** Üye anahtarlarını **ada göre** okur, yani bu şekle tiple değil
+  string'le bağlıdır. Tipli ilişkiye çevirmek ayrı bir değişikliktir ve içeri kaçırılmadı.
+- **`BUNDLE_MEMBER_KEYS` / `_CORE_HASHED_KEYS` çalışma-zamanı koruması DEĞİL**, test
+  tarafından karşılaştırılan sabitlerdir; başka bir yerde elle rakip sözlük kuran bir çağıran
+  yakalanmaz. R3'ün üretim tarafındaki kuralı da bir **yorumdur**, runtime guard değil —
+  zorlayan şey testtir.
+- R3'ün golden'ları **sentetik** üye listesine karşı pinlidir (deterministik ve session'sız
+  olsun diye). Yani **sealing şeklini** doğrularlar, `_pin_member`'ın o şekli ürettiğini değil;
+  o yarıyı R2'nin byte-identity kanıtı kapatır ve R2 indiği için iki yarı da artık korunuyor.
+- **F2 (G4 imzasız) ve F3 (G1+G2+G3 imzasız) BLOKLU. P-E1 TAMAMLANMADI.** Komisyon modeli
+  uydurulmadı.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.**
+- Kabul borcu tavanları **bu iki slice yüzünden oynamadı** — ikisi de refactor/gate slice'ı,
+  kriter kapatmadı. Dalga sırasında görülen `105/B74 → 103/B72 → 100/B69` inişleri **#733 ve
+  #749'a aittir**, buraya değil.
+- Codemap: R2 için `BACKEND_LAYERS.md` `research_data` satırı genişletildi; R3 yeni
+  endpoint / tablo / sayfa / job eklemedi.
+- **Plan §5.2 tavanı bu dalgada AŞILDI** — bir noktada altı PR açıktı (#742 #745 #746 #747
+  #748 #749), tavan üç. Kayda geçirilir; yeni kod slice'ı açılmadı.

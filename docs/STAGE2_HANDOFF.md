@@ -6743,6 +6743,55 @@ açık bulgu var.
 
 
 
+## Stage 74 — R2 + R3: bundle yüzeyi tek okumaya bağlandı, sealed şekil sürüme kilitlendi (PR #742 + #745) landed
+
+**Ürün davranışı DEĞİŞMEDİ.** `bundle_hash` kıpırdamadı · `_BUNDLE_COMPILER_VERSION`
+`research-bundle-v2`'de kaldı · `ENGINE_VERSION` / `execution_key` / golden digest'ler
+ellenmedi · migration yok · OpenAPI değişmedi. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+A-08), verdict BLOCKED.**
+
+- **R2 (#742)** — `TimingProvenance.as_bundle_member()` + `BUNDLE_MEMBER_KEYS`;
+  `jobs/research_data.py::_pin_member` tek projeksiyon çağrısına indi; `_enum` **silindi**
+  (aynı iki satırlık coercion'ın **üçüncü** kopyası — `run_context._enum` ve R1'de kaldırılan
+  `readiness_check._enum_value`'dan sonra). Üyenin 13 anahtarından 11'i value object'ten;
+  ikisi (`market_content_hash`, `feature_definition_ids`) session gerektirdiği için parametre.
+  İki projeksiyon **kasıtlı olarak farklı ad** kullanır (bundle `research_revision_id`,
+  manifest `revision_id`) — birini diğerine uydurmak temizlik değil **wire değişikliğidir**;
+  sabit kalması gereken **değerdir**.
+- **R3 (#745)** — sealed body'nin şekli `compiler_version`'a **golden digest** ile kilitlendi
+  (iki compiler ayrı pinli; opsiyonel `task_id`/`run_request_id` iki yönde de kapsandı).
+  `resolved_at` yarısı **zaten #730'da inmişti**; planın durdurma koşulu kontrol edildi ve
+  **tetiklenmedi**. **Golden'lar R2'nin altından geçti:** R2 inmeden önce pinlenmişlerdi,
+  R2'li tabana rebase sonrası **değişmeden tuttular** (41 unit + 39 entegrasyon) — aynı sealed
+  şeklin iki bağımsız türetimi birbirini doğruladı.
+- **CodeQL alert 256 haklı çıktı:** `_SEALED_BODY_KEYS` ölü üretim koduydu (`backend/src`'te
+  tek geçiş = kendi tanımı) ve savunma gerekçesi yanlıştı (`MANIFEST_REVISION_KEYS` public +
+  `__all__`, bu private). **Kaldırıldı** — kapı zaten golden'a dayanıyordu, iki mutation proof
+  kaldırma sonrası da kırmızı verdi.
+- **R4 için iş YOKTU** — iki teslimatı da #730'da inmişti (strict xfail **0**,
+  `test_all_three_artifacts_carry_the_same_timing_dict` mevcut ve **güçlü**: üç artefaktın tüm
+  timing sözlüğünü karşılaştırıyor, non-default zone/delay ile değerleri de pinliyor). Ölçüldü,
+  uydurulmadı. **PACKAGE R BİTTİ.**
+- Test sayıları/coverage: **otorite CI**. Kabul borcu tavanları **bu iki slice yüzünden
+  oynamadı** (kriter kapatılmadı); dalgadaki `105/B74 → 103/B72 → 100/B69` inişleri **#733 ve
+  #749'a** aittir. Codemap: `BACKEND_LAYERS.md` `research_data` satırı genişletildi.
+- **Süreç bedelleri (ÖLÇÜLDÜ):** R3'ün dalında **ONBİR CI koşusu** yapıldı (6 yeşil, 5
+  supersede edilip iptal), head **on kez** oynadı, taban altı kez; PR 14:57Z→04:59Z, **~14
+  saat**, ürün kodu hiç değişmeden. Tam suite üç kez yeşil indi, ilk ikisi **gene de merge
+  edilemedi**, çünkü `strict: true` altında kapı green değil **güncelliktir** ·
+  paylaşılan dal head'i defalarca altımdan değişti (push öncesi
+  `git ls-remote --heads origin <dal>`, force-push daima `--force-with-lease` ile eski SHA'ya
+  pinli) · `guard-git.sh` ledger ratchet düşüşünde **yanlış pozitif** verdi (birleşmiş dosya
+  main'inkiyle byte-aynıydı; çare **merge değil rebase**) · **base'i `main` olmayan PR CI
+  KOŞMAZ** (#743 `total_count: 0` ile bloklu kaldı, kapatıldı; R3 main'e rebase edilip **#745**
+  olarak yeniden açıldı) · **CodeQL iki kez altyapıdan çöktü** (init'te "No server is currently
+  available"; analiz hiç koşmadı, çare rerun — alert 256'nın **gerçek** bulgusuyla karıştırma,
+  farkı log söyler) · aynı DB'ye paralel koşan iki pytest **iki sahte kırmızı** üretti, ve
+  Postgres düşükken entegrasyon suite'i **sahte bir YEŞİL** verdi (`exit 0` ama 39 **skipped**).
+- **Plan §5.2 tavanı aşıldı** — bir noktada altı PR açıktı (#742 #745 #746 #747 #748 #749),
+  tavan üç. Kayda geçirildi; yeni kod slice'ı açılmadı.
+- Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 74 · kalkış: `docs/ADIM74_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:
@@ -6757,6 +6806,15 @@ açık bulgu var.
 > **Ajanın kapatabileceği mühendislik ön koşulu KALMADI — sıradaki hamle bir İMZADIR.**
 > Planın kalan koşulabilir kalemleri artık `C5` dışındakiler: bkz. §6 tablosu
 > (`R2`/`R3`/`P1`/`P2` hatları ve açık PR'lar #741 #742 #743).
+
+> **ADIM 74 GÜNCELLEMESİ (2026-08-17).** `R2` (#742) ve `R3` (#745) **indi**; `R4` ölçüldü ve
+> **zaten #730'da inmişti** → **PACKAGE R BİTTİ**, bu satırın işaret ettiği açık PR listesi
+> (#741 #742 #743) tükendi: #741 ve #742 merge edildi, #743 kapatıldı (yerine #745).
+> **Sıradaki hamle hâlâ bir İMZADIR** — `F2` → G4 imzasız · `F3` → G1+G2+G3 imzasız ·
+> `C2`/`C3`/`C4` → G9 + G13 imzasız, ardından importer-allowlist **insan incelemesi** ·
+> `A-08` → ajan kapatamaz. İmzasız bir kapının arkasındaki slice'a **BAŞLAMA**, ürün kararı
+> **UYDURMA**. Ve bir slice'a girmeden ÖNCE ağaca karşı **ölç**: bu dalgada planın *"açık"*
+> dediği iki kalem (R3'ün yarısı, R4'ün tamamı) ağaçta **KAPALI** çıktı.
 
 > **ADIM 71 (C1) §4.1'in (b) engelini DARALTTI ama KAPATMADI.** *"Üç faz book eder,
 > `ItemParticipant` tarif ister"* artık **yanlış**: describe yarıları

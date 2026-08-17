@@ -225,7 +225,25 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 67 (RD-11.c3: successor onayı koşan/bitmiş run'ın
+> `future_dev`. **Son dalga — ADIM 68 (kabul borcu batch 05, doc 12): İKİ KRİTER KAPANDI
+> (`RD-09`, `RD-15`), `partial` 105 → 103, `debt_class.B` 74 → 72 (ratchet AŞAĞI). ÜRÜN KODU
+> DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** **`RD-09.c4` YENİ TEST
+> YAZILMADAN kapandı:** ADIM 54 onu *"yalnız funding-enabled bir run ile kapanır"* diye
+> bırakmıştı, o harness **ADIM 67'de indi**, ve oradaki `RD-11.c3` testi clause'u **birebir**
+> assert ediyordu (*"an existing run OR RESULT stays bound to v1.0"* — iki yarısı da kanıtlı)
+> → mevcut düğüm **cite edildi**. **Ders: yeni partiye başlamadan önce son iki slice'ın REUSE
+> anchor'larını oku, bir clause bedavaya kapanabilir.** `RD-15.c4` yeni frontend testiyle
+> kapandı (`display_name: null` satır hâlâ `entity_id` ile tanınır; negatif kontrol =
+> fallback'i kaldır). **İKİ BULGU ÖLÇÜLDÜ, KAYDEDİLDİ, ÜZERİNE GİDİLMEDİ:** `RD-13.c4`
+> (reload/compare/new-revision kurtarma yolu research frontend'inde **yok**) ve `RD-12.c4`
+> (sayfa job durumunu **hiç yeniden okumuyor**) → ikisi de **sınıf D görünüyor**, ikisi de
+> **yeniden sınıflandırılMADI** (B → D **D tavanını yükseltir** = adjudication). Defterde
+> artık **yedi** böyle bulgu var. **Tuzaklar:** stub şeklini varsayma (`{data, meta}`);
+> frontend düğüm id'si **`::` değil ` > `**; clause toplamlarını `--report`'tan **oku**,
+> tahmin etme. `PROJECT_HISTORY.md` §ADIM 68 · `docs/ADIM68_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **ADIM 67 (RD-11.c3: successor onayı koşan/bitmiş run'ın
 > manifest'ini yeniden yazmaz, doc 12 §14): ÜRÜN KODU DEĞİŞMEDİ. `partial` 106 → 105,
 > `debt_class.B` 75 → 74 (ratchet AŞAĞI). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > BLOCKED.** Clause dört partidir açıktı çünkü **harness yoktu** (*enabled funding policy

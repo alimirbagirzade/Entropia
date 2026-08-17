@@ -10188,3 +10188,63 @@ Clause defteri: covered **1004 → 1005**, uncovered **123 → 122**.
 - **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.**
 - **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
 - Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.
+
+## ADIM 68 — kabul borcu batch 05 (doc 12): İKİ kriter kapandı, İKİ sınıf-D bulgusu kaydedildi
+
+> **NUMARA NOTU.** Yazıldığında main'in son kaydı **ADIM 67**'ydi (base `58db533`).
+> Dal `test/closure-acceptance-batch-05`; **merge edilmiş ad kazanır**.
+
+**Base SHA `58db533`** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI
+**değişmedi** · **ÜRÜN KODU DEĞİŞMEDİ**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+verdict BLOCKED.** Tavanlar: `partial` **105 → 103**, `debt_class.B` **74 → 72**.
+
+### 1. Parti ÖLÇÜLEREK seçildi, defterin sınıflandırmasına güvenilmedi
+
+Sınıf B'de 74 kriter, 19 belgeye dağılmış. Doc 12 seçildi (6 kriter). Ölçüm sonucu: bu
+altının **dördü** zaten tek açık clause'a inmişti ve **yüzeye göre ayrışıyordu** — biri
+backend, üçü frontend.
+
+### 2. `RD-09.c4` — YENİ TEST YAZILMADAN kapandı
+
+ADIM 54 bu clause'u açık bırakırken gerekçesini yazmıştı: *"closable, but only through a
+funding-enabled run … wiring the whole path outgrew this batch"*. **O harness ADIM 67'de
+indi**, ve orada `RD-11.c3` için yazılan test bu clause'u **birebir** assert ediyor:
+v1.1 onaylandıktan sonra run manifest'i, **Result snapshot'ı** ve okuma yüzeyi hâlâ v1.0'ı
+adlandırıyor. Clause'un sözü *"an existing run **or result** stays bound to v1.0"* — iki
+yarısı da kanıtlı. **Mevcut düğüm CITE EDİLDİ, yeni test yazılmadı.**
+
+Bu, bir slice'ın bir sonrakine bıraktığı harness'ın **ölçülebilir** getirisidir: sıfır yeni
+test, bir kriter kapandı.
+
+### 3. `RD-15.c4` — yeni frontend testi, negatif kontrollü
+
+*"No raw display-name dependency remains on this page."* Sevk edilen desen
+`display_name ?? entity_id` (`ResearchData.tsx:609`): ad **değişken bir etikettir**, kimlik
+ona bağlanamaz. Test, `display_name: null` olan bir satırın registry'de **hâlâ
+`entity_id` ile tanınabildiğini** render üzerinden assert eder (kaynağı okuyarak değil).
+**Negatif kontrol:** fallback kaldırılıp `{row.display_name}` bırakıldı → test kırmızı
+(`Unable to find … rd_anon`).
+
+**Tuzak:** ilk yazımda stub payload'ı `{items, next_cursor}` şeklindeydi, sevk edilen şekil
+`{data, meta}` — sayfa hiç tablo render etmedi ve test *"Unable to find role=table"* ile
+düştü. **Testin düşmesi doğru davranıştı**; şekli varsaymak yerine `DATASETS_PAGE`'e bakmak
+gerekiyordu.
+
+### 4. İKİ BULGU — ölçüldü, KAYDEDİLDİ, ÜZERİNE GİDİLMEDİ
+
+| Clause | Ölçüm | Sonuç |
+|---|---|---|
+| `RD-13.c4` | *reload / compare / new-revision* kurtarma yolu **frontend'in hiçbir yerinde yok** — `ROW_VERSION_CONFLICT`/`STALE_REVISION` verbatim yolu Trash, Market Data, Library ve Mainboard'da var, Research Data revizyon-append yüzeyinde **yok** | **sınıf D görünüyor** |
+| `RD-12.c4` | `ResearchData.tsx` `useQueryClient` tutuyor ama **job-status sorgusu yok**; sayfa bir job'ın durumunu/kalite raporunu **hiç yeniden okumuyor** | **sınıf D görünüyor** |
+
+**İkisi de YENİDEN SINIFLANDIRILMADI.** B → D taşımak **D tavanını YÜKSELTİR**; bu bir
+adjudication'dır, bir test slice'ının kararı değil. Defterde artık **yedi** böyle açık bulgu
+var (`TL-11.c3`, `TL-16`, `TL-01.c4`, `RD-01.c4`, `RD-05.c5`, ve bu ikisi).
+
+### 5. Dürüst sınırlar
+
+- **Ürün kodu değişmedi.** Bu bir kanıt + ölçüm slice'ıdır.
+- Doc 12'nin kalan sınıf-B kriterleri (`RD-01`, `RD-05`) **zaten şüpheliydi** (ADIM 54) ve
+  bu partide **ele alınmadı**.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.** **A-08 DEĞİŞMEDİ** (2/184, 0/10, 0/4).
+- Codemap tazelenmedi ve gerekmedi: yeni endpoint / tablo / sayfa / job yok.

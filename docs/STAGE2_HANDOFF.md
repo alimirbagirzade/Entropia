@@ -6476,6 +6476,39 @@ test dosyasının hiçbiri `run_backtest` çağırmıyordu.
   `AT-04`, `AT-17`, `CP-16`, `PC-15`, `AM-13`, `AM-15`) — **ürün boşluğu**, test kapatamaz.
 - **Karar 1 (#552) / Karar 3 (#559) imzasız.** **A-08 tek blocker.**
 
+## Stage 68 — kabul borcu batch 05 (doc 12): iki kriter kapandı, iki sınıf-D bulgusu landed
+
+**Ne indi.** `RD-09` ve `RD-15` `partial` → `covered`; tavanlar `partial` **105 → 103**,
+`debt_class.B` **74 → 72** (ratchet **aşağı**). **Ürün kodu DEĞİŞMEDİ.** Blocker sayısı
+**değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+**`RD-09.c4` YENİ TEST YAZILMADAN kapandı.** ADIM 54 onu *"yalnız funding-enabled bir run
+ile kapanır"* diye bırakmıştı; o harness **ADIM 67'de indi** ve oradaki `RD-11.c3` testi bu
+clause'u birebir assert ediyor (v1.1 onaylandıktan sonra manifest + **Result snapshot** +
+okuma yüzeyi hâlâ v1.0). Mevcut düğüm **cite edildi**.
+
+**`RD-15.c4`** yeni bir frontend testiyle kapandı: `display_name: null` olan satır registry'de
+hâlâ `entity_id` ile tanınıyor. Negatif kontrol: `display_name ?? entity_id` fallback'i
+kaldırılınca test kırmızı.
+
+### İki bulgu — ölçüldü, kaydedildi, üzerine gidilmedi
+
+| Clause | Ölçüm |
+|---|---|
+| `RD-13.c4` | *reload/compare/new-revision* kurtarma yolu research frontend'inde **YOK** (verbatim `STALE_REVISION` yolu Trash/Market Data/Library/Mainboard'da var) → **sınıf D görünüyor** |
+| `RD-12.c4` | Sayfa job durumunu/kalite raporunu **hiç yeniden okumuyor** (`useQueryClient` var, job-status sorgusu yok) → **sınıf D görünüyor** |
+
+**İkisi de yeniden sınıflandırılMADI** — B → D **D tavanını yükseltir**, bu bir
+adjudication'dır. Defterde artık **yedi** böyle açık bulgu var.
+
+### Pazarlıksız
+
+1. **Yeni partiye başlamadan önce son iki slice'ın REUSE anchor'larını oku** — bir clause
+   bedavaya kapanabilir.
+2. **Defterin sınıfı bir iddiadır**; davranışın sevk edildiğini `src` içinde doğrula.
+3. **Stub şeklini varsayma** (`{data, meta}`, `{items, next_cursor}` değil).
+4. **Frontend düğüm id'si `::` değil ` > `**; clause toplamlarını `--report`'tan oku.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

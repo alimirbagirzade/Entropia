@@ -6437,6 +6437,45 @@ soruldu ve **imzalandı** (A1+A2, 2026-08-14). #720'nin Karar 1 imzasızken sevk
 - **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.**
 - **GH #558'e dokunulmadı** — kapatmak insan kararıdır.
 
+## Stage 67 — RD-11.c3: successor onayı run manifest'ini yeniden yazmaz (doc 12 §14) landed
+
+**Ne indi.** `RD-11.c3` `uncovered` → `covered`; kriterin **son açık clause'u** olduğu için
+`RD-11` da `partial` → **`covered`** oldu ve `debt_class`'ını kaybetti. Tavanlar:
+`partial` **106 → 105**, `debt_class.B` **75 → 74** (ratchet **aşağı**). **Ürün kodu
+DEĞİŞMEDİ**, migration yok, OpenAPI değişmedi. Blocker sayısı **değişmedi** (1 — yalnız
+A-08), verdict **BLOCKED**.
+
+**Clause dört partidir açıktı çünkü harness yoktu** — *enabled funding policy üzerinden
+research revision pinleyen TAMAMLANMIŞ bir run*. Ölçüldü: `FundingPolicy` kullanan dört
+test dosyasının hiçbiri `run_backtest` çağırmıyordu.
+
+### Reuse anchor'ları
+
+| Anchor | Ne için |
+|---|---|
+| `_ready_composition(..., funding_for=...)` | Funding AÇIK ready composition; callback `(market_entity_id, market_revision_id)` alır |
+| `_approved_funding_revision` | Readiness'in **ve** worker'ın kabul ettiği funding revision (beş kapı) |
+| `_completed_funded_run` | `_completed_run`'ın funding'li ikizi, `load_funding_rows` enjekte eder |
+| `_approve_successor` | Aynı root altında ikinci revizyon + onay, sevk edilmiş komutlarla |
+
+### Pazarlıksız
+
+1. **"Saklanan satır değişmedi" tek başına totolojidir** — manifest admission'da yazılır ve
+   hiçbir şey yeniden yazmaz. Kanıt **okuma yolundadır**
+   (`manifest_excerpt.research_data_revision_refs`, doc 16 §8.2).
+2. **Negatif kontrol İKİ eksende**: saklanan JSON'u tahrif → saklanan assertion'lar kırmızı;
+   `_research_revision_refs`'i boz → **yalnız** okuma-yolu assertion'ı kırmızı.
+3. **Successor'ın gerçekten indiğini assert et**, yoksa test vacuous geçer.
+4. **Market linkini elle yazma** (DR3 komutu pinler) ve **successor'a `market_entity_id` geçir**
+   (onay `_ensure_market_link_active`'ten geçiyor).
+5. **Kriterin son clause'u kapanınca `debt_class` KALDIRILIR** ve iki tavan birden iner.
+
+### Açık bırakılanlar
+
+- Sınıf D kalemleri (`alignment_policy_versions[]`, `missing_and_stale_policies[]`, `TL-16`,
+  `AT-04`, `AT-17`, `CP-16`, `PC-15`, `AM-13`, `AM-15`) — **ürün boşluğu**, test kapatamaz.
+- **Karar 1 (#552) / Karar 3 (#559) imzasız.** **A-08 tek blocker.**
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

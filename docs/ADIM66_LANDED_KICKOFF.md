@@ -1,4 +1,5 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM67_LANDED_KICKOFF.md`'dir.**
 > **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
 > `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
 

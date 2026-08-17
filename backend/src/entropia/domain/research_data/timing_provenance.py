@@ -167,6 +167,78 @@ class TimingProvenance:
             "feature_definitions": feature_definitions,
         }
 
+    def as_bundle_member(
+        self,
+        *,
+        market_content_hash: str | None,
+        feature_definition_ids: list[str],
+    ) -> dict[str, Any]:
+        """One Research Data bundle member (doc 12 §9.1/§9.2, Karar 2 = A1+A2).
+
+        **The same values under different names, deliberately.** The bundle spells
+        three of them its own way — ``research_revision_id``, ``research_content_hash``
+        and ``market_dataset_revision_id`` — because a bundle member sits beside
+        *market* members and has to say which side each id belongs to, whereas the
+        manifest's ``revision`` sub-dict is already nested under a research feed and
+        does not. Renaming either surface to match the other would be a wire change,
+        not a tidy-up. What must never differ is the VALUE, and that is exactly what
+        routing both through this object buys.
+
+        **This dict is hashed into ``bundle_hash``** (``jobs/research_data.py::
+        _seal_bundle`` -> ``manifest_hash``), so the key set is a wire contract on
+        this surface too. It carries the six timing fields the Run manifest pins plus
+        ``instrument_mapping_ref``; ``_seal_bundle`` derives doc 12 §9.2's flat
+        top-level arrays from these members, which stay authoritative (O-30 idiom).
+
+        Fields the row cannot answer stay parameters, because this layer performs no
+        I/O: ``market_content_hash`` needs the market link, and
+        ``feature_definition_ids`` a second dereference. ``revision_state``,
+        ``category_key``, ``field_definition_version`` and ``validation_status`` are
+        deliberately ABSENT — the shipped bundle never carried them, and adding one
+        here would move every ``bundle_hash`` under a refactor's cover.
+        """
+        return {
+            "research_revision_id": self.revision_id,
+            "research_content_hash": self.content_hash,
+            "usage_scope": self.usage_scope,
+            "market_dataset_revision_id": self.linked_market_dataset_revision_id,
+            "market_content_hash": market_content_hash,
+            "available_time_policy": self.available_time_policy,
+            "available_delay_seconds": self.available_delay_seconds,
+            "event_time_semantics": self.event_time_semantics,
+            "frequency_policy": self.frequency_policy,
+            "source_timezone_mode": self.source_timezone_mode,
+            "source_timezone_iana": self.source_timezone_iana,
+            "instrument_mapping_ref": self.instrument_mapping_ref,
+            "feature_definition_ids": feature_definition_ids,
+        }
+
+
+BUNDLE_MEMBER_KEYS: frozenset[str] = frozenset(
+    {
+        "research_revision_id",
+        "research_content_hash",
+        "usage_scope",
+        "market_dataset_revision_id",
+        "market_content_hash",
+        "available_time_policy",
+        "available_delay_seconds",
+        "event_time_semantics",
+        "frequency_policy",
+        "source_timezone_mode",
+        "source_timezone_iana",
+        "instrument_mapping_ref",
+        "feature_definition_ids",
+    }
+)
+"""The exact key set :meth:`TimingProvenance.as_bundle_member` publishes.
+
+The bundle twin of :data:`MANIFEST_REVISION_KEYS`, and named for the same reason:
+this set is hashed into ``bundle_hash``, so growing it costs a ``compiler_version``
+bump and a re-partitioned hash space. A test compares against it so the constant
+cannot rot into decoration.
+"""
+
 
 MANIFEST_REVISION_KEYS: frozenset[str] = frozenset(
     {
@@ -195,6 +267,7 @@ field addition has to touch a constant that says out loud what it costs.
 
 
 __all__ = [
+    "BUNDLE_MEMBER_KEYS",
     "MANIFEST_REVISION_KEYS",
     "ResearchRevisionRow",
     "TimingProvenance",

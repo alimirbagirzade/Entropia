@@ -10555,3 +10555,168 @@ sayısal otorite `docs/generated/repository_facts.md`'dir, bu satır değil.
 - **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
 - **Bu kayıt slice'ın sahibi tarafından yazılmadı.** Yukarıdaki §5'te yeniden ölçülmeyen her
   şey PR #729 gövdesinin iddiasıdır ve otoritesi o CI koşusudur.
+
+
+---
+
+## ADIM 71 — describe/book split: P1, P3 ve P4 ikiye ayrıldı (C1 / E4a, PR #735)
+
+> **NUMARA NOTU — bu slice İKİ KEZ taşındı.** Önce ADIM 68 yazıldı, `#736` o adı **merge
+> edilmiş** olarak aldı → ADIM 69; sonra kapanış PR'ı (#737) sıra beklerken **#732** iki
+> kaydı birden indirdi (**ADIM 69** = P-D/#728 ve **ADIM 70** = F1/#729) → bu kayıt
+> **ADIM 71**'dir. Kural değişmedi: **numaralar yeniden atanmaz, merge edilmiş ad kazanır**;
+> taşınan taraf hep merge edilmemiş olandır. Dal `feat/closure-e4a-describe-book-split`,
+> commit mesajı `refactor(closure-c1): …` — ADIM numarası **taşımaz**. Kapanış dalı
+> `docs/stage-68-landed` adında kalır (PR #737 açıkken yeniden adlandırılmadı); dal
+> adındaki `68` yazıldığı andaki tahmindir, kaydın numarası değil.
+
+**Squash SHA `dc2902f`** · base **`ed867bc`** · migration **YOK** · `ENGINE_VERSION`
+**değişmedi** · alembic head **`0043_i08_registry_strategy_fks`** · OpenAPI **değişmedi** ·
+`SHARED_ALLOCATION_STATUS` = `future_dev` **değişmedi**. **Blocker sayısı DEĞİŞMEDİ
+(1 — yalnız A-08), verdict BLOCKED.**
+
+### 1. Ne kapandı
+
+`final_closure_ordered_plan_2026-08-13.md` §3 PACKAGE C'nin **`C1`**'i. Ön koşulu **YOK** —
+ve özellikle **ADR §16 Gate 1 değil**: C1 hiçbir sözleşme değiştirmez, tüm kanıtı
+*hiçbir şeyin oynamadığı*dır.
+
+```
+_phase_carry -> _compute_carry  + _book_carry
+_phase_held  -> _evaluate_held  + _apply_held
+_phase_entry -> _evaluate_entry + _apply_entry
+```
+
+`_ItemStepper` **altı alan kazandı, üçünü korudu**. `_step` (`:3425`) **karakter karakter
+aynı**, dolayısıyla `run_engine` yapı gereği el değmemiş. `origin/main`'e karşı bayt bayt
+doğrulandı: `_step`, `_phase_tail`, `_phase_admit`, `_phase_open_fills`, `_open`,
+`_do_open`, `_finalize`, `_output`.
+
+### 2. Asıl kazanım — değerlendirme artık GERÇEKTEN salt-okur
+
+Split öncesi kod **karar verirken** üç sayacı artırıyor ve `filtered_no_entry`
+yayımlıyordu: `suppressed_entries`, `entries_blocked_by_restriction`,
+`strength_adjustments`. Yani *"değerlendir"* ile *"defterе yaz"* **ayırt edilemiyordu** —
+bir havuz bir kalemi dinleyip reddettiğinde kalemin defteri çoktan oynamış olurdu.
+
+Bunlar artık karar nesnesinde `_LedgerEffect` olarak taşınır ve **yalnız**
+`_book_effects` (`:1409`) uygular. `_signal_strength` sayacını **korur** (iki
+`_phase_tail` çağıranı için); yeni **`_strength_value`** (`:1385`) P4'ün kullandığı saf
+yazımdır. Sayaç `setattr` ile değil **açık dallanmayla** uygulanır — mypy her yazılabilir
+alanı görür, tanınmayan ad sessizce attribute yaratmak yerine **gürültüyle** düşer.
+
+Yeniden yazımın mekanik kontrolü:
+
+| | eski | yeni |
+|---|---|---|
+| `_phase_held` etkileri | 22 | `_evaluate_held` **0** + `_apply_held` 22, **aynı sırada** |
+| `_phase_entry_body` etkileri | 19 | `_evaluate_entry` **0** + `_apply_entry` 13 + `_book_effects`'e ertelenen 6 |
+
+### 3. TEK bilinçli istisna — trail anchor
+
+`_evaluate_held` pozisyonun trail anchor'ını **ilerletir**. Bu bir booking DEĞİL,
+**piyasanın** yüksek-su işaretidir: bar o ekstremi bastığı için ilerler, hiçbir arbitraj
+onu geri bastıramaz, ve `max`/`min` aynı barı yeniden tarif etmeyi **idempotent** yapar.
+`_resolve_stop` trailing seviyeyi ondan türetir → ilerletilmemiş anchor **bir önceki
+barın** stop'unu tarif ederdi. Alanın kendi docstring'inde yazılı.
+
+### 4. Kabul — ADR-0002 §15 R-4
+
+**50 golden digest (41 non-portfolio + 9 `portfolio.*`) OYNAMADI**,
+`engine_golden_digests.json` **bayt bayt aynı** — ölçüm **M-1** birebir yeniden üretildi,
+`git diff --exit-code` **0**. Merge sonrası main'de de doğrulandı (`ed867bc` ↔ `dc2902f`
+arasında dosya diff'i **boş**).
+
+### 5. Testler — ve negatif kontrollerin ÖĞRETTİĞİ
+
+Yeni `tests/unit/test_backtest_engine_describe_book.py` (**10 test**) digest'in
+göremeyeceğini pinler: `run_engine` her barda describe ve book'u **arka arkaya** çağırır,
+o yüzden digest'ler salt-okur bir describe yarısını yazan birinden **ayırt edemez**.
+
+- altı yarıyı doğrudan sürmek, birleşik fazları **digest-digest** yeniden üretir
+- entry / carry / held tarif etmek **her barda, tekrar tekrar** hiçbir şey yazmaz
+- book etmek hâlâ her şeyi yazar (yukarısının **negatif kontrolü** — hiçbir şey yapmayan
+  bir faz de hiçbir şey yazmaz)
+- bastırılmış bir entry'nin sayacı **ve** `filtered_no_entry` olayı ertelenir, sonra
+  **gerçekten** uygulanır
+
+**Üç negatif kontrol, üçünün de düştüğü kanıtlandı.** Sayaçlardan birini satır içine geri
+koymak belirli bir parametrize vakayı kırmızıya çevirir:
+
+| sayaç | yakalayan vaka |
+|---|---|
+| `suppressed_entries` | `direction_veto` |
+| `entries_blocked_by_restriction` | `date_blackout` |
+| `strength_adjustments` | `volatility_strength` |
+
+> **DERS (kaydediliyor, sessizce düzeltilmiyor):** ilk iki negatif kontrol **GEÇTİ** —
+> çünkü ilk senaryo kümem (`baseline_stop_out` + `funding_held`) **hiçbir bastırma yoluna
+> ulaşmıyordu**. Yani salt-okur testi, korumayı iddia ettiği üç sayacın **ikisini hiç
+> gözlemlemiyordu**. `date_blackout`, `volatility_strength` ve `direction_veto` vakaları
+> **negatif kontrol geçtiği için** eklendi. **Bir negatif kontrolün geçmesi, testin iyi
+> olduğu değil, yolun hiç koşulmadığı anlamına gelir.**
+
+### 6. C1'in İKİNCİ teslimatı — `_phase_tail` scaling ayrılabilirliği ÖLÇÜLDÜ
+
+Plan bunu **çağrı grafiğinden varsayıldı, 474 satırlık gövde OKUNMADI** diye işaretlemişti.
+Okundu. `_phase_tail` (`:2951`) **474 satır**, dört üst-düzey bölüm:
+
+| Satır | Bölüm |
+|---|---|
+| `:2959` | close'a ertelenmiş fill |
+| `:2998`–`:3252` | **stacking / conflict** (~255 satır) |
+| `:3253`–`:3411` | **scale ladder** (~159 satır) |
+| `:3412`–`:3423` | kuyruk defteri (`prev_*`, `window.append`) |
+
+Scale ladder **kendi başına temiz bir describe/book şeklidir**. **AMA** guard'ı
+`position is not None` ve `len(led.trades) == trades_before_bar` okur — ve stacking bölümü
+**ikisini de yazar** (`:3091` `_close`, `:3098` `_do_open`, `:3220` `_close`, `:3221`
+`position = None`), **tek** bir bar-başı trade bütçesi altında (`trades_before_bar`,
+`_phase_admit:1981`'de yakalanır).
+
+**Sonuç: scaling, stacking book EDİLMEDEN tarif edilemez.** Kalemin kendi sıralı zaman
+çizgisinde bu zararsızdır (bugünkü sıra zaten budur); **paylaşımlı bir koşuda** ise bir P8
+scaling intent'i **bar başına İKİNCİ bir arbitraj turu** ister ve **ADR §8'de bir tane
+vardır**. Bu, P-C2 §C.3.8 seçenek **(a)**'yı (admission'da blokla) *önerilen* değil
+**ZORUNLU** yapar → **G12** bir tercih değil bir **sözleşme sorusudur**; aksi karar
+"daha çok refactor" değil **ADR §8 değişikliği** demektir.
+
+`_phase_tail` **DEĞİŞTİRİLMEDİ** (F3 de onu talep ediyor). Tam yazım:
+`docs/audit/closure_c1_phase_tail_scaling_separability_2026-08-17.md`.
+
+### 7. Süreç — üç ölçülmüş tuzak
+
+- **`docs-history-guard` merge'i BLOKLADI ve HAKLIYDI-AMA-YANLIŞ-POZİTİFTİ.** #733
+  `## Class B (75)` başlığını `(74)` yapmıştı; merge bunu **kayıt silme** olarak gösterdi.
+  Bu tam olarak §ADIM 61'in kaydettiği şekildir (*"başlık yeniden adlandırması guard'a
+  kayıt silme gibi görünür"*) ve **kaydedilmiş çaresi REBASE'dir**. Merge iptal edildi,
+  rebase yapıldı → `git show HEAD -- docs/ | grep '^-## '` **boş**. **Guard'a
+  dokunulmadı.**
+- **E2E görsel kırmızısı BU SLICE'IN DEĞİLDİ ve taban GÜNCELLENMEDİ.**
+  `05-mainboard-ready-check-run.spec.ts` flake yaptı (15 sn `Valid config` timeout),
+  Playwright **retry** etti, mainboard oluşturma akışı **iki kez** koştu; `npm test` ile
+  `npm run visual` **aynı compose stack'ini** paylaşır (`e2e.yml` tek `up` `:59`, `down -v`
+  yalnız `:140`) → `/mainboard` **bir satır uzadı** (929 → 974 px, oran 0.03 > 0.02).
+  `strategy-details`'in alınan yüksekliği denemeler arası **907/908 arasında zıpladı** —
+  **belirlenimsiz**, yani bir CSS/markup regresyonu olamaz. Commit **sıfır** frontend
+  dosyasına dokunuyor. Rebase sonrası koşuda **F-23 YEŞİL**. **Taban da
+  `maxDiffPixelRatio` de elleNMEDİ** — kirlenmiş durumu kapıya gömerdi. Bu izolasyon
+  zayıflığı **pre-existing ve hâlâ açık**.
+- **`strict: true` iki kez rebase ettirdi.** #733 ve #731 arka arkaya indi;
+  `mergeable_state` iki kez `behind` oldu. İkincisinde koşan `Backend` **bilerek iptal
+  edildi** — zaten geçersizleşecekti, beklemek ~25 dk'yı boşa harcardı. Üretilmiş dosya
+  çakışmaları (`README.md`, `repository_facts.*`) **elle birleştirilmedi, YENİDEN
+  ÜRETİLDİ** → **3585 collected / 341 dosya** (her iki slice'ın testlerini de sayar).
+
+### 8. Dürüst sınırlar
+
+- **`C2` hâlâ BLOKLU:** `settle` / `finalize` / P10 / `iter_portfolio` yok ve **G9**
+  (ADR §6/§8 amendment) ile **G13** (P10 equity-point kuralı) **İMZASIZ insan kapıları**.
+  C1 bunları **değiştirmedi**; `C3` (adapter) hâlâ erişilemez.
+- **Containment DEĞİŞMEDİ** — `SHARED_ALLOCATION_STATUS` = `future_dev`, containment gate
+  yeşil ve **zayıflatılMADI**, `run_portfolio` hâlâ üretimden çağrılmıyor.
+- **`_ScriptedParticipant`'a dokunulmadı** — oracle harness'ının kendi aracı olarak kaldı.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.**
+- Kabul borcu tavanları **oynamadı** — bu bir refactor slice'ı, kriter kapatmadı.
+- Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.

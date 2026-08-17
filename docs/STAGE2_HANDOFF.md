@@ -6612,7 +6612,97 @@ hiçbir yanıta ulaşmayan bir şey için `retryable` reklamı olurdu.
   (run `31841208114`: 4130 passed / 1 xfailed, coverage %93.72). **Otorite o koşudur.**
 
 
+## Stage 71 — describe/book split: P1, P3 ve P4 ikiye ayrıldı (C1 / E4a, PR #735) landed
+
+**Ne indi.** Üç karar fazı birer **çifte** ayrıldı: `_phase_carry` → `_compute_carry` +
+`_book_carry`, `_phase_held` → `_evaluate_held` + `_apply_held`, `_phase_entry` →
+`_evaluate_entry` + `_apply_entry`. `_ItemStepper` **altı alan kazandı, üçünü korudu**;
+`_step` **karakter karakter aynı**, dolayısıyla `run_engine` yapı gereği el değmemiş.
+**Ürün davranışı DEĞİŞMEDİ**, migration yok, OpenAPI değişmedi, `ENGINE_VERSION`
+değişmedi, containment `future_dev`. Blocker sayısı **değişmedi** (1 — yalnız A-08),
+verdict **BLOCKED**.
+
+**Kabul (ADR-0002 §15 R-4): 50 golden digest OYNAMADI**, `engine_golden_digests.json`
+**bayt bayt aynı** — ölçüm M-1 (41 non-portfolio + 9 `portfolio.*`) birebir yeniden
+üretildi.
+
+**Asıl kazanım:** değerlendirme artık **gerçekten salt-okur**. Split öncesi kod karar
+verirken `suppressed_entries` / `entries_blocked_by_restriction` / `strength_adjustments`
+sayaçlarını artırıp `filtered_no_entry` yayımlıyordu; bunlar artık karar nesnesinde
+`_LedgerEffect` olarak taşınır ve yalnız `_book_effects` uygular. Mekanik kontrol:
+`_evaluate_held` **0** etki + `_apply_held` 22 (aynı sırada); `_evaluate_entry` **0** etki
++ `_apply_entry` 13 + ertelenen 6.
+
+**TEK bilinçli istisna:** `_evaluate_held` trail anchor'ı ilerletir — bu booking değil
+**piyasanın** yüksek-su işaretidir (idempotent; `_resolve_stop` trailing seviyeyi ondan
+türetir).
+
+**C1'in ikinci teslimatı — `_phase_tail` scaling ayrılabilirliği ÖLÇÜLDÜ ve sonuç
+OLUMSUZ.** Scale ladder kendi başına temiz bir describe/book şekli, ama guard'ı
+`position` ve `len(led.trades) == trades_before_bar` okur; stacking bölümü **ikisini de**
+yazar (`:3091`, `:3098`, `:3220`, `:3221`), tek bar-başı bütçe altında. Yani scaling
+stacking book edilmeden tarif **edilemez** → paylaşımlı koşuda bar başına **ikinci bir
+arbitraj turu** gerekir, **ADR §8'de bir tane var**. P-C2 §C.3.8 (a) artık **zorunlu**;
+**G12** bir tercih değil **sözleşme sorusu**. `_phase_tail` **değiştirilmedi** (F3 talep
+ediyor). → `docs/audit/closure_c1_phase_tail_scaling_separability_2026-08-17.md`
+
+**Ders (kaydedildi):** ilk iki negatif kontrol **geçti**, çünkü ilk senaryo kümesi hiçbir
+bastırma yoluna ulaşmıyordu — salt-okur testi üç sayacın **ikisini hiç gözlemlemiyordu**.
+`date_blackout` / `volatility_strength` / `direction_veto` vakaları **negatif kontrol
+geçtiği için** eklendi. **Geçen bir negatif kontrol, testin iyi olduğunu değil yolun hiç
+koşulmadığını söyler.**
+
+**Süreç:** `docs-history-guard` merge'i blokladı (#733'ün `Class B (75)` → `(74)` başlık
+değişimi kayıt silme gibi göründü) → §ADIM 61'in kaydettiği çare **rebase** uygulandı,
+guard'a dokunulmadı. E2E görsel kırmızısı **bu slice'ın değildi** (flake retry'si paylaşılan
+compose stack'ini kirletti; `/mainboard` bir satır uzadı) → **taban güncellenMEDİ**, rebase
+sonrası F-23 yeşil. Üretilmiş dosya çakışmaları elle birleştirilmedi, **yeniden üretildi**
+(**3585 collected / 341 dosya**).
+
+**Açık kaldı:** `C2` (`settle`/`finalize`/P10/`iter_portfolio`) **G9** ve **G13** imzasız
+insan kapılarının arkasında; `C3` (adapter) hâlâ erişilemez. `PROJECT_HISTORY.md` §ADIM 71 ·
+`docs/ADIM71_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+
+> **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:
+> `ItemParticipant.settle` + `.finalize`, P10, `iter_portfolio`.**
+
+> **ADIM 71 (C1) §4.1'in (b) engelini DARALTTI ama KAPATMADI.** *"Üç faz book eder,
+> `ItemParticipant` tarif ister"* artık **yanlış**: describe yarıları
+> (`_compute_carry` / `_evaluate_held` / `_evaluate_entry`) sevk edildi ve `_evaluate_entry`
+> ölçülmüş biçimde **sıfır** etki yazıyor. **Kalan engel Protocol'ün kendisi:** bugün
+> **write-only** — loop bir kaleme ne YAPTIĞINI söyleyemez, çünkü `settle` yok.
+>
+> **BUNDAN ÖNCE İKİ İMZA GEREKİR ve ikisi de agent tarafından kapatılamaz:**
+> **G9** = ADR-0002 §6/§8 amendment'ı (`settle`, `finalize`, P10, `iter_portfolio`) —
+> **`Accepted`** bir ADR'yi değiştirmek onu kabul eden imzayı ister; **G13** = P10
+> end-of-data equity noktası (son `t_ms`'e **ekle** mi, içine **katla** mı — eklemek aynı
+> ana iki nokta koyar ve **A5**'in by-construction sıralılık iddiasını kırar).
+>
+> **`settle`/`finalize` ZORUNLU Protocol üyesi olmalı, `hasattr` ile YOKLANMAMALI:**
+> yoklama fail-open'dır ve `settle`'ı unutan bir participant sessizce düz koşar. mypy bunu
+> yapısal olarak zorlayamıyorsa **dur ve seam'i yeniden düşün** (plan `C2` stop condition).
+>
+> **`C3` (adapter) `C2`'ye bağlı** ve ayrıca **importer-allowlist kararı** ister:
+> `portfolio_engine.__all__` Protocol'ün tiplendiği altı tipin **hiçbirini** yeniden
+> yayımlamıyor, o yüzden `execution/` dışındaki her implementasyon containment gate'in
+> importer kontrolünü **zorunlu olarak** kırmızıya çevirir — bu **bilinçli** ve
+> **gözden geçirilmiş bir genişletme** ister, sessiz bir gevşetme değil.
+> Ölçüm: `docs/audit/closure_e4_adapter_precondition_measurement_2026-08-17.md` (PR #731).
+>
+> **`C5` (allocation plan revision pin) — HEDEFİ ZATEN SEVK EDİLMİŞ, kod slice'ı DEĞİL.**
+> Bu kayıt yazıldığında `C5` planın *"ikinci şerit dolgusu"* sayılıyordu; ölçüm bunu
+> çürüttü: `readiness_check.py::_resolve_allocation` config'i **koşullu** kurar —
+> `_pinned_revision` bir revizyon döndürürse **dondurulmuş satırdan**, yalnız `None`
+> döndürürse draft'tan, ve o durumda `plan_revision_id` de `None` olduğu için ikisi
+> **hiçbir yönde ayrışamaz**. Bayat olan kod değil **ADR 0002 §10.2**'nin present-tense
+> cümlesi. Ölçüm ve dispozisyon: **PR #740**. `C5`'i kod yazmak için AÇMA.
+
+### Bu hedefin ADIM 71 öncesi gerekçesi (korundu)
+
+
 
 > **ADIM 69 sıralamayı belgeledi. BAŞLIK DEĞİŞMEDİ — PR B hâlâ kilometre taşıdır**; plan
 > onun ÖNÜNDEKİ işi sıraya koyar, onu değiştirmez.

@@ -168,13 +168,13 @@ sembolü "yok" saymak da (#582 gövdesi), bağlı olmayan bir sembolü "çalış
 
 | Sembol | Tanım | Üretim çağıranı | Test çağıranı | Doğru tek cümle |
 |---|---|---|---|---|
-| `run_portfolio` | `portfolio_engine.py:531` | **SIFIR** | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** |
-| `ItemParticipant` | `portfolio_engine.py:251` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var; onu gerçekleyen üretim adapter'ı YOK.** |
+| `run_portfolio` | `portfolio_engine.py:550` | **SIFIR** | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** |
+| `ItemParticipant` | `portfolio_engine.py:270` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var; onu gerçekleyen üretim adapter'ı YOK.** Ayrıca **write-only**: `settle`/`finalize` yok → `C2`. |
 | `project_portfolio_run` | `execution/portfolio_projection.py:513` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_projection.py` | **Gerçeklenmiş ve bağlanmamış.** |
 | `build_portfolio_manifest` | `execution/provenance.py:473` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_provenance.py` | **Gerçeklenmiş ve bağlanmamış.** |
-| `_ItemStepper` | `engine.py:756` | **`run_engine` (`:3279`) → worker `jobs/backtest_engine.py:859`** | stepper + phase suite'leri | **Gerçeklenmiş ve ÜRETİMDE AKTİF** (PR #602'den beri). |
-| `_build_stepper` | `engine.py:793` (yapı `:3263`, çağrı `:3350`) | `run_engine` | aynı | **Üretimde aktif** — `run_engine`'in bar döngüsüne kadarki gövdesi. |
-| `_phase_entry(bar, *, equity)` | `engine.py:2448` | `run_engine` | oracles | **`E(t)` enjeksiyon noktası SEVK EDİLMİŞ**; bugün `equity=None` ile çağrılır. |
+| `_ItemStepper` | `engine.py:818` | **`run_engine` (`:3533`) → worker `jobs/backtest_engine.py:859`** | stepper + phase suite'leri | **Gerçeklenmiş ve ÜRETİMDE AKTİF** (PR #602'den beri). **ADIM 69'den beri altı describe/book alanı da taşır.** |
+| `_build_stepper` | `engine.py:879` | `run_engine` | aynı | **Üretimde aktif** — `run_engine`'in bar döngüsüne kadarki gövdesi. |
+| `_phase_entry(bar, *, equity)` | `engine.py:2663` | `run_engine` | oracles | **`E(t)` enjeksiyon noktası SEVK EDİLMİŞ**; bugün `equity=None` ile çağrılır. ADIM 69'den beri `_evaluate_entry` (`:2677`) + `_apply_entry` (`:2789`) çifti. |
 
 > **"hiç yazılmadı / never written" YAZMA.** ADR §12'nin ADIM 16 stepper'ı **2026-08-05'te
 > PR #602 ile indi** (ADR'nin kendi **AMENDMENT**'ı `:713`, `:690`'ı geçersiz kılar).
@@ -204,16 +204,36 @@ tam ve birinci sınıf ilan eder). Bayraksız bir wiring **her bağımsız kompo
 yeniden fiyatlar** — dal `alloc_probe is not None and shared_allocation_is_executable()`
 olmalı ve **tek** yerde karar verilmeli.
 
-### Kalan tek engel: ŞEKİL uyuşmazlığı (dosya eksikliği değil)
+### Kalan engel — ŞEKİL DEĞİL, ARTIK PROTOCOL'ÜN KENDİSİ (ADIM 69 sonrası)
 
-| `ItemParticipant` ne istiyor | `_ItemStepper` ne sunuyor | Fark |
+> **ESKİ İDDİA GEÇERSİZ.** Bu bölüm ADIM 69'e kadar *"üç faz book eder, döngü tarif ister"*
+> diyordu. **`C1` (PR #735) tam olarak onu kapattı.** Describe yarıları sevk edildi:
+
+| `ItemParticipant` ne istiyor | `_ItemStepper` bugün ne sunuyor | Durum |
 |---|---|---|
-| `carry(view) -> CarryCharges \| None` | `carry(bar) -> None` | bir şey döndürmez; anında ücret keser |
-| `mandatory_exit(view, *, held) -> MandatoryExit \| None` | `held(bar) -> bool` | bayrak döner; çıkışı kendi book eder |
-| `entry(view, snapshot, *, held) -> ItemIntent \| None` | `entry(bar, *, equity) -> None` | bir şey döndürmez; arbitrasyonsuz book eder |
+| `carry(view) -> CarryCharges \| None` | `compute_carry(bar) -> _CarryPlan \| None` + `book_carry` | **tarif VAR** — cursor `book_carry`'e kadar ilerlemez |
+| `mandatory_exit(view, *, held) -> MandatoryExit \| None` | `evaluate_held(bar) -> _HeldDecision \| None` + `apply_held` | **tarif VAR** — kolu adlandırır, kapatmaz |
+| `entry(view, snapshot, *, held) -> ItemIntent \| None` | `evaluate_entry(bar) -> _EntryDecision \| None` + `apply_entry` | **tarif VAR** — ölçülmüş **sıfır** etki |
 
-Üç faz **book eder**, döngü ise arbitrasyon öncesi **tarif** ister. Bunu kapatmak `run_engine`'in
-bar gövdesine — **46 golden digest**'in kapsadığı ifadelere — dokunur → **ADR §16 insan kapısı**.
+**Kalan engel `ItemParticipant`'ın kendisidir: WRITE-ONLY.** Loop bir kaleme neyin
+**admitted** olduğunu söyleyemez — `settle` yok, `finalize` yok, `PHASE_ORDER`'da P10 yok
+(`portfolio_engine.py:129`, sekiz faz), `iter_portfolio` yok. `settle` olmadan book
+edilebilecek tek yer `entry()`'nin içidir → **arbitrasyondan ÖNCE**, arkasında
+`PortfolioSnapshot` olmayan sermaye taahhüdü.
+
+Bunu kapatmak `C2`'dir ve **`Accepted`** bir ADR'yi değiştirir → **G9** (ADR §6/§8
+amendment) + **G13** (P10 equity noktası) **imzasız insan kapıları**.
+
+**Ayrıca `_phase_tail`'in scaling bölümü AYRILAMAZ** (ADIM 69 ölçtü): guard'ı `position`
+ve `len(led.trades) == trades_before_bar` okur, stacking bölümü ikisini de yazar
+(`:3091`, `:3098`, `:3220`, `:3221`), tek bar-başı bütçe altında (`_phase_admit:1981`).
+Paylaşımlı koşuda P8 **ikinci bir arbitraj turu** ister, ADR §8'de bir tane var →
+**G12 bir sözleşme sorusudur**. Ayrıntı:
+`docs/audit/closure_c1_phase_tail_scaling_separability_2026-08-17.md`.
+
+> **Golden digest sayısı 50'dir** (41 non-portfolio + 9 `portfolio.*`), 46 değil — #720
+> dört `costs.commission_*` senaryosu ekledi (ölçüm M-1). Buraya sayı yazarken
+> `engine_golden_digests.json`'dan say.
 
 ### Kapsama kapısının YEŞİLİ ters okunur
 

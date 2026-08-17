@@ -224,8 +224,36 @@ Before stopping a working session, produce **ALL** of the following:
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. **Son dalga — ADIM 67 (RD-11.c3: successor onayı koşan/bitmiş run'ın
+> manifest'ini yeniden yazmaz, doc 12 §14): ÜRÜN KODU DEĞİŞMEDİ. `partial` 106 → 105,
+> `debt_class.B` 75 → 74 (ratchet AŞAĞI). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> BLOCKED.** Clause dört partidir açıktı çünkü **harness yoktu** (*enabled funding policy
+> üzerinden research revision pinleyen TAMAMLANMIŞ run*); ölçüldü — `FundingPolicy` kullanan
+> dört dosyanın hiçbiri `run_backtest` çağırmıyordu. **"Saklanan satır değişmedi" TEK BAŞINA
+> TOTOLOJİDİR:** manifest admission'da yazılır, Result'a kopyalanır, hiçbir şey yeniden
+> yazmaz — kriterin koruduğu kusur bir **OKUMA yüzeyinin** pini canlı çözmesidir, o yüzden
+> her saklanan-satır assertion'ı `manifest_excerpt.research_data_revision_refs` (doc 16 §8.2)
+> ile eşleştirildi. **Negatif kontrol İKİ eksende koştu:** saklanan JSON tahrif → saklanan
+> assertion'lar kırmızı; `history.py::_research_revision_refs` bozuldu → **yalnız** okuma-yolu
+> kırmızı (üçüncü assertion'ın ayırt edici olduğunun kanıtı). **Successor'ın gerçekten
+> indiği de assert edilir** (yeni id + `approved` + root head), yoksa test vacuous geçer.
+> Clause'un **kendi sözü** "running OR finished" olduğu için **iki test**: SUCCEEDED+Result
+> ve QUEUED (worker hiç koşmadan). Harness: `_ready_composition` **`funding_for` callback**'i
+> aldı (literal değil — funding pini ancak market revision **var olduktan sonra** kurulabilir;
+> readiness link eşitliği şart koşar), varsayılan `None` mevcut çağıranları **bayt bayt aynı**
+> bırakır. **Fundable revision'ın BEŞ kapısı var, beşi farklı yerden** (`funding_rate`+native,
+> `research_backtest`+APPROVED, pozitif delay'li `fixed_delay`, market link eşitliği,
+> `instrument_mapping_ref` coherence). **Linki ELLE YAZMA** (DR3 komutu pinler);
+> **successor'a `market_entity_id` geçir** (onay `_ensure_market_link_active`'ten geçer).
+> **Kriterin son clause'u kapanınca `debt_class` KALDIRILIR.** AÇIK: sınıf D kalemleri,
+> **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ**, A-08 değişmedi.
+> `PROJECT_HISTORY.md` §ADIM 67 · `docs/ADIM67_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` ·
-> **OpenAPI DEĞİŞTİ**. **Son dalga — ADIM 66 (research timing provenance bundle KİMLİĞİNE
+> **OpenAPI DEĞİŞTİ**. **ADIM 66 (research timing provenance bundle KİMLİĞİNE
 > pinlendi, P-E3 / GH #558): ÜRÜN KODU DEĞİŞTİ, `bundle_hash` ŞEKİL DEĞİŞTİRDİ. Blocker
 > sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Ön koşul **imzasızdı ve slice
 > DURDU**: `closure_product_decisions_2026-08-13.md` §Karar 2'nin beş kutusu da boştu →

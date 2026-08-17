@@ -21,15 +21,15 @@
   ],
   "provenance": {
     "measured_by": "docs/audit/acceptance_semantic_scan.py --root .. --report",
-    "measured_at": "2026-08-14T00:00:00Z",
-    "slice": "P-E3 — research timing provenance pinned into the bundle identity (GH #558, Karar 2 = A1+A2)",
-    "base_commit": "2a314ae",
+    "measured_at": "2026-08-17T00:00:00Z",
+    "slice": "RD-11.c3 — a successor Approved revision does not rewrite a finished run manifest (doc 12 §14)",
+    "base_commit": "6902710",
     "conditions": "static scan; ast + title extraction against the live test tree; no database, no network, no test run",
-    "supersedes": "the ADIM 55 freeze (106 partial / 8 uncovered; A1 B75 C6 D32, base 4d9a373). NO CEILING MOVED and none could: this slice closed the CLAUSE RD-11.c2, and the ceilings count CRITERIA. RD-11 stays partial/B because c3 (a successor approval must not rewrite a live run manifest) is untouched. What changed is the clause ledger — uncovered clauses 124 -> 123, covered 1003 -> 1004 — and the REASON RD-11.c2 was open: the ADIM 54 finding said no test could close it because _seal_bundle carried five fields and none of the three the clause names. That was true, and it was resolved by the PRODUCT changing (jobs/research_data.py::_pin_member), not by moving the row to class D, which would have RAISED the D ceiling.",
+    "supersedes": "the P-E3 freeze (106 partial / 8 uncovered; A1 B75 C6 D32, base 2a314ae). This slice closed RD-11.c3, the criterion's LAST open clause, so RD-11 itself moved partial -> covered and lost its debt_class: partial 106 -> 105 and class B 75 -> 74. Both ceilings are lowered here, never raised. No criterion was reclassified and none was deleted. The clause needed a harness that did not exist — a COMPLETED Backtest Run pinning a research revision through an enabled funding policy — which is why it sat uncovered through four earlier batches; _ready_composition gained an optional funding_for callback (default None keeps every existing caller byte-identical) because the pin can only be built after the market revision exists.",
     "clause_totals_at_freeze": {
-      "covered": 1004,
+      "covered": 1005,
       "partial": 9,
-      "uncovered": 123,
+      "uncovered": 122,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "product_decision_required": 0
@@ -48,12 +48,12 @@
   "ceilings": {
     "total_criteria": 383,
     "status": {
-      "partial": 106,
+      "partial": 105,
       "uncovered": 8
     },
     "debt_class": {
       "A": 1,
-      "B": 75,
+      "B": 74,
       "C": 6,
       "D": 32
     }

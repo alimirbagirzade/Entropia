@@ -223,6 +223,18 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
+> **Araç yapılandırması — SLICE DEĞİL (PR #739, 2026-08-17):** `.claude/settings.json`
+> `permissions.allow` **18 → 42** girdi. Eklenenler: §Local verify'ın dört backend adımı,
+> üç frontend kapısı, iki `memory_index` kapısı (dokuzu da **tam biçim**) + 15 salt-okur MCP
+> aracı (`codebase-memory-mcp` graph araçları, `Claude_Code_Remote` listeleme). **Joker
+> yok** — `Bash(uv run *)` / `npm run *` / `node *` keyfi kod çalıştırdığı için bilerek
+> dışarıda, `Bash(uv run ruff check *)` bile alınmadı (`--fix` dosya yazar); mutating MCP
+> aracı (`index_repository`, `delete_project`, `ingest_traces`, `manage_adr`) alınmadı.
+> **Ürün kodu, migration, `ENGINE_VERSION`, OpenAPI değişmedi; blocker sayısı DEĞİŞMEDİ
+> (1 — yalnız A-08).** Mevcut 18 girdiye, `hooks` bloğuna ve ADIM 58'in dört guard kaydına
+> dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
+> slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
+
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Son dalga — ADIM 73 (kabul borcu batch 06, doc 07 backend): ÜRÜN KODU

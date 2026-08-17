@@ -364,20 +364,36 @@ export interface ApprovalResult {
 
 // One pinned member of a compiled bundle. The exact research revision id + content
 // hash AND the linked market revision id + content hash — never "latest".
+// The timing block mirrors jobs/research_data.py::_pin_member, which in turn mirrors
+// the Run manifest's revision sub-dict (GH #558, Karar 2 = A1, signed 2026-08-14).
 export interface BundleMember {
   research_revision_id: string;
   research_content_hash: string | null;
   usage_scope: string | null;
   market_dataset_revision_id: string | null;
   market_content_hash: string | null;
+  available_time_policy: string | null;
+  available_delay_seconds: number | null;
+  event_time_semantics: string | null;
+  frequency_policy: string | null;
+  source_timezone_mode: string | null;
+  source_timezone_iana: string | null;
+  instrument_mapping_ref: string | null;
+  feature_definition_ids: string[];
 }
 
 // _seal_bundle -> a content-addressed immutable bundle. task_id / run_request_id
 // appear only when the request supplied them (the server drops None from the body).
+// The three arrays are doc 12 §9.2's own field names, DERIVED from members above
+// (Karar 2 = A2); §9.2's alignment_policy_versions[] / missing_and_stale_policies[]
+// are absent because nothing in the backend produces them (class D, not empty).
 export interface BundleResult {
   bundle_kind: string;
   members: BundleMember[];
   compiler_version: string;
+  available_time_policies: string[];
+  instrument_mapping_revision_ids: string[];
+  feature_definition_revision_ids: string[];
   resolved_at: string;
   bundle_hash: string;
   task_id?: string;

@@ -224,8 +224,39 @@ Before stopping a working session, produce **ALL** of the following:
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` ·
+> **OpenAPI DEĞİŞTİ**. **Son dalga — ADIM 66 (research timing provenance bundle KİMLİĞİNE
+> pinlendi, P-E3 / GH #558): ÜRÜN KODU DEĞİŞTİ, `bundle_hash` ŞEKİL DEĞİŞTİRDİ. Blocker
+> sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Ön koşul **imzasızdı ve slice
+> DURDU**: `closure_product_decisions_2026-08-13.md` §Karar 2'nin beş kutusu da boştu →
+> karar oturum içinde ürün sahibine soruldu ve **imzalandı (A1+A2, 2026-08-14)**; #720'nin
+> Karar 1 imzasızken sevk etme emsali **tekrarlanmadı**. İstenen *"A1, A2, B ve C"* birlikte
+> imzalanamazdı (**B = hiç pinleme**, A'nın tersi; **C = A1'in alt kümesi**) → düzeltilerek
+> imzalandı. `jobs/research_data.py::_pin_member` (YENİ) **her** üyeyi tek yerden pinler →
+> "en fakir yüzey" yapı gereği imkânsız; `::_seal_bundle` §9.2'nin **kendi adlarıyla** üç
+> türetilmiş dizi yayımlar (O-30 idiomu). **`_derived`'ın `sorted()`'ı TAŞIYICIDIR** —
+> `canonical_json` dizi elemanlarını sıralamaz, kaldırmak hash'i çağıranın argüman sırasına
+> bağlar. `compiler_version` → **`research-bundle-v2`** (eski/yeni hash uzaylarını
+> kendiliğinden ayırır → migration/dual-read **gerekmedi**). **Deponun TEK `xfail(strict)`'i
+> KALDIRILDI** — gevşetilmedi, ürün değişti; doğrulama **üretilmiş artefaktla** (`Backend
+> xfail markers: 1 (1 strict)` → **`0 (0 strict)`**). **Tipli gövdeyi `response_model` ile
+> BAĞLAMA:** `response_model=None` + `responses={200: {"model": ...}}` — ölçüldü,
+> `response_model` gövdeyi yeniden serileştirip `task_id`/`run_request_id`'yi `null` olarak
+> geri ekler, oysa `_seal_bundle` onları düşürür ve **düşürülmüş gövde hash'lenen gövdedir**.
+> **Arkasında sevk edilmiş alan olmayan bir §9.2 adını `[]` yayımlama** — boş dizi *"böyle
+> bir şey yok"* diye **beyan eder** (provenance yalanı), yokluk **boşluktur**;
+> `alignment_policy_versions[]` + `missing_and_stale_policies[]` **sınıf D olarak imzalandı**
+> (`grep` ile ölçüldü: `backend/src`'te sıfır kaynak). **Kabul borcunda CLAUSE ≠ KRİTER:**
+> `RD-11.c2` kapandı ama **hiçbir tavan oynamadı** (tavanlar kriter sayar; `RD-11` `c3`
+> yüzünden partial/B kalır) — clause defteri **uncovered 124 → 123**. **AÇIK:** `RD-11.c3`,
+> §9.2'nin iki sınıf-D adı, **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ**, #558'e
+> dokunulmadı (kapatmak **insan kararı**). `PROJECT_HISTORY.md` §ADIM 66 ·
+> `docs/ADIM66_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
-> **Son dalga — ADIM 65 (adli denetim kaydı + #541'in iki blocker gerekçesi, PR #700,
+> **ADIM 65 (adli denetim kaydı + #541'in iki blocker gerekçesi, PR #700,
 > DARALTILDI): FİNANSAL MANTIK OKUNDU, DOKUNULMADI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), verdict BLOCKED. Closes #541.** `capabilities.py`'nin scaling-timeframe grubundaki
 > iki `dependency` metni kanonu okuyunca **ayakta kalmıyordu** ve ikisi de ağaca karşı
@@ -796,10 +827,15 @@ Before stopping a working session, produce **ALL** of the following:
   ürettiği sayının (**72 dosya / 716 call site**) altında kaldığı için tek başına okunursa
   yanıltır (P-B/DR-4). Toplanan sayı için üretilmiş artefakta, geçen sayı için CI'a bak. **Dikkat (eski bir hata, tekrarlama):** ADIM 17
   koşusunda pytest'in özet satırı ve exit code'u yakalanmamıştı — çıktıyı dosyaya yaz, `$?`'i
-  **ayrı** oku. **Bilinçli `xfail(strict)` sayısı 1'dir** (eskiden 4 yazıyordu — **bayat**):
-  `test_research_point_in_time_parity.py:583`, tek issue **#558** (available-time policy pin'i
-  bir ÜRÜN kararı, bug değil). **#556 ×2 ve #557 düzeltildi**, artık normal assert ediyor
-  (gateway `rd_jobs.admit_bundle_member` kapısından geçiyor). Oracle paketinde xfail **sıfır**.
+  **ayrı** oku. **Bilinçli `xfail(strict)` sayısı ARTIK 0'dır** (ADIM 66'da 1 → 0; buraya sayı
+  yazma, üretilmiş `repository_facts.md` §*Backend `xfail` markers* otoritedir). Son strict
+  xfail `test_research_point_in_time_parity.py`'deydi ve tek issue **#558**'di
+  (available-time policy pin'i bir ÜRÜN kararı, bug değil): **Karar 2 A1+A2 olarak imzalandı
+  (2026-08-14)**, `jobs/research_data.py::_pin_member` pini sevk etti ve marker **kaldırıldı**
+  — `strict=False` yapılarak **gevşetilmedi**. **#556 ×2 ve #557 düzeltildi**, artık normal
+  assert ediyor (gateway `rd_jobs.admit_bundle_member` kapısından geçiyor). Oracle paketinde
+  xfail **sıfır**. Yeni bir strict xfail eklersen onu **bir ürün kararına** bağla; bir bug'ı
+  xfail'lemek onu görünmez yapar.
   Doğrula: `gh run list --branch main --limit 1` → job log.
   **Ortam tuzağı:** paralel worktree oturumları aynı anda koşuyor — `TEST_DATABASE_URL` ile
   worktree'ye özel izole DB kullan (**sürücü `postgresql+asyncpg://` olmalı**). Tam suite'i

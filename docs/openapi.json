@@ -1011,6 +1011,160 @@
         "title": "BootstrapStatusResponse",
         "type": "object"
       },
+      "BundleMemberModel": {
+        "description": "One pinned bundle member — ``jobs/research_data.py::_pin_member`` verbatim.\n\nDocumentation only: it is published via ``responses=``, NOT as a\n``response_model``, so FastAPI never filters or re-serializes the sealed body.\nThat matters because the body is what ``bundle_hash`` was computed over — a\nresponse model that dropped or added a key would make the published bundle\ndisagree with its own hash.",
+        "properties": {
+          "available_delay_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Delay Seconds"
+          },
+          "available_time_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available Time Policy"
+          },
+          "event_time_semantics": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Time Semantics"
+          },
+          "feature_definition_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Definition Ids",
+            "type": "array"
+          },
+          "frequency_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Policy"
+          },
+          "instrument_mapping_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument Mapping Ref"
+          },
+          "market_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Content Hash"
+          },
+          "market_dataset_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Dataset Revision Id"
+          },
+          "research_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Content Hash"
+          },
+          "research_revision_id": {
+            "title": "Research Revision Id",
+            "type": "string"
+          },
+          "source_timezone_iana": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timezone Iana"
+          },
+          "source_timezone_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timezone Mode"
+          },
+          "usage_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Scope"
+          }
+        },
+        "required": [
+          "research_revision_id",
+          "research_content_hash",
+          "usage_scope",
+          "market_dataset_revision_id",
+          "market_content_hash",
+          "available_time_policy",
+          "available_delay_seconds",
+          "event_time_semantics",
+          "frequency_policy",
+          "source_timezone_mode",
+          "source_timezone_iana",
+          "instrument_mapping_ref",
+          "feature_definition_ids"
+        ],
+        "title": "BundleMemberModel",
+        "type": "object"
+      },
       "CancelRunBody": {
         "properties": {
           "expected_row_version": {
@@ -5026,6 +5180,89 @@
           }
         },
         "title": "SaveStrategyDraftBody",
+        "type": "object"
+      },
+      "SealedBundleResponse": {
+        "description": "The sealed bundle body (doc 12 §9.1/§9.2, GH #558 Karar 2 = A1+A2).\n\nPublished so the contract is VISIBLE in ``docs/openapi.json``: both handlers\nreturn a bare ``dict``, which the drift guard renders as a free-form object, so\nbefore this the timing pin could have changed shape with a zero-line schema\ndiff. ``alignment_policy_versions[]`` and ``missing_and_stale_policies[]`` are\nthe two §9.2 names deliberately NOT here — nothing in the backend produces them.",
+        "properties": {
+          "available_time_policies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Available Time Policies",
+            "type": "array"
+          },
+          "bundle_hash": {
+            "title": "Bundle Hash",
+            "type": "string"
+          },
+          "bundle_kind": {
+            "title": "Bundle Kind",
+            "type": "string"
+          },
+          "compiler_version": {
+            "title": "Compiler Version",
+            "type": "string"
+          },
+          "feature_definition_revision_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Definition Revision Ids",
+            "type": "array"
+          },
+          "instrument_mapping_revision_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Instrument Mapping Revision Ids",
+            "type": "array"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/BundleMemberModel"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "resolved_at": {
+            "title": "Resolved At",
+            "type": "string"
+          },
+          "run_request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Request Id"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "bundle_kind",
+          "members",
+          "compiler_version",
+          "available_time_policies",
+          "instrument_mapping_revision_ids",
+          "feature_definition_revision_ids",
+          "resolved_at",
+          "bundle_hash"
+        ],
+        "title": "SealedBundleResponse",
         "type": "object"
       },
       "SetRationaleFamilyBody": {
@@ -14887,9 +15124,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Compile Agent Bundle Api V1 Research Datasets Bundles Agent Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SealedBundleResponse"
                 }
               }
             },
@@ -14930,9 +15165,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Compile Evidence Bundle Api V1 Research Datasets Bundles Backtest Evidence Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SealedBundleResponse"
                 }
               }
             },

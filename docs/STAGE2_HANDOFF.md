@@ -6386,6 +6386,57 @@ hâle gelmişti (aşağıda).
 - Merdivenin tepesi (`1D` sonrası) hâlâ **canonical bir boşluk**: clamp / durdur / reddet
   üç farklı üründür.
 
+## Stage 66 — research timing provenance bundle KİMLİĞİNE pinlendi (P-E3, GH #558) landed
+
+**Ne indi.** Doc 12 §9.1/§9.2'nin istediği available-time provenance'ı artık **her iki bundle
+üyesi** taşıyor ve **hash'e giriyor** → `bundle_hash` bir time-policy değişimi altında artık
+**değişmez değil**. `compiler_version` `research-bundle-v1` → **`research-bundle-v2`**.
+Migration **yok** (kolon yok), dual-read **yok** (kalıcı tüketici yok — yeniden ölçüldü),
+`ENGINE_VERSION` **değişmedi**. **OpenAPI DEĞİŞTİ.** Blocker sayısı **değişmedi** (1 — yalnız
+A-08), verdict **BLOCKED**.
+
+**Deponun tek `xfail(strict)`'i KALDIRILDI** (gevşetilmedi — ürün değişti). Doğrulama elle
+değil **üretilmiş artefaktla**: `repository_facts.md` → `Backend xfail markers: 1 (1 strict)`
+→ **`0 (0 strict)`**.
+
+**Ön koşul imzasızdı ve slice DURDU.** `closure_product_decisions_2026-08-13.md` §Karar 2'nin
+beş kutusu da boştu, GH #558 açık ve **yorumsuzdu**. Karar oturum içinde ürün sahibine
+soruldu ve **imzalandı** (A1+A2, 2026-08-14). #720'nin Karar 1 imzasızken sevk etme emsali
+**tekrarlanmadı**.
+
+### Reuse anchor'ları (tam adlarıyla)
+
+| Anchor | Ne için |
+|---|---|
+| `jobs/research_data.py::_pin_member` | **Her** bundle üyesi buradan geçer — yeni bir bundle yüzeyinde üyeyi elle kurma |
+| `jobs/research_data.py::_derived` | Üye anahtarından **sıralı** + tekil + null'suz üst düzey dizi |
+| `routes/research_data.py::SealedBundleResponse` | Yayımlanan gövde şeması — **`response_model` olarak bağlanmaz** (§Pazarlıksız 1) |
+| `test_research_point_in_time_parity.py::TIMING_KEYS` | Parity **sözleşmesinin kendisi**; manifest'e yedinci alan eklersen buraya da ekle |
+| `test_research_point_in_time_parity.py::_three_artifacts` | Üç artefaktı tek çağrıda kurar |
+
+### Pazarlıksız
+
+1. **Tipli gövdeyi `response_model` ile bağlama** — `response_model=None` +
+   `responses={200: {"model": ...}}`. Ölçüldü: `response_model` gövdeyi yeniden serileştirir
+   ve `task_id`/`run_request_id`'yi `null` olarak **geri ekler**; `_seal_bundle` onları
+   **düşürür** ve düşürülmüş gövde **hash'lenen gövdedir**.
+2. **`_derived`'ın `sorted()`'ı taşıyıcıdır** — `canonical_json` dizi elemanlarını
+   **sıralamaz**, yani sıralamayı kaldırmak hash'i çağıranın argüman sırasına bağlar.
+3. **Aynı token'lı iki üye sıralamayı SINAMAZ**; farklı policy taşıyan bir üçüncü üye gerekir.
+4. **Harness zone alanlarını kurmaz** — kurmazsan üç artefakt `None` üzerinde anlaşır ve
+   hiçbiri alanı taşımasa da test geçer.
+5. **Arkasında alan olmayan bir §9.2 adını `[]` olarak yayımlama** — boş dizi *"böyle bir şey
+   yok"* diye **beyan eder** (provenance yalanı); yokluk **boşluktur** ve assert edilir.
+
+### Açık bırakılanlar (dürüst sınır)
+
+- **`RD-11.c3` AÇIK** (sınıf B) — hiçbir test successor onayına karşı run manifest'ini geri
+  okumuyor. Sıradaki slice bu; harness'ın yarısı hazır.
+- **§9.2'nin iki adı sınıf D** (`alignment_policy_versions[]`, `missing_and_stale_policies[]`)
+  — **ürün boşluğu**, test borcu değil. İmzalı sapma olarak kayıtlı.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ.**
+- **GH #558'e dokunulmadı** — kapatmak insan kararıdır.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 59 bunu ölçtü ve KAPSAMINI DARALTTI, kapıyı açmadı:** §4.1'in **(a)** engeli

@@ -137,6 +137,7 @@ from entropia.domain.backtest.execution.scaling import (
     scaling_is_modelled,
 )
 from entropia.domain.backtest.execution.sizing import (
+    SIZE_RESOLVED_TO_ZERO,
     _cap_to_sleeve,
     _position_size,
     _sizing_is_honored,
@@ -1496,7 +1497,7 @@ def _build_stepper(
             # ``ctx.alloc_on`` when nothing was handed over, so this sets the reason only for
             # the independent case that previously reported the uninformative ``no_fill``.
             if not alloc_on:
-                led.portfolio_block_reason = "size_resolved_to_zero"
+                led.portfolio_block_reason = SIZE_RESOLVED_TO_ZERO
             return None
         if rules_active and portfolio_cap_amount is not None and size > _ZERO:
             # Composition-wide Max Total Exposure: the entry may only deploy the

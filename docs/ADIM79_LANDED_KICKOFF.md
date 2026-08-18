@@ -19,10 +19,13 @@ Tavanlar `partial` **93 → 91**, `debt_class.B` **62 → 60**. Açık kabul bor
 **A=1 · B=60 · C=6 · D=32 → 99**. Clause `covered` **1019 → 1021**, `uncovered`
 **108 → 106**; `total_criteria` **383** (taban).
 
-> **SIRA UYARISI — ZİNCİR ÜÇ SEVİYE DERİN.** #757 (ADIM 75) → #763 (ADIM 76) → bu (ADIM 78).
-> **Hiçbiri inmedi.** Alttakilerden biri rebase edilirse bu dal da rebase ister; en alttaki
-> merge olana kadar hiçbiri merge edilemez. Sebep: kabul defteri **seri bir kaynak** — baseline
-> `supersedes` zinciri bir öncekinin dondurduğu sayıları devralmalı.
+> **SIRA UYARISI — ZİNCİR ÇÖZÜLDÜ, AMA SEBEBİ DURUYOR.** Bu belge yazıldığında zincir üç
+> seviye derindi (#757 → #763 → bu) ve hiçbiri inmemişti. **2026-08-18 itibarıyla:** #757 ve
+> #756 main'de, #763 **kapatıldı** (batch 08 bu PR'a katlandı), ve bu dal **doğrudan main'e**
+> (`347fe19`) rebase edildi — yani artık yığılı değil. **Sebep hâlâ geçerli:** kabul defteri
+> **seri bir kaynaktır**, baseline'ın `supersedes` zinciri bir öncekinin dondurduğu sayıları
+> devralmalıdır; bir sonraki batch'i main'den bağımsız dallandırma. **NUMARA:** #754 **ADIM
+> 77**'yi merge edilmiş adla aldı → batch 08 **ADIM 78**, batch 09 **ADIM 79**.
 
 ## Bu slice'ın öğrettikleri
 
@@ -83,7 +86,7 @@ ROL: Entropia V18 Principal Engineer. Yalnız bu slice.
 [ENTROPIA ORTAK SÖZLEŞME bloğunu uygula]
 
 TABAN — ÖNCE ZİNCİRİ ÖLÇ
-  Üç PR yığılı ve hiçbiri inmemiş olabilir: #768 (ADIM 78 + 78) tek PR. Her birinin state/merged durumunu API'den OKU.
+  #768 (ADIM 78 + 79) tek PR ve main'e rebase edilmiş durumda. Yine de state/merged durumunu API'den OKU — bu satır bayatlar.
   - Hepsi indiyse: main'den dallan.
   - Biri açıksa: EN ÜSTTEKİ açık dalın üstüne YIĞ.
   Numarayı `grep '^## ADIM' docs/PROJECT_HISTORY.md | tail -1` ile ÖĞREN; merge edilmiş ad

@@ -11782,8 +11782,11 @@ Açık kabul borcu **101 → 99** (A=1 · B=60 · C=6 · D=32). Clause `covered`
 
 ### 7. Dürüst sınırlar
 
-- **Zincir üç seviye derin** ve hiçbiri inmedi: #757 (ADIM 75) → #763 (ADIM 76) → bu (ADIM 78).
-  Alttaki her rebase bu dalı da rebase ettirir.
+- **Zincir üç seviye derindi:** #757 (ADIM 75) → #763 (batch 08) → bu. Kayıt yazıldığında
+  hiçbiri inmemişti; **zincir sonradan çözüldü** — #757 ve #756 main'e indi, #763 **kapatıldı**
+  (batch 08 bu PR'a katlandı) ve bu dal doğrudan main'e rebase edildi. Numaralar da o sırada
+  kaydı: #754 **ADIM 77**'yi merge edilmiş adla aldığı için batch 08 → **ADIM 78**,
+  batch 09 → **ADIM 79** (bu kayıt). Kural değişmedi: **merge edilmiş ad kazanır.**
 - **Defterde artık ON ÜÇ bulgu var** ve dördü aynı şekle sahip (`TS-02.c2`, `PC-02.c2`,
   `AOS-04.c2`, `AOS-06.c2`): transient/hayali bir yüzey hakkında **yanlışlanamaz** iddialar.
   Bu artık tek tek bir slice'ın işi değil, **bir adjudication kalemi**.

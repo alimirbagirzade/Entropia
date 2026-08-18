@@ -7149,9 +7149,12 @@ codemap güncellemesi **gerekmedi**. `PROJECT_HISTORY.md` §ADIM 81 ·
 > `portfolio_engine.py::ItemParticipant.settle` ve `::finalize` **zorunlu** Protocol üyesi
 > (`hasattr` probe'u **yok**), `PHASE_ORDER` **dokuz faz** — `P10` dahil —,
 > `iter_portfolio` ve `PORTFOLIO_LOOP_VERSION` yayımlı.
-> **#759'un kendi `PROJECT_HISTORY` kaydı YOKTUR** ve bu kapanış onu **yazmadı** (ADIM 69/70
-> dersi: kaydı sahibi yazar). Kayıtsız inen diğerleri: #752 #755 #747 #761 #770 #774 #773 —
-> tablo `docs/ADIM81_LANDED_KICKOFF.md` §*Bugün main'e inen … kayıt görünmeyen PR'lar*.
+> **#759'un kaydı bu kapanış yazılırken YOKTU; bu blok tazelenirken VARDI** — `PROJECT_HISTORY.md`
+> §**ADIM 82** (PR **#778**, bu PR CI'da beklerken indi). Bu kapanış onun anlatısını **yazmadı**
+> (ADIM 69/70 dersi: kaydı sahibi yazar) ve doğru olan buydu — satır sahibine gitti. Hâlâ
+> kayıtsız görünenler: #752 #755 #747 #761 #770 #774 #773, artı bu PR açıkken inen #762 #765 —
+> tablo `docs/ADIM81_LANDED_KICKOFF.md` §*Bugün main'e inen … kayıt görünmeyen PR'lar*
+> (**o tablo da present-tense okunmaz, ölçülür**).
 >
 > **Sıradaki mühendislik kalemi `C3`.** Ölçüldü:
 > `backend/src/entropia/domain/backtest/execution/` altında **`participant.py` YOK**.

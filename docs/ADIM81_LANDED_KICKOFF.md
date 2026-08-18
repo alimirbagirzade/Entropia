@@ -45,7 +45,11 @@
   ama **işaret otorite değildir**.
 - `docs/decisions/closure_participant_importer_allowlist_2026-08-18.md` (**PR #761**) —
   `C3`'ün importer-allowlist kararının brifi. **Bu slice'ta yazılmadı, ama sıradaki işin
-  önündeki kapı budur** (aşağı bak).
+  önündeki kapı buydu** (aşağı bak). **GÜNCELLEME (bu PR açıkken ölçüldü): KARAR İMZALANDI**
+  — *"2026-08-18, **Seçenek A**"* (`☑ A`), yani allowlist **tek adlandırılmış modülle**
+  genişletilir. Belge **negatif kontrolü ZORUNLU** kılıyor: sahte bir importer kapıyı
+  gerçekten kırmızıya çevirmeli, yoksa genişletme tripwire'ı **kör eder** (§Ölçüm 4,
+  Seçenek C ölçülerek elendi).
 
 ## Pazarlıksız — bu slice'ın öğrendikleri
 
@@ -71,17 +75,23 @@
 
 ## Sıradaki tasarım işaretleri — ÖNCE ÖLÇ
 
-- **`C2` İNDİ (PR #759, `c78b15b`) ve kaydı YOK.** Bu kapanış onun anlatısını **yazmadı**
-  (ADIM 69/70 dersi: bir kapanış başkasının slice'ının anlatısını uydurmaz). Ölçülen:
+- **`C2` İNDİ (PR #759, `c78b15b`); bu kapanış yazılırken kaydı YOKTU, ARTIK VAR.**
+  Bu kapanış onun anlatısını **yazmadı** (ADIM 69/70 dersi: bir kapanış başkasının slice'ının
+  anlatısını uydurmaz) — ve doğru olan buydu: kaydı **sahibi yazdı**, `PROJECT_HISTORY.md`
+  **§ADIM 82** (PR **#778**, bu PR açıkken indi). Ölçülen:
   `portfolio_engine.py::ItemParticipant.settle` ve `::finalize` **zorunlu** Protocol üyesi,
   `PHASE_ORDER` **dokuz faz** (`P10` dahil), `iter_portfolio` ve `PORTFOLIO_LOOP_VERSION`
   yayımlı.
 - **Sıradaki mühendislik kalemi `C3`** — `execution/participant.py` adaptörü. Ölçüldü:
   `backend/src/entropia/domain/backtest/execution/` altında **`participant.py` YOK**.
-  Önündeki kapı bir imza değil bir **insan incelemesidir**: containment gate'in importer
+  Önündeki kapı bir imza değil bir **insan incelemesiydi**: containment gate'in importer
   kontrolü (`portfolio_engine.__all__` Protocol'ün tiplendiği altı tipin hiçbirini yeniden
   yayımlamıyor) → allowlist genişletmesi **bilinçli ve gözden geçirilmiş** olmalı. Brif
-  **#761'de indi**; **imzasızdır**.
+  **#761'de indi ve KARARI İMZALANDI** (2026-08-18, **Seçenek A** — allowlist'i **tek
+  adlandırılmış modülle** genişlet). **`C3` artık bir imza beklemiyor.** İki şey pazarlıksız:
+  **negatif kontrol ZORUNLU** (sahte bir importer kapıyı gerçekten kırmızıya çevirmeli) ve
+  **Seçenek C ölçülerek elendi** — yeniden-ihraç import kontrolünü hiç tetiklemez, yani kapıyı
+  **kör eder**. Kararı uygulamadan önce belgeyi **kendin oku**, bu satırı otorite sayma.
 - **Kapı brifleri ile ilgilenen bir slice için:** `G11` tek imzasız-ve-briefsiz kapıydı, **PR
   #771 açık** ve onu brifliyor. **İkinci bir brif YAZMA** — önce `list_pull_requests`.
 - **Kabul borcu hattı ayrı ilerliyor:** batch 08/09 **PR #768'de açık** (91 partial / B 60),
@@ -92,19 +102,23 @@
 
 | PR | Konu | Kayıt |
 |---|---|---|
-| **#759** | **`C2` — `settle` + `finalize` + P10 faz döngüsüne eklendi (ÜRÜN KODU)** | **YOK** |
+| ~~#759~~ | `C2` — `settle` + `finalize` + P10 faz döngüsüne eklendi (ÜRÜN KODU) | **ARTIK VAR — §ADIM 82 (#778)** |
 | #752 | G12 (Karar 6) signature block'u yaratıldı | YOK |
 | #755 | G4 cap-overflow brifi | YOK (yalnız başka kayıtlarda anılıyor) |
 | #747 | G15 external-row winner brifi | YOK (yalnız anılıyor) |
-| #761 | `C3` importer-allowlist brifi | YOK |
+| #761 | `C3` importer-allowlist brifi (**kararı İMZALANDI**, Seçenek A) | YOK |
 | #770 | G9/G13 imzalarının NEREDE verildiğinin kaydı | YOK |
 | #774 | Karar 4/5 kutuları işaretlendi | YOK |
 | #773 | prompt paketi canlı kickoff'u adlandırmayı bıraktı | YOK |
 | #750 · #753 | G9/G13 blokları + ADR §13.2 amendment'ı | ADIM 76 içinde **anılıyor**, kendi kaydı yok |
 
 > **Bunların ADIM kayıtlarını YAZMA.** Kaydı **sahibinin** yazması gerekir; bir kapanış
-> başkasının slice'ının anlatısını uyduramaz. Burada yalnız **işaret edilir**. En ağırı
-> **#759**: bir **ürün kodu** slice'ı kayıtsız duruyor.
+> başkasının slice'ının anlatısını uyduramaz. Burada yalnız **işaret edilir**.
+>
+> **BU TABLO BİR KEZ ÇÜRÜDÜ — dersi tablonun kendisinden daha değerli.** Yazıldığında en ağır
+> satır **#759**'du (kayıtsız inmiş bir **ürün kodu** slice'ı); bu PR CI'da beklerken **#778**
+> indi ve onu **§ADIM 82** olarak yazdı. Yani *"işaret et, uydurma"* **işe yaradı**: satır
+> sahibine gitti. **Kalan satırları da present-tense okuma — ölç.**
 
 ## Çalışma yöntemi (bu dalgada işe yarayan)
 
@@ -151,18 +165,24 @@ KAPI DURUMU (ADIM 81'de ölçüldü — YENİDEN ÖLÇ):
   F3 → G1+G2+G3, C6 → G11+G12, C9 → G8+G14+G10, A-08 → ajan kapatamaz).
 
 SIRADAKİ MÜHENDİSLİK KALEMİ: C3 — execution/participant.py adaptörü.
-  C2 PR #759'da İNDİ (settle/finalize zorunlu Protocol üyesi, PHASE_ORDER 9 faz).
-  C3'ün önündeki kapı bir imza değil INSAN İNCELEMESİDİR: containment gate'in
-  importer allowlist'i. Brif docs/decisions/closure_participant_importer_
-  allowlist_2026-08-18.md (PR #761) — İMZASIZ. Genişletmeyi sessizce yapma.
+  C2 PR #759'da İNDİ (settle/finalize zorunlu Protocol üyesi, PHASE_ORDER 9 faz)
+  ve kaydı ADIM 82'de (#778) yazıldı.
+  C3'ün önündeki kapı containment gate'in importer allowlist'iydi; brif
+  docs/decisions/closure_participant_importer_allowlist_2026-08-18.md (#761)
+  ve KARAR İMZALANDI — 2026-08-18, Seçenek A (allowlist'i TEK adlandırılmış
+  modülle genişlet). Yani C3 artık imza beklemiyor. NEGATİF KONTROL ZORUNLU:
+  sahte bir importer kapıyı gerçekten kırmızıya çevirmeli — yoksa genişletme
+  tripwire'ı KÖR EDER (Seçenek C bu yüzden ölçülerek elendi). ÖNCE KENDİN ÖLÇ.
 
 ALTERNATİF HAT — kabul borcu batch 11: sınıf-B'den TEK belge + TEK yüzey seç.
   cd backend && uv run python ../docs/audit/acceptance_semantic_scan.py --root .. --report
   ZİNCİR: batch 08/09 PR #768'de açık (91 / B 60), main tabanı 96 / B 65.
   İkinci inen rebase edip YENİDEN DONDURMALI.
 
-KAYITSIZ İNEN SLICE'LAR (yalnız işaret et, ANLATI UYDURMA): #759 (ÜRÜN KODU),
-  #752 #755 #747 #761 #770 #774 #773. Kaydı sahibinin yazması gerekir.
+KAYITSIZ İNEN SLICE'LAR (yalnız işaret et, ANLATI UYDURMA): #752 #755 #747
+  #761 #770 #774 #773 — ve #762 #765 #778, bunlar bu PR açıkken indi.
+  #759 ARTIK KAYITLI (ADIM 82 / #778). Kaydı sahibinin yazması gerekir; bu
+  liste de bayatlar, ONU DA ÖLÇ.
 
 DUR koşulları: imzasız kapı, çözülmemiş PO kararı, kırmızı focused test,
 OpenAPI drift, çoklu alembic head, historical Result davranışı değişimi.

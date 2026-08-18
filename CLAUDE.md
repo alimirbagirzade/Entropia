@@ -262,8 +262,8 @@ Before stopping a working session, produce **ALL** of the following:
 > düzelten bir kapı değil **insan**) · **çift iş** (#772 aynı §'yı tazeledi → taban **daha doğru
 > ölçen** dal oldu; tazelemeden önce `list_pull_requests`). **O sırada kayıtsız olan ürün slice'ı
 > (`C2` = PR #759) ARTIK KAYITLI** — ADIM 82 onu geriye dönük yazdı (#778); sıradaki
-> mühendislik kalemi **`C3`** (`execution/participant.py` **yok**, önünde importer-allowlist
-> **insan incelemesi**, brif #761, imzasız).
+> mühendislik kalemi **`C3`** (`execution/participant.py` **yok**; importer-allowlist kararı
+> **#761'de İMZALANDI — Seçenek A**, negatif kontrol zorunlu).
 > `PROJECT_HISTORY.md` §ADIM 81 · `docs/ADIM81_LANDED_KICKOFF.md`.
 >
 >

@@ -7730,12 +7730,15 @@ criteria:
     - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
   - id: PC-01.c2
     text: The status pill renders the literal `Not Checked` when no scan exists.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - 'frontend/src/test/createPackage.test.tsx > Create Package page > reads the literal Not Checked
+      on the TA Pre-Check row when no scan exists (PC-01.c2)'
   - id: PC-01.c3
     text: No persisted Package Revision is created merely by rendering the surface.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_create_package_persistence.py::test_reading_the_precheck_surface_persists_no_package_revision
   production_paths:
   - backend/src/entropia/application/commands/create_package.py
   - backend/src/entropia/application/queries/create_package.py
@@ -7744,12 +7747,19 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_create_package_persistence.py::test_full_flow_create_precheck_draft_publish
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
+  - backend/tests/integration/test_create_package_persistence.py::test_reading_the_precheck_surface_persists_no_package_revision
+  - 'frontend/src/test/createPackage.test.tsx > Create Package page > reads the literal Not Checked
+    on the TA Pre-Check row when no scan exists (PC-01.c2)'
   evidence_type:
   - backend_integration
+  - frontend_component
   positive:
   - backend/tests/integration/test_create_package_persistence.py::test_full_flow_create_precheck_draft_publish
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
-  negative: []
+  - 'frontend/src/test/createPackage.test.tsx > Create Package page > reads the literal Not Checked
+    on the TA Pre-Check row when no scan exists (PC-01.c2)'
+  negative:
+  - backend/tests/integration/test_create_package_persistence.py::test_reading_the_precheck_surface_persists_no_package_revision
   auth: []
   occ: []
   idempotency: []
@@ -7757,13 +7767,17 @@ criteria:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: '`Not Checked` exists exactly once in the tree (`pages/CreatePackage.tsx:973`) and no frontend
-    test asserts it — grepping the string across `frontend/src/test` returns nothing. c3 is likewise
-    unasserted: `test_fresh_request_projects_an_empty_chain` looks like the right test but it drives
-    the request to a DRAFT first, so it proves an empty revision CHAIN, not "a rendered surface writes
-    no revision".'
+  status: covered
+  notes: 'CLOSED in acceptance batch 07 (ADIM 75). c2: `Not Checked` exists exactly once in the tree
+    (`pages/CreatePackage.tsx:973`) and nothing asserted it; the new test scopes the assertion to the
+    TA Pre-Check `.cp-status-row` so a coincidental match elsewhere on the workspace cannot satisfy it.
+    NEGATIVE CONTROL: replacing the literal with an em dash fails with "Unable to find an element with
+    the text: Not Checked". c3: `test_fresh_request_projects_an_empty_chain` looked like the right test
+    but drives the request to a DRAFT first, so it proved an empty revision CHAIN on a request that
+    already HAS a root. The new test drives the READ PATH the surface uses
+    (`queries/create_package.py::get_package_request`) TWICE on a request that never left `requested`,
+    and counts `PackageRoot` / `PackageRevision` around it. NEGATIVE CONTROL: making that query call
+    `pkg_repo.create_package` fails with `assert 2 == 0` — two reads, two roots.'
 - id: PC-02
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'
@@ -7806,7 +7820,21 @@ criteria:
     in `normalize_request`, at the route, before the DB — so "no scan job starts" and "Send rejects
     the empty request" collapse into the same proven guard. The UI half is unproven: `PreCheck.tsx`
     renders "No Pre-Check scan yet for this request." for the no-scan case and no test asserts that
-    string, nor is there an empty-input branch keyed to an empty source.'
+    string, nor is there an empty-input branch keyed to an empty source. ADIM 75 FINDING — c2 is very
+    likely MISCLASSIFIED and no test can close it as written. The clause wants the Pre-Check surface
+    to show a "final empty-input text" for an EMPTY SOURCE (doc 07 §16 PC-02: "UI shows TA PRE-CHECK
+    RESULT with final empty-input text"). MEASURED on base 0f0651d: (1) `EMPTY_SOURCE` appears NOWHERE
+    in `frontend/src` — grepping the code and every empty-source spelling across the whole frontend
+    tree returns only unrelated hits in `marketData.test.tsx` and `panelLogs.test.tsx`; the only
+    `EmptyState` on the Pre-Check page (`pages/PreCheck.tsx:123`) is "No requests yet", an empty
+    request LIST, not an empty source. (2) More decisively, the state is UNCONSTRUCTIBLE on the shipped
+    surface: the overlay is rendered as `{precheckOpen && detail !== null ? <PreCheckModal … />}`
+    (`pages/CreatePackage.tsx:765`), so Pre-Check cannot be opened without a persisted request — and a
+    request with an empty source cannot be persisted, because the route rejects it before the DB. There
+    is therefore no reachable screen on which an "empty-input" Pre-Check result could be rendered. That
+    makes c2 closer to class C (a scenario Production cannot construct) than to class B; either way it
+    is NOT test debt. NOT RECLASSIFIED — B -> C/D RAISES that ceiling and is an adjudication, not a
+    test slice''s call. This makes NINE such open findings across the ledger.'
 - id: PC-03
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'
@@ -8527,23 +8555,31 @@ criteria:
   - id: PC-17.c4
     text: Closing the Pre-Check modal issues no cancel request, and reopening rehydrates the current
       job/status from the server.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - 'frontend/src/test/createPackage.test.tsx > Create Package page > closing Pre-Check cancels
+      nothing and reopening re-reads the server (PC-17.c4)'
   production_paths:
   - backend/src/entropia/application/commands/create_package.py
   - backend/src/entropia/application/jobs/create_package.py
   - frontend/src/pages/CreatePackage.tsx
+  - frontend/src/components/PreCheckModal.tsx
   test_evidence:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_failure_is_durable_failed_state
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_is_redelivery_idempotent
+  - 'frontend/src/test/createPackage.test.tsx > Create Package page > closing Pre-Check cancels
+    nothing and reopening re-reads the server (PC-17.c4)'
   evidence_type:
   - backend_integration
+  - frontend_component
   positive:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_admission_returns_queued_durable_job
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_is_redelivery_idempotent
   negative:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_failure_is_durable_failed_state
+  - 'frontend/src/test/createPackage.test.tsx > Create Package page > closing Pre-Check cancels
+    nothing and reopening re-reads the server (PC-17.c4)'
   auth: []
   occ: []
   idempotency:
@@ -8554,12 +8590,18 @@ criteria:
   - backend/tests/integration/test_create_package_precheck_worker.py::test_worker_is_redelivery_idempotent
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The durability half is strong. The UI half is not asserted: the closest test, `createPackage.test.tsx
-    > … > opens Pre-Check in an accessible modal dialog and closes on Escape`, checks aria-modal,
-    in-context controls and focus restoration — it makes no claim about requests NOT being sent on
-    close, and nothing in the suite re-mounts the page mid-check to prove rehydration from the server.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 07 (ADIM 75). The durability half was already strong; the UI half
+    had no assertion — the closest test (`opens Pre-Check in an accessible modal dialog and closes on
+    Escape`) checks aria-modal, in-context controls and focus restoration, and makes no claim about
+    requests NOT being sent on close. The new test asserts BOTH halves of c4. (1) Close is a CLIENT-side
+    dismissal: the count of non-GET fetch calls is identical before and after Escape, so the browser
+    issues nothing on the way out — which is what makes the shipped copy ("closing this browser does
+    not cancel it") true rather than aspirational. (2) The overlay keeps no snapshot: with the stub
+    switched to report a BLOCKED scan and the query invalidated, reopening shows the SERVER''s status,
+    not the passed one it was closed on. TWO NEGATIVE CONTROLS, both red: making `onClose` fire a POST
+    fails half (1) with `expected 1 to be +0`; freezing the `detail` prop across reopens fails half (2)
+    with "Unable to find an element with the text: blocked".'
 - id: PC-18
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'
@@ -8767,37 +8809,57 @@ criteria:
     - backend/tests/integration/test_create_package_persistence.py::test_precheck_comment_only_call_is_not_a_dependency
   - id: PC-21.c2
     text: The surface says "ready for conversion" for that PASSED state.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - 'frontend/src/test/preCheck.test.tsx > Pre-Check page > states the canonical PASSED result line
+      once the durable job lands (PC-21.c2)'
   - id: PC-21.c3
     text: The PASSED result makes no claim about repaint, future leak, validation or approval.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - 'frontend/src/test/preCheck.test.tsx > Pre-Check page > claims nothing about repaint, future
+      leak, validation or approval on a PASSED result (PC-21.c3)'
   production_paths:
   - backend/src/entropia/application/jobs/create_package.py
   - backend/src/entropia/domain/create_package/source_scan.py
   - frontend/src/pages/PreCheck.tsx
   test_evidence:
   - backend/tests/integration/test_create_package_persistence.py::test_precheck_comment_only_call_is_not_a_dependency
+  - 'frontend/src/test/preCheck.test.tsx > Pre-Check page > states the canonical PASSED result line
+    once the durable job lands (PC-21.c2)'
+  - 'frontend/src/test/preCheck.test.tsx > Pre-Check page > claims nothing about repaint, future
+    leak, validation or approval on a PASSED result (PC-21.c3)'
   evidence_type:
   - backend_integration
+  - frontend_component
   positive:
   - backend/tests/integration/test_create_package_persistence.py::test_precheck_comment_only_call_is_not_a_dependency
-  negative: []
+  - 'frontend/src/test/preCheck.test.tsx > Pre-Check page > states the canonical PASSED result line
+    once the durable job lands (PC-21.c2)'
+  negative:
+  - 'frontend/src/test/preCheck.test.tsx > Pre-Check page > claims nothing about repaint, future
+    leak, validation or approval on a PASSED result (PC-21.c3)'
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The state half is proven. The UI copy is not: `PreCheck.tsx` renders "Pre-Check passed.
-    Dependency manifest is ready for candidate generation." and no test asserts that string — `preCheck.test.tsx`
-    asserts the Resolved/Missing row text and the stale line only. c3 is a negative-scope claim (the
-    surface must NOT assert repaint/validation/ approval verdicts); nothing in the suite guards against
-    such copy being added, so it is recorded as unproven rather than assumed from the absence of the
-    words.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 07 (ADIM 75). c2: `PreCheck.tsx` renders "Pre-Check passed.
+    Dependency manifest is ready for candidate generation." and nothing asserted it. The line only
+    renders once a run has been ADMITTED and the projection then carries a HIGHER scan attempt than
+    the one visible at admission (F-01a), so the test drives that transition with a route handler that
+    answers differently before and after the POST — a static fixture would leave the page on the
+    running line and the assertion would pass vacuously. NEGATIVE CONTROL: trimming the copy to a bare
+    "Pre-Check passed." fails on the whole-sentence matcher. c3 is a NEGATIVE SCOPE claim and was the
+    reason this row was flagged as risky: Pre-Check resolves DEPENDENCIES and must not imply repaint,
+    lookahead/future-leak, functional validation or approval verdicts, which are separate gates. The
+    absence of those words had been assumed, never asserted; the test now pins the whole rendered
+    surface against seven over-claim patterns. It is not a tautology — NEGATIVE CONTROL: appending "No
+    repaint and no lookahead leak; validation approved." to the PASSED line fails with `expected ...
+    not to match /repaint/i`. Both halves were verified to be reachable: the surface genuinely renders
+    the passed line in the asserted state.'
 - id: PC-22
   document: docs/spec/07_Entropia_V18_Pre_Check_Page_Documentation_v1_1.md
   section: '16'

@@ -129,6 +129,50 @@ async function selectRequest() {
   fireEvent.click(screen.getByRole("button", { name: "Select" }));
 }
 
+// PC-21 fixtures: a request with NO scan yet, and the PASSED scan the durable
+// worker lands. A source with no unresolved TA dependency passes with an empty
+// `missing` set — the PC-21 state.
+const PASSED_SCAN = {
+  ...SCAN,
+  scan_id: "scan_2",
+  attempt_no: 1,
+  status: "passed",
+  missing: [],
+};
+
+const REQUEST_DETAIL_NO_SCAN = {
+  ...REQUEST_DETAIL,
+  state: "requested",
+  current_scan: null,
+  precheck_fresh: false,
+};
+
+const REQUEST_DETAIL_PASSED = {
+  ...REQUEST_DETAIL,
+  state: "precheck_passed",
+  current_scan: PASSED_SCAN,
+  precheck_fresh: true,
+};
+
+// The status line only renders once a run has been ADMITTED and the projection
+// then carries a HIGHER scan attempt than the one visible at admission — that is
+// how the page tells "still running" from "landed" (F-01a). So the detail route
+// has to answer differently before and after the POST; a static fixture would
+// leave the page on the running line forever and the assertion would be vacuous.
+function stubPassedRun() {
+  let admitted = false;
+  return stubApi({
+    "POST /create-package/requests/req_1/pre-check": () => {
+      admitted = true;
+      return PRECHECK_RESULT;
+    },
+    "GET /dependency-scans/scan_2": { ...SCAN_DETAIL, ...PASSED_SCAN },
+    "GET /create-package/requests/req_1": () =>
+      admitted ? REQUEST_DETAIL_PASSED : REQUEST_DETAIL_NO_SCAN,
+    "GET /create-package/requests": REQUESTS_PAGE,
+  });
+}
+
 describe("Pre-Check page", () => {
   afterEach(() => {
     cleanup();
@@ -239,5 +283,60 @@ describe("Pre-Check page", () => {
 
     expect(await screen.findByText("Unable to load")).toBeInTheDocument();
     expect(screen.getByText("FORBIDDEN: Sign in to run Pre-Check.")).toBeInTheDocument();
+  });
+
+  // --------------------------------------------------------------------- //
+  // PC-21 — the PASSED result: what it says, and what it must NOT say      //
+  // --------------------------------------------------------------------- //
+
+  it("states the canonical PASSED result line once the durable job lands (PC-21.c2)", async () => {
+    stubPassedRun();
+    renderPage();
+    await selectRequest();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run Pre-Check" }));
+
+    // doc 07 §7.2: the PASSED status line is CANONICAL copy, not a free-form
+    // paraphrase — it is the sentence telling the user the dependency manifest is
+    // ready for the next step. Asserted whole, so trimming it back to a bare
+    // "Pre-Check passed." would fail here.
+    expect(
+      await screen.findByText(
+        /Pre-Check passed\. Dependency manifest is ready for candidate generation\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("claims nothing about repaint, future leak, validation or approval on a PASSED result (PC-21.c3)", async () => {
+    stubPassedRun();
+    renderPage();
+    await selectRequest();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run Pre-Check" }));
+    await screen.findByText(/Pre-Check passed\./);
+
+    // PC-21's second half is a NEGATIVE SCOPE claim, and it is the half that
+    // matters: Pre-Check resolves DEPENDENCIES and says so. It does not certify
+    // repaint behaviour, future/lookahead leakage, functional validation or
+    // approval — those are separate gates (validation runs, baseline compare,
+    // Admin approval). A Pre-Check surface implying any of them would be telling
+    // the user the package is safe on evidence it never collected.
+    //
+    // Nothing guarded this before: the absence of those words was ASSUMED, not
+    // asserted, so a later copy edit could introduce the over-claim silently.
+    // This pins the whole rendered surface rather than one element.
+    const surface = document.body.textContent ?? "";
+    expect(surface).toMatch(/Pre-Check passed\./);
+    for (const overclaim of [
+      /repaint/i,
+      /look-?ahead/i,
+      /future leak/i,
+      /\bvalidated\b/i,
+      /\bvalidation\b/i,
+      /\bapproved\b/i,
+      /\bapproval\b/i,
+    ]) {
+      expect(surface).not.toMatch(overclaim);
+    }
   });
 });

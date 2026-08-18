@@ -3210,7 +3210,10 @@ criteria:
       03 §6.2 chooser and per-choice helpers verbatim
   - id: AOS-01.c2
     text: Keyboard navigation of the chooser matches pointer behaviour.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > offers the keyboard
+      exactly the pointer's two stops, in the same order (AOS-01)
   - id: AOS-01.c3
     text: Rendering or choosing performs no backend mutation.
     status: covered
@@ -3228,6 +3231,8 @@ criteria:
     two canonical choices with their workbench targets (AOS-01)
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > renders the doc 03
     §6.2 chooser and per-choice helpers verbatim
+  - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > offers the keyboard
+    exactly the pointer's two stops, in the same order (AOS-01)
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > performs no backend
     call — rendering and choosing never touch fetch (§7.1)
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > choosing Trading Signal
@@ -3241,6 +3246,8 @@ criteria:
     two canonical choices with their workbench targets (AOS-01)
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > renders the doc 03
     §6.2 chooser and per-choice helpers verbatim
+  - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > offers the keyboard
+    exactly the pointer's two stops, in the same order (AOS-01)
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > choosing Trading Signal
     navigates to the Trading Signal workbench
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > choosing Trade Log
@@ -3254,14 +3261,24 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The membership half of the row is genuinely asserted (exactly two choices, both routed to
-    their workbenches) and the no-mutation half is asserted against fetch. The clause "keyboard navigation
-    matches pointer behavior" has no asserting test: every chooser test drives the UI by click. A
-    neighbouring suite does assert submenu keyboard semantics (menu.test.tsx, "exposes a nested submenu
-    trigger as an expandable button") but that is the primary menu, not the Add Outsource Signal chooser,
-    so it is not cited here.'
+  status: covered
+  notes: 'ADIM batch 10 closed c2, the last open clause on this row and the last on doc 03 that a test
+    could close. The membership and no-mutation halves were already asserted; what was missing was any
+    assertion about the KEYBOARD, because every chooser test drove the UI by click. The new test asserts
+    the tab SEQUENCE inside the chooser region rather than re-asserting that the choices are links: the
+    keyboard is offered exactly the stops the pointer has, in the same order. That distinction is the
+    whole point - the membership test stays green when a choice is pulled out of the tab order, since
+    tabIndex={-1} leaves role, name and href untouched while making the chooser mouse-only. Both negative
+    controls isolated the new test and left the other six green: tabIndex={-1} on the Link produced
+    "expected [] to deeply equal [<a>, <a>]", and a tabIndex={0} div added inside the chooser produced a
+    three-element sequence against the expected two. HONEST BOUNDARY, recorded rather than papered over:
+    jsdom implements no native anchor activation, so pressing Enter cannot be simulated in a component
+    test and this test does not pretend to. What native activation depends on IS asserted - each stop is
+    an <a href> carrying the same target the pointer path navigates to, and the two "choosing ..." tests
+    drive that pointer path - but the keystroke itself belongs to the browser. A real-browser proof would
+    belong in e2e/specs/14-keyboard-flow.spec.ts (@a11y), which drives Tab and Enter against the seeded
+    stack; it was NOT added here because this container cannot run that suite (the Docker Hub blob CDN
+    answers 403), and an unverifiable assertion is not evidence.'
 - id: AOS-02
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'

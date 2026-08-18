@@ -237,7 +237,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 77 (P1 + P4, PR #751 + #754): ÜRÜN KODU DEĞİŞTİ, gözlenebilir
+> `future_dev`. **Son dalga — ADIM 80 (kabul borcu batch 10, doc 03 frontend): ÜRÜN KODU
+> DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Tek clause: **`AOS-01.c2`** (chooser klavye paritesi) — parite **native** (`OutsourceSignal.tsx`
+> seçimleri `<Link>` render eder), eksik olan **assertion**'dı. **DERS: "seçimler link" demek
+> yetmez, o zaten asserted** — `tabIndex={-1}` role/ad/href'i bozmadan chooser'ı mouse-only yapar
+> ve membership testi **yeşil kalır**; bu yüzden yeni assertion **SIRA** hakkında (chooser'da
+> klavyeye pointer'ın stop'larının tam aynısı, aynı sırayla). İki negatif kontrol **yalnız yeni
+> testi** düşürdü. **Dürüst sınır:** jsdom'da native anchor activation yok → `Enter`
+> **basılamaz**, test bastığını iddia etmiyor; gerçek tarayıcı kanıtı `@a11y` suite'ine
+> yazılırdı ama bu container onu **koşamıyor** (403) → **yazılmadı**. **Tavanlar İNDİ:
+> `partial` 97 → 96, `debt_class.B` 66 → 65**; açık borç **104** (A=1 · B=65 · C=6 · D=32).
+> **Doc 03'te testin kapatabileceği satır KALMADI.** **ZİNCİR: bu freeze main `347fe19`'a karşı;
+> batch 08/09 hâlâ PR #768'de (91 / B 60) → ikinci inen rebase edip YENİDEN DONDURMALI**
+> (numara da öyle: 78/79 #768'in, bu yüzden burası **80**).
+> `PROJECT_HISTORY.md` §ADIM 80 · `docs/ADIM80_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 77 (P1 + P4, PR #751 + #754): ÜRÜN KODU DEĞİŞTİ, gözlenebilir
 > DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** #617'nin şeklinin
 > **dördüncü ve beşinci** örneği kapandı: `readiness_check.py::_resolve_tick_data_issues`
 > (**1 → 11**, slope 1) ve `backtest_run.py::_resolve_tick_pins` (**3 → 23**, slope 2) — ikisi de

@@ -6961,6 +6961,35 @@ bu kaydı dalgayı merge eden oturum ürün sahibinin talimatıyla yazdı. Kayı
 `docs/ADIM77_LANDED_KICKOFF.md`.
 
 
+## Stage 80 — kabul borcu batch 10 (doc 03 frontend): AOS-01 kapandı, doc 03'ün test borcu bitti landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**. Tek clause'luk parti: `AOS-01.c2` (chooser klavye
+paritesi, doc 03 §14) — batch 09'da **yüzey** gerekçesiyle ertelenmişti.
+
+**Parite native:** `pages/OutsourceSignal.tsx` her seçimi `<Link>` (`<a href>`) olarak render
+ediyor. Eksik olan davranış değil assertion'dı. Yeni test **"seçimler link"i tekrarlamıyor** —
+o zaten `AOS-01.c1`'de asserted ve `tabIndex={-1}` altında **yeşil kalır**. Assertion **sıra**
+hakkında: chooser bölgesinde klavyeye pointer'ın stop'larının **tam aynısı, aynı sırayla**
+sunulur.
+
+**İki negatif kontrol, ikisi de yeni testi izole etti** (diğer altısı yeşil): `tabIndex={-1}` →
+`expected [] to deeply equal [<a>, <a>]`; chooser içine `tabIndex={0}` div → üç elemanlı dizi.
+
+**Dürüst sınır:** jsdom'da native anchor activation yok → `Enter` **basılamaz** ve test bastığını
+iddia etmiyor. Gerçek tarayıcı kanıtı `e2e/specs/14-keyboard-flow.spec.ts` (`@a11y`) içine
+yazılırdı; bu container o suite'i koşamadığı için (Docker Hub **403**) **yazılmadı**.
+
+**Tavanlar:** `partial` **97 → 96**, `debt_class.B` **66 → 65**, açık borç **105 → 104**
+(A=1 · B=65 · C=6 · D=32). `total_criteria` **383** ve `uncovered` **8** değişmedi.
+
+**Zincir notu:** freeze **main `347fe19`**'a karşı ölçüldü; batch 08/09 hâlâ **PR #768**'de
+(91 / B 60). İkinci inen taraf rebase edip **yeniden dondurmalı**.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 80 ·
+`docs/ADIM80_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:

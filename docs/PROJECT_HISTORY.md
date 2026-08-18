@@ -11558,3 +11558,66 @@ kurucuyu **orphan process** olarak sonlandırdı (`Terminate orphan process: pid
 - **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
 - Codemap tazelenmedi ve gerekmedi: yeni endpoint / tablo / sayfa / job yok; eklenen iki
   sembol mevcut repository modüllerinin içinde.
+
+## ADIM 80 — kabul borcu batch 10 (doc 03 frontend): AOS-01 kapandı, doc 03'ün test edilebilir borcu bitti
+
+> **ÜRÜN KODU DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Diff'te `backend/src` altında **sıfır** dosya, `frontend/src/pages`
+> altında **sıfır** dosya; değişen tek kod `frontend/src/test/outsourceSignal.test.tsx`.
+
+**Tek clause'luk parti.** `AOS-01.c2` — *"keyboard navigation of the chooser matches pointer
+behaviour"* (doc 03 §14) — dört partidir açıktı ve batch 09'un kickoff'unda **yüzey** gerekçesiyle
+ertelenmişti: satır frontend, parti backend'di. Kapandı.
+
+**Kapanma sebebi bir ürün düzeltmesi DEĞİL:** parite **native**. `pages/OutsourceSignal.tsx`
+her seçimi bir react-router `<Link>` (yani `<a href>`) olarak render ediyor
+(`TypeChoice`, `:119`), click handler olarak değil — dosyanın kendi yorumu bunu zaten
+gerekçelendiriyor (*"A link (not a button) because the choice is pure navigation"*). Eksik olan
+davranış değil **assertion**'dı.
+
+**ASIL NOKTA — "seçimler link" DEMEK YETMEZ, o zaten asserted.** `AOS-01.c1`'in mevcut testi
+`getAllByRole("link")` ile iki seçimi ve href'lerini pinliyor. Yeni test onu tekrarlasaydı
+*işaretleme* olurdu, kapsama değil: **`tabIndex={-1}` role'ü, adı ve href'i olduğu gibi bırakır**,
+yani membership testi **yeşil kalırken** chooser mouse-only olur. Bu yüzden yeni assertion
+**SIRA** hakkında: chooser bölgesinin içinde klavyeye **pointer'ın sahip olduğu stop'ların tam
+olarak aynısı, aynı sırayla** sunulur — eksik seçim yok, pointer'ın görmediği stop yok.
+Tab sırası jsdom'da DOM'dan türetilir (`TABBABLE_SELECTOR` + `tabIndex >= 0`), çünkü jsdom
+sequential focus navigation uygulamaz.
+
+**İki negatif kontrol, ikisi de YENİ testi izole etti** (diğer altı test her ikisinde de yeşil):
+
+| Kaldırılan/eklenen davranış | Gözlenen kırmızı |
+|---|---|
+| `Link`'e `tabIndex={-1}` (seçimler tab sırasından çıkar) | `expected [] to deeply equal [<a>, <a>]` |
+| chooser içine `tabIndex={0}` bir `div` (pointer'ın görmediği stop) | üç elemanlı dizi ↔ beklenen iki |
+
+Birincisi ayırt edici olan: **pointer davranışı bozulmadan** klavye paritesi kırılıyor ve
+**yalnız** yeni test fark ediyor.
+
+**DÜRÜST SINIR — kaydedildi, üstü örtülmedi.** jsdom'da **native anchor activation yok**, yani
+`Enter` bir component testinde **basılamaz** ve bu test bastığını **iddia etmiyor**. Activation'ın
+dayandığı şey asserted: her stop, pointer yolunun gittiği **aynı** hedefi taşıyan bir `<a href>`
+(pointer yolunu dosyadaki iki *"choosing …"* testi sürüyor). Gerçek tarayıcı kanıtı
+`e2e/specs/14-keyboard-flow.spec.ts` (`@a11y`, Tab + Enter'ı seeded stack'e karşı sürüyor) içine
+yazılırdı; **YAZILMADI**, çünkü bu container o suite'i koşamıyor (Docker Hub blob CDN **403**) ve
+**koşulamayan bir assertion kanıt değildir**.
+
+**Tavanlar İNDİ.** `partial` **97 → 96**, `debt_class.B` **66 → 65**; açık kabul borcu
+**105 → 104** (A=1 · B=65 · C=6 · D=32). Clause düzleminde `covered` 1015 → **1016**,
+`uncovered` 112 → **111**. `total_criteria` **383** (taban) ve `uncovered` **kriter** sayısı
+**8** değişmedi. `AOS-01`'in üç clause'u da `covered` olduğu için kriter `covered` oldu ve
+**`debt_class` KALDIRILDI** (settled bir satır sınıf taşıyamaz — `DEBT_CLASS_NOT_ALLOWED`).
+
+**Doc 03'te testin kapatabileceği satır kalmadı.** Geriye kalanlar: `AOS-02`'nin iki clause'u,
+`AOS-04.c2` ve `AOS-06.c2` (ikisi de **yanlışlanamaz** olarak imzalı — batch 09'un (B)
+adjudication'ı) ve sınıf-D satırlar.
+
+**ZİNCİR NOTU — bu freeze main'e karşı ölçüldü.** Taban `347fe19`; **batch 08 ve 09 hâlâ
+PR #768'de açık** ve orada **91 partial / B 60** donuyor. Kabul defteri **seri bir kaynaktır**:
+ikinci inen taraf rebase edip **yeniden dondurmak zorundadır**, çünkü ölçülenin üstünde kalan bir
+tavan sessizce geçmez — `test_the_frozen_ceiling_leaves_no_headroom` kırmızı verir.
+
+**NUMARA:** main'in son kaydı **ADIM 77**; **78 ve 79 PR #768'in** (batch 08 + 09), o yüzden bu
+slice **80**. #768 bu PR'dan sonra inerse merge edilmiş ad kazanır ve bu kayıt taşınır.
+`docs/ADIM80_LANDED_KICKOFF.md`.

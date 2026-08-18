@@ -239,15 +239,48 @@ narrowing at E5 asserts on a call site E4c makes legal.
 
 ## §2 — Hard gates: who opens each, looking at what, evidence written where
 
-The prompt names six. Measurement finds **thirteen**, of which two are already discharged and
-one has no owner at all.
+> **GÜNCELLEME 2026-08-18 — bu bölümün kapı DURUMLARI yeniden ölçüldü.** Belge `historical`
+> kalır; aşağıdaki satırlar yazıldıkları güne göre değil, **bugüne** göre doğrudur. Yeniden
+> ölçülen tek şey her kapının *durumu*dur — soruların kendisi, sahipleri ve blokladıkları
+> slice'lar **değişmedi**.
+>
+> Değişenler: **G4** ve **G15** artık **brifingli** (ayrı karar belgeleri, PR #755 ve #747) —
+> *"no signature block"* ifadesi bayattı. **G12**'nin bloğu da yaratıldı (Karar 6, PR #752).
+> **G6** 2026-08-14'te, **G9** ve **G13** 2026-08-17'de karara bağlandı.
+> **Hiçbiri seçilmiş/imzalanmış hâle bu güncellemeyle gelmedi** — bu belge yalnız kaydı
+> gerçeğe hizalar.
+>
+> **DİKKAT — imzaların nerede yaşadığı tek tip DEĞİL:** G9 ve G13'ün imzası
+> `docs/adr/0002-…md` **§13.2**'de verildi (*"Signed by the PO (`alimirbagirzade`),
+> 2026-08-17"*) — yani **imzayı veren belge ADR'dir**, `closure_product_decisions_2026-08-13.md`
+> değil. Bu ayrışma **bu belgenin işi değildir** ve burada yalnız **kaydedilir**.
+>
+> **Bu paragraf 2026-08-18'de bir kez daha ölçüldü ve DEĞİŞTİ.** Önceki hâli
+> *"Karar 4 ve Karar 5'in `karar veren:` kutuları HÂLÂ BOŞTUR"* diyordu; bu **`e05a5b1`
+> (#774) ile geçersiz kaldı** — o PR kutuları işaretledi (`[x]` + `karar veren:
+> **alimirbagirzade**, tarih **2026-08-17**`, yani ADR'nin tarihi). **Sonuç değişmedi**
+> (G9 ve G13 zaten imzalıydı ve öyle sayılıyordu); değişen, kanıtın **kaç yerde** durduğudur:
+> artık hem ADR §13.2'de hem karar belgesinde. **Kutuya bakıp *"imzasız"* sonucuna varmak
+> yine de yanlıştır** — kural genel: bir kutunun boş olması kapının imzasız olduğunu
+> göstermez, çünkü imza başka bir belgede verilmiş olabilir; otorite sırası md. 2.
+> **Karar 5'in alt-sorusu (A5 kapısının biçimi) #774'te bilerek AÇIK bırakıldı** — o alt-soru
+> 2026-08-17'de sorulmamıştı ve çıkarımla işaretlenmedi.
+
+The prompt names six. **This table registers sixteen (G1–G16).**
+
+> **The sentence that used to stand here was wrong when it was written, not merely stale.** It
+> read: *"Measurement finds **thirteen**, of which two are already discharged and one has no
+> owner at all."* Measured at `2a314ae` — the commit that introduced this document — the table
+> already carried **sixteen** rows and only **G5** was discharged. It is quoted here rather than
+> deleted, because the count tables below were built on top of it and a reader comparing
+> revisions needs to see which number was corrected and why.
 
 | # | Gate | Status at `c49f5e7` | **Who opens it** | **Looking at what** | **Evidence written where** | Blocks |
 |---|---|---|---|---|---|---|
 | **G1** | **#552 commission — incidence** (per-fill vs round trip) | **UNSIGNED.** `decisions:276` all four boxes `[ ]`, `karar veren:` blank. GH #552 is **closed** (by #720) — *issue CLOSED ≠ çözüldü* | PO / maintainer | `decisions §Karar 1`; Master Ref §8 `:7513`, §6.2 `:7425`, §7 item 7 `:7738` | signature block `decisions:276-283` | **F3** |
 | **G2** | **#552 commission — base** (flat amount vs bps on notional) | **UNSIGNED, and untouched by #720.** Shipped schema says flat (`config.py`, *"Per-trade fee"*); Master Ref §2.3 `:3110` gives the only concrete example as *bps on notional* | PO / maintainer | same block, Option C | same signature block | **F3**, and the only Package A item that can bump `ENGINE_VERSION` |
 | **G3** | **`execution_content.commission_model` manifest field** — required by Master Ref §8 *regardless of which model wins*; absent today | **UNSIGNED** (mandatory addendum, `decisions:280`) | PO / maintainer | `decisions:460-465` | same signature block, `[ ] evet / [ ] hayır` | **F3** |
-| **G4** | **#550 cap-overflow disposition** — Master Ref §10.2 says *"clamp değil"*; the engine clamps silently and **no validator compares base against the cap** | **NOT BRIEFED — no owner.** First recorded in P-C1 §2.1 / STOP-GATE 4 | **NOBODY YET.** Requires a fourth entry in `docs/decisions/closure_product_decisions_2026-08-13.md` | Master Ref §10.2 `:7562` vs doc 02 `:1015`/`:1920`; sleeve precedent `:8168` | **does not exist yet — creating it is this plan's first deliverable to a human** | **F2** |
+| **G4** | **#550 cap-overflow disposition** — Master Ref §10.2 says *"clamp değil"*; the engine clamps silently and **no validator compares base against the cap** | ✅ **BRIEFED 2026-08-17 (PR #755), still UNSIGNED.** Was *"NOT BRIEFED — no owner"*; first recorded in P-C1 §2.1 / STOP-GATE 4 | PO / maintainer | `docs/decisions/closure_g4_cap_overflow_2026-08-17.md`; Master Ref §10.2 vs doc 02 field table + ⓘ panel; §11.4 *"kırpılıp açılmaz"*; sleeve precedent | signature block in that file — **4 dispositions (A blocker / B-i / B-ii cap policy / C canonical / D observable clamp), all boxes `[ ]`**. **NOT** a fourth entry in `closure_product_decisions…` — it landed as its own file, following G15's precedent | **F2** |
 | **G5** | **#550 canonical option** (percent vs unit-count) | ✅ **DISCHARGED.** GH #550 body: *"Decision recorded in the comments: adopt canon (option A)"*; closed `completed` by #720 | — | GH #550 body + comments; `sizing.py::_percent_of_capital` | GH #550, PR #720 | nothing |
 | **G6** | **#558 research bundle shape** (A1 / A2 / A1+A2 / B / C) + 2 sub-decisions | **UNSIGNED.** `decisions:467-477` all boxes `[ ]`. GH #558 **OPEN**, `product-decision` | PO / maintainer | `decisions §Karar 2`; doc 12 §9.1/§9.2 | signature block `decisions:467-477` | **R2, R4** |
 | **G7** | **§9.2's two class-D fields** (`alignment_policy_versions[]`, `missing_and_stale_policies[]`) | **UNSIGNED**, and **out of scope regardless** — measured 0 hits in `backend/src`, `frontend/src`; no column exists | PO / maintainer | `decisions:472` sub-decision | same signature block | nothing (excluded) |
@@ -255,27 +288,36 @@ one has no owner at all.
 | **G9** | **ADR §16 Gate 1** — amend ADR §6/§8 to add `settle`, `finalize`, P10, `iter_portfolio` | ✅ **SIGNED 2026-08-17** by the PO; amendment applied as ADR `0002` **§13.2** (§6 clauses 6–7, §8.2 phase P10). No product code shipped with it | PO / maintainer | `docs/adr/0002…md` §6, §8, §16 | an ADR amendment entry, same shape as the §13.1 table | **C2** |
 | **G10** | **ADR §16 Gate 2** — flag flip + `ENGINE_VERSION` bump | **NOT REQUESTED.** §16: *"should hold for ADIM 20, which is the first slice that changes a shipped number"* | PO / maintainer | ADR §14 acceptance matrix, §16 | ADR §16 approval record | **C9** |
 | **G11** | **P2 — deferred fills / resting limits on shared runs** (block at admission, or model P2) | **UNDECIDED, unbriefed.** P-C2 §C.3.7 recommends (a) block | PO / maintainer | P-C2 §C.3.7; doc 14 §9.1 taxonomy | needs a new admission blocker code + a decision entry | **C6** |
-| **G12** | **P8 — scaling on shared runs** (block at admission, or model P8) | **UNDECIDED, unbriefed.** `run_portfolio` currently raises `UnsupportedIntentKindError` | PO / maintainer | P-C2 §C.3.8 | as G11 | **C6**, and the size of **C1** |
+| **G12** | **P8 — scaling on shared runs** (block at admission, or model P8) | ✅ **BRIEFED 2026-08-17 (PR #752), still UNSIGNED.** Was *"UNDECIDED, unbriefed"*. `run_portfolio` currently raises `UnsupportedIntentKindError` | PO / maintainer | P-C2 §C.3.8 | `closure_product_decisions_2026-08-13.md` §**Karar 6**, signature block `karar veren:` blank | **C6**, and the size of **C1** |
 | **G13** | **P10 end-of-data equity point** — append a new point at the last `t_ms`, or fold into it | ✅ **DECIDED 2026-08-17: FOLD** (`commit_tick` at the same `t_ms` after the closes). Appending was rejected — it would break A5's by-construction claim. Recorded in ADR `0002` §13.2 | PO / maintainer | P-C2 §C.3.10; ADR §14 A5 | ADR amendment alongside G9 | **C2** |
 | **G14** | **#544 NET cross-item conflict semantics** | GH #544 **OPEN**, `product-decision` + `blocks-adim-19` | PO / product | ADR §9.4 | GH #544 | **C9** (E6 precondition #20) |
-| **G15** | **Ready Check leg 3 — which row wins** (`work_object_revision_id` is **not UNIQUE**, so today's per-item winner is undefined) | **UNDECIDED, unbriefed.** Batching changes readiness answers | PO / product | `CLAUDE.md` §ADIM 62 measurement; P-C2 §D.1 leg 3 | needs a decision entry | **nothing in this plan** — leg 3 has no slice by design |
+| **G15** | **Ready Check leg 3 — which row wins** (`work_object_revision_id` is **not UNIQUE**, so today's per-item winner is undefined) | ✅ **BRIEFED 2026-08-17 (PR #747), still UNSIGNED.** Was *"UNDECIDED, unbriefed"*. Batching changes readiness answers | PO / product | `docs/decisions/closure_g15_external_row_winner_2026-08-17.md`; `CLAUDE.md` §ADIM 62 measurement; P-C2 §D.1 leg 3 | signature block in that file — 4 options, all boxes `[ ]`, and a **precondition box that is a NUMBER** (production duplication count, still **untaken**) | **nothing in this plan** — leg 3 has no slice by design |
 | **G16** | **A-08 human screen-reader audit** (#514) | **OPEN, in progress.** 2/184 Section A cells, 0/10 flows, SR-1 never started, exit criteria **0/4** | **human auditor only** (`human-only` label) | `docs/audit/a11y_screen_reader_audit_results.md` §5 exit criteria | that ledger | **the final RC verdict** |
 
-> **G4 and G15 are the two gates nobody owns.** Both are recorded here for the first time as
-> *actionable* rather than as an observation. Neither can be discharged by an agent, and neither
-> has a signature block to sign — creating those blocks is a human action this plan requests.
+> **G4 and G15 were the two gates nobody owned — that is now HISTORICAL.** Both were recorded
+> here for the first time as *actionable* rather than as an observation, and both asked for a
+> signature block that did not exist. **Both blocks now exist** (PR #747 for G15, PR #755 for
+> G4), each as its own file under `docs/decisions/`. **Neither is signed**, and neither can be
+> discharged by an agent — that part is unchanged. The action this plan requested has been
+> performed; the decision it requested has not.
 
 **Count, stated three ways because the three numbers differ and each is used somewhere below:**
 
-| | Count | Which |
-|---|---|---|
-| **Registered human gates** | **16** | G1–G16. **Not one is dischargeable by an agent.** |
-| **Still open** | **15** | all but **G5** (#550 canonical option, discharged in the issue body and shipped by #720) |
-| **Actually blocking a slice or the RC verdict** | **14** | the 15 open, minus **G7** (unsigned but excluded from scope — the two class-D fields have no backing column and no slice) |
+| | Count (as written 2026-08-13) | **Re-measured 2026-08-18** | Which |
+|---|---|---|---|
+| **Registered human gates** | **16** | **16** (unchanged) | G1–G16. **Not one is dischargeable by an agent.** |
+| **Still open** | 15 | **11** | resolved since: **G5** (discharged in the issue body, shipped by #720) · **G6** + **G7** (Karar 2, signed 2026-08-14) · **G9** + **G13** (ADR `0002` §13.2, signed 2026-08-17). Open: **G1, G2, G3, G4, G8, G10, G11, G12, G14, G15, G16** |
+| **Actually blocking a slice or the RC verdict** | 14 | **11** | the original 14 was *"15 open minus G7 (excluded from scope)"*; **G7 is now resolved**, so nothing is excluded and this equals the open count |
 
-Two of the sixteen — **G4** and **G15** — have **no signature block to sign**. Creating those
-blocks is the first human action this plan asks for, and neither can be substituted by an
-agent's judgement.
+> **Brifingli ama imzasız — üçüncü bir durum ve sayıyı DEĞİŞTİRMEZ.** G4, G12 ve G15 artık
+> imzalanacak bir yere sahiptir; hâlâ **açık** sayılırlar. Bir blok yaratmak bir kapıyı
+> kapatmaz. Bu ayrım bu belgenin en kolay yanlış okunan yeridir ve bu yüzden yazılıdır.
+
+**Bu paragraf 2026-08-13'te doğruydu, 2026-08-18'de artık değildir.** O gün on altının ikisi —
+**G4** ve **G15** — imzalanacak bir blok taşımıyordu ve bu belge o blokların yaratılmasını
+*"insanın ilk aksiyonu"* diye istiyordu. **İkisi de yaratıldı** (#747, #755); **G12**'ninki de
+(#752). Bugün on altı kapının **hepsinin** imzalanacak bir yeri vardır. Değişmeyen şey şudur:
+**hiçbiri bir ajanın muhakemesiyle ikame edilemez** ve on biri hâlâ imzasızdır.
 
 ---
 
@@ -342,8 +384,8 @@ verification without 19 copies of the same block.
 
 | Field | Value |
 |---|---|
-| **Goal** | Make the cap overflow non-silent, in whichever of the three dispositions is signed. |
-| **Prerequisites** | **G4 — and G4 has no signature block yet.** A brief must be written first. **Do not start.** |
+| **Goal** | Make the cap overflow non-silent, in whichever disposition is signed. **The set is no longer three** — see the note under this table. |
+| **Prerequisites** | **G4 — BRIEFED, NOT SIGNED.** *(2026-08-18: the brief now exists — `docs/decisions/closure_g4_cap_overflow_2026-08-17.md`, PR #755 — so the "a brief must be written first" precondition is DISCHARGED. The signature itself is still missing: all four disposition boxes are `[ ]` and `karar veren:` is blank.)* **Still: do not start.** The brief also records that disposition (A) cannot be signed until the blast-radius count is taken, and that count is **still untaken**. |
 | **Canonical source** | Master Ref §10.2 `:7562` — *"Base veya formula sonucu bu limiti aşarsa `clamp değil` blocker veya explicit cap policy uygulanır"*; doc 02 `:1015`, `:1920`; sleeve precedent `:8168` (which allows capping **for the sleeve** and therefore is *not* an argument here) |
 | **Production files** | *blocker* → `domain/readiness/validators.py` only (engine untouched) · *cap policy* → `config.py::PositionSizeLimits` + `execution/sizing.py::_clamp_to_limits` + `manifest.py` `execution_content` · *sign the clamp* → **zero files** |
 | **Test files** | Ready Check unit test **with a negative control** (base *under* the cap must stay READY — otherwise the test proves only that the validator always fires) |
@@ -357,9 +399,27 @@ verification without 19 copies of the same block.
 | **Commands** | `[V-BACKEND]` + `[V-GOLDEN]` |
 | **Expected exit codes** | 0; golden diff 0 |
 | **Rollback** | *blocker*: revert the validator, no data touched. *cap policy*: revert the field — stored payloads carrying `overflow_policy` stay valid JSON, **but verify the config models actually ignore unknown keys before relying on it**; `execution_key` returns to its old namespace, so post-revert runs stop matching interim Results. **Cheapest rollback is not shipping the field until signed.** |
-| **Stop condition** | Unsigned G4 = do not open the PR |
+| **Stop condition** | Unsigned G4 = do not open the PR *(unchanged 2026-08-18 — briefed is not signed)* |
 | **Next PR** | none |
-| **Parallel?** | YES with R*, P*, C1 — **but it is blocked, so the question is moot until G4 is signed** |
+| **Parallel?** | YES with R*, P*, C1 — **but it is blocked, so the question is moot until G4 is signed** *(still blocked 2026-08-18)* |
+
+> **Honest boundary on the per-disposition cells above (2026-08-18).** They enumerate the
+> **three** dispositions that existed before PR #755, and **were not re-derived** for what the
+> brief actually carries. The brief has **four**, and the fourth — **(D) observable clamp**
+> (size unchanged, silence removed) — has **no row here**. That omission is deliberate: the
+> brief itself records *"(D)'nin Result artefaktı üzerindeki şekil etkisi ölçülmedi"*, so
+> inventing its cells would manufacture engineering detail nobody has measured.
+>
+> The brief also splits **(B)** into **B-i / B-ii**, and that split is what decides whether
+> `execution_key` moves — so two cells above are narrower than they read: *Manifest-schema
+> version?* describes **B-ii only**, and under **B-i nothing shifts**, because the brief
+> measured that `overflow_policy` is *already* pinned transitively (`mainboard_items` pins
+> `strategy_revision_id`; strategy revisions are immutable). Publishing it again in
+> `execution_content` is therefore a **disclosure choice, not a correctness requirement**.
+>
+> Two cells were re-derived from the brief's §Karşılaştırma table and **do** hold across all
+> five shapes (A · B-i · B-ii · C · D): `ENGINE_VERSION` is `yok` on every row, and so is
+> `migration`. **Read the brief, not this table, for the option set.**
 
 #### `F3` — commission model + `execution_content.commission_model`
 
@@ -761,17 +821,17 @@ criteria in `docs/audit/a11y_screen_reader_audit_results.md`.
 
 ```mermaid
 flowchart TD
-    subgraph GATES["HUMAN GATES — 15 open, none dischargeable by an agent"]
+    subgraph GATES["HUMAN GATES — 11 open as of 2026-08-18, none dischargeable by an agent"]
         G1G2G3["G1/G2/G3 · #552 commission<br/>incidence + base + manifest field<br/>UNSIGNED"]
-        G4["G4 · #550 cap overflow<br/>NO SIGNATURE BLOCK EXISTS"]
+        G4["G4 · #550 cap overflow<br/>BRIEFED #755 · UNSIGNED"]
         G6["G6 · #558 bundle shape<br/>UNSIGNED"]
         G8["G8 · #559 DST<br/>UNSIGNED · scope-only per hüküm (a)"]
-        G9["G9 · ADR §16 Gate 1<br/>amend §6/§8"]
+        G9["G9 · ADR §16 Gate 1<br/>SIGNED 2026-08-17 · ADR §13.2"]
         G10["G10 · ADR §16 Gate 2<br/>flip + bump"]
-        G11G12["G11/G12 · P2 + P8<br/>block or model"]
-        G13["G13 · P10 equity point<br/>fold vs append"]
+        G11G12["G11/G12 · P2 + P8<br/>G12 BRIEFED #752 · both UNSIGNED"]
+        G13["G13 · P10 equity point<br/>DECIDED FOLD · ADR §13.2"]
         G14["G14 · #544 NET"]
-        G15["G15 · leg 3 row winner<br/>NO SIGNATURE BLOCK EXISTS"]
+        G15["G15 · leg 3 row winner<br/>BRIEFED #747 · UNSIGNED"]
         G16["G16 · A-08 #514<br/>human audit · 0/4"]
     end
 
@@ -970,7 +1030,7 @@ order does not rescue two writers. See §1.2 and P1/P2/P3's `Parallel?` fields.
 | ID | Slice | Ready today? | Blocked by | Bumps `ENGINE_VERSION`? | Shifts `execution_key`? |
 |---|---|---|---|---|---|
 | `F1` | zero-size refusal reason | ✅ | — | no | no |
-| `F2` | cap-overflow disposition | ❌ | **G4 (no signature block)** | no | only the cap-policy option |
+| `F2` | cap-overflow disposition | ❌ | **G4 (briefed #755, UNSIGNED)** | no | only the cap-policy option |
 | `F3` | commission + `commission_model` | ❌ | **G1 + G2 + G3** | **maybe** | **yes** |
 | `R1` | `TimingProvenance` + hash proof | ✅ | — | no | **must not** |
 | `R2` | bundle projection | ❌ | R1 + **G6** | no | no (`bundle_hash` only) |
@@ -1000,9 +1060,12 @@ runnable, of which the wave ceiling admits three at a time**).
 1. **It ran nothing.** No `pytest`, no `npm test`, no coverage figure, no test count is asserted.
    Every claim is a source measurement at `c49f5e7`, cited by symbol. **CI is the authority for
    anything that runs.**
-2. **It decides no product question.** Sixteen gates are registered; **fifteen are open** and not
-   one is answered here. Two of them (**G4**, **G15**) have no signature block to sign, and
-   creating those blocks is a human action this plan requests rather than performs.
+2. **It decides no product question.** Sixteen gates are registered; **fifteen were open when
+   this was written — eleven are open as of 2026-08-18** (§2) — and not one is answered here.
+   Two of them (**G4**, **G15**) had no signature block to sign, and creating those blocks was a
+   human action this plan requested rather than performed. **Both blocks were created on
+   2026-08-17** (#747, #755), as was **G12**'s (#752). **Still none of the sixteen is answered
+   by this document**, which is the claim this item makes and it is unchanged.
 3. **It changed no issue state**, opened no issue, and closed none — including the three whose
    *closed* status is measured above as **not** equal to *resolved* (#550, #551, #552).
 4. **The 22 E6 preconditions are P-C2's design output, not a verified checklist.** They are

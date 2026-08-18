@@ -237,7 +237,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 74 (R2 + R3, PR #742 + #745): ÜRÜN DAVRANIŞI DEĞİŞMEDİ —
+> `future_dev`. **Son dalga — ADIM 75 (kabul borcu batch 07, doc 07 frontend): ÜRÜN KODU
+> DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Batch 06'nın **tümleyeni**: aynı belge, frontend yüzeyi. Üç kriter daha kapandı —
+> **`PC-01`** (`.c2` literal `Not Checked` pill + `.c3` render etmek revizyon yazmaz, okuma
+> yolu sürülerek), **`PC-17.c4`** (kapanış hiç non-GET istek atmaz **ve** yeniden açılış
+> sunucudan okur) ve **`PC-21`** (`.c2` kanonik PASSED metni + `.c3` **negatif kapsam**:
+> yüzey repaint/lookahead/validation/approval iddia etmez). **ALTI negatif kontrol, altısı da
+> kırmızı.** **Tavanlar İNDİ: `partial` 100 → 97, `debt_class.B` 69 → 66**; açık borç
+> **108 → 105** (A=1 · B=66 · C=6 · D=32), clause `covered` 1010 → 1015. **DOC 07'DE SINIF B
+> KALMADI** — iki batch altı kriter kapattı; kalan satırlar yalnız bulgular ve iki sınıf-D
+> Agent satırı (`PC-15`, `PC-16`). **BULGU: `PC-02.c2` HİÇ KURULAMAZ** (sınıf C şeklinde) —
+> overlay yalnız `detail !== null` iken render edilir, boş kaynaklı istek route'ta DB'den önce
+> reddedilir, yani boş-girdi Pre-Check sonucunun çizileceği ekran **yok**;
+> **yeniden sınıflandırılmadı**, defterde artık **dokuz** böyle bulgu var. **DERS: yanlış
+> sebeple kırmızıya dönen negatif kontrol hiçbir şey kanıtlamaz** — kırmızının **hangi
+> assertion'da** olduğunu oku. **`C2` hâlâ BLOKLU — G9 + G13 imzasız.**
+> `PROJECT_HISTORY.md` §ADIM 75 · `docs/ADIM75_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **ADIM 74 (R2 + R3, PR #742 + #745): ÜRÜN DAVRANIŞI DEĞİŞMEDİ —
 > `bundle_hash` kıpırdamadı, `_BUNDLE_COMPILER_VERSION` `research-bundle-v2`'de kaldı.
 > Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `R2` research timing sözlüğünün
 > **üçüncü elle kopyasını** sildi (`_pin_member` → `TimingProvenance.as_bundle_member()`;

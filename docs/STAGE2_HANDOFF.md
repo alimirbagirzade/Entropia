@@ -6742,7 +6742,6 @@ açık bulgu var.
 `docs/ADIM72_LANDED_KICKOFF.md`.
 
 
-
 ## Stage 74 — R2 + R3: bundle yüzeyi tek okumaya bağlandı, sealed şekil sürüme kilitlendi (PR #742 + #745) landed
 
 **Ürün davranışı DEĞİŞMEDİ.** `bundle_hash` kıpırdamadı · `_BUNDLE_COMPILER_VERSION`
@@ -6791,6 +6790,47 @@ A-08), verdict BLOCKED.**
 - **Plan §5.2 tavanı aşıldı** — bir noktada altı PR açıktı (#742 #745 #746 #747 #748 #749),
   tavan üç. Kayda geçirildi; yeni kod slice'ı açılmadı.
 - Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 74 · kalkış: `docs/ADIM74_LANDED_KICKOFF.md`.
+
+## Stage 75 — kabul borcu batch 07 (doc 07 frontend): doc 07 bitti, dokuzuncu bulgu landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**, containment `future_dev`. Blocker sayısı
+**değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+Batch 06'nın **tümleyeni**: aynı sayfa belgesi (doc 07), bu kez **frontend** yüzeyi. Üç
+kriter daha kapandı ve **doc 07'nin sınıf-B işi bitti**.
+
+| Kriter | Kapanan clause | Neden açıktı |
+|---|---|---|
+| `PC-01` | `.c2` **+** `.c3` | `Not Checked` ağaçta **tam bir kez** var, hiçbir test assert etmiyordu; `.c3`'ün "doğru görünen" testi isteği önce **DRAFT**'a sürüyordu |
+| `PC-17` | `.c4` | dayanıklılık yarısı güçlüydü, **UI yarısı** hiç assert edilmemişti |
+| `PC-21` | `.c2` **+** `.c3` | kanonik PASSED metni assert edilmiyordu; `.c3` bir **negatif kapsam** iddiası ve yokluğu **varsayılmıştı** |
+
+**Tavanlar İNDİ:** `partial` **100 → 97**, `debt_class.B` **69 → 66**. Açık kabul borcu
+**108 → 105** (A=1 · B=66 · C=6 · D=32). Clause düzeyinde `covered` **1010 → 1015**,
+`uncovered` **117 → 112**.
+
+**ALTI negatif kontrol, altısı da kırmızı** — her biri davranışı **üründen** kaldırarak:
+`Not Checked` → em dash · `get_package_request` paket yaratınca `assert 2 == 0` ·
+`onClose` POST atınca `expected 1 to be +0` · modal'ın `detail`'i donunca `blocked`
+bulunamıyor · PASSED satırı kırpılınca tam cümle eşleşmiyor · PASSED satırı fazla iddia
+edince `not to match /repaint/i`.
+
+**`PC-21.c3` bir totoloji değil.** Negatif kapsam iddiası (yüzey repaint / lookahead /
+validation / approval hakkında hiçbir şey **iddia etmemeli**) yedi kalıba karşı **tüm
+render edilmiş yüzeyi** pinliyor ve fazla-iddia eklendiğinde **kırmızıya dönüyor**.
+
+**BULGU — `PC-02.c2` KURULAMAZ (sınıf C şeklinde), kapatılmadı.** "Boş kaynak için nihai
+boş-girdi metni" **yok**: `EMPTY_SOURCE` `frontend/src`'te **hiç geçmiyor** ve daha
+belirleyicisi, durum **erişilemez** — overlay yalnız `detail !== null` iken render ediliyor
+(`CreatePackage.tsx:765`), yani kalıcı bir istek olmadan Pre-Check açılamıyor; boş kaynaklı
+istek ise route'ta DB'den önce reddediliyor. **Yeniden sınıflandırılmadı** (C tavanını
+yükseltir). Defterde artık **DOKUZ** böyle bulgu var.
+
+**Doc 07'de sınıf B kalmadı.** Kalan açık satırlar yalnız bulgular (`PC-02.c2`, `PC-20.c3`)
+ve iki sınıf-D Agent satırı (`PC-15`, `PC-16`). `PROJECT_HISTORY.md` §ADIM 75 ·
+`docs/ADIM75_LANDED_KICKOFF.md`.
+
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 

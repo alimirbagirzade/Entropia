@@ -320,8 +320,19 @@ DOCS YAZARKEN — doc-status KAPISI (bu paket bunu CI'da yiyerek öğrendi)
     > (üretilmiş, CI'da `--check` ile kapılı).
 
   AYRICA: aynı anda YALNIZ BİR belge `doc-status: current` olabilir.
-  Şu an o belge docs/ADIM55_LANDED_KICKOFF.md. Yeni bir KICKOFF yazıyorsan
-  (kapanış ritüeli md. 2) eskisini `historical`a DEMOTE ET, yoksa kapı düşer.
+  Yeni bir KICKOFF yazıyorsan (kapanış ritüeli md. 2) o an `current` olanı
+  `historical`a DEMOTE ET, yoksa kapı düşer.
+
+  HANGİSİ OLDUĞUNU BURADAN OKUMA, BULDUR — her slice'ta değişir:
+
+    for f in $(git ls-tree -r --name-only HEAD -- docs | grep -E 'KICKOFF.*\.md$'); do
+      head -3 "$f" | grep -q 'doc-status: current' && echo "$f"
+    done
+
+  `head -3` ZORUNLU: kapı (`_doc_status`) yalnız İLK 3 SATIRI okur, ama bu paket
+  dahil birçok belge gövdesinde `doc-status: current` dizgesini ANLATIR.
+  Düz `grep -l` gövde metnini de yakalar ve sana yanlış dosyayı gösterir —
+  bu paketin ilk denemesi tam olarak buna düştü.
 
   Push etmeden ÖNCE yerelde doğrula:
     cd backend && uv run python ../scripts/generate_repository_facts.py --root .. --check

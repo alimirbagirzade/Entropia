@@ -7007,9 +7007,11 @@ yazılırdı; bu container o suite'i koşamadığı için (Docker Hub **403**) *
 > `PHASE_ORDER` **dokuz faz** → P10, `iter_portfolio`). **Hâlâ imzasız olan kapılar
 > başkadır:** `G12` (Karar 6 — `C6`), Karar 1 (#552 — `F3`), Karar 3 (#559 — `C9`),
 > `G4` (`F2`), ve `G10` (Gate 2 / containment lift) **hiç talep edilmedi**.
-> **Bir kapının imzasını `docs/decisions/closure_product_decisions_2026-08-13.md`'nin boş
-> kutusundan okuma** — G9/G13'ün imzası orada DEĞİL, ADR'dedir; o belgenin banner'ı artık
-> altı kararın tamamı için imzanın **yerini** tablo hâlinde söyler.
+> **Bir kapının imzasını `docs/decisions/closure_product_decisions_2026-08-13.md`'nin
+> kutusundan okuma** — G9/G13'ün imzası orada DEĞİL, **ADR-0002 §13.2**'dedir. O belgenin
+> banner'ı altı kararın tamamı için imzanın **yerini** tablo hâlinde söyler; Karar 4/5'in
+> kutuları 2026-08-18'de **geriye dönük** dolduruldu (ürün sahibi teyidi), yani artık boş
+> değil — ama **işaretin kendisi otorite değildir**, §13.2'dir.
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:
 > `ItemParticipant.settle` + `.finalize`, P10, `iter_portfolio`.**

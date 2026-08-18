@@ -11412,3 +11412,149 @@ tespiti **artık geçerli değil**. Sıradaki hamle **koddur**: `C2` / E4b (`set
 kalıcı bir gerçek değildir.** Denetim satırları **bilerek dondurulmuş** bırakıldı (ADIM 65
 emsali), canlı belgeler (`CLAUDE.md`, kickoff, handoff) **güncellendi** — ikisi farklı
 sözleşmelerdir.
+
+## ADIM 77 — P1 + P4: Ready Check'in tick-data bacağı ve RUN admission'ın tick pinleri batch'lendi (PR #751 + #754)
+
+> **İKİ PR, TEK KAPANIŞ — ve BU KAYDI SLICE'LARI YAZAN OTURUMLAR YAZMADI.** P1 ve P4 iki
+> ayrı oturumda üretildi, ikisi de **kapanış ritüeli olmadan** PR'a açıldı ve **ayrı ayrı**
+> merge edildi: **P1 = #751** (`ab51d08`, 2026-08-18 07:39Z), **P4 = #754**. Aynı şeklin iki
+> yarısı ve aynı dal soyağacından geldikleri için ADIM 74'ün R2 + R3'ü birlikte kaydetmesi
+> gibi birlikte kaydedilirler — ADIM 69/70 ve ADIM 72'nin sonradan onarmak zorunda kaldığı
+> desenin aynısı.
+> Kaydı, dalgayı merge eden oturum **ürün sahibinin açık talimatıyla** yazdı. Bu yüzden
+> aşağıda **ölçtüğüm** ile **dalın kendi commit'lerinin iddia ettiği** ayrı ayrı
+> işaretlenmiştir; ikisi karıştırılmadı. **NUMARA:** dal ve commit mesajları ADIM numarası
+> taşımaz; kayıt `## ADIM 74`/`75`/`76` indikten sonra yazıldığı için **77**'dir.
+
+**Ürün kodu DEĞİŞTİ, ama gözlenebilir davranış DEĞİŞMEDİ.** Migration **yok** ·
+`ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden digest'ler ellenmedi ·
+alembic head `0043_i08_registry_strategy_fks` · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Kabul borcu tavanları
+**oynamadı** (bu slice bir kabul kriteri kapatmıyor).
+
+### Ne indi
+
+**#617'nin şeklinin dördüncü ve beşinci örneği** kapandı — ikisi de bir döngünün içinde
+duran per-item okuma:
+
+| Bacak | PR | Nerede | Onarım öncesi ÖLÇÜLEN | Sonra |
+|---|---|---|---|---|
+| P1 — Ready Check tick-data uygunluğu | **#751** | `readiness_check.py::_resolve_tick_data_issues` | 1 → 11 statement, **slope 1** | tek `IN()`, **`per_item: 0`** |
+| P4 — RUN admission tick pinleri | **#754** | `backtest_run.py::_resolve_tick_pins` | 3 → 23 statement, **slope 2** | üç batch'li okuma, **`per_item: 0`** |
+
+**P4, P1'in okuyucusunu YENİDEN KULLANIR** (`find_approved_tick_revisions_for_instruments`) —
+ikinci bir kopya büyütmedi. İkisi ayrı PR olarak indiği için P1 önce main'e girdi ve P4'ün
+dalı ona rebase edildi; sevk edilen kod tek bir şeydir, iki yarısı ayrı merge edilmiştir.
+
+P4 **admission yolundaki İLK bütçe satırıdır**: `docs/performance/README.md` §8 run
+admission'ı deterministik olarak kapılanan yüzey diye adlandırıyordu, ama onu ölçen
+hiçbir satır yoktu — yani tamamen ölçülmemişti.
+
+İki yeni çoğul okuyucu eklendi ve **ikisi de mevcut bir okuyucunun alan-alan aynası**
+(üçüncü bir idiom icat edilmedi): `market_data.py::find_approved_tick_revisions_for_instruments`
+(`get_dataset_roots`'un aynası) ve `strategy.py::get_strategy_revisions`
+(`mainboard.get_work_object_revisions`'ın aynası). İkisinde de boş girdi round trip'siz
+kısa devre yapar, tekrarlı id'ler çöker, satırı olmayan id haritada **YOKTUR** — yani
+çağıranın `is None` dalı tekil okumadaki `session.get` ıskasıyla bayt bayt aynı davranır.
+
+`_resolve_strategy_payload` **opsiyonel** bir önceden-getirilmiş harita alıyor
+(`mirrors`, varsayılan `None`). Sebep mimari: bir mirror pin'inin NE OLDUĞU ve
+çözülemeyeninin ne yapacağı **tek bir tanım** olarak kalsın diye — her batch'in yanında
+yeniden yazılmasın. Varsayılan `None` olduğu için Ready Check, engine ve run-context
+resolver'ı **statement statement değişmedi**.
+
+### Neden bu bir hız değişikliği DEĞİL de bir sözleşme meselesi (P4)
+
+Pinlenen revizyon id'si **değişmez manifest'e girer**. Aynı `execution_key`'i paylaşan iki
+koşu asla farklı tick yolu replay edemez (doc 15 §15, INF-04/INF-05). Yani "batch aynı satırı
+seçiyor mu" sorusu bir performans detayı değil, bir **girdi** sorusudur.
+
+Cevap ölçülebilir: tekil okuyucunun sırası `created_at DESC, revision_id DESC LIMIT 1` ve
+bu sıra **TOTAL** — `revision_id` her `created_at` beraberliğini bozar — dolayısıyla "bu
+enstrümanın en yeni onaylı tick revizyonu" tek bir satırı adlandırır ve
+`DISTINCT ON (instrument_id)` aynı sıralama üzerinde farklı çözemez. Test bunu **eşit
+`created_at`'li bir fixture** ile sürüyor: ayrı zaman damgalarıyla tie-break hiç koşmaz ve
+**her implementasyon geçer**. Assertion, elle yazılmış bir beklentiye değil, tekil
+okuyucuya karşı **oracle karşılaştırmasıdır** — aynı hatayı iki kez kodlamasın diye.
+
+**Leg 3 (`_resolve_external`) bilerek ONARILMADI** ve bütçe satırı `per_item: 1`'de
+BIRAKILDI. Orada per-item kazanan **tanımsızdır** (`work_object_revision_id` UNIQUE değil),
+yani hiçbir fixture "aynı satır" iddiasını pinleyemez; bu bir **ürün kararıdır (G15)**,
+performans değişikliği değil. O satırı 0'a indirmek operasyon hakkında bir yalan olurdu.
+
+### Fail-closed bir bacakta fixture ÖLÇÜMÜN KENDİSİDİR
+
+İki bacak da dar kapılardan geçiyor ve kapıyı açmayan bir fixture **hiç koşmamış** bir
+bacak için yeşil slope raporlar:
+
+- tick bacağı `intrabar_policy.tick_policy` `require` olmayan her stratejiyi atlar →
+  varsayılan `inherit` bırakan bir fixture **iki boyutta da 0 statement** ölçer;
+- admission bacağı **fail-closed**: onaylı revizyonu olmayan ilk tick-talep eden strateji
+  422 `TICK_DATA_UNAVAILABLE` fırlatır ve kalan okumalar hiç ateşlenmez → bloklanmış bir
+  fixture, birinci kalemde duran bir bacak için neredeyse düz bir slope raporlar.
+
+Bütçe defterinin `_comment`/`note` alanları bunu **beş şekliyle** yazıyor, ve
+`query_budgets.json`'ın kendi başlığının anlattığı identity-map kör noktasının burada
+geçerli OLMADIĞI da ölçülmüş: `_resolve_strategy_payload` `dict(revision.payload)` döndürüp
+referans tutmadığı için zayıf referanslı `StrategyRevision` toplanıyor ve bir sonraki
+`session.get` gerçek bir round trip oluyor — bilerek expunge EDİLMEMİŞ bir oturumda aynı
+slope 2 yeniden üretilmiş.
+
+### Süreç kaydı — kural metni daraltıldı, gevşetilmedi
+
+`docs/performance/README.md` §7 *"ölçen slice fail-closed bir admission yolunu da
+değiştirmemeli"* diyordu. P4 ikisini bir slice'ta yaptığı için o cümle, tek başına
+okunduğunda, **yeni inen değişikliği yasaklıyordu**. Kuralın öznesi her zaman **sayacı
+SEVK EDEN** slice'tı: elinde her yüzeyin ilk sayısı vardı, aynı değişiklikte onarım
+yapsaydı onarımı karşılaştıracak bağımsız bir öncesi kalmazdı. Sonraki tek-yüzeyli bir
+slice bunun tersidir — ve o issue'ların adlandırdığı kabul (*satırı `per_item: 0`'a
+sık*) ancak bir slice iki yarıyı da yaparsa bir anlam taşır. Cümle daraltıldı ve sonraki
+slice'ın **bunun yerine borçlu olduğu** dört şey yazıldı (önce ölçülen slope'u kaydet,
+fixture'ın bacağı gerçekten koştuğunu kanıtla, davranış paritesini maliyetten ayrı kanıtla,
+negatif kontrolü **pristine** dosyaya karşı ve çift başına değil **batch'li okuma başına**
+koştur).
+
+### Ölçülen (bu oturum) ve iddia edilen (dalın commit'leri) — AYRI
+
+**Bu kapanışta bizzat koşulanlar:** `ruff check` **0** · `ruff format --check` **0**
+(806 dosya) · `mypy src` **0** (399 kaynak dosya) · `generate_repository_facts.py --check`
+**0** · **tam backend suite tek `uv run pytest` çağrısında**, izole worktree + yerel PG16 →
+**1 kırmızı**, coverage **%93.80** (kapı ≥90). **Bu suite koşusunun TARİHİ var:** P4'ün kodu
+üzerinde, ama **#751/#755/#757/#756 inmeden ÖNCEKİ** ağaçta ölçüldü — yani sayı o koşunun
+doğru kaydıdır, bu head'in değil; **bu head için otorite CI'dır** ve ürün kodu o koşudan
+beri değişmedi. O tek kırmızı
+`test_auth_mode_login_gate.py::test_session_mode_login_reaches_the_credential_check` idi ve
+**ortamsal olduğu ölçüldü, varsayılmadı**: hata `relation "human_users" does not exist`,
+yerel veritabanına `alembic upgrade head` koşulmamıştı; migrasyondan sonra aynı dosya
+**exit 0**. Auth-mode login kapısıdır ve tick-pin batch'lemesiyle hiçbir kod yolu paylaşmaz.
+
+**Dalın commit'lerinin iddia ettiği ve bu oturumun YENİDEN KOŞMADIĞI:** her batch'li okuma
+için pristine dosyaya karşı ayrı negatif kontrol. Testler mevcut ve tam suite içinde geçti;
+negatif kontroller **bu kapanışta tekrar sürülmedi** — kayda geçirilir.
+
+**Sayılar:** iki PR toplamı **13 yeni test**. **#751**: `test_readiness_tick_data_batch.py`
+(YENİ, 3 test) + `test_query_budgets.py::test_ready_check_tick_data_leg`. **#754**:
+`test_backtest_tick_pin_batch.py` (YENİ, 8 test) + `test_query_budgets.py::test_run_admission_tick_pins`.
+Kesin collected sayısı için **üretilmiş artefakt otoritedir** (`docs/generated/repository_facts.md`);
+kapanışta yeniden üretilir. **Buraya elle sayı yazma** — bu dalgada dört PR test ekledi ve her
+merge deltayı kaydırdı.
+
+### CI dersi — `cancelled` bir test hatası DEĞİLDİR (yeniden ölçüldü)
+
+`5a51c7a` üzerinde `Acceptance flows (a)-(e)` **cancelled** döndü ve log sebebi söylüyor:
+job ~60 dakika `npm exec playwright install --with-deps chromium` içinde, apt
+`archive.ubuntu.com`'dan paket çekerken asılı kaldı, job timeout'unda öldürüldü ve cleanup
+kurucuyu **orphan process** olarak sonlandırdı (`Terminate orphan process: pid (2270)`).
+**Hiçbir test gövdesi koşmadı**, artefakt üretilmedi. **#756 aynı saat içinde aynı asılmaya
+çarptı** — iki bağımsız PR, aynı arıza: bu altyapıdır, diff değil. Çare rerun.
+
+### Dürüst sınır
+
+- **Bu kayıt geriye dönüktür.** Slice'ın kendi oturumları ritüeli yazmadı; ölçülmemiş
+  hiçbir şey uydurulmadı, dalın iddiaları iddia olarak işaretlendi.
+- **#617 / #618 issue durumlarına DOKUNULMADI** — kapatmak insan kararıdır. #618'in
+  yüzeyi (Approve Package pinned-resolver) bu slice'ın **kapsamı dışında**; kapanan
+  #617'nin şekli, issue'nun kendisi değil.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- Codemap tazelenmedi ve gerekmedi: yeni endpoint / tablo / sayfa / job yok; eklenen iki
+  sembol mevcut repository modüllerinin içinde.

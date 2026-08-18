@@ -32,6 +32,7 @@ re-admits the CURRENT composition with a new run_id + manifest + ``retry_of_run_
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.commands.backtest_run_context import resolve_run_manifest_context
 from entropia.application.commands.readiness_check import (
     _load_workspace,
+    _mirror_ref,
     _resolve_strategy_payload,
     run_readiness_check,
 )
@@ -79,6 +81,7 @@ from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import market_data as market_repo
 from entropia.infrastructure.postgres.repositories import readiness as readiness_repo
+from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.infrastructure.postgres.repositories import trash as trash_repo
 from entropia.infrastructure.queues.enqueue import enqueue_job
 from entropia.shared.errors import (
@@ -791,6 +794,27 @@ async def _assert_ready_report_current(
         raise ReadyReportStaleError()
 
 
+def _pinned_mirror_refs(
+    strategies: list[dict[str, Any]], revisions: Mapping[str, Any]
+) -> list[str]:
+    """Every doc 02 §7.1 mirror ref the pinned work-object revisions carry.
+
+    Collected before the loop so the mirror pins can be read in one batch, the same
+    split ``readiness_check._tick_data_demands`` makes for the availability leg. An
+    entry whose pinned revision has no row contributes nothing, exactly as the loop's
+    own ``is None`` skip drops it.
+    """
+    refs: list[str] = []
+    for entry in strategies:
+        revision = revisions.get(str(entry["revision_id"]))
+        if revision is None:
+            continue
+        ref = _mirror_ref(revision.payload)
+        if ref is not None:
+            refs.append(ref)
+    return refs
+
+
 async def _resolve_tick_pins(
     session: AsyncSession, item_manifest: dict[str, Any] | None
 ) -> dict[str, Any] | None:
@@ -820,21 +844,47 @@ async def _resolve_tick_pins(
     revisions = await mb_repo.get_work_object_revisions(
         session, [str(entry["revision_id"]) for entry in strategies]
     )
+    # P4: one IN() read for every doc 02 §7.1 mirror pin those revisions name, built
+    # AFTER the revision map because a mirror ref is only reachable through the
+    # work-object revision that carries it — the same order ``_resolve_market_data_issues``
+    # builds its Root batch in. ``_resolve_strategy_payload`` still owns what a mirror IS
+    # and what an unresolvable one does; it is handed the map instead of issuing the read.
+    mirrors = await strat_repo.get_strategy_revisions(
+        session, _pinned_mirror_refs(strategies, revisions)
+    )
+    # The tick probe cannot be batched with the two above: the instrument it keys on is
+    # only known after the payload is dereferenced and parsed. So the demands are
+    # collected first, exactly as ``readiness_check._tick_data_demands`` does for the
+    # availability leg, and the pins are decided in a second pass over that list. The
+    # ORDER of that second pass is the manifest order, so the item that raises the 422
+    # below is the same item, with the same ``scope_id``, as before this batching.
+    demands: list[tuple[dict[str, Any], StrategyConfig]] = []
     for entry in strategies:
         revision_id = entry["revision_id"]
         revision = revisions.get(str(revision_id))
         if revision is None:
             continue
-        payload = await _resolve_strategy_payload(session, dict(revision.payload))
+        payload = await _resolve_strategy_payload(session, dict(revision.payload), mirrors)
         try:
             config = StrategyConfig.model_validate(payload)
         except PydanticValidationError:
             continue  # readiness STRATEGY_CONFIG_INVALID already gates this upstream
         if not tick_data_required(config):
             continue
-        tick_revision = await market_repo.find_approved_tick_revision_for_instrument(
-            session, config.data.instrument_id
-        )
+        demands.append((entry, config))
+    # An instrument with no APPROVED tick/trade revision on an ACTIVE root is absent from
+    # this map, exactly as ``find_approved_tick_revision_for_instrument`` returned ``None``
+    # for it, so the fail-closed branch below is unchanged. The batch also picks the SAME
+    # row per instrument: the per-instrument order was already TOTAL (``created_at DESC,
+    # revision_id DESC``), so ``DISTINCT ON`` cannot resolve a tie differently — which
+    # matters here beyond speed, because this revision id goes into the immutable manifest
+    # and a different row would be a different replayed input behind one ``execution_key``
+    # (doc 15 §15, INF-04/INF-05).
+    tick_revisions = await market_repo.find_approved_tick_revisions_for_instruments(
+        session, [config.data.instrument_id for _entry, config in demands]
+    )
+    for entry, config in demands:
+        tick_revision = tick_revisions.get(config.data.instrument_id)
         if tick_revision is None:
             raise _readiness_blocked(
                 [

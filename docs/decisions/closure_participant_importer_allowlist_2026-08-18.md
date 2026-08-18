@@ -1,10 +1,16 @@
 # `participant.py` containment gate'in importer allowlist'ini genişletir — hangi biçimde?
 
-> **Bu belge KARAR BEKLİYOR.** `C3` (E4c) yazıldığı anda containment gate'in importer
+> **KARAR İMZALANDI — 2026-08-18, Seçenek A.** Ayrıntı ve gerekçe için §Karar'a bak.
+>
+> Aşağıdaki hazırlık metni **yazıldığı hâliyle korunmuştur** ve hâlâ "hiçbir seçeneği
+> seçmez" diye okunur. Bu kasıtlıdır: bir kararın gerekçesi ancak **reddedilen
+> alternatifleriyle birlikte** okunabilir, ve hazırlığı sonradan kazanan seçeneğe göre
+> yeniden yazmak §Ölçüm 4'ün B ve C için ödediği bedeli görünmez kılardı.
+>
+> Hazırlığın özgün çerçevesi: `C3` (E4c) yazıldığı anda containment gate'in importer
 > kontrolü **kırmızıya döner**; bu tasarımın amacıdır, kazası değil. Kırmızıyı yeşile almanın
-> her yolu **bilinçli bir tripwire'a** dokunur. Bu belge o kararın bloğunu **yaratır**;
-> **hiçbir seçeneği seçmez** ve "önerilen" yazmaz — `closure_g15_external_row_winner_2026-08-17.md`
-> ile aynı disiplin.
+> her yolu **bilinçli bir tripwire'a** dokunur — o yüzden karar bir insana aitti.
+> `closure_g15_external_row_winner_2026-08-17.md` ile aynı disiplin.
 
 - **Tarih:** 2026-08-18
 - **Base:** `origin/main` @ `8151cdc` (`docs(closure-g4): brief the Max Single Position cap overflow decision (#755)`)
@@ -137,13 +143,37 @@ etkisi tahmin değil, koşulmuş sonuçtur.
 
 ---
 
-## Karar
+## Karar — İMZALANDI
 
-**Seçenek: ☐ A ☐ B ☐ C ☐ (başka: ______________________)**
+**Seçenek: ☑ A** ☐ B ☐ C ☐ (başka: ______________________)
 
-**Gerekçe:**
+Allowlist **tek adlandırılmış modülle** genişletilir:
 
-**İmzalayan:** ______________________  **Tarih:** ____________
+```python
+assert importers in (
+    [],
+    ["domain/backtest/portfolio_engine.py"],
+    ["domain/backtest/participant.py", "domain/backtest/portfolio_engine.py"],
+)
+```
+
+**Gerekçe (§Ölçüm 4'e dayanır, tahmine değil):** A, tripwire'ı **yaşatan** tek seçenektir.
+Beklenmeyen bir **üçüncü** importer hâlâ kırmızı verir, genişleme **diff'te görünür** ve
+gerekçesi bu belgeye bağlıdır. B ve C'nin ikisi de kapıyı yeşil bırakır ama **ölçmez hâle
+getirir** — §Ölçüm 4 bunu koşarak gösterdi: yalnız `portfolio_engine`'den import eden sonda
+modülü kapıyı **exit 0** ile geçti. Yeşil bir kapının hiçbir şey ölçmemesi, kırmızı bir
+kapının incelenmesinden daha kötüdür; bu deponun tripwire'ları tam bu ayrım için var.
+
+C'nin ek maliyeti de kabul edilmedi: `portfolio_engine`'in public yüzeyini yedi tip
+büyütmek, faz döngüsü modülünü bir **tip deposu** hâline getirirdi.
+
+**İmzalayan:** `alimirbagirzade` (ürün sahibi / maintainer)  **Tarih:** 2026-08-18
+
+**Uygulama `C3`'e aittir, bu belgeye değil.** Allowlist satırı `participant.py` gerçekten
+var olduğunda değiştirilir — bugün değiştirmek, negatif kontrolü test edecek bir hedef
+olmadan bir kapıyı gevşetmek olurdu. `C3` bu değişikliği yaparken **negatif kontrol
+zorunludur** (§"Karar ne verilirse verilsin" md. 4): sahte bir üçüncü importer eklendiğinde
+kapı hâlâ kırmızı vermelidir.
 
 ---
 

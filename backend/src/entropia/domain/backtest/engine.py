@@ -2786,13 +2786,27 @@ def _build_stepper(
             want=want, strength=strength, effects=tuple(effects), entry_detail=entry_detail
         )
 
-    def _apply_entry(bar: _Bar, decision: _EntryDecision, *, equity: Decimal | None = None) -> None:
+    def _apply_entry(
+        bar: _Bar,
+        decision: _EntryDecision,
+        *,
+        equity: Decimal | None = None,
+        size_override: Decimal | None = None,
+    ) -> None:
         """P4 BOOKED — place what :func:`_evaluate_entry` described. Decides nothing.
 
         ``equity`` is scoped to THIS call: set on the way in, cleared on the way out, so a
         later phase can never size against a snapshot that has since been superseded.
         ``None`` — what ``_step`` passes — leaves the sizing chain reading this item's own
-        ledger, unchanged."""
+        ledger, unchanged.
+
+        ``size_override`` is the same cap channel ``_open`` has carried since the F-07i (C)
+        partial-fill path: ``min(planned, override)``, never a raise. A shared-clock
+        participant passes the size ARBITRATION granted, which can be smaller than the
+        planned one (an item risk limit, an exposure cap), and the item must book what the
+        pool opened rather than what it asked for. ``None`` — what ``_step`` and
+        :func:`_phase_entry` pass — is byte-identical to the pre-parameter behaviour, which
+        is why no golden digest moves for this parameter existing."""
         nonlocal pending, position, sizing_equity, working_limit, working_stop
 
         sizing_equity = equity
@@ -2925,6 +2939,7 @@ def _build_stepper(
                     bar_seq=led.bars_seen,
                     deferred=False,
                     strength=strength,
+                    size_override=size_override,
                 )
             else:
                 _emit(

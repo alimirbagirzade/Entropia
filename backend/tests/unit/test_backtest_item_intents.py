@@ -914,6 +914,14 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
     ``run_portfolio`` in, this test is the one that must be updated deliberately; it
     should never fail by accident.
 
+    **Widened deliberately at `C3` (E4c), by ONE NAMED module.** ``domain/backtest/participant.py``
+    is the engine-backed ``ItemParticipant`` adapter; it names the phase loop's own types in
+    its signatures, so it cannot exist without appearing here. It sits OUTSIDE ``execution/``
+    on purpose — inside, the containment gate's importer scan would have exempted it and the
+    guard would have gone blind rather than satisfied. The widening is a named entry, never a
+    wildcard, so a THIRD importer is still a red build. Signed 2026-08-18, Option A:
+    ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``.
+
     It has been updated deliberately twice, in the same shape the clock's own containment
     test was, and each entry is NAMED rather than the assertion being loosened to "some
     importers are fine": the ADIM 17 shared ledger (``execution/portfolio_ledger.py``)
@@ -953,6 +961,7 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
         "domain/backtest/execution/portfolio_ledger.py",
         "domain/backtest/execution/portfolio_projection.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/participant.py",
         "domain/backtest/portfolio_engine.py",
     ]
 

@@ -12262,3 +12262,186 @@ ad kazanır** → bu kayıt **ADIM 84**, partisi **batch 12**. Dal ve commit mes
 `batch 11` yazar; numaralar yeniden atanmaz. **İki batch'in kriterleri AYRIK** (#781: doc 18;
 bu: doc 05), o yüzden tavan iki freeze'in farkından türetilmedi — dal rebase edilip `--report`
 ile **merged ağaçta yeniden ölçüldü**. `docs/ADIM84_LANDED_KICKOFF.md`.
+
+## ADIM 85 — C3 / E4c: `_EngineParticipant`, ve dual booking'i şanstan çıkaran iki değişmez
+
+**Ürün kodu DEĞİŞTİ (bir yeni modül + engine'de bir opsiyonel parametre), ama ÜRETİMDE
+GÖZLENEBİLİR HİÇBİR ŞEY DEĞİŞMEDİ: adaptörün `backend/src` içinde ÇAĞIRANI YOK.**
+`ENGINE_VERSION` değişmedi · migration yok · OpenAPI değişmedi ·
+`SHARED_ALLOCATION_STATUS` = `future_dev` (DEĞİŞMEDİ) · **50 golden digest BAYT BAYT AYNI**
+(`git diff --exit-code -- backend/tests/unit/engine_golden_digests.json` → 0).
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Ne sevk edildi
+
+`domain/backtest/participant.py::_EngineParticipant` — `_ItemStepper`'ın `C1`'de ayrılan
+describe/book yarılarını `ItemParticipant`'ın beş kancasına çevirir. **Bilerek `execution/`
+DIŞINDA:** içeri koymak containment gate'in importer taramasını **yapısı gereği** atlatır
+(guard tatmin olmaz, **kör** olur). Dışarıda beş allowlist birden kırmızıya döndü ve **her
+biri tek adlandırılmış modülle** genişletildi — imzalı karar, 2026-08-18, **Seçenek A**
+(`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`).
+
+**İmzalı karar YALNIZ containment gate'i ölçmüştü; DÖRT kardeş guard da kırmızı verdi**
+(`test_backtest_unified_clock.py`, `test_backtest_portfolio_ledger.py`,
+`test_backtest_item_intents.py`, `test_backtest_cross_item_arbitration.py` — hepsi TAM
+liste eşitliği). Kararın gerekçesi bire bir aynı şekle uyuyor ve hepsi `== [...]` olduğu
+için genişleme sıkılığı **hiç azaltmıyor**; yine de bu **kararın ölçtüğü kapsamın
+dışındadır** ve insan incelemesine bırakılmıştır (#731'in *"allowlist genişletmesi İNSAN
+incelemesidir"* tespiti). `execution.attribution` ve `execution.provenance` guard'ları
+**değişmedi** — adaptör onları import etmiyor.
+
+**Negatif kontrol ZORUNLUYDU ve koştu (kararın kapanış sınırları md. 4):** gerçek bir üçüncü
+importer modülü ağaca kondu → kapı **kırmızı** (`['_probe_a.py', 'participant.py',
+'portfolio_engine.py']`), sonra silindi. Ayrıca kalıcı bir test yazıldı —
+`test_widening_the_importer_allowlist_did_not_disable_it` — ve o **İKİ** yarıyı birden
+assert eder: bir **üçüncü** importer reddedilir (*"iki giriş serbest"* değil) **ve farklı
+adlı bir ikinci** importer da reddedilir (*"bir fazla modül serbest"* değil). Allowlist'i
+bir `len() <= 2` sayımına indirmek testi kırmızıya çevirdi.
+
+### İki değişmez (planın kabul kriteri)
+
+**RECONCILIATION (§C.3.3)** — havuzun attribution delta'sı == item `_Ledger`'ının realize
+delta'sı, **iki item'lık** gerçek bir engine fixture'ı üzerinde (20 düz bar + 20-bar SMA
+cross; A stop'la, B **P10** ile kapanır). Elle türetilmiş: sleeve'ler 6 000 / 4 000, boylar
+30 / 20 birim, sonuçlar **-33.00** ve **+80.00**, havuz **10 047.00**.
+**Adaptör hiçbir tutarı YENİDEN TÜRETMEZ** — booking yarısının item ledger'ında yaptığı
+**equity delta'sını ÖLÇER** (`_measured`), ve kapanışın gerekçesini bile eklenen trade
+satırının `exit_reason`'ından okur. Bir eşleme tablosu, motorun zaten cevapladığı bir
+soruya ikinci bir cevap olurdu (stop/exit çakışması `exit_signal` de `stop_loss` da
+olabilir — dal tek başına belirlemez).
+
+**SLEEVE PARITY (§C.3.5, seam #7)** — `sleeve_capital(stepper.ctx, snapshot.equity) ==
+snapshot.sleeve_capacity[item_id]`, **her tick'te her item için**, ve **üç sermaye
+modelinde birden** (compound rezervsiz, compound rezervli, fixed) çünkü iki türetim her
+birinde **farklı dala** girer. Adaptör bunu P4'te **koşum sırasında da** kontrol eder ve
+sapmada `ParticipantDivergenceError` verir: bu, testin değil **ürünün** garantisi olur, ve
+`C4`'ün worker wiring'i `wi`'yi iki yere farklı geçiremez.
+
+### Ölçülmüş GAP — entry fill'inin komisyonu (kapatılmadı, BİLEREK)
+
+`_do_open` giriş fill'inin komisyonunu **giriş anında** item equity'sine yazar (#552 / PD-2:
+komisyon **fill başına**). `_phase_7_apply` hiçbir maliyet book etmez (`set_position` ve
+başka bir şey değil) ve `settle` `None` döner → **adaptörün o anda bunu bildirecek bir
+kanalı yoktur.** İki defter tam olarak **giriş tarafı komisyonlar kadar** ayrışır, başka
+hiçbir şey kadar değil; çıkış tarafı komisyon `MandatoryExit.commission` ile aynalanır ve
+havuzun `fees` satırına iner.
+
+**Bir sonraki tick'in `CarryCharges.fee`'sine kaydırmak toplamı düzeltir, ZAMANLAMAYI
+bozar** — PD-2 tam olarak *"aynı toplam değil, farklı ZAMAN; equity girişte düşer, bu
+`peak`'i ve ondan türeyen her metriği oynatır"* diyor. Arkasında karar olmayan sessiz bir
+sayısal kaydırma icat etmek yerine gap **ölçüldü, pinlendi ve raporlandı**: `C3`'ün
+dokunmadığı `portfolio_engine.py`'ye aittir. Pin:
+`test_the_entry_fills_commission_is_the_one_leg_the_loop_cannot_mirror` (komisyon 7 → sapma
+item başına tam **7.00**). **Komisyonu sıfır olan bir fixture bu bacağı hiç koşturmadan
+temiz bir kimlik raporlardı** (ADIM 77'nin dersi).
+
+### Üç tuzak, üçü de kapandı — ve üçü de negatif kontrolden geçti
+
+1. **Flat check `_step`'in DRIVER'ında** (`if not _phase_held(bar)`), `_phase_entry_body`'de
+   değil — onun guard listesinde `pending`/`working_limit`/`working_stop` var, **`position`
+   YOK**. Adaptör hem loop'un verdiği `held`'i hem **item'ın kendi defterini** okur. Negatif
+   kontrol: item tarafı kaldırıldı → test, tutulan bir **long**'un üstüne **short** intent
+   üretildiğini gösterdi. Tuzağın **canlı** olduğu ayrıca assert edilir (aynı barda describe
+   yarısı gerçekten bir giriş istiyor), yoksa yeşil sonuç totoloji olurdu.
+2. **`_validated_intent`'in beş sınır kontrolü TEKRARLANMADI** — reddi loop'a bırakmak
+   onların orada olmasının sebebidir. **Kaynak düzeyi ratchet**, çünkü davranışsal bir test
+   **olmayan** bir kontrolü göremez: iki kopya, biri değişene kadar hep aynı fikirdedir.
+3. **BAR ÇEVİRİ KATMANI YOK.** `_normalize(` ve `_Bar(` modülde geçmez, **ve** stepper'ın
+   admit ettiği bar clock'un **nesnesinin ta kendisidir** (`is` ile assert edilir — eşit bir
+   `_Bar` yeniden kuran bir adaptör `==` kontrolünü geçerdi).
+
+### Adaptörün REDDETTİKLERİ — ve §C.3.7/§C.3.8'in kayıtsız ÜÇÜNCÜ kardeşi
+
+Adaptör `_step`'in beş fazından dördünü sürer ve **`tail`'i hiç çağırmaz**: scaling bölümü
+`C1`'de **AYRILAMAZ** ölçüldü, stacking/hedge bölümleri ise arkasında `PortfolioSnapshot`
+olmayan pozisyon **açar ve kapatır**. Sermayeyi arbitrasyon dışında taahhüt eden bir fazı
+koşturmak yerine — ya da yapılandırılmış bir davranışı sessizce düşürmek yerine, ki aynı
+kusurun daha sessiz hâlidir — **inşa anında** reddedilir
+(`participant.py::_unsupported_shapes`, on bir madde).
+
+> **YENİ BULGU: `same_direction_stacking` şema VARSAYILANI `allow_stacking`'dir.** P-C2
+> §C.3.7 (ertelenen fill) ve §C.3.8 (scaling) bu forkun iki kardeşini kaydeder; **üçüncüsü
+> hiçbir belgede yok** ve diğer ikisinden farklı olarak **varsayılan yol**. `C6` bu listeyi
+> admission blocker'a çevirdiğinde mevcut stratejilerin çoğunu paylaşımlı koşudan
+> reddedecektir → **ürün kararı**, bir test slice'ının kararı değil. Burada yeniden
+> sınıflandırılMADI, ölçüldü ve yazıldı.
+
+### `engine.py`'de tek satırlık genişleme — ve neden zorunluydu
+
+`_apply_entry` artık `size_override` alır ve onu `_do_open`'a geçirir. Tasarım (§C.3.6)
+*"`size_override` yeni değil, `_open` zaten kabul ediyor"* diyor — **doğru, ama
+`_apply_entry` onu iletmiyordu**, yani tasarımın yazdığı çağrı kurulamıyordu. Parametre
+opsiyoneldir, `_step` ve `_phase_entry` onu geçmez → **davranış bayt bayt aynıdır**, ve 50
+golden digest bunu kanıtlar. Negatif kontrol: iletim kaldırıldı → capped-grant testi
+kırmızı, üstelik **adaptörün kendi fail-closed guard'ıyla** (*"pool 20 verdi, item 30 book
+etti"*).
+
+### Diğer ölçülmüş sınırlar (dürüstlük)
+
+- **`settle` yalnız ADMITTED karar için çağrılır** (`_phase_7_apply` reddedileni atlar),
+  oysa tasarım §C.3.6 *"admitted VE rejected için çağrılır"* diyor. **Sevk edilen kazanır**;
+  sonucu, reddedilen bir intent'in `entry_signal` trace olayının ve `strength_adjustments`
+  sayacının item journal'ına yazılmamasıdır — **para değil, iz**. Paylaşımlı yolda
+  projeksiyon zaten `filtered_events=[]` yayımladığı için bunu tüketen bir yüzey yok.
+- **`want is None` olan bir describe planı `entry()` içinde HEMEN book edilir** — o plan
+  yalnız suppression sayaçları ve `filtered_no_entry` izini taşır, **hiç para taşımaz** ve
+  havuza ulaşmaz; `settle` çağrılmayacağı için tutmak onları kaybetmek olurdu.
+- **`_pending` her tick'in ilk kancasında (`carry`) temizlenir** — describe edilen bir giriş
+  kendi tick'ine aittir; havuz onu kabul etmediyse plan ölüdür ve daha sonraki bir
+  valuation'a karşı book edilemez.
+- **`stepper.finalize` FLAT item için de koşar** (dinlenen emri iptal eder). Rapor edilecek
+  bir şey yok diye atlamak replay'i yarım bırakırdı.
+
+### Süreç dersleri
+
+- **Bir tasarımın *"X zaten var"* tespiti, ÇAĞRI ZİNCİRİNİN TAMAMI için doğrulanmalıdır.**
+  §C.3.6 `_open`'a bakıp `size_override`'ı *"yeni değil"* saydı; `_apply_entry` onu
+  iletmiyordu, yani tasarımın yazdığı satır derlenmezdi.
+- **Kırmızı bir kapı, kapıyı gevşetmeden önce ÖLÇÜLÜR.** İmzalı karar bir kapıyı ölçmüştü;
+  ağaç beş tane olduğunu söyledi. Sayı tahmin edilmedi, koşuldu.
+- **`ruff` RUF002/RUF003 Türkçe noktasız `ı`'yı test docstring'inde reddeder** — imzalı
+  karardan alıntı yapan gerekçeler İngilizce parafraza çevrildi (kaynak belgeye işaret
+  ederek), susturma eklenmedi.
+
+**AÇIK KALAN (değişmedi):** `C4` (worker dalı) başlamadı · `G10` (Gate 2 / containment lift)
+**hiç talep edilmedi** · `G11`/`G12`/`G8`/`G14` açık · A-08 defteri **2/184**, **0/4**, #514
+açık. **C3 containment'ı AÇMAZ.**
+
+**NUMARA — bu slice ÜÇ KEZ taşındı, ve üçünün de sebebi bir KURALDIR, kaza değil.**
+İlk yazımda main'in son kaydı **ADIM 80**'di ve bu slice **81** yazıldı. Sonra **#776**'nın
+aynı numarayı istediği görüldü ve o, **zaten main'de olan** #769'un kapanış ritüelidir:
+*inmiş bir slice'ın henüz yazılmamış kaydı, yeni bir slice'a numarasını kaptırmaz* — aksi
+hâli ADIM 69/70 ve ADIM 72'nin sonradan ödemek zorunda kaldığı yeniden-kurgulama borcudur.
+→ **82**. Ardından **#778 merge edildi** (`40cbd7f`) ve **82'yi aldı** — o da kayıtsız inen
+`C2`'nin (#759) ritüeliydi, yani aynı kuralın ikinci uygulaması. → **83**.
+
+**ASIL DERS, ve bu bir süreç bulgusudur:** son birkaç saatte **üç numara** açık PR'ların
+altından çekildi. Sebep yapısal — **kapanış-belgesi PR'ları hızlı iner, bir kod slice'ı
+`Backend` için ~50 dk bekler**, ve numara PR'ın en oynak parçasıdır. Pratik savunma:
+numarayı **erken değil, merge'den hemen ÖNCE** ata, ve **demote hedefini aynı commit'te
+taşı**.
+
+**VE ÖNGÖRÜ İKİ KEZ GERÇEKLEŞTİ — bu paragraf artık ölçümdür, talimat değil.** Önce #776
+`aecd72c` ile indi, canlı kickoff `ADIM81` oldu ve demote hedefi onunla taşındı (`ADIM80`'in
+demote'u main'inkine bırakıldı, `ADIM81` demote edildi). Sonra **aynı şey bir kez daha oldu:
+`7f331c7` ile #781 indi ve `ADIM 83`'ü ALDI** — üstelik bu sefer numara üç açık PR tarafından
+birden isteniyordu (#777 = bu slice, #780 = inmiş #765/#766'nın ritüeli, #781 = kabul borcu
+batch 11). **Kural yine merge sırasını izledi, hak iddiasını değil: merge edilen ad kazanır.**
+#780'in kuralca daha güçlü bir iddiası vardı (kayıtsız inmiş iki PR'ı yazıyor) ama #781 önce
+indi; **bu, kuralın istisnası değil, "hangi ad merge edildi" ölçümünün hak iddiasından önce
+geldiğinin kanıtıdır.** → bu kayıt önce **84**'e taşındı ve demote hedefi ikinci kez taşındı.
+**Sonra DÖRDÜNCÜ kez taşındı ve 85 oldu**, çünkü 84'ü de **#784** aldı (kabul borcu batch 12,
+doc 05; `ea55aa7`). Demote hedefi de onunla taşındı: `ADIM81` ve `ADIM83` artık main'in,
+**bu kayıt `ADIM84`'ü demote eder** ve banner'ı `ADIM85`'i gösterir. Ağaçta tek `current`:
+`docs/ADIM85_LANDED_KICKOFF.md`. `_check_live_kickoff_is_newest` tam olarak bunu okur; bayat
+bir demote iki `current` bırakır ve kapı kırmızı verir.
+
+**DÖRDÜNCÜ taşımanın ÖLÇÜLMÜŞ sebebi, ve dersin gerçek şekli:** altı açık PR birlikte
+sıralandığında **`ADIM 84`'ü ÜÇ dal birden yazıyordu** — bu slice, **#780** (inmiş #765/#766'nın
+ritüeli) ve **#784**. Üçü de **aynı `docs/ADIM84_LANDED_KICKOFF.md` dosyasını EKLİYORDU**, yani
+ikinci ve üçüncü merge bir **add/add conflict** verirdi. Sıra merge edilebilirliğe göre kuruldu:
+**#784 = 84**, **bu kayıt = 85**, **#780 = 86**. Buradan çıkan kural, *"merge'den hemen önce
+say"*dan daha keskindir: **çakışan şey başlık değil DOSYA YOLUDUR.** Bir kapanış PR'ı açmadan
+önce açık PR'ların **ekleyeceği kickoff dosya yollarını** listele — `check_classification`
+bunu asla yakalayamaz, çünkü çakışan dalların **hepsi** kendi içinde tutarlıdır ve tek
+`current` taşır; kapı ancak ikinci merge'de bir git conflict'i olarak konuşur.

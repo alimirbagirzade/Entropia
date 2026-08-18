@@ -20,6 +20,7 @@ it. A phase loop nothing calls cannot change a shipped Result.
 from __future__ import annotations
 
 import pathlib
+from collections.abc import Mapping
 from decimal import Decimal
 
 from entropia.domain.allocation.capability import (
@@ -52,6 +53,19 @@ _PHASE_LOOP_MODULES = (
     "execution.arbitration",
     "execution.attribution",
     "execution.provenance",
+)
+
+#: The production modules outside ``execution/`` that may name a phase-loop module, as an
+#: exhaustive NAMED list per state of the tree. ``participant.py`` is the `C3` adapter: it
+#: takes ``ItemTickView``/``PortfolioSnapshot``/``ArbitrationDecision`` in its signatures, so
+#: it cannot exist without appearing here, and it sits outside ``execution/`` on purpose —
+#: inside, the scan below would have exempted it and this guard would have gone BLIND rather
+#: than satisfied. Signed 2026-08-18, Option A — ONE NAMED module, never a wildcard:
+#: ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``.
+_AUTHORISED_PHASE_LOOP_IMPORTERS: tuple[list[str], ...] = (
+    [],
+    ["domain/backtest/portfolio_engine.py"],
+    ["domain/backtest/participant.py", "domain/backtest/portfolio_engine.py"],
 )
 
 #: Every public way INTO the phase loop. The caller scan below is a text search, so it
@@ -139,6 +153,20 @@ def test_the_same_trades_read_5000_sequentially_and_3000_on_one_clock() -> None:
     assert "portfolio_curve_sequential_not_unified_clock" in sequential.diagnostics["warnings"]
 
 
+def _importers_outside_execution(module: str, sources: Mapping[pathlib.Path, str]) -> list[str]:
+    """Every production module OUTSIDE ``execution/`` that imports one phase-loop module.
+
+    Factored out of the test so the widening of :data:`_AUTHORISED_PHASE_LOOP_IMPORTERS`
+    can be negative-controlled against the real predicate rather than against a paraphrase
+    of it — a restated scan would be a second implementation, free to disagree with the one
+    that actually guards the tree."""
+    return sorted(
+        str(path.relative_to(_SRC))
+        for path, text in sources.items()
+        if f"execution.{module.split('.')[-1]} import" in text and path.parent.name != "execution"
+    )
+
+
 def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
     """ADR §12 ADIM 18 / §14 A1 — the positive counterpart of the pre-ADIM-18 assertion.
 
@@ -172,13 +200,8 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
     ]
 
     for module in _PHASE_LOOP_MODULES:
-        importers = sorted(
-            str(path.relative_to(_SRC))
-            for path, text in sources.items()
-            if f"execution.{module.split('.')[-1]} import" in text
-            and path.parent.name != "execution"
-        )
-        assert importers in ([], ["domain/backtest/portfolio_engine.py"]), (
+        importers = _importers_outside_execution(module, sources)
+        assert importers in _AUTHORISED_PHASE_LOOP_IMPORTERS, (
             f"{module} gained a production importer outside the phase loop: {importers}"
         )
 
@@ -295,4 +318,53 @@ def test_every_public_loop_driver_is_named_in_the_caller_scan() -> None:
     assert drivers == sorted(_LOOP_ENTRY_POINTS), (
         "a new public way into the phase loop appeared; add it to _LOOP_ENTRY_POINTS or the "
         f"containment caller scan will not see it. Found: {drivers}"
+    )
+
+
+def test_widening_the_importer_allowlist_did_not_disable_it() -> None:
+    """The negative control the `C3` allowlist decision was signed ON, kept executable.
+
+    ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`` makes this
+    mandatory rather than optional, in its closing limits, item 4: a fabricated second or
+    third importer must STILL turn the gate red — otherwise what was performed was not a
+    widening but a disabling.
+
+    Both halves of that are asserted, because only the pair distinguishes a NAMED list from
+    a loosened one:
+
+    * a **third** importer is refused — the allowlist did not become "two entries are fine";
+    * a **differently-named second** importer is refused — it did not become "one extra
+      module is fine", which is what a ``len()`` check or a wildcard would have produced.
+
+    The real predicate is exercised, not a paraphrase: the probe modules are injected into
+    the same ``sources`` mapping ``_importers_outside_execution`` reads, so a scan that
+    stopped detecting imports at all would fail this test instead of passing it silently."""
+    sources = {p: p.read_text() for p in _SRC.rglob("*.py")}
+    module = "execution.clock"
+    live = _importers_outside_execution(module, sources)
+
+    # The tree as it stands is authorised — and it is the WIDENED entry that authorises it,
+    # so this test fails if the adapter is ever moved into ``execution/`` and the widening
+    # is left behind as dead permission.
+    assert live in _AUTHORISED_PHASE_LOOP_IMPORTERS
+    assert live == ["domain/backtest/participant.py", "domain/backtest/portfolio_engine.py"]
+
+    probe_src = "from entropia.domain.backtest.execution.clock import ItemTickView\n"
+    third = _SRC / "domain" / "backtest" / "_probe_third_importer.py"
+    second = _SRC / "domain" / "backtest" / "_probe_other_adapter.py"
+    assert third not in sources and second not in sources
+
+    with_third = _importers_outside_execution(module, {**sources, third: probe_src})
+    assert len(with_third) == 3
+    assert with_third not in _AUTHORISED_PHASE_LOOP_IMPORTERS, (
+        "a third production importer of the phase loop passed the widened allowlist; the "
+        "widening disabled the tripwire instead of extending it by one named module"
+    )
+
+    without_adapter = {p: t for p, t in sources.items() if p.name != "participant.py"}
+    with_other = _importers_outside_execution(module, {**without_adapter, second: probe_src})
+    assert len(with_other) == 2
+    assert with_other not in _AUTHORISED_PHASE_LOOP_IMPORTERS, (
+        "a DIFFERENTLY-NAMED second importer passed the allowlist; it is a named list, not "
+        "a count, and Option B/C were rejected precisely because they stop naming anything"
     )

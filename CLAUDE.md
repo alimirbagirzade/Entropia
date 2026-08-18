@@ -237,7 +237,27 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 84 (kabul borcu batch 12, doc 05 backend): ÜRÜN KODU
+> `future_dev` (**DEĞİŞMEDİ**). **Son dalga — ADIM 85 (C3 / E4c, `_EngineParticipant`):
+> ÜRÜN KODU DEĞİŞTİ ama ÜRETİMDE ÇAĞIRANI YOK; 50 golden digest BAYT BAYT AYNI. Blocker
+> sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Yeni tek modül
+> `domain/backtest/participant.py` — bilerek `execution/` **DIŞINDA** (içeride containment
+> gate'in importer taraması **kör** olurdu). **Beş** allowlist tek adlandırılmış modülle
+> genişledi (imzalı karar 2026-08-18, Seçenek A); **karar yalnız containment gate'ini
+> ölçmüştü, dört kardeş guard insan incelemesine bırakıldı.** Negatif kontrol koştu ve
+> kalıcı teste dönüştü. İki değişmez pinlendi: **reconciliation** (havuz attribution'ı ==
+> item ledger delta'sı) ve **sleeve parity** (`Ci(t)`'nin iki türetimi, her tick/item, üç
+> sermaye modeli) — ikincisi **üründe de** zorlanır. **Ölçülmüş, kapatılmayan gap:** giriş
+> fill'i komisyonunun havuza aynalanacağı bir faz yok; kaydırmak PD-2'nin zamanlama
+> gerekçesini bozardı → `C4`/`C6`'ya bırakıldı. **Yeni bulgu:** `same_direction_stacking`
+> şema **varsayılanı** `allow_stacking` ve adaptör onu reddediyor → §C.3.7/§C.3.8 forkunun
+> kayıtsız **üçüncü** kardeşi, `C6` için **ürün kararı**. `engine.py`'de tek genişleme:
+> `_apply_entry(..., size_override=None)` (tasarımın yazdığı çağrı kurulamıyordu).
+> **Next: `C4`.** `PROJECT_HISTORY.md` §ADIM 85 · `docs/ADIM85_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 84 (kabul borcu batch 12, doc 05 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > İki kriter kapandı: **`TL-13`** (var olan bir readiness raporu bir Trade Log pin'inin
 > **üzerinden** taşındı — iki yarı da kanıtlıydı, **dikişi** hiç geçilmemişti; güncellik hiç

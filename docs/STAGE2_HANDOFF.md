@@ -7241,8 +7241,60 @@ dondurulmalı**.
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 83 ·
 `docs/ADIM83_LANDED_KICKOFF.md`.
 
+## ADIM 85 — C3 / E4c: `_EngineParticipant` adaptörü landed (PR #777)
+
+**Ürün kodu değişti, gözlenebilir davranış değişmedi — adaptörün `backend/src` içinde ÇAĞIRANI
+YOK.** `ENGINE_VERSION` değişmedi · migration yok · OpenAPI değişmedi ·
+`SHARED_ALLOCATION_STATUS` = `future_dev` · **50 golden digest bayt bayt aynı**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+Yeni modül `domain/backtest/participant.py` (`execution/` DIŞINDA, bilerek: içeride
+containment gate'in importer taraması **kör** olurdu). **Beş importer allowlist'i** tek
+adlandırılmış modülle genişledi (imzalı karar 2026-08-18, Seçenek A) — containment gate + dört
+kardeş guard (clock / portfolio_ledger / intents / arbitration). **Karar yalnız containment
+gate'i ölçmüştü; dördü insan incelemesine açıkça bırakıldı.** Negatif kontrol koştu (gerçek bir
+üçüncü importer → kırmızı) ve kalıcı bir teste dönüştü.
+
+İki değişmez pinlendi: **reconciliation** (havuz attribution'ı == item ledger realize delta'sı,
+iki item'lık gerçek engine fixture'ı) ve **sleeve parity** (`Ci(t)`'nin iki türetimi, her tick
+her item, üç sermaye modelinde). İkincisi **üründe de** zorlanır (`ParticipantDivergenceError`),
+yalnız testte değil.
+
+**Ölçülmüş, kapatılmayan gap:** giriş fill'inin komisyonu — loop'ta o kanal yok (`settle`
+`None` döner), sonraki tick'e kaydırmak PD-2'nin zamanlama gerekçesini bozardı. Ölçüldü,
+pinlendi, `portfolio_engine.py`'ye (yani `C4`/`C6`'ya) bırakıldı.
+**Yeni bulgu:** `same_direction_stacking` şema **varsayılanı** `allow_stacking` ve adaptör onu
+reddediyor → §C.3.7/§C.3.8 forkunun kayıtsız **üçüncü** kardeşi, `C6` için bir **ürün kararı**.
+
+`PROJECT_HISTORY.md` §ADIM 85 · `docs/ADIM85_LANDED_KICKOFF.md`.
+
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+
+> **ADIM 85 GÜNCELLEMESİ (2026-08-19) — BAŞLIK BİLEREK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> Bu slice'ın bir yazımı başlığı *"`C4` (E5) …"* olarak yeniden adlandırmıştı; geri alındı,
+> çünkü `docs-history-guard` `^-## ` desenine bakar ve bir `## ` başlığını yeniden yazmak ona
+> **kayıt silme** gibi görünür (ADIM 61 emsali; ADIM 81 ve ADIM 84 aynı kararı aynı gerekçeyle
+> vermişti). **Kapı fiilen kırmızı verdi ve `ENTROPIA_HOOKS=off` ile atlanmadı** — düzeltilen
+> kapı değil, başlıktı. Kural: *başlığa dokunma, düzeltmeyi gövdeye yaz.*
+>
+> **Başlık iki iş adlandırıyor ve ADAPTÖR yarısı İNDİ** (`C3`,
+> `participant.py::_EngineParticipant` — üretimde çağıranı **YOK**, 50 golden digest bayt bayt
+> aynı, `assert callers == []` el değmedi). Kalan yarı call site'tır ve o **`C4`**'tür:
+> `_use_unified_clock(capital_execution)` **tek** yerde, paylaşımlı dal item döngüsünün
+> **kardeşi** olarak, `iter_portfolio` üzerinden tick-adımlı iptal kontrolü, ve containment
+> tripwire'ının *"hiçbir şey çağırmıyor"* assertion'ının **yetkili-çağıran allowlist'ine
+> DARALTILMASI** (silinmesi ya da gevşetilmesi değil). `C4` de containment'ı **AÇMAZ**.
+>
+> **`C4`'ün iki conjunct'ı da taşıyıcıdır** (`shared_allocation_is_executable()` **ve**
+> `shared_allocation_requested(...)`): biri eksik kalırsa her bağımsız kompozit Result
+> **sessizce yeniden fiyatlanır** — bayraksız, bump'sız, kullanıcıya görünmeden.
+>
+> **`C3`'ün `C4`'e devrettiği iki ölçülmüş kalem:** (1) giriş fill'i komisyonunun havuza
+> aynalanacak bir fazı yok; (2) adaptörün on bir maddelik reddi `C6`'nın admission blocker
+> listesiyle **aynı** olmalıdır ve `allow_stacking` şema varsayılanı olduğu için bu bir **ürün
+> kararı** doğurur.
+
 
 > **ADIM 81 GÜNCELLEMESİ (2026-08-18, main `1741b03`) — BU BAŞLIK ARTIK `C3`'Ü ADLANDIRIYOR,
 > ve gövdesinin `C2` yarısı BAYATTIR.** Başlık **bilerek değiştirilmedi** (docs kayıt-silme

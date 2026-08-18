@@ -1232,6 +1232,14 @@ def test_the_shared_ledger_is_reachable_only_through_the_phase_loop() -> None:
     ``run_portfolio`` in, this is the test that must be updated deliberately — it should never
     fail by accident.
 
+    **Widened deliberately at `C3` (E4c), by ONE NAMED module.** ``domain/backtest/participant.py``
+    is the engine-backed ``ItemParticipant`` adapter; it names the phase loop's own types in
+    its signatures, so it cannot exist without appearing here. It sits OUTSIDE ``execution/``
+    on purpose — inside, the containment gate's importer scan would have exempted it and the
+    guard would have gone blind rather than satisfied. The widening is a named entry, never a
+    wildcard, so a THIRD importer is still a red build. Signed 2026-08-18, Option A:
+    ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``.
+
     It has been updated deliberately once, in the same shape the clock's and the intent
     layer's own containment tests were: the cross-item arbitration layer
     (``execution/arbitration.py``) asks this ledger the capacity question, so it is named here
@@ -1263,6 +1271,7 @@ def test_the_shared_ledger_is_reachable_only_through_the_phase_loop() -> None:
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/attribution.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/participant.py",
         "domain/backtest/portfolio_engine.py",
     ]
 

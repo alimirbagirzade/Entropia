@@ -251,11 +251,20 @@ narrowing at E5 asserts on a call site E4c makes legal.
 > gerçeğe hizalar.
 >
 > **DİKKAT — imzaların nerede yaşadığı tek tip DEĞİL:** G9 ve G13'ün imzası
-> `docs/adr/0002-…md` **§13.2**'dedir (*"Signed by the PO (`alimirbagirzade`), 2026-08-17"*);
-> `closure_product_decisions_2026-08-13.md` içindeki **Karar 4 ve Karar 5'in `karar veren:`
-> kutuları HÂLÂ BOŞTUR** (2026-08-18'de ölçüldü). Kutuya bakıp *"imzasız"* sonucuna varmak
-> yanlış olur; ADR otoritedir (otorite sırası md. 2). Bu ayrışma **bu belgenin işi değildir**
-> ve burada yalnız **kaydedilir**.
+> `docs/adr/0002-…md` **§13.2**'de verildi (*"Signed by the PO (`alimirbagirzade`),
+> 2026-08-17"*) — yani **imzayı veren belge ADR'dir**, `closure_product_decisions_2026-08-13.md`
+> değil. Bu ayrışma **bu belgenin işi değildir** ve burada yalnız **kaydedilir**.
+>
+> **Bu paragraf 2026-08-18'de bir kez daha ölçüldü ve DEĞİŞTİ.** Önceki hâli
+> *"Karar 4 ve Karar 5'in `karar veren:` kutuları HÂLÂ BOŞTUR"* diyordu; bu **`e05a5b1`
+> (#774) ile geçersiz kaldı** — o PR kutuları işaretledi (`[x]` + `karar veren:
+> **alimirbagirzade**, tarih **2026-08-17**`, yani ADR'nin tarihi). **Sonuç değişmedi**
+> (G9 ve G13 zaten imzalıydı ve öyle sayılıyordu); değişen, kanıtın **kaç yerde** durduğudur:
+> artık hem ADR §13.2'de hem karar belgesinde. **Kutuya bakıp *"imzasız"* sonucuna varmak
+> yine de yanlıştır** — kural genel: bir kutunun boş olması kapının imzasız olduğunu
+> göstermez, çünkü imza başka bir belgede verilmiş olabilir; otorite sırası md. 2.
+> **Karar 5'in alt-sorusu (A5 kapısının biçimi) #774'te bilerek AÇIK bırakıldı** — o alt-soru
+> 2026-08-17'de sorulmamıştı ve çıkarımla işaretlenmedi.
 
 The prompt names six. **This table registers sixteen (G1–G16).**
 

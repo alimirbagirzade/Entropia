@@ -36,10 +36,10 @@ argument in `acceptance_semantic_map.yaml` before planning any row.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 66 |
+| B | 65 |
 | C | 6 |
 | D | 32 |
-| **open total** | **105** |
+| **open total** | **104** |
 
 ## Class A (1)
 
@@ -47,7 +47,7 @@ argument in `acceptance_semantic_map.yaml` before planning any row.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (66)
+## Class B (65)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -59,7 +59,6 @@ argument in `acceptance_semantic_map.yaml` before planning any row.
 | `AT-11` | 02 | partial | A disabled stop rule is excluded from the evaluator/manifest dependencies; re-enabling revalidates the old value. | `test_disabled_percentage_stop_produces_none` does NOT do what its name says — its body only asserts `stops.percentage_stop.enabled is False`, i.e. that the model accepts a disabled stop. The real filter lives in `compiler.py::filter_disabled_sections` (lines ~275-295, "only keep enabled stops"), and `grep -rn filter_disabled backend/tests` returns nothing: no test asserts a disabled stop is dr… |
 | `AT-22` | 02 | partial | Supervisor/User cannot mutate another owner's Strategy Root; Admin can; a Rationale Family exception grants no Strategy edit. | The denial half is well proven on the strategy surface itself. The GRANT half is not: `test_can_edit_only_own` exercises only the owner/non-owner pair and never an Admin actor, and no strategy test drives a save/patch/clear as ADMIN against another owner's root. `test_list_strategy_drafts_admin_sees_every_owner` is a READ, so it cannot stand in for a mutation grant. There is also no test for a … |
 | `AT-23` | 02 | partial | Clear confirms, wipes the unsaved config, writes no Trash record and deletes no prior immutable revision. | `test_clear_resets_draft_without_deleting_root` clears a draft that was never saved, so the "does not delete a prior immutable revision" clause is never exercised: no test saves a revision, clears the draft and then re-reads the revision. The "creates no Trash record" clause is only indirect — the test asserts `deletion_state == ACTIVE` on the root rather than the absence of a `trash_entry` row. |
-| `AOS-01` | 03 | partial | Hover/focus type chooser: only Trading Signal and Trade Log, keyboard parity, no backend mutation. | The membership half of the row is genuinely asserted (exactly two choices, both routed to their workbenches) and the no-mutation half is asserted against fetch. The clause "keyboard navigation matches pointer behavior" has no asserting test: every chooser test drives the UI by click. A neighbouring suite does assert submenu keyboard semantics (menu.test.tsx, "exposes a nested submenu trigger as… |
 | `AOS-04` | 03 | partial | A Trading Signal draft is an Unsaved transient view with no ids and is absent from Ready Check composition. | The transient-identity half is asserted exactly as the spec words it — the contract test opens the draft and asserts unsaved is True and that root_id / revision_id / item_id are absent from the body. The second half ("absent from server Ready Check composition") has no asserting test: no test runs a Ready Check with an open transient draft and asserts the composition snapshot omits it. Structur… |
 | `AOS-05` | 03 | partial | A Trade Log draft is an Unsaved transient view and starts no import job until an explicit upload/import action. | The "no import job yet" half is proven from the chooser side — choosing Trade Log issues no request at all, so no import can have been queued. The Unsaved-transient-draft half is only proven for the Trading Signal branch (test_external_trading_signal_draft_is_transient); there is no equivalent assertion for the trade_log draft kind on either surface, so that clause is recorded uncovered rather … |
 | `AOS-06` | 03 | partial | Discarding an unsaved draft leaves no Trash Entry, audit event, hash change or stale Ready Report. | The load-bearing fact for "no Trash Entry / no audit event" is asserted — the draft opener returns a body with no root/revision/item identity, so there is no row a discard could soft delete or audit. Nothing asserts the discard path itself, and nothing asserts that the composition hash is unchanged or that no readiness.became_stale event is emitted across a discard. The composition-hash invaria… |

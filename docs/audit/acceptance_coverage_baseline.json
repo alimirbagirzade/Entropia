@@ -21,15 +21,15 @@
   ],
   "provenance": {
     "measured_by": "docs/audit/acceptance_semantic_scan.py --root .. --report",
-    "measured_at": "2026-08-17T21:30:09Z",
-    "slice": "acceptance batch 07 — doc 07 (Pre-Check), FRONTEND surface: PC-01, PC-17 and PC-21 closed; PC-02.c2 measured as unconstructible (class C-shaped)",
-    "base_commit": "0f0651d",
+    "measured_at": "2026-08-18T10:57:47Z",
+    "slice": "acceptance batch 10 — doc 03 (Add Outsource Signal), FRONTEND surface: AOS-01 closed by its last open clause c2 (chooser keyboard parity)",
+    "base_commit": "347fe19",
     "conditions": "static scan; ast + title extraction against the live test tree; no database, no network, no test run",
-    "supersedes": "the batch-06 freeze (100 partial / 8 uncovered; A1 B69 C6 D32, base df7df92). Batch 07 finished doc 07 by taking its FRONTEND surface — the complement of batch 06 — and closed THREE more criteria, so partial 100 -> 97 and class B 69 -> 66; both ceilings are lowered, never raised. PC-01 needed BOTH of its open clauses and both surfaces: c2 (the literal 'Not Checked' pill, which existed exactly once in the tree and was asserted nowhere) and c3 (no Package Revision persisted by RENDERING — the pre-existing test looked right but drove the request to a DRAFT first, so it proved an empty revision CHAIN on a request that already had a root). PC-17.c4 asserted both halves the durability tests never touched: closing the overlay issues NO non-GET request, and reopening re-reads the server rather than a snapshot. PC-21 closed its two remaining clauses, including c3 — a NEGATIVE SCOPE claim (the PASSED surface must not imply repaint, lookahead, validation or approval) whose absence had been assumed rather than asserted. SIX negative controls were run, each by REMOVING the behaviour from product code and recording which assertion went red: the 'Not Checked' literal -> em dash; get_package_request made to create a package (assert 2 == 0); onClose made to POST a cancel (expected 1 to be +0); the modal's detail frozen across reopens (blocked not found); the PASSED line trimmed; and the PASSED line made to over-claim (not to match /repaint/i). ONE finding was MEASURED AND RECORDED RATHER THAN ACTED ON: PC-02.c2 wants the Pre-Check surface to show a 'final empty-input text' for an EMPTY SOURCE, but EMPTY_SOURCE appears nowhere in frontend/src, and the state is UNCONSTRUCTIBLE — the overlay renders only when `detail !== null`, so Pre-Check cannot be opened without a persisted request, and an empty-source request is rejected at the route before the DB. That reads class C (a scenario Production cannot construct) rather than class B. NOT RECLASSIFIED — B -> C raises the C ceiling and that is an adjudication, not a test slice's call. That makes NINE such open findings across the ledger, and doc 07 now has exactly two open rows left, both of them findings (PC-02.c2 and PC-20.c3) plus the two class-D Agent rows PC-15/PC-16.",
+    "supersedes": "the batch-07 freeze (97 partial / 8 uncovered; A1 B66 C6 D32, base 0f0651d). Batch 10 is a ONE-CLAUSE batch and closes AOS-01.c2, 'keyboard navigation of the chooser matches pointer behaviour' — the last clause on doc 03 that a test could close — so partial 97 -> 96 and class B 66 -> 65; both ceilings are lowered, never raised. NO PRODUCT CODE CHANGED: parity is native, because pages/OutsourceSignal.tsx renders each choice as a react-router <Link> (an <a href>) rather than a click handler. The assertion is deliberately NOT 'the choices are links' — the pre-existing membership test already proves that and stays GREEN while the chooser is made mouse-only, since tabIndex={-1} leaves role, name and href untouched. It is about the SEQUENCE instead: inside the chooser region the keyboard is offered exactly the stops the pointer has, in the same order. TWO negative controls, each isolating the new test and leaving the other six green: tabIndex={-1} on the Link gave 'expected [] to deeply equal [<a>, <a>]', and a tabIndex={0} div added inside the chooser gave a three-element sequence against the expected two. HONEST BOUNDARY: jsdom has no native anchor activation, so Enter cannot be pressed in a component test and the test does not pretend to; what activation depends on is asserted (each stop is an <a href> carrying the same target the pointer path navigates to). A real-browser proof belongs in e2e/specs/14-keyboard-flow.spec.ts (@a11y) and was NOT added, because this container cannot run that suite (Docker Hub blob CDN answers 403) and an unverifiable assertion is not evidence. CHAINING NOTE: this freeze is measured against MAIN at 347fe19 and therefore does NOT include batches 08 and 09, which are still open in PR #768 at 91 partial / B 60. Whichever lands second must rebase and re-freeze — the ledger is a serial source and a ceiling left above the measured figure fails test_the_frozen_ceiling_leaves_no_headroom rather than passing quietly.",
     "clause_totals_at_freeze": {
-      "covered": 1015,
+      "covered": 1016,
       "partial": 9,
-      "uncovered": 112,
+      "uncovered": 111,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "product_decision_required": 0
@@ -50,12 +50,12 @@
   "ceilings": {
     "total_criteria": 383,
     "status": {
-      "partial": 97,
+      "partial": 96,
       "uncovered": 8
     },
     "debt_class": {
       "A": 1,
-      "B": 66,
+      "B": 65,
       "C": 6,
       "D": 32
     }

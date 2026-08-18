@@ -237,7 +237,43 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 75 (kabul borcu batch 07, doc 07 frontend): ÜRÜN KODU
+> **`future_dev` (DEĞİŞMEDİ)**. **Son dalga — ADIM 76 (P-E6/C8: containment kapısının İKİNCİ
+> DÜNYASI): ÜRÜN KODU DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.** **22 containment ön koşulunun 2'si yeşil** → **flag'e DOKUNULMADI**
+> (`G8`/`G14` = #559/#544 **açık**; **`G10` (Gate 2 — lift onayı) TALEP EDİLMEDİ**;
+> `G11`/`G12` açık) → prompt'un 1–3. maddeleri **yazılamazdı**: `_EngineParticipant`,
+> `_use_unified_clock`, `settle`/`finalize`, `iter_portfolio`, `PHASE_ORDER`'da P10 **yok**.
+> **BULGU 1: kapı TEK DÜNYALIYDI** — `active_v1`'i kuran tek test resolver'ın flag'i
+> *görmezden geldiğini* kanıtlamak için var, yani üç üretim yüzeyi (`rules.py:154`,
+> `backtest_run.py:542`, `allocation_plan.py:59`) + frontend fixture'ı lifted dünyada **hiç
+> koşulmamıştı**; YENİ `test_shared_allocation_two_world_gate.py` (10 test) + bir lifted
+> frontend render testi, **`future_dev` pinleri gevşetilmeden**. **BULGU 2 (asıl sonuç): flag
+> bir REDDETMEDİR, MOTOR DEĞİL** — worker `shared_allocation_is_executable`'ı hiç çağırmaz, o
+> yüzden bugün flag çevrilse shared Result **sıralı yaklaşımla** üretilirdi: **drawdown 5000,
+> gerçeği 3000** (`portfolio_mode.py`'nin flag-bağımsızlığı okuru korur ama **sayıyı
+> düzeltmez**) → `C9`'un neden SON slice olduğunun ölçülmüş gerekçesi. **BULGU 3 (`C9`
+> devraldı):** capability bloğu lifted dünyada `available: true` + *"not available in this
+> build"* der (sayfa korunuyor, sözleşme değil) — #559 emsaliyle characterization pinlendi.
+> **DERS: `and`/`or` kapısını BİLEŞİK sonucuyla test etmek kısa devrenin arkasını ölçmez** —
+> sekiz negatif kontrolden biri yeşil kaldı, test hücre başına **iki conjunct'ı ayrı** assert
+> edecek şekilde düzeltildi. Ratchet'e **dokunulmadı**; **A4 NOT EVALUABLE, `covered`
+> işaretlenMEDİ**. **SLICE KAPANIRKEN DEĞİŞTİ: `G9` + `G13` İMZALANDI** (#753, `9fc5580`,
+> ADR-0002 **§13.2**) → **`G9` APPROVED**, **`G13` = FOLD** (aynı `t_ms`'te `commit_tick`;
+> append reddedildi, A5 by-construction kalır). **Ön koşul sayısı DEĞİŞMEDİ (2/22)** — madde
+> #5 bileşiktir ve P10 **sevk edilmedi** (*"No product code ships with this amendment"*).
+> **Ama ADIM 72'nin "sıradaki hamle bir İMZADIR" tespiti ARTIK GEÇERSİZ: sıradaki hamle
+> KODDUR — `C2`/E4b** (`settle`+`finalize` **zorunlu** Protocol üyesi, `hasattr` probe'u
+> **yasak**; `PHASE_ORDER`'a P10; `iter_portfolio`). **DERS: bir denetimin "imzasız"
+> bulgusu SHA'ya bağlıdır, kalıcı gerçek değildir** — denetim satırları donduruldu, canlı
+> belgeler güncellendi. **NUMARA: bu kayıt İKİ KEZ taşındı** (74 yazıldı → `#758` 74'ü,
+> `#757` 75'i merge edilmiş/sıraya girmiş adla aldı → **76**); dal adı numara taşımaz.
+> Sırayı tercih değil **kapı** belirledi: `check_classification` canlı kickoff'un ağaçtaki
+> en yüksek numaralı `ADIM<n>` dosyası olmasını ister. `PROJECT_HISTORY.md` §ADIM 76 ·
+> `docs/ADIM76_LANDED_KICKOFF.md` ·
+> `docs/audit/closure_w0_containment_lift_preconditions_2026-08-17.md`.
+>
+>
+> Öncesinde **ADIM 75 (kabul borcu batch 07, doc 07 frontend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Batch 06'nın **tümleyeni**: aynı belge, frontend yüzeyi. Üç kriter daha kapandı —
 > **`PC-01`** (`.c2` literal `Not Checked` pill + `.c3` render etmek revizyon yazmaz, okuma
@@ -254,6 +290,8 @@ Before stopping a working session, produce **ALL** of the following:
 > sebeple kırmızıya dönen negatif kontrol hiçbir şey kanıtlamaz** — kırmızının **hangi
 > assertion'da** olduğunu oku. **`C2` hâlâ BLOKLU — G9 + G13 imzasız.**
 > `PROJECT_HISTORY.md` §ADIM 75 · `docs/ADIM75_LANDED_KICKOFF.md`.
+>
+>
 >
 >
 > Öncesinde **ADIM 74 (R2 + R3, PR #742 + #745): ÜRÜN DAVRANIŞI DEĞİŞMEDİ —

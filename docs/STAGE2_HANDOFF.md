@@ -6831,6 +6831,88 @@ yükseltir). Defterde artık **DOKUZ** böyle bulgu var.
 ve iki sınıf-D Agent satırı (`PC-15`, `PC-16`). `PROJECT_HISTORY.md` §ADIM 75 ·
 `docs/ADIM75_LANDED_KICKOFF.md`.
 
+## Stage 76 — P-E6/C8: containment kapısının İKİNCİ DÜNYASI; flag DEĞİŞMEDİ landed
+
+Base `0f0651d` · migration **YOK** · alembic head `0043_i08_registry_strategy_fks` ·
+`ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** ·
+**`SHARED_ALLOCATION_STATUS` = `future_dev` (DEĞİŞMEDİ)** · **ürün kodu DEĞİŞMEDİ**
+(`backend/src` + `frontend/src/lib` + `frontend/src/pages`'te sıfır satır) ·
+**blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+**Prompt'un sert ön koşulu DÜŞTÜ ve slice bilerek daraltıldı.** P-E6'nın 1–3. maddeleri
+(gerçek worker oracle'ları, historical compat, manifest namespace) üretimde bir shared kod
+yolu varsayıyor; **yok**. Ölçüldü: `_EngineParticipant` yok · `_use_unified_clock` yok ·
+`ItemParticipant.settle`/`.finalize` yok · `iter_portfolio` yok · `PHASE_ORDER` P10 taşımıyor.
+`C2` imzaya bloklu: **`G9` + `G13` imza blokları #750 ile YARATILDI ama imzalanmadı**
+(kutular `[ ]`, `karar veren:` boş). **22 containment ön koşulunun 2'si yeşil** (#1 = ADIM 71
+describe/book split; #19 = ADIM 72 R-1 pini); `G8`/`G14` (#559/#544) **açık**, `G10` (ADR §16
+Gate 2) **talep edilmedi**. Satır satır kanıt:
+`docs/audit/closure_w0_containment_lift_preconditions_2026-08-17.md` §2.
+
+**Sevk edilen iş = P-E6'nın 5. maddesi, ve ölçüm onu en değerli parça yaptı.**
+**BULGU 1: containment kapısı TEK DÜNYALIYDI.** `active_v1`'i kuran tek test
+(`test_backtest_portfolio_mode.py:160`) resolver'ın flag'i **görmezden geldiğini** kanıtlamak
+için var; yani flag'i okuyan üç üretim yüzeyi (`rules.py:154`, `backtest_run.py:542`,
+`allocation_plan.py:59`) lifted dünyada **hiç koşulmamıştı**, ve frontend fixture'ı
+(`portfolio.test.tsx:43`) `available: false` **sabitti**. YENİ
+`backend/tests/unit/test_shared_allocation_two_world_gate.py` (**10 test**) + bir lifted-dünya
+frontend render testi. **Hiçbir `future_dev` pini gevşetilmedi.**
+
+**BULGU 2 (asıl sonuç): flag bir REDDETMEDİR, bir MOTOR değildir.** `jobs/backtest_engine.py:299`
+her item'ı bağımsız replay edip `:364` `combine_item_runs` ile katlar ve
+`shared_allocation_is_executable`'ı **hiç çağırmaz** (kaynak düzeyinde assert edildi). Bugün
+flag çevrilse Ready Check blocker'ı düşer, admission guard reddetmeyi bırakır ve worker
+shared-capital Result'ı **sıralı yaklaşımla** üretir: **drawdown 5000, gerçeği 3000.**
+Okuru koruyan tek şey `portfolio_mode.py`'nin flag-bağımsızlığı (A19, iki dünyada da
+`legacy_sequential`) — **sayı yine yanlış, yalnız dürüstçe etiketli.** `C9`'un neden SON
+slice olduğunun ölçülmüş gerekçesi.
+
+**BULGU 3 (`C9` devraldı):** `shared_allocation_capability_view()` lifted dünyada
+`available: true` ile *"not available in this build"* mesajını **birlikte** yayımlar.
+Bugünün sayfası korunuyor (`Portfolio.tsx:358` `!available` arkasında, yeni test bunu pinler)
+ama blok yayımlanan **sözleşmedir**. #559 emsaliyle **characterization** pinlendi —
+`C9` metinleri flag-aware yapınca o test **kırmızıya döner, kasıtlı**.
+
+**DERS: `and`/`or` kapısını BİLEŞİK sonucuyla test etmek kısa devrenin arkasını ölçmez.**
+Sekiz negatif kontrol ailesinden **biri yeşil kaldı** — `shared_allocation_requested`'ı
+flag-aware yapan perturbasyon truth-table testimi hiç kırmadı, çünkü guard lifted dünyada
+ilk terimde kısa devre yapıyor. Test **hücre başına iki conjunct'ı ayrı** assert edecek
+şekilde yeniden yazıldı; perturbasyon **iki yönde de** kırmızı verdi.
+
+**Kabul borcu ratchet'ine DOKUNULMADI** (yeni testler kriter kapatmıyor; bu slice hiçbir
+tavana el sürmedi). **Sayı yazmıyoruz: bu slice'ın TABANINDA tavanlar A=1 · B=69 · C=6 ·
+D=32 → açık 108 idi, ama ARADA #757 (ADIM 75) indi ve B'yi 66'ya, açık borcu 105'e çekti** —
+canlı değer `docs/audit/acceptance_coverage_baseline.json`. Üretilmiş olgular tazelendi:
+backend collected **3625 → 3635** (+10 test, +1 dosya), frontend call site **722 → 723** (+1);
+taban ölçümü 3610 → 3620 / 718 → 719 idi, arada #751/#755/#757 indi ve **delta aynı kaldı**. **A4 NOT EVALUABLE kalır ve `covered`
+işaretlenMEDİ.** Hiçbir issue kapatılmadı; `G9`/`G13`/`G10` **imzasız bırakıldı** (ADR §16).
+`PROJECT_HISTORY.md` §ADIM 76 · `docs/ADIM74_LANDED_KICKOFF.md`.
+
+
+
+> **ADIM 74 GÜNCELLEMESİ (2026-08-17).** Yukarıdaki *"sıradaki hamle bir İMZADIR"*
+> tespiti **yeniden ölçüldü ve DOĞRULANDI** — ve bir adım netleşti: `G9` ve `G13`'ün imza
+> **blokları artık VAR** (#750, `decisions:834` ve `:911`), ama **hiçbiri imzalanmadı**
+> (kutular `[]`, `karar veren:` boş). Yani engel *"imzalanacak yer yok"* değil, **imzanın
+> kendisi**. `C9`'un ek kapıları da ölçüldü: **`G8` (#559) ve `G14` (#544) İKİSİ DE AÇIK**
+> (`reopened`), **`G10` (ADR §16 Gate 2) hâlâ talep edilmedi**, `G16` (A-08) açık.
+> **22 containment ön koşulunun 2'si yeşil.** ADIM 74 bu yüzden `C2`'ye başlamadı;
+> ajanın imzasız kapatabileceği işten **kapının ikinci dünyasını** seçti (yukarı).
+> **Flag'e dokunulmadı.** Ön koşul tablosu:
+> `docs/audit/closure_w0_containment_lift_preconditions_2026-08-17.md` §2.
+
+> **ADIM 74 KAPANIRKEN DEĞİŞTİ — `G9` + `G13` İMZALANDI (#753, `9fc5580`, 21:54Z).**
+> Ürün sahibi ADR §16 **Gate 1**'i oturum içinde imzaladı: **`G9` APPROVED as stated**,
+> **`G13` = FOLD**. Kayıt **ADR-0002 §13.2** (+ §6 madde 6–7, §8.2 P10).
+> **Ön koşul sayısı DEĞİŞMEDİ (2/22)** — madde #5 bileşiktir, P10 **sevk edilmedi**
+> (*"No product code ships with this amendment"*), `PHASE_ORDER` hâlâ sekiz faz.
+> **AMA yukarıdaki "sıradaki hamle bir İMZADIR" satırı ARTIK GEÇERSİZ — sıradaki hamle
+> KODDUR: `C2` / E4b.** `settle`/`finalize` **zorunlu** Protocol üyesi (`hasattr` probe'u
+> **yasak**, fail-open), P10 döngüden sonra **bir kez**, sonra **FOLD**.
+> **`G10` (Gate 2 / lift) hâlâ TALEP EDİLMEDİ**; `G11`/`G12`/`G8`/`G14` ve
+> `participant.py` importer-allowlist incelemesi açık → **flag'e dokunmak hâlâ yasak.**
+
+
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 

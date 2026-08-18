@@ -5,7 +5,9 @@
 > eklendi (G9/G13 P-C2 dalgasında, G12 `234b6bc` ile). Bu arada **G9 ve G13'ün imzası bu
 > belgede değil, `docs/adr/0002-unified-clock-portfolio-simulation.md` §13.2'de verildi**
 > (2026-08-17, ürün sahibi) — çünkü ikisi de bir **ADR amendment'ıdır** ve ADR §16 kapısı
-> kendi belgesinde işler. Buradaki kutular boş kaldı; **boş kutu, imzasız demek değildir.**
+> kendi belgesinde işler. **Karar 4 ve Karar 5'in kutuları 2026-08-18'de geriye dönük
+> dolduruldu** (ürün sahibi imzayı o gün doğrudan teyit etti) — ama **otorite hâlâ
+> §13.2'dir**. Karar 1/3/6'nın kutuları **gerçekten boştur**.
 > 2026-08-18'de ölçülen durum:
 >
 > | Karar | Kapı | Durum | İmzanın YERİ |
@@ -850,15 +852,27 @@ portföy bilinçli olarak kapsam dışına alınıyorsa doğru.
 
 **Karar 4 — ADR §6/§8 amendment'ı (G9):**
 
-`[ ] A (dördü birden)`  `[ ] B (asgari: settle+finalize+P10, iter_portfolio ertelenir)`
+`[x] A (dördü birden)`  `[ ] B (asgari: settle+finalize+P10, iter_portfolio ertelenir)`
 `[ ] C (amendment reddedilir)`  `[ ] D (hiçbir şey yapma — C2/C3/C4 süresiz bloklu)`
 
 Alt-karar — `settle`/`finalize` **zorunlu** Protocol üyesi mi?
-`[ ] evet (zorunlu, fail-closed)`  `[ ] hayır (opsiyonel/`hasattr` — fail-open, gerekçe: ______)`
+`[x] evet (zorunlu, fail-closed)`  `[ ] hayır (opsiyonel/`hasattr` — fail-open, gerekçe: ______)`
 
-karar veren: ________________  tarih: ____________
+karar veren: **alimirbagirzade** (ürün sahibi)  tarih: **2026-08-17**
+kayıt yeri: **ADR-0002 §13.2** (`9fc5580`, PR #753) — kutular buraya **geriye dönük** işlendi
 
-> **İMZA BAŞKA BİR BELGEDE VERİLDİ — yukarıdaki boş kutular bunu YANSITMIYOR.**
+> **KUTULAR 2026-08-18'DE DOLDURULDU; KARAR O GÜN VERİLMEDİ.** #770 bu satırları boş
+> bırakmış ve *"boş kutu, imzasız demek değildir"* diye **doğru** biçimde uyarmıştı; ama bir
+> uyarı, okuyanın onu okumasına bağlıdır ve bu belgedeki **diğer beş imza satırı** aynı kutu
+> biçimini kullanır (§Karar 2 dolu; Karar 1/3/6 gerçekten boş). Aynı işaretin bir satırda
+> *"imzasız"*, başkasında *"başka yerde imzalı"* demesi deftere bakan bir oturumun **ayırt
+> edemeyeceği** bir ayrımdır — nitekim bu oturum tam olarak buna düştü ve ürün sahibine
+> sormak zorunda kaldı. **Otorite hâlâ §13.2'dir**; buradaki işaretler onun defterdeki
+> yansımasıdır. Seçenek `A` ve alt-kararın *"evet"*i uydurulmadı: §13.2 `A`'yı *"APPROVED as
+> stated"* olarak verir, alt-kararı ise ADR **§6 clause 6** kendi sözüyle kapatır —
+> *"a **required** Protocol member, never probed with `hasattr`: probing is fail-open"*.
+>
+> **İmzanın verildiği belge:**
 > `docs/adr/0002-unified-clock-portfolio-simulation.md` **§13.2** (*"Amendment table — the
 > ADIM 20 contract additions (2026-08-17)"*, `9fc5580`, PR #753) G9'u **`APPROVED as
 > stated`** olarak imzalar: §6 iki Protocol üyesi (`settle`, `finalize`) kazanır, §8.2 bir
@@ -944,15 +958,25 @@ değil.
 
 **Karar 5 — P10 end-of-data equity noktası (G13):**
 
-`[ ] A (katla — aynı t_ms'te commit_tick)`  `[ ] B (aynı t_ms'e ikinci nokta ekle)`
+`[x] A (katla — aynı t_ms'te commit_tick)`  `[ ] B (aynı t_ms'e ikinci nokta ekle)`
 `[ ] C (sentetik t_ms'e ekle)`  `[ ] D (P10 yok)`
 
 Alt-karar — A5 kapısı `len(set(instants)) == len(instants)` biçimine güçlendirilsin mi?
-`[ ] evet`  `[ ] hayır (gerekçe: ______)`
+`[ ] evet`  `[ ] hayır (gerekçe: ______)`  ← **AÇIK BIRAKILDI, bilerek**
 
-karar veren: ________________  tarih: ____________
+karar veren: **alimirbagirzade** (ürün sahibi)  tarih: **2026-08-17**
+kayıt yeri: **ADR-0002 §13.2** (`9fc5580`, PR #753) — kutular buraya **geriye dönük** işlendi
 
-> **İMZA BAŞKA BİR BELGEDE VERİLDİ — yukarıdaki boş kutular bunu YANSITMIYOR.**
+> **ALT-KARAR NEDEN İŞARETSİZ.** §13.2 ana seçeneği net verir (**FOLD**) ama A5 kapısının
+> ayrıca `len(set(instants)) == len(instants)` biçimine güçlendirilip güçlendirilmeyeceğini
+> **söylemez** — yalnız *"A5 survives as a by-construction claim"* der ve bunu append'i
+> **reddetme gerekçesi** olarak kullanır. İki okuma da savunulabilir (fold seçildiği için
+> runtime kontrolü gereksizdir ↔ ucuz bir runtime kontrolü zararsızdır). Ürün sahibine
+> 2026-08-18'de sorulan şey **G9 ve G13'ün kendisiydi**, bu alt-soru değil; çıkarımla `[x]`
+> koymak, imzalanmamış bir kararı imzalı göstermek olurdu — bu belgenin var oluş sebebi
+> tam olarak bunu önlemek.
+>
+> **İmzanın verildiği belge:**
 > ADR-0002 **§13.2** (2026-08-17, `9fc5580`) G13'ü **`FOLD`** olarak imzalar: aynı `t_ms`'te
 > `commit_tick`, kapanışlardan sonra — yani **seçenek A (katla)**. `B` (aynı ana ikinci
 > nokta) gerekçesiyle birlikte **reddedildi**: *"two points on one instant would demote a

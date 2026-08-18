@@ -237,26 +237,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 76 (kabul borcu batch 08, doc 04 backend): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 77 (kabul borcu batch 09, doc 03 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
-> Doc 04'ün dört kriteri kapandı — **`TS-15.c2`** (SUPERVISOR rolü **özellikle**: sayfadaki her
-> sahiplik testi ikinci bir düz USER seçiyordu), **`TS-18.c2`** (silmenin **kurtarılabilir**
-> yarısı: trash + audit + outbox, daha önce yalnız projeksiyon düşüşü assert ediliyordu),
-> **`TS-10.c3`** (allocation açılınca bağımsız sermaye **korunur**, `content_hash` ile çift
-> assertion) ve **`TS-08.c3`** (düzeltilen import ilk raporu **bozmaz**, bayt bayt).
-> **DÖRT negatif kontrol, dördü de kırmızı.** **Tavanlar İNDİ: `partial` 97 → 93,
-> `debt_class.B` 66 → 62**; açık borç **105 → 101** (A=1 · B=62 · C=6 · D=32), clause `covered`
-> 1015 → 1019. **DOC 04'TE DE SINIF B KALMADI** (doc 07 bir önceki dalgada bitmişti).
-> **İKİ BULGU, ikisi FARKLI şekilde:** `TS-07.c2` **sevk edilmemiş** — `run_engine`'in
-> **hiç sinyal-olayı girdisi yok**, engine'in `SignalEventRow`'u bir **çıktı** günlüğü (sınıf D);
-> `TS-02.c2` ise **YANLIŞLANAMAZ** — transient draft açıcısı session'sız saf bir fonksiyon, yani
-> draft'ın snapshot'a ulaşabileceği **dikiş yok**, yeşil bir test **kapsamak değil işaretlemek**
-> olurdu, o yüzden **bilerek açık bırakıldı**. **DERS: "kapatılamaz"ın üç şekli var —
-> sevk edilmemiş / kurulamaz / yanlışlanamaz — ve hiçbiri bir test slice'ının yeniden
-> sınıflandıracağı şey değildir.** Defterde artık **on bir** bulgu.
-> **SIRA:** bu slice **merge edilmemiş** ADIM 75'in (PR #757) üstünde **yığılı**; #758 sıra
-> beklerken ADIM 74'ü aldı, batch 07 → 75, bu kayıt → **76** taşındı.
-> `PROJECT_HISTORY.md` §ADIM 76 · `docs/ADIM76_LANDED_KICKOFF.md`.
+> İki kriter kapandı: **`AOS-13.c3`** (doc 03 §13'ün adlandırdığı **SUPERVISOR** rolü hiç
+> sürülmemişti — testler ikinci bir düz USER ya da Agent seçiyordu; yeni test **iki fiili**
+> `create_work_object_revision` + `soft_delete_work_object`, **iki external kind** üzerinde
+> sürer ve reddin **kalıcı** olduğunu doğrular) ve **`AOS-05.c1`** (transient-draft sözleşmesi
+> yalnız `trading_signal` dalında kanıtlıydı; `trade_log` **ödünç alınmadı**, ayrı pinlendi).
+> **Tavanlar İNDİ: `partial` 93 → 91, `debt_class.B` 62 → 60**; açık borç **101 → 99**
+> (A=1 · B=60 · C=6 · D=32), clause `covered` 1019 → 1021.
+> **İKİ BULGU, ikisi de YANLIŞLANAMAZ:** `AOS-04.c2` `TS-02.c2`'nin **birebir ikizi**;
+> `AOS-06.c2` daha net — **`discard` ağaçta hiç yok** (komut yok, uç yok, handler yok; tek anma
+> yokluğu tarif eden bir yorum), yani clause bir **eylemsizliğin** etkisizliğini iddia ediyor.
+> **`AOS-01.c2` kapatılamadığı için değil FRONTEND olduğu için ertelendi** — chooser seçimleri
+> link, klavye pariteliği native, assertion ve negatif kontrolü **gerçek**; doc 03'ü bitirecek
+> tek satırlık bir parti. **DERS: negatif kontrolün NEDEN kırmızıya döndüğünü oku** — bu slice'ta
+> ilk kontrol yetki yerine **doğrulama** hatasıyla düştü, yani red yetkilendirmeye atfedilemiyordu;
+> test düzeltildi. **Defterde artık on üç bulgu var ve DÖRDÜ aynı yanlışlanamaz şekle sahip**
+> (`TS-02.c2`, `PC-02.c2`, `AOS-04.c2`, `AOS-06.c2`) — bu artık bir **adjudication kalemi**.
+> **SIRA: zincir ÜÇ seviye derin ve hiçbiri inmedi** — #757 (75) → #763 (76) → bu (77).
+> `PROJECT_HISTORY.md` §ADIM 77 · `docs/ADIM77_LANDED_KICKOFF.md`.
 >
 >
 > Öncesinde **ADIM 74 (R2 + R3, PR #742 + #745): ÜRÜN DAVRANIŞI DEĞİŞMEDİ —

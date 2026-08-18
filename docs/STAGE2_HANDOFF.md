@@ -6874,6 +6874,48 @@ Doc 04'te sınıf B kalmadı; kalan satırlar iki bulgu ve önceden sınıf-D ol
 `PROJECT_HISTORY.md` §ADIM 76 · `docs/ADIM76_LANDED_KICKOFF.md`.
 
 
+## Stage 77 — kabul borcu batch 09 (doc 03 backend): iki kriter kapandı, iki bulgu landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**, containment `future_dev`. Blocker sayısı
+**değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+Doc 03 (Add Outsource Signal), **backend** yüzeyi. Beş sınıf-B adayının her birinin tek açık
+clause'u vardı; **ikisi kapandı, ikisi bulgu çıktı, biri frontend olduğu için ertelendi**.
+
+| Kriter | Kapanan clause | Neden açıktı |
+|---|---|---|
+| `AOS-13` | `.c3` | doc 03 §13'ün adlandırdığı **SUPERVISOR** rolü hiç sürülmemişti (testler ikinci bir düz USER ya da Agent seçiyordu) |
+| `AOS-05` | `.c1` | transient-draft sözleşmesi yalnız **trading_signal** dalında kanıtlıydı; `trade_log` ödünç alınmamıştı |
+
+**Tavanlar İNDİ:** `partial` **93 → 91**, `debt_class.B` **62 → 60**. Açık kabul borcu
+**101 → 99** (A=1 · B=60 · C=6 · D=32). Clause düzeyinde `covered` **1019 → 1021**,
+`uncovered` **108 → 106**.
+
+**`AOS-13.c3` iki fiili de sürer** (`create_work_object_revision` **ve**
+`soft_delete_work_object`), **iki external kind** üzerinde, ve reddin **kalıcı** olduğunu
+doğrular. Edit çağrısı geçerli bir `available_time` taşır — yoksa çağrı izinli bir aktör için
+bile anti-lookahead doğrulamasına takılırdı ve **red yetkilendirmeye atfedilemezdi**.
+
+**İKİ negatif kontrol, ikisi de kırmızı:** `can_edit`'e `Role.SUPERVISOR` kısayolu → iki
+parametrizasyonda da `DID NOT RAISE AccessDeniedError`; opener yalnız `TRADE_LOG` dalında
+`root_id` döndürünce → yeni test kırmızı, **kardeşi yeşil kalıyor** (per-kind pinlemenin
+varlık sebebi tam olarak bu).
+
+**İKİ BULGU — ikisi de YANLIŞLANAMAZ:**
+- **`AOS-04.c2`** `TS-02.c2`'nin **birebir ikizi**; satırın kendi notu zaten kabul ediyordu
+  (*"bu bir argüman, assertion değil"*).
+- **`AOS-06.c2` daha da net:** `discard` `commands/mainboard.py` ve `routes/mainboard.py`
+  içinde **hiç geçmiyor** — discard komutu, ucu, handler'ı **yok**. Tek anma
+  `OutsourceSignal.tsx:97`'deki *"leaving this page discards nothing durable"* yorumu, yani
+  yokluğun **tarifi**. Clause bir **eylemsizliğin** etkisizliğini iddia ediyor.
+
+**`AOS-01.c2` ertelendi, kapatılamaz olduğu için değil FRONTEND olduğu için** — chooser
+seçimleri link olarak render ediliyor, yani klavye pariteliği native; assertion yazılabilir ve
+negatif kontrolü gerçek (link'i `div onClick` yapmak). Doc 07'nin batch 06/07 bölünmesinin
+aynısı. `PROJECT_HISTORY.md` §ADIM 77 · `docs/ADIM77_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:

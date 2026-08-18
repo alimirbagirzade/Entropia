@@ -3385,12 +3385,23 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The transient-identity half is asserted exactly as the spec words it — the contract test
-    opens the draft and asserts unsaved is True and that root_id / revision_id / item_id are absent
-    from the body. The second half ("absent from server Ready Check composition") has no asserting
-    test: no test runs a Ready Check with an open transient draft and asserts the composition snapshot
-    omits it. Structurally the draft has no composition row to omit, but that is an argument, not
-    an assertion.'
+  notes: 'ADIM 77 FINDING - c2 is the verbatim twin of TS-02.c2 and is UNFALSIFIABLE for the same reason, so it
+    was left open rather than marked. This row''s own note already concedes the shape ("Structurally the
+    draft has no composition row to omit, but that is an argument, not an assertion"); ADIM 76 measured why
+    that argument cannot be turned into a failing test. MEASURED again on this base: the opener
+    commands/mainboard.py::start_external_work_object_draft (104-117) is a PURE function taking only (actor,
+    kind); it opens no session and its single caller routes/mainboard.py:91-95 passes ctx.actor and kind and
+    nothing else, so no database handle is in scope anywhere on that path. The draft therefore has no
+    representation the Ready Check composition snapshot (MainboardCompositionSnapshot.item_manifest, built
+    from mb_repo.list_active_items) could read. An assertion that the draft is absent would pass today and
+    could only fail after a three-point change (give the opener a session, add a write, wire the id into the
+    snapshot) - not a regression a guard catches. Closing it honestly needs a persisted-draft design (as
+    I-12 already did for Strategy) or an adjudication that the row is class C. NOT RECLASSIFIED. The
+    transient-identity half is asserted exactly as the spec words it — the contract test opens the draft and
+    asserts unsaved is True and that root_id / revision_id / item_id are absent from the body. The second
+    half ("absent from server Ready Check composition") has no asserting test: no test runs a Ready Check
+    with an open transient draft and asserts the composition snapshot omits it. Structurally the draft has
+    no composition row to omit, but that is an argument, not an assertion.'
 - id: AOS-05
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'
@@ -3399,7 +3410,9 @@ criteria:
   clauses:
   - id: AOS-05.c1
     text: Choosing Trade Log produces a draft view explicitly marked Unsaved with no server identity.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/contract/test_mainboard_contract.py::test_external_trade_log_draft_is_transient
   - id: AOS-05.c2
     text: No import job starts until an explicit child upload/import action occurs.
     status: covered
@@ -3417,27 +3430,33 @@ criteria:
     call — rendering and choosing never touch fetch (§7.1)
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > choosing Trade Log
     navigates to the Trade Log workbench
+  - backend/tests/contract/test_mainboard_contract.py::test_external_trade_log_draft_is_transient
   evidence_type:
   - frontend_component
+  - backend_contract
   positive:
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > choosing Trade Log
     navigates to the Trade Log workbench
   negative:
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > performs no backend
     call — rendering and choosing never touch fetch (§7.1)
+  - backend/tests/contract/test_mainboard_contract.py::test_external_trade_log_draft_is_transient
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The "no import job yet" half is proven from the chooser side — choosing Trade Log issues
-    no request at all, so no import can have been queued. The Unsaved-transient-draft half is only
-    proven for the Trading Signal branch (test_external_trading_signal_draft_is_transient); there
-    is no equivalent assertion for the trade_log draft kind on either surface, so that clause is recorded
-    uncovered rather than borrowed from its sibling.
+  status: covered
+  notes: 'CLOSED in acceptance batch 09 (ADIM 77). The "no import job yet" half was already proven from the
+    chooser side. The Unsaved-transient half existed only for the Trading Signal branch
+    (test_external_trading_signal_draft_is_transient) and was deliberately NOT borrowed for trade_log; this
+    pins it per kind. That separation is not ceremony: doc 03 §6.2 names the two choices separately, they
+    route to different workbenches, and a special case for one kind - say minting an id early so the Trade
+    Log importer has something to bind to - would leave the sibling green while breaking this row. NEGATIVE
+    CONTROL: making start_external_work_object_draft return a root_id for the TRADE_LOG branch only fails
+    this test on assert root_id not in body while the trading_signal sibling stays green, which is exactly
+    the divergence the per-kind assertion exists to catch.'
 - id: AOS-06
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'
@@ -3471,12 +3490,23 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: The load-bearing fact for "no Trash Entry / no audit event" is asserted — the draft opener
-    returns a body with no root/revision/item identity, so there is no row a discard could soft delete
-    or audit. Nothing asserts the discard path itself, and nothing asserts that the composition hash
+  notes: 'ADIM 77 FINDING - c2 names an action that DOES NOT EXIST as a surface, so no test can fail on it.
+    MEASURED on this base: grepping discard across commands/mainboard.py and routes/mainboard.py returns
+    NOTHING - there is no discard command, no discard endpoint and no discard handler. The only mention
+    anywhere is a comment in frontend/src/pages/OutsourceSignal.tsx:97 stating that "leaving this page
+    discards nothing durable", which is a description of the absence, not an implementation of it.
+    Discarding an unsaved draft is simply navigating away from a client-side view whose opener never touched
+    the server (see the AOS-04.c2 finding for that measurement). Asserting that this non-action changes no
+    composition hash and emits no readiness.became_stale event would be asserting that nothing does nothing:
+    green today, and unable to go red through any single realistic change. The load-bearing no-Trash-Entry /
+    no-audit half is already asserted via the draft''s lack of identity. Same shape as TS-02.c2 and
+    AOS-04.c2. NOT RECLASSIFIED - B to C raises the C ceiling and that is an adjudication, not a test
+    slice''s call. The load-bearing fact for "no Trash Entry / no audit event" is asserted — the draft
+    opener returns a body with no root/revision/item identity, so there is no row a discard could soft
+    delete or audit. Nothing asserts the discard path itself, and nothing asserts that the composition hash
     is unchanged or that no readiness.became_stale event is emitted across a discard. The composition-hash
     invariant IS asserted for expand/collapse (presentationState.test.tsx, AOS-16) but that is a different
-    action and is not cited here.
+    action and is not cited here.'
 - id: AOS-07
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'
@@ -3845,7 +3875,9 @@ criteria:
     - backend/tests/integration/test_trade_log_persistence.py::test_foreign_owner_cannot_create_revision
   - id: AOS-13.c3
     text: A Supervisor specifically cannot edit or delete another owner external object.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   - id: AOS-13.c4
     text: Admin can act on a foreign external object.
     status: covered
@@ -3884,6 +3916,7 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_read_trading_signal
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
+  - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   evidence_type:
   - backend_integration
   - backend_contract
@@ -3901,6 +3934,7 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_read_trading_signal
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
+  - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   auth:
   - backend/tests/integration/test_mainboard_authz.py::test_attach_own_work_object_is_allowed
   - backend/tests/integration/test_mainboard_authz.py::test_attach_foreign_work_object_is_denied
@@ -3914,20 +3948,27 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_read_trading_signal
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
+  - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: Owner-writes, foreign-denies, Admin-override, Agent-is-not-a-human and the API-enforces-it
-    clauses are all asserted server-side. The one clause the spec names by role and the suite does
-    not is Supervisor. The signal/trade-log ownership tests seed a second plain USER, not a SUPERVISOR,
-    so "Supervisor cannot edit/delete other owner external object" is asserted nowhere on this line.
-    The canonical role matrix does declare supervisor-edit=own and supervisor-delete=own (test_role_matrix_contract.py),
-    but that is a policy-table assertion about a matrix, not a request against an external work object,
-    so it is not cited as proof of the enforced behaviour.
+  status: covered
+  notes: 'CLOSED in acceptance batch 09 (ADIM 77). Owner-writes, foreign-denies, Admin-override,
+    Agent-is-not-a-human and API-enforcement were all asserted; the one role doc 03 §13 names and the suite
+    never drove was Supervisor, because every ownership test here seeds a second plain USER or an Agent.
+    Supervisor sits BETWEEN User and Admin, so "a non-owner is denied" does not settle it - the question is
+    whether the elevated role leaks a write it was never granted. The canonical role matrix does declare
+    supervisor-edit=own / supervisor-delete=own (test_role_matrix_contract.py), but that asserts a POLICY
+    TABLE rather than a request against a real object; this drives the commands themselves. BOTH verbs the
+    clause names are exercised (create_work_object_revision and soft_delete_work_object) over BOTH external
+    kinds, and the refusal is checked to be durable - the root is still ACTIVE on its original revision
+    afterwards. The edit call passes a VALID external-kind available_time on purpose: without it the call
+    would fail anti-lookahead validation even for a permitted actor and the denial would be confounded, so
+    authorization is the only thing standing between the Supervisor and a successful write. NEGATIVE
+    CONTROL: adding a Role.SUPERVISOR short-circuit to domain/identity/policy.py::can_edit fails both
+    parametrisations with DID NOT RAISE AccessDeniedError.'
 - id: AOS-14
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'

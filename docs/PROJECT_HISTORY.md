@@ -11370,3 +11370,109 @@ Açık kabul borcu **105 → 101** (A=1 · B=62 · C=6 · D=32). Clause `covered
 - **G9 ve G13 artık İMZALI** (#753, main'e indi) — `C2` imzasız kapıların arkasında **değil**;
   bu slice bunu kullanmadı ama sıradaki paket-C dilimi `docs/adr/0002`'yi doğrulamalı.
 - Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.
+
+## ADIM 77 — kabul borcu batch 09 (doc 03 backend): iki kriter kapandı, iki bulgu
+
+> **NUMARA / SIRA NOTU.** Bu slice, ikisi de merge EDİLMEMİŞ **ADIM 75** (batch 07, PR #757)
+> ve **ADIM 76** (batch 08, PR #763) üstüne **yığılarak** yazıldı — zincir üç seviye derin.
+> Gerekçe defterin **seri bir kaynak** olmasıdır: `acceptance_coverage_baseline.json`'ın
+> `supersedes` alanı bir zincirdir ve batch 09'un devralması gereken sayılar batch 08'in
+> dondurdukları (93/62), main'in bayat 100/69'u değil. **Merge edilmiş ad kazanır** —
+> bu dalgada zaten iki kez taşındık (#758 ADIM 74'ü aldı, batch 07 75'e, batch 08 76'ya).
+
+Base **`ff4ed01`** (batch 08'in tepesi; ölçüm anında main `8151cdc`) · migration **YOK** ·
+`ENGINE_VERSION` **değişmedi** · alembic head **`0043_i08_registry_strategy_fks`** · OpenAPI
+**değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ
+(1 — yalnız A-08), verdict BLOCKED.** Ürün kodu **değişmedi**.
+
+### 1. Parti — beş aday, iki kapanış
+
+ADIM 76'nın kickoff'u doc 03'ü "doc 04'ün ikizi, harness yeniden kullanılabilir, ama `AOS-04`'ü
+`TS-02` ile aynı transient-draft tuzağı için **önce ölç**" diye işaret etmişti. Uyarı yerindeydi
+ve **iki** satırı birden ısırdı.
+
+| Kriter | Clause | Sonuç |
+|---|---|---|
+| `AOS-13` | `.c3` | **KAPANDI** — `test_supervisor_cannot_edit_or_delete_a_foreign_external_object` |
+| `AOS-05` | `.c1` | **KAPANDI** — `test_external_trade_log_draft_is_transient` |
+| `AOS-04` | `.c2` | **BULGU** — `TS-02.c2`'nin birebir ikizi, yanlışlanamaz |
+| `AOS-06` | `.c2` | **BULGU** — discard yüzeyi **hiç yok** |
+| `AOS-01` | `.c2` | **ERTELENDİ** — kapatılabilir ama **frontend** |
+
+### 2. `AOS-13.c3` — rolü sürmek, matrisi okumak değil
+
+Satırın gerisi iyi kapsanmıştı: owner-writes, foreign-denies, Admin-override,
+Agent-is-not-a-human ve API-enforcement. Sürülmemiş tek rol **Supervisor**'dı, çünkü buradaki
+her sahiplik testi ikinci bir **düz USER** ya da bir **Agent** seçiyor. Supervisor **User ile
+Admin arasında** durur; "sahibi olmayan reddedilir" bu satırı kapatmaz.
+
+Kanonik rol matrisi `supervisor-edit=own` / `supervisor-delete=own` **beyan ediyor**
+(`test_role_matrix_contract.py`) — ama bu bir **politika tablosu** assertion'ıdır, gerçek bir
+nesneye karşı istek değil. Yeni test komutların kendisini sürer: **iki fiil**
+(`create_work_object_revision`, `soft_delete_work_object`), **iki external kind**, ve red sonrası
+kökün hâlâ ACTIVE ve orijinal revizyonunda olduğu.
+
+**Edit çağrısı geçerli bir `available_time` taşır ve bu bilinçlidir.** İlk yazımda taşımıyordu;
+negatif kontrolü koşunca test kırmızıya döndü ama **yanlış sebeple** — yetki kaldırılınca çağrı
+anti-lookahead doğrulamasına takılıyordu (`available_time is required for trading_signal`).
+Yani red **yetkilendirmeye atfedilemiyordu**. Alan eklendi; kontrol artık temiz:
+`DID NOT RAISE AccessDeniedError`.
+
+### 3. `AOS-05.c1` — kardeşi ödünç almamak
+
+Transient-draft sözleşmesi yalnız `trading_signal` dalında kanıtlıydı. Opener iki üyeli bir küme
+üzerinde **tek** fonksiyon olduğu için bunu "ikisini de kapatır" saymak kolaydı; sayılmadı.
+Doc 03 §6.2 iki seçimi **ayrı** adlandırır, farklı workbench'lere giderler, ve **tek bir kind'a
+özel bir sapma** — diyelim Trade Log importer'ının bağlanacağı bir id'nin erken üretilmesi —
+kardeşi yeşil bırakıp bu satırı kırardı. Negatif kontrol tam olarak bunu gösterdi: opener yalnız
+`TRADE_LOG` dalında `root_id` döndürünce **yeni test kırmızı, kardeşi yeşil**.
+
+### 4. İKİ BULGU — ikisi de YANLIŞLANAMAZ
+
+**`AOS-04.c2`** `TS-02.c2`'nin birebir ikizi. Satırın kendi notu şekli zaten kabul ediyordu:
+*"Structurally the draft has no composition row to omit, but that is an argument, not an
+assertion."* Ölçüm aynı: `start_external_work_object_draft` `(actor, kind)` alan **saf** bir
+fonksiyon, session açmıyor, tek çağıranı başka bir şey geçmiyor; composition snapshot ise
+`mb_repo.list_active_items`'tan kuruluyor. Draft oraya **hiçbir yoldan** giremez.
+
+**`AOS-06.c2` daha da net.** `discard` `application/commands/mainboard.py` ve
+`apps/api/routes/mainboard.py` içinde **hiç geçmiyor** — discard komutu **yok**, ucu **yok**,
+handler'ı **yok**. Ağaçtaki tek anma `frontend/src/pages/OutsourceSignal.tsx:97`'deki
+*"leaving this page discards nothing durable"* **yorumu**, yani yokluğun tarifi. Discard,
+opener'ı sunucuya hiç dokunmamış bir client-side görünümden **ayrılmaktır**. Test "hiçbir şey
+hiçbir şey yapmaz" derdi: bugün yeşil, tek bir gerçekçi değişiklikle kırmızıya **dönemez**.
+Satırın yük taşıyan yarısı (Trash Entry yok, audit yok) draft'ın kimliksizliğiyle zaten assert
+edilmiş durumda.
+
+### 5. `AOS-01.c2` neden ertelendi
+
+**Kapatılamaz olduğu için değil.** Chooser seçimleri **link** olarak render ediliyor
+(`OutsourceSignal.tsx:114` — *"A link (not a button) because the choice is [navigation]"*), yani
+klavye pariteliği platformdan geliyor. Assertion yazılabilir ("her seçim href'li, klavyeyle
+işletilebilir bir link") ve negatif kontrolü **gerçek**: link'i `div onClick` yapmak testi
+kırmızıya çevirir ve bu birinin makul şekilde yapabileceği bir regresyondur.
+
+Ertelenme sebebi **yüzey**: bu satır frontend, batch ise backend. Doc 07'nin batch 06 (backend)
++ batch 07 (frontend) bölünmesinin aynısı. Doc 03'ün frontend partisi tek satırlık olacak.
+
+### 6. Ratchet
+
+```
+status.partial      93 -> 91
+debt_class.B        62 -> 60
+```
+
+Açık kabul borcu **101 → 99** (A=1 · B=60 · C=6 · D=32). Clause `covered` **1019 → 1021**,
+`uncovered` **108 → 106**; toplam **1175**, `total_criteria` **383** değişmedi.
+
+### 7. Dürüst sınırlar
+
+- **Zincir üç seviye derin** ve hiçbiri inmedi: #757 (ADIM 75) → #763 (ADIM 76) → bu (ADIM 77).
+  Alttaki her rebase bu dalı da rebase ettirir.
+- **Defterde artık ON ÜÇ bulgu var** ve dördü aynı şekle sahip (`TS-02.c2`, `PC-02.c2`,
+  `AOS-04.c2`, `AOS-06.c2`): transient/hayali bir yüzey hakkında **yanlışlanamaz** iddialar.
+  Bu artık tek tek bir slice'ın işi değil, **bir adjudication kalemi**.
+- `AOS-13.c3` `mb_cmd` yüzeyini sürer; aynı rolün diğer uçlardaki davranışı bu satırla kapanmaz.
+- Ürün kodu değişmedi → containment, `ENGINE_VERSION`, golden digest ve A-08 etkilenmedi.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.

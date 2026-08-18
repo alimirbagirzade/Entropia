@@ -796,6 +796,41 @@ class PortfolioLedger:
         self._last_point_equity = self.equity
         return point
 
+    def fold_tick(self, t_ms: int) -> PortfolioEquityPoint | None:
+        """``P10`` — settle the book at ``t_ms`` WITHOUT adding a second point there.
+
+        The end-of-data close realizes money after the last tick has already committed. ADR
+        §13.2 (G13) decided that this **folds** into the point at that instant rather than
+        appending a new one: two points on one ``t_ms`` would break A5's *by-construction*
+        time-ordering claim, demoting a structural invariant to something a runtime check has
+        to defend.
+
+        Folding is therefore a REPLACE, not a second :meth:`commit_tick`. Calling ``commit_tick``
+        again at the same ``t_ms`` is exactly the appending behaviour G13 rejected — it is not a
+        near-miss, it is the other option. The replacement keeps the original ``seq`` and
+        ``t_ms``, so the curve's length and instants are unchanged and only the settled figures
+        move.
+
+        When the last point sits at an EARLIER instant — the final tick moved no equity, so it
+        appended nothing — there is nothing at ``t_ms`` to fold into and the point is appended
+        normally. Either way the curve ends with exactly one point per instant."""
+        self._assert_writable()
+        if self.equity == self._last_point_equity:
+            return None
+        if self.equity_points and self.equity_points[-1].t_ms == t_ms:
+            previous = self.equity_points[-1]
+            folded = PortfolioEquityPoint(
+                seq=previous.seq,
+                t_ms=previous.t_ms,
+                equity=self.equity,
+                drawdown=_money(self.peak - self.equity),
+                gross_exposure_percent=self._exposure_percent(self.gross_exposure),
+            )
+            self.equity_points[-1] = folded
+            self._last_point_equity = self.equity
+            return folded
+        return self.commit_tick(t_ms)
+
     # -------------------------------------------------------------------------- capacity
 
     def resolve_capacity(

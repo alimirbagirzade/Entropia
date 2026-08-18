@@ -6914,6 +6914,53 @@ işaretlenMEDİ.** Hiçbir issue kapatılmadı; `G9`/`G13`/`G10` **imzasız bır
 
 
 
+## Stage 77 — P1 + P4: Ready Check'in tick-data bacağı ve RUN admission'ın tick pinleri batch'lendi (PR #751 + #754) landed
+
+**Ne indi.** #617'nin şeklinin **dördüncü ve beşinci** örneği — ikisi de bir döngünün içinde
+duran per-item okuma. Ölçülen değerler, tahmin değil:
+
+| Bacak | PR | Onarım öncesi | Sonra |
+|---|---|---|---|
+| Ready Check tick-data uygunluğu (`_resolve_tick_data_issues`) | #751 | 1 → 11 statement, slope 1 | tek `IN()`, `per_item: 0` |
+| RUN admission tick pinleri (`_resolve_tick_pins`) | #754 | 3 → 23 statement, slope 2 | üç batch'li okuma, `per_item: 0` |
+
+**Ürün kodu değişti, gözlenebilir davranış değişmedi.** Migration yok · `ENGINE_VERSION`
+değişmedi · OpenAPI değişmedi · golden digest'ler ellenmedi · alembic head
+`0043_i08_registry_strategy_fks` · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı
+değişmedi (1 — yalnız A-08), verdict BLOCKED.** Kabul borcu tavanları oynamadı.
+
+**P4 admission yolundaki İLK bütçe satırı.** `docs/performance/README.md` §8 run admission'ı
+deterministik kapılanan yüzey diye adlandırıyordu ama onu ölçen satır yoktu.
+
+**Yeni semboller — ikisi de mevcut bir okuyucunun aynası, üçüncü idiom yok:**
+`market_data.py::find_approved_tick_revisions_for_instruments` (← `get_dataset_roots`) ve
+`strategy.py::get_strategy_revisions` (← `mainboard.get_work_object_revisions`). Ayrıca
+`readiness_check.py::_mirror_ref`, `::_tick_data_demands` ve `backtest_run.py::_pinned_mirror_refs`.
+`_resolve_strategy_payload` **opsiyonel** bir prefetch haritası alır (`mirrors=None`), böylece
+"mirror NEDİR" sorusunun tek tanımı korunur ve eski çağıranlar statement statement değişmez.
+
+**Asıl nokta bir sözleşme, bir hız detayı değil.** Pinlenen revizyon id'si değişmez manifest'e
+girer (doc 15 §15, INF-04/INF-05), yani aynı `execution_key`'i paylaşan iki koşu farklı tick
+yolu replay edemez. `DISTINCT ON` yalnız tekil okuyucunun sırası **TOTAL** olduğu için güvenli
+(`created_at DESC, revision_id DESC`), ve test bunu **eşit `created_at`'li** bir fixture ile
+sürüyor — ayrı zaman damgalarıyla tie-break hiç koşmaz ve her implementasyon geçer.
+
+**Leg 3 (`_resolve_external`) bilerek onarılmadı**, satırı `per_item: 1`'de bırakıldı: orada
+per-item kazanan tanımsız (`work_object_revision_id` UNIQUE değil), yani hangi satırın kazandığı
+bir **ürün kararıdır (G15)**.
+
+**Kural metni daraltıldı, gevşetilmedi.** `docs/performance/README.md` §7'nin *"ölçen slice
+admission'a dokunmamalı"* cümlesi, tek başına okununca P4'ü yasaklıyordu. Öznesi her zaman
+**sayacı sevk eden** slice'tı; sonraki tek-yüzeyli slice'ın bunun yerine borçlu olduğu dört şey
+yazıldı.
+
+**Dürüst sınır.** İki PR da **kapanış ritüeli olmadan** açıldı ve **ayrı ayrı** merge edildi;
+bu kaydı dalgayı merge eden oturum ürün sahibinin talimatıyla yazdı. Kayıtta **ölçülen** ile
+**dalların iddia ettiği** ayrı işaretli — negatif kontroller bu kapanışta yeniden koşulmadı.
+**#617 / #618 issue durumlarına dokunulmadı.** `PROJECT_HISTORY.md` §ADIM 77 ·
+`docs/ADIM77_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:

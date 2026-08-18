@@ -193,6 +193,27 @@ async def get_strategy_revision(session: AsyncSession, revision_id: str) -> Stra
     return await session.get(StrategyRevision, revision_id)
 
 
+async def get_strategy_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, StrategyRevision]:
+    """Resolve many strategy revisions in ONE query, keyed by ``revision_id`` (P4).
+
+    The batch counterpart of :func:`get_strategy_revision`, mirroring
+    ``mainboard.get_work_object_revisions`` field for field: an empty input
+    short-circuits without a round trip, duplicate ids collapse, and an id with no row
+    is ABSENT from the map — so a caller's ``is None`` branch behaves exactly as the
+    per-id ``session.get`` miss did. Never a per-item N+1.
+
+    A PK batch has no ordering question to answer, so unlike the market-data readers
+    there is nothing here that could pick a different row than the per-id form.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = select(StrategyRevision).where(StrategyRevision.revision_id.in_(ids))
+    return {row.revision_id: row for row in (await session.execute(stmt)).scalars().all()}
+
+
 async def list_strategy_revisions(
     session: AsyncSession, entity_id: str, *, limit: int = 100
 ) -> Sequence[StrategyRevision]:

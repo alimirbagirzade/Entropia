@@ -24,6 +24,8 @@ plane (doc 01 §5, §7; DOMAIN_MODEL §4, §5):
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from entropia.application.commands import mainboard as mb_cmd
@@ -39,12 +41,14 @@ pytestmark = pytest.mark.integration
 
 OWNER = Actor(principal_id="owner_h", principal_type=PrincipalType.HUMAN, role=Role.USER)
 FOREIGN = Actor(principal_id="foreign_h", principal_type=PrincipalType.HUMAN, role=Role.USER)
+SUPERVISOR = Actor(principal_id="super_h", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR)
 ADMIN = Actor(principal_id="admin_h", principal_type=PrincipalType.HUMAN, role=Role.ADMIN)
 AGENT = Actor(principal_id="agent_sys", principal_type=PrincipalType.AGENT, role=None)
 
 _PRINCIPALS: dict[str, PrincipalType] = {
     "owner_h": PrincipalType.HUMAN,
     "foreign_h": PrincipalType.HUMAN,
+    "super_h": PrincipalType.HUMAN,
     "admin_h": PrincipalType.HUMAN,
     "agent_sys": PrincipalType.AGENT,
 }
@@ -57,7 +61,13 @@ async def _seed_principals(session) -> None:
     await session.flush()
 
 
-async def _create_work_object(session, *, owner_id: str, name: str = "secret") -> tuple[str, str]:
+async def _create_work_object(
+    session,
+    *,
+    owner_id: str,
+    name: str = "secret",
+    object_kind: MainboardItemKind = MainboardItemKind.STRATEGY,
+) -> tuple[str, str]:
     """Create a work object owned by ``owner_id`` with the real-world default
     ``lifecycle_state="active"``. Returns (root_id, revision_id).
 
@@ -69,7 +79,7 @@ async def _create_work_object(session, *, owner_id: str, name: str = "secret") -
         session,
         owner_principal_id=owner_id,
         created_by_principal_id=owner_id,
-        object_kind=MainboardItemKind.STRATEGY,
+        object_kind=object_kind,
         payload={"name": name},
     )
     await session.flush()
@@ -172,6 +182,61 @@ async def test_agent_cannot_soft_delete_human_work_object(session) -> None:
 
     with pytest.raises(AccessDeniedError):
         await mb_cmd.soft_delete_work_object(session, AGENT, root_id=root_id)
+
+
+@pytest.mark.parametrize(
+    "external_kind",
+    [MainboardItemKind.TRADING_SIGNAL, MainboardItemKind.TRADE_LOG],
+)
+async def test_supervisor_cannot_edit_or_delete_a_foreign_external_object(
+    session, external_kind
+) -> None:
+    """AOS-13.c3: a SUPERVISOR is not an Admin on someone else's external object.
+
+    The rest of this row is well covered — owner-writes, foreign-denies,
+    Admin-override, Agent-is-not-a-human and the API-enforces-it clauses all have
+    tests. The one role doc 03 §13 names and the suite never drove is Supervisor:
+    every ownership test here seeds a second plain USER or an Agent. Supervisor sits
+    BETWEEN User and Admin, so "a non-owner is denied" does not settle it — the
+    question is whether the elevated role leaks a write it was never granted.
+
+    The canonical role matrix does declare supervisor-edit=own / supervisor-delete=own
+    (``test_role_matrix_contract.py``), but that asserts a POLICY TABLE, not a request
+    against a real work object; this drives the commands themselves. Both verbs the
+    clause names are exercised, over both external kinds, and the refusal is checked
+    to be durable rather than merely raised.
+    """
+    await _seed_principals(session)
+    root_id, revision_id = await _create_work_object(
+        session, owner_id="owner_h", object_kind=external_kind
+    )
+    # Commit the fixture: each refusal below is followed by a rollback (the command
+    # raises mid-transaction), which would otherwise discard the object under test.
+    await session.commit()
+
+    with pytest.raises(AccessDeniedError):
+        await mb_cmd.create_work_object_revision(
+            session,
+            SUPERVISOR,
+            root_id=root_id,
+            payload={"name": "supervisor-edit"},
+            # A VALID external-kind revision: without the anti-lookahead field the
+            # call would fail validation even for a permitted actor, and the denial
+            # would be confounded. This way the ONLY thing standing between the
+            # Supervisor and a successful write is the authorization gate.
+            available_time=datetime(2024, 5, 1, 10, 0, tzinfo=UTC),
+        )
+    await session.rollback()
+
+    with pytest.raises(AccessDeniedError):
+        await mb_cmd.soft_delete_work_object(session, SUPERVISOR, root_id=root_id)
+    await session.rollback()
+
+    # Neither refusal left a mark: the root is still ACTIVE on its original revision.
+    root = await mb_repo.get_work_object_root(session, root_id)
+    assert root is not None
+    assert str(root.deletion_state) == "active"
+    assert root.current_revision_id == revision_id
 
 
 # --------------------------------------------------------------------------- #

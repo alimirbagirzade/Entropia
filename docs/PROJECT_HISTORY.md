@@ -11243,3 +11243,169 @@ değişmedi. Sayılar `--report` çıktısından okundu, tahmin edilmedi.
 - **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
 - **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ**; `C2`'nin **G9/G13** kapıları imzasız.
 - Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.
+
+---
+
+## ADIM 76 — P-E6/C8: containment kapısı TEK DÜNYALIYDI, ikinci dünya eklendi. FLAG DEĞİŞMEDİ
+
+> **NUMARA NOTU — bu kayıt İKİ KEZ taşındı (74 → 75 → 76), ikisi de ölçülerek.**
+> Kayıt **ADIM 74** yazıldı; kapanış PR'ı (#756) sıra beklerken `#758` (R2 + R3 kapanışı,
+> `47e4a68`) main'e indi ve hem `## ADIM 74` kaydını hem `docs/ADIM74_LANDED_KICKOFF.md`
+> dosyasını yarattı → **75**. Aynı saat içinde `#757` (kabul borcu batch 07) da 75'e
+> taşındı, güncel main'e rebase edildi ve auto-merge ile sıraya girdi → bu kayıt **ADIM
+> 76**'dır ve kickoff'u `docs/ADIM76_LANDED_KICKOFF.md`'dir. Kural değişmedi: **numaralar
+> yeniden atanmaz, merge edilmiş ad kazanır.** Sırayı belirleyen şey tercih değil bir
+> KAPIDIR: `check_classification` canlı kickoff'un ağaçtaki **en yüksek numaralı**
+> `ADIM<n>` dosyası olmasını şart koşar (`_check_live_kickoff_is_newest`), yani 76 önce
+> inseydi #757 kendi 75'ini `current` yapamaz ve ikinci kez renumber olmak zorunda kalırdı.
+> Dal adı (`claude/entropia-v18-oracle-acceptance-nut60x`) numara taşımaz.
+
+**Taban:** `origin/main` @ `0f0651d`. Prompt'un beklediği taban `31ed27d`'ydi — **main o
+commit'in 8 commit ilerisindeydi** (`31ed27d` bir ata); prompt'un *"FARKLIYSA durma, farkı
+raporla, ilgili satırları yeniden ölç"* talimatı uygulandı ve 22 ön koşulun tamamı
+`0f0651d`'ye karşı yeniden ölçüldü.
+
+**Sonuç: `SHARED_ALLOCATION_STATUS` = `future_dev` KALDI. Ürün kodu DEĞİŞMEDİ** (`backend/src`
+ve `frontend/src/lib` + `frontend/src/pages` içinde sıfır satır). `ENGINE_VERSION` değişmedi,
+golden digest'ler el değmedi, migration yok, OpenAPI **değişmedi** (`--check` yeşil).
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Ön koşul: prompt'un sert kapısı DÜŞTÜ ve slice bilerek daraltıldı
+
+Prompt'un 1–3. maddeleri (*gerçek worker üzerinden kabul oracle'ları*, historical
+compatibility, manifest/version namespace) **üretimde bir shared kod yolu varsayıyor.
+Yok.** Ölçüldü: `_EngineParticipant` (plan `C3`) **yok**, `_use_unified_clock` (`C4`/E5)
+**yok**, `ItemParticipant.settle`/`.finalize` (`C2`) **yok**, `iter_portfolio` **yok**,
+`PHASE_ORDER` P10 **taşımıyor**. `C2` imzaya bloklu: **`G9` ve `G13` imza blokları #750 ile
+YARATILDI ama imzalanmadı** — her kutu `[ ]`, `karar veren:` boş; belgenin kendi cümlesi
+(`decisions:929`) *"yalnız İMZA BLOĞUDUR … bir ajan bu iki kapıyı kapatamaz (ADR §16)"*.
+
+**22 ön koşulun 2'si yeşil** (#1 describe/book split — ADIM 71/#735; #19 R-1 pini — ADIM 72),
+**20'si kırmızı**. Ek `C9` kapıları: `G8` (#559 **açık**) · `G10` (ADR §16 Gate 2 — **talep
+edilmedi**) · `G14` (#544 **açık**) · `G16` (A-08 açık). Tam tablo, satır satır kanıtıyla:
+`docs/audit/closure_w0_containment_lift_preconditions_2026-08-17.md` §2.
+
+Yani oracle'ları *yazmak* ya boş bir test üretirdi ya da imzasız kapıların arkasındaki
+`C2`/`C3`/`C4`'ü bu slice'ta inşa etmek olurdu. **İkisi de yapılmadı.** Yapılan şey prompt'un
+**5. maddesidir** ve o madde ölçüm sonucu **en değerli** parça çıktı.
+
+### BULGU 1 — containment kapısı **TEK DÜNYALI** bir kapıydı
+
+`backend/tests` içinde `SHARED_ALLOCATION_STATUS`'u `"active_v1"`'e çeviren **tek** test
+vardı: `test_backtest_portfolio_mode.py:160` — ve o testin **amacı** Result resolver'ının
+flag'i **görmezden geldiğini** kanıtlamaktır. Yani flag'i okuyan **üç üretim yüzeyinin
+hiçbiri** lift'in yarattığı dünyada hiç koşulmamıştı: `rules.py:154` (Ready Check
+blocker'ı), `backtest_run.py:542` (admission guard'ı), `allocation_plan.py:59` (UI'ın
+render ettiği capability bloğu). Frontend'de de aynı — `portfolio.test.tsx:43`'ün
+`SHARED_MODE_CAPABILITY` fixture'ı `available: false` **sabittir** ve
+`Portfolio.tsx:358`'in `containmentActive` dalının `true` tarafı hiç render edilmemişti.
+
+**Sonuç: flag'i çeviren PR, o dört yüzeyin ne yaptığını öğrenen ilk yer olurdu.**
+Kapatıldı: YENİ `backend/tests/unit/test_shared_allocation_two_world_gate.py` (10 test) +
+`portfolio.test.tsx`'e bir lifted-dünya render testi. **Hiçbir `future_dev` pini
+gevşetilmedi** — onlar kapının kendisidir ve `C9` onları bilerek günceller.
+
+### BULGU 2 — **flag bir REDDETMEDİR, bir MOTOR değildir** (ölçüldü, pinlendi)
+
+`jobs/backtest_engine.py:299` her item'ı bağımsız replay eder ve `:364`
+`combine_item_runs` ile sırayla katlar. `capital_execution`'ı yalnız havuzun başlangıç
+sermayesini seçmek ve kompozisyonu `shared_pool` **etiketlemek** için okur —
+`shared_allocation_is_executable`'ı **hiç çağırmaz** (kaynak düzeyinde assert edildi).
+
+Yani **bugün flag çevrilse**: Ready Check blocker'ı düşer, admission guard reddetmeyi
+bırakır, ve worker shared-capital Result'ı **sıralı yaklaşımla** üretir — containment
+mesajının *"portfolio drawdown ve ondan türeyen her metrik yanlış olurdu"* dediği
+sayılarla. Ölçülen biçim: **drawdown 5000, gerçeği 3000.**
+`test_lifting_the_flag_alone_still_folds_the_sequential_curve` bunu **lifted** dünyada
+pinliyor (contained dünyadaki eşi ADIM 3'ten beri duruyordu).
+
+Okuru koruyan tek şey `portfolio_mode.py`'nin **flag-bağımsızlığıdır**: stored Result
+`legacy_sequential` + `LEGACY_SEQUENTIAL_RESULT_NOTE` etiketini **iki dünyada da** korur
+(A19; yeni test `portfolio_simulation_context`'in tamamını iki dünyada karşılaştırıyor,
+`comparable_with_unified_clock: False` dahil). Ama bu bir teselli değil — **sayı yine
+yanlış, yalnız dürüstçe etiketli.** `C9`'un neden SON slice olduğunun ölçülmüş gerekçesi budur.
+
+### BULGU 3 (sınıf: `C9` borcu) — capability bloğu lifted dünyada kendi kendisiyle çelişir
+
+`shared_allocation_capability_view()` `status` ve `available`'ı flag'ten türetir ama
+`message`/`remediation`/`dependency`'yi **koşulsuz sabit** döner. Lifted dünyada yayımlanan
+blok (ölçüldü): `available: true` + *"Shared capital allocation is not available in this
+build."* + *"Turn the Portfolio Allocation toggle off…"* + *"re-opens when the unified-clock
+co-simulation lands"* (yani tam o inen şey).
+
+Bugünün sayfası **etkilenmez** — `Portfolio.tsx:358` üç metni de `!capability.available`
+arkasına alır, ve yeni frontend testi **bunu** pinliyor. Ama blok **yayımlanan
+sözleşmedir** (`allocation_plan.py` onu bilerek verbatim döner; ilke *"the browser renders
+SERVER state"*), ve `available`'ı kontrol etmeden `message` okuyan ikinci bir tüketici bir
+**yanlış** basar. **#559 emsaliyle characterization olarak pinlendi**: `C9` üç metni
+flag-aware yaptığında o test **kırmızıya döner ve bu kasıtlıdır** — metinler lift'in parçasıdır.
+
+> **Yeniden sınıflandırma YAPILMADI** ve kabul borcu ratchet'ine (`acceptance_coverage_baseline.json`)
+> **dokunulmadı**: yeni testler var olan bir kabul kriterini kapatmıyor, kapının **ikinci
+> dünyasını** açıyor. Tavanlar (A=1 · B=69 · C=6 · D=32, açık 108) **oynamadı**.
+
+### DERS — bir negatif kontrol, testimin docstring'inin yalan söylediğini gösterdi
+
+Sekiz negatif kontrol ailesi koşuldu; yedisi kırmızı verdi, **biri YEŞİL kaldı**:
+`shared_allocation_requested`'ı flag-aware yapan perturbasyon, truth-table testimi
+**hiç kırmadı**. Sebep yapısal: guard bir `and`'dir, lifted dünyada **ilk terimde
+kısa devre yapar** ve ikinci terim hiç değerlendirilmez → *bileşik* verdict'i assert eden
+bir test, dört hücrenin ikisinde request yarısına **kördür**. Test, hücre başına **iki
+conjunct'ı ayrı ayrı** assert edecek biçimde yeniden yazıldı ve perturbasyon **iki yönde
+de** (lifted'da False, contained'da False — ikincisi fail-OPEN şekli) kırmızı verdi.
+**Kayda geçen ders: `and`/`or` üzerine kurulu bir kapıyı bileşik sonucuyla test etmek
+kısa devrenin arkasını ölçmez; terimleri ayrı pinle.**
+
+### Ölçüm ve süreç notları
+
+- **Postgres bu container'da kurulu ama koşmuyordu** (`pg_isready` → no response). PG16
+  bulundu, `/var/tmp/entropia-pg`'de unprivileged bir cluster kaldırıldı (`initdb` **root
+  olarak koşmaz**; scratchpad yolu `nobody` için **traverse edilemez** → `/var/tmp`), böylece
+  tam suite + coverage kapısı **yerelde** koştu.
+- **Üretilmiş olgular TAZELENDİ** ve aritmetiği çapraz doğruladı: backend collected
+  **3610 → 3620** (+10 test, +1 dosya), frontend call site **718 → 719** (+1). ADIM 60'ın
+  dersi tekrar ısırdı: **test ekleyen slice `repository_facts` üretmek zorundadır**, yoksa
+  `Backend` job'ı ~50 saniyede kırmızı olur.
+- `| tail` tuzağı bu oturumda **canlı yaşandı**: `ruff check . | tail` **exit=0** gösterdi,
+  gerçek exit **1**'di (iki bulgu). Çıktı dosyaya yazıldı, `$?` **ayrı** okundu.
+
+### Dürüst sınır
+
+- **Gerçek worker üzerinden oracle YAZILMADI** — bu bir eksiklik değil §1'in ölçüm sonucu.
+- **A4 NOT EVALUABLE kalır** (plan `C8`'in stop condition'ı): `mainboard_items`
+  permütasyonunun **gerçek bir Result** üzerinde aynı digest'i vermesi bu commit'te
+  ölçülemez. **`covered` işaretlenMEDİ** — ADIM 48'in kaydettiği "işaretle ama kapsama"
+  şekli tekrarlanmadı.
+- **Bulgu 3 onarılmadı** (`capability.py` = `C9`'un dosyası; plan `C8` için *"no-touch: all
+  production trees"*).
+- **Hiçbir issue kapatılmadı/açılmadı/etiketlenmedi** (#514/#544/#558/#559 olduğu gibi);
+  **`G9`/`G13`/`G10` imzasız bırakıldı** — ADR §16.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.
+
+### SLICE KAPANIRKEN DEĞİŞTİ — `G9` ve `G13` İMZALANDI (PR #753, `9fc5580`, 21:54Z)
+
+Ölçüm `0f0651d`'de yapıldı ve iki kapıyı **imzasız** buldu. **~20 dakika sonra**, bu slice'ın
+kapanış belgeleri yazılırken, ürün sahibi ADR §16 **Gate 1**'i oturum içinde **imzaladı**:
+**`G9` APPROVED as stated** ve **`G13` = FOLD**. Kayıt `docs/adr/0002-…md` §6 madde 6–7,
+§8.2 P10 ve **§13.2 amendment tablosu**. P11-1 gereği main dala **merge edildi** (rebase
+değil — belge PR'ı; `-X theirs` **kullanılmadı**).
+
+**Yeniden ölçüldü — ön koşul sayısı DEĞİŞMEDİ: hâlâ 2/22.** Madde #5 bir **bileşiktir**
+(*"P10 appended to `PHASE_ORDER`; end-of-data equity-point rule decided"*): kural artık
+karara bağlı ama **P10 sevk edilmedi** — amendment kendi ağzıyla *"**No product code ships
+with this amendment**"* diyor ve `PHASE_ORDER` hâlâ sekiz faz taşıyor. **Flag'e dokunmama
+gerekçesi hiç zayıflamadı** ve BULGU 2 (flag bir reddetmedir) aynen geçerli.
+
+**Ama kritik yolun ŞEKLİ değişti ve bu kayda geçmelidir:** ADIM 72'den beri taşınan
+*"ajanın kapatabileceği mühendislik ön koşulu kalmadı — sıradaki hamle bir İMZADIR"*
+tespiti **artık geçerli değil**. Sıradaki hamle **koddur**: `C2` / E4b (`settle` +
+`finalize` + P10 + `iter_portfolio`), sözleşmesi ADR §13.2'de yazılı. `settle`/`finalize`
+**zorunlu** Protocol üyesidir ve `hasattr` ile probe edilmesi **yasaktır** (fail-open).
+**`G10` (Gate 2 — lift onayı) hâlâ TALEP EDİLMEDİ**; `G11`/`G12`/`G8`/`G14` ve
+`participant.py`'nin importer-allowlist incelemesi açık.
+
+**DERS (bu slice'ın ikinci ölçüm dersi): bir denetimin "imzasız" bulgusu SHA'ya bağlıdır,
+kalıcı bir gerçek değildir.** Denetim satırları **bilerek dondurulmuş** bırakıldı (ADIM 65
+emsali), canlı belgeler (`CLAUDE.md`, kickoff, handoff) **güncellendi** — ikisi farklı
+sözleşmelerdir.

@@ -624,4 +624,44 @@ describe("Portfolio / Equity Allocation page", () => {
     expect(await screen.findByText("independent (off)")).toBeInTheDocument();
     expect(screen.queryByTestId("alloc-containment-note")).not.toBeInTheDocument();
   });
+
+  // P-E6 / C8: the OTHER world -------------------------------------------- //
+  //
+  // Every containment assertion above renders `available: false`, because the fixture
+  // hard-codes it and the server has shipped `future_dev` since ADIM 3. So the `true`
+  // arm of `Portfolio.tsx`'s `containmentActive` was never rendered by any test: the
+  // page's behaviour on the day the containment lifts was unverified. This closes that
+  // half. It asserts what the page must do when the SERVER says available — it does not
+  // predict when the server will say it, and it changes no shipped fixture.
+  it("drops the containment notice when the server reports the mode available", async () => {
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": {
+        ...DRAFT_SAVED,
+        shared_mode_capability: {
+          ...SHARED_MODE_CAPABILITY,
+          status: "active_v1",
+          available: true,
+        },
+      },
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    // The badge flips to the plain mode name, and the "not available" wording is gone.
+    expect(await screen.findByText("shared allocation")).toBeInTheDocument();
+    expect(
+      screen.queryByText("shared allocation — not available in this build"),
+    ).not.toBeInTheDocument();
+    // The notice — and with it all three server strings — must not render. This is what
+    // keeps the measured backend defect off the screen: `capability.message` still says
+    // "not available in this build" in that world, and the page is only safe because it
+    // gates on `available` rather than printing the text unconditionally.
+    expect(screen.queryByTestId("alloc-containment-note")).not.toBeInTheDocument();
+    expect(screen.queryByText(SHARED_MODE_CAPABILITY.message)).not.toBeInTheDocument();
+    // The plan stays exactly as authorable as it was — the notice was never the lock.
+    expect(
+      screen.getByRole("checkbox", { name: /USE EQUITY ALLOCATION FOR THIS BACKTEST/i }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: /save draft/i })).toBeEnabled();
+  });
 });

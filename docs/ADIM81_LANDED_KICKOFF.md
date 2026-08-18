@@ -17,9 +17,13 @@
   (+ `F2` slice bloğu, mermaid kapı düğümleri, §6 envanteri, §7 md. 2).
 - **Kapı sayımı artık ölçülmüş: 16 kayıtlı · 11 açık · 11 bloklayan.** Çözülmüş beş: **G5**,
   **G6**, **G7**, **G9**, **G13**. Açık: **G1 G2 G3 G4 G8 G10 G11 G12 G14 G15 G16**.
-- **G4 · G12 · G15 → BRIEFED ama İMZASIZ** (PR #755 / #752 / #747). **G11 artık imzalanacak
-  yeri olmayan TEK kapı** — ve PR **#771** açıkken tam olarak onu brifliyor, yani bu satır
-  **yarın bayatlayabilir**: okumadan önce ölç.
+- **G4 · G12 · G15 · G11 → BRIEFED ama İMZASIZ** (PR #755 / #752 / #747 / **#771**).
+  **#771 bu PR CI'da beklerken indi**, yani *"G11 imzalanacak yeri olmayan tek kapı"*
+  iddiası — bu belgenin ilk sürümünde yazıyordu ve *"yarın bayatlayabilir"* diye
+  işaretlenmişti — **bayatladı ve düzeltildi**. Ölçüldü: `closure_g11_deferred_fill_admission_2026-08-18.md`
+  var, `karar veren:` kutusu **boş**. **Bugün on altı kapının HEPSİNİN imzalanacak bir yeri
+  vardır.** **Sayım DEĞİŞMEDİ (11 açık)** — bu, kuralın kendisinin kanıtıdır: bir blok
+  yaratmak bir kapıyı kapatmaz.
 
 > **PAZARLIKSIZ — brifingli ≠ imzalı.** Bir signature block yaratmak bir kapıyı **kapatmaz** ve
 > sayımı **değiştirmez**. Bu belgenin (ve planın) en kolay yanlış okunan yeri budur. İmzasız bir
@@ -92,8 +96,11 @@
   **negatif kontrol ZORUNLU** (sahte bir importer kapıyı gerçekten kırmızıya çevirmeli) ve
   **Seçenek C ölçülerek elendi** — yeniden-ihraç import kontrolünü hiç tetiklemez, yani kapıyı
   **kör eder**. Kararı uygulamadan önce belgeyi **kendin oku**, bu satırı otorite sayma.
-- **Kapı brifleri ile ilgilenen bir slice için:** `G11` tek imzasız-ve-briefsiz kapıydı, **PR
-  #771 açık** ve onu brifliyor. **İkinci bir brif YAZMA** — önce `list_pull_requests`.
+- **Kapı brifleri ile ilgilenen bir slice için: BRİFSİZ KAPI KALMADI** (G11 sonuncusuydu,
+  #771 ile indi). **Yeni bir brif yazmadan önce ölç** — hangi kapının bloğu var ve hangisi
+  imzasız, `docs/decisions/` altından okunur, bu satırdan değil:
+  `grep -l 'karar veren' docs/decisions/*.md` ve kutunun dolu olup olmadığına **bak**.
+  **İkinci bir brif YAZMA** — önce `list_pull_requests` (ADIM 81'in (b) dersi).
 - **Kabul borcu hattı ayrı ilerliyor:** batch 08/09 **PR #768'de açık** (91 partial / B 60),
   main'de ADIM 80 sonrası taban **96 / B 65**. **Kabul defteri SERİ bir kaynaktır** — ikinci
   inen taraf rebase edip **yeniden dondurmalı**.
@@ -160,7 +167,8 @@ BAŞLAMADAN ÖNCE ÇAKIŞMA ARA (ADIM 81'in (b) dersi):
 
 KAPI DURUMU (ADIM 81'de ölçüldü — YENİDEN ÖLÇ):
   16 kayıtlı · 11 açık · 11 bloklayan. Çözülmüş: G5 G6 G7 G9 G13.
-  G4/G12/G15 BRIEFED ama İMZASIZ. G11 için brif PR #771'de AÇIK olabilir.
+  G4/G12/G15/G11 BRIEFED ama İMZASIZ (#755/#752/#747/#771). Brifsiz kapı KALMADI.
+  Bu satırı da ÖLÇ: docs/decisions/ altındaki 'karar veren:' kutularına BAK.
   BRİFİNGLİ ≠ İMZALI. İmzasız kapının arkasındaki slice'a BAŞLAMA (F2 → G4,
   F3 → G1+G2+G3, C6 → G11+G12, C9 → G8+G14+G10, A-08 → ajan kapatamaz).
 

@@ -257,7 +257,8 @@ Before stopping a working session, produce **ALL** of the following:
 > DEĞİŞMEDİ, tek docs dosyası (+93/−30). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Kapı sayımı ölçüldü: **16 kayıtlı · 11 açık · 11 bloklayan** (çözülmüş: G5 G6 G7 G9 G13);
 > **`G4`/`G12`/`G15` BRIEFED ama İMZASIZ** (#755/#752/#747) — **brifingli ≠ imzalı, sayımı
-> değiştirmez**; `G11` imzalanacak yeri olmayan tek kapı (brifi **PR #771**'de açık olabilir).
+> değiştirmez**; `G11` de **#771 ile brieflendi** (bu PR beklerken indi) → **brifsiz kapı
+> KALMADI, sayım yine DEĞİŞMEDİ**.
 > **İki ders:** kısmi ölçüm = STALE-BY-DEFAULT ihlali (G6/G7 ölçülmeden taşındı → *"13 açık"*,
 > düzelten bir kapı değil **insan**) · **çift iş** (#772 aynı §'yı tazeledi → taban **daha doğru
 > ölçen** dal oldu; tazelemeden önce `list_pull_requests`). **O sırada kayıtsız olan ürün slice'ı

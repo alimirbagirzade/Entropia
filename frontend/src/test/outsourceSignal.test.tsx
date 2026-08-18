@@ -26,6 +26,18 @@ function renderChooser() {
   );
 }
 
+// jsdom implements no sequential focus navigation, so the tab order is derived
+// from the DOM the way a browser derives it: natively focusable elements plus
+// anything carrying an explicit tabindex, minus whatever a negative value takes
+// back out of the sequence.
+const TABBABLE_SELECTOR = "a[href], button, input, select, textarea, summary, [tabindex]";
+
+function tabStopsWithin(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR)).filter(
+    (el) => el.tabIndex >= 0 && !el.hasAttribute("disabled"),
+  );
+}
+
 describe("Add Outsource Signal chooser", () => {
   afterEach(() => {
     cleanup();
@@ -42,6 +54,29 @@ describe("Add Outsource Signal chooser", () => {
       "/trading-signal",
     );
     expect(screen.getByRole("link", { name: "Trade Log" })).toHaveAttribute("href", "/trade-log");
+  });
+
+  // AOS-01.c2 — "keyboard navigation of the chooser matches pointer behaviour".
+  //
+  // The membership test above proves the two choices are links; it says nothing
+  // about the keyboard, and stays green if a choice is taken out of the tab
+  // order (`tabIndex={-1}` leaves role, name and href untouched while making the
+  // chooser mouse-only). So the assertion here is about the SEQUENCE: inside the
+  // chooser the keyboard is offered exactly the stops the pointer has, in the
+  // same order — no choice missing, no stop the pointer cannot see.
+  //
+  // Honest boundary: jsdom has no native anchor activation, so pressing Enter
+  // cannot be simulated here. What activation depends on IS asserted — each stop
+  // is an <a href> carrying the same target the pointer path navigates to (the
+  // two "choosing …" tests below drive that path) — but the keystroke itself is
+  // the browser's, and this test does not pretend to press it.
+  it("offers the keyboard exactly the pointer's two stops, in the same order (AOS-01)", () => {
+    renderChooser();
+    const chooser = screen.getByRole("region", { name: "Choose the external object type" });
+    expect(tabStopsWithin(chooser)).toEqual([
+      screen.getByRole("link", { name: "Trading Signal" }),
+      screen.getByRole("link", { name: "Trade Log" }),
+    ]);
   });
 
   it("renders the doc 03 §6.2 chooser and per-choice helpers verbatim", () => {

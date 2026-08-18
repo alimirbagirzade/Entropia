@@ -1,9 +1,26 @@
 # Closure product decisions — 2026-08-13
 
-> **Bu belge KARAR BEKLİYOR** — Karar 1 ve Karar 3 hâlâ imzasızdır.
-> **Karar 2 (#558) 2026-08-14'te İMZALANDI** ve P-E3 o imzayla sevk edildi; §Karar 2'nin
-> imza satırına ve altındaki imza notuna bak. Karar 1'in durumu ayrıca dürüst tutulmalıdır:
-> #720 per-fill komisyonu **imza olmadan** sevk etti (`CLAUDE.md` §Current position, P-B).
+> **BU BELGE ARTIK TEK İMZA SİCİLİ DEĞİLDİR — aşağıdaki tabloyu okumadan "imzasız" deme.**
+> Belge Karar 1–3 ile doğdu ve o banner yalnız onları sayıyordu; Karar 4–6 sonradan
+> eklendi (G9/G13 P-C2 dalgasında, G12 `234b6bc` ile). Bu arada **G9 ve G13'ün imzası bu
+> belgede değil, `docs/adr/0002-unified-clock-portfolio-simulation.md` §13.2'de verildi**
+> (2026-08-17, ürün sahibi) — çünkü ikisi de bir **ADR amendment'ıdır** ve ADR §16 kapısı
+> kendi belgesinde işler. Buradaki kutular boş kaldı; **boş kutu, imzasız demek değildir.**
+> 2026-08-18'de ölçülen durum:
+>
+> | Karar | Kapı | Durum | İmzanın YERİ |
+> |---|---|---|---|
+> | 1 — commission modeli (#552) | — | **İMZASIZ** | — (ama #720 per-fill'i imza olmadan **sevk etti**; `CLAUDE.md` §Current position, P-B) |
+> | 2 — research bundle shape (#558) | — | **İMZALI** (A1+A2, 2026-08-14) | **bu belge**, §Karar 2 imza satırı |
+> | 3 — DST fold/gap (#559) | — | **İMZASIZ** | — |
+> | 4 — ADR §6/§8 amendment | **G9** | **İMZALI** (APPROVED as stated, 2026-08-17) | **ADR-0002 §13.2** |
+> | 5 — P10 equity noktası | **G13** | **İMZALI** (FOLD, 2026-08-17) | **ADR-0002 §13.2** |
+> | 6 — paylaşımlı koşuda scaling | **G12** | **İMZASIZ** | — |
+>
+> **Ölçülmüş sonuç:** `C2` (E4b) artık bir imza beklemiyor. ADIM 72'nin *"sıradaki hamle bir
+> İMZADIR"* tespiti G9/G13 için **geçersizdir**; `CLAUDE.md` §Current position bunu ADIM 76
+> kaydında zaten yazıyor. Hâlâ imza bekleyen üç kapı **G12 (Karar 6)**, **Karar 1** ve
+> **Karar 3**'tür — ve bunlar `C2`'yi değil, sırasıyla `C6`, `F3` ve `C9`'u tutar.
 
 - **Tarih:** 2026-08-13
 - **Base:** `origin/main` @ `0d8bf8f7134d86d77a7eee10023dadd3d80aab0d`
@@ -841,6 +858,23 @@ Alt-karar — `settle`/`finalize` **zorunlu** Protocol üyesi mi?
 
 karar veren: ________________  tarih: ____________
 
+> **İMZA BAŞKA BİR BELGEDE VERİLDİ — yukarıdaki boş kutular bunu YANSITMIYOR.**
+> `docs/adr/0002-unified-clock-portfolio-simulation.md` **§13.2** (*"Amendment table — the
+> ADIM 20 contract additions (2026-08-17)"*, `9fc5580`, PR #753) G9'u **`APPROVED as
+> stated`** olarak imzalar: §6 iki Protocol üyesi (`settle`, `finalize`) kazanır, §8.2 bir
+> faz (**P10**) kazanır, `iter_portfolio` `run_portfolio`'nun tick sürülebilir generator
+> formu olarak kabul edilir — yani **seçenek A (dördü birden)**. Zorunlu alt-karar da orada
+> karşılanır: ADR'ın kendi Protocol metni üyeleri **zorunlu** kılar, `hasattr` yoklaması
+> reddedilir. İmza kutularını buraya geriye dönük işaretlemedim; **bir imzayı kaydeden
+> belge onu veren belgedir**, ve ADR §16 kapısı bir ADR amendment'ı için kendi belgesinde
+> işler (§13.2'nin kendi deyişiyle: *"This is §16's Gate 1, requested and granted in
+> session"*).
+>
+> **Ne AÇMADI:** §13.2 açıkça *"No product code ships with this amendment"* der ve §16'nın
+> **Gate 2**'sini (containment lift) **talep edilmemiş** bırakır. `SHARED_ALLOCATION_STATUS`
+> `future_dev` kalır. `participant.py` importer-allowlist incelemesi, **G11** ve **G12**
+> etkilenmez.
+
 ---
 
 ## Karar 5 — P10 end-of-data equity noktası: **ekle** mi, **katla** mı? (kapı **G13**)
@@ -917,6 +951,17 @@ Alt-karar — A5 kapısı `len(set(instants)) == len(instants)` biçimine güçl
 `[ ] evet`  `[ ] hayır (gerekçe: ______)`
 
 karar veren: ________________  tarih: ____________
+
+> **İMZA BAŞKA BİR BELGEDE VERİLDİ — yukarıdaki boş kutular bunu YANSITMIYOR.**
+> ADR-0002 **§13.2** (2026-08-17, `9fc5580`) G13'ü **`FOLD`** olarak imzalar: aynı `t_ms`'te
+> `commit_tick`, kapanışlardan sonra — yani **seçenek A (katla)**. `B` (aynı ana ikinci
+> nokta) gerekçesiyle birlikte **reddedildi**: *"two points on one instant would demote a
+> structural invariant to a runtime check"*.
+>
+> **Alt-karar hakkında DÜRÜST SINIR:** §13.2 A5 kapısının biçimini ayrıca imzalamaz; söylediği
+> şey **`A5 survives as a by-construction claim`**'dir. Yani fold seçildiği için A5'i bir
+> koşma-anı kontrolüne çevirme gerekçesi ortadan kalkar; bu, alt-karara *"hayır"* denmesiyle
+> **tutarlıdır** ama onun yerine geçmez. Kutuyu bu okumaya dayanarak işaretlemedim.
 
 ---
 

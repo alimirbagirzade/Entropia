@@ -56,6 +56,19 @@ _NON_CONSUMABLE_STATES = frozenset(
     {ResearchRevisionState.DEPRECATED, ResearchRevisionState.APPROVAL_REVOKED}
 )
 
+# R3 — the rule that governs this constant: **a change to the shape `_seal_bundle`
+# hashes MUST move this version with it.** Two bundles compiled under different field
+# sets would otherwise share a `compiler_version` while being non-comparable, which is
+# the defect doc 12 §9.2 raised against a bundle that could not attest its own timing
+# rule. Nothing enforced it before R3: the tests pinned individual keys and this
+# literal VALUE, so a seventh key could be added and every test would stay green.
+#
+# `tests/unit/test_research_bundle_seal_rule.py` closes that by pinning the
+# `bundle_hash` of a fixed input as a golden digest, and by comparing the sealed
+# body's core key set against its own `_CORE_HASHED_KEYS`. If a golden moves, exactly
+# two outcomes are legitimate — revert the shape change, or bump this version AND
+# re-pin the golden in the same commit. Editing the golden alone is the one move that
+# must not happen quietly.
 _BUNDLE_COMPILER_VERSION = "research-bundle-v2"
 
 

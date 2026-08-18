@@ -6879,9 +6879,12 @@ flag-aware yapan perturbasyon truth-table testimi hiç kırmadı, çünkü guard
 ilk terimde kısa devre yapıyor. Test **hücre başına iki conjunct'ı ayrı** assert edecek
 şekilde yeniden yazıldı; perturbasyon **iki yönde de** kırmızı verdi.
 
-**Kabul borcu ratchet'ine DOKUNULMADI** (yeni testler kriter kapatmıyor; tavanlar
-A=1 · B=69 · C=6 · D=32 → 108 sabit). Üretilmiş olgular tazelendi: backend collected
-**3610 → 3620**, frontend call site **718 → 719**. **A4 NOT EVALUABLE kalır ve `covered`
+**Kabul borcu ratchet'ine DOKUNULMADI** (yeni testler kriter kapatmıyor; bu slice hiçbir
+tavana el sürmedi). **Sayı yazmıyoruz: bu slice'ın TABANINDA tavanlar A=1 · B=69 · C=6 ·
+D=32 → açık 108 idi, ama ARADA #757 (ADIM 75) indi ve B'yi 66'ya, açık borcu 105'e çekti** —
+canlı değer `docs/audit/acceptance_coverage_baseline.json`. Üretilmiş olgular tazelendi:
+backend collected **3625 → 3635** (+10 test, +1 dosya), frontend call site **722 → 723** (+1);
+taban ölçümü 3610 → 3620 / 718 → 719 idi, arada #751/#755/#757 indi ve **delta aynı kaldı**. **A4 NOT EVALUABLE kalır ve `covered`
 işaretlenMEDİ.** Hiçbir issue kapatılmadı; `G9`/`G13`/`G10` **imzasız bırakıldı** (ADR §16).
 `PROJECT_HISTORY.md` §ADIM 76 · `docs/ADIM74_LANDED_KICKOFF.md`.
 

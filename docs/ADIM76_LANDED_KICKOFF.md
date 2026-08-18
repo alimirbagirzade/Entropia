@@ -14,12 +14,15 @@ Base **`0f0651d`** · alembic head **`0043_i08_registry_strategy_fks`** · `ENGI
 (DEĞİŞMEDİ)** · migration **YOK** · **ürün kodu değişmedi**. **Blocker sayısı DEĞİŞMEDİ
 (1 — yalnız A-08), verdict BLOCKED.**
 
-Kabul borcu tavanları **oynamadı**: A=1 · B=69 · C=6 · D=32 → açık **108**;
-`total_criteria` **383** (taban). Bu slice bir kabul kriteri kapatmadı — **ratchet'e
+Kabul borcu tavanlarına bu slice **dokunmadı**. **Buraya sayı yazma — canlı otorite
+`docs/audit/acceptance_coverage_baseline.json`**: tabanda A=1 · B=69 · C=6 · D=32 / açık
+**108** idi, **#757 (ADIM 75) arada indi** ve B **66** / açık **105** oldu.
+`total_criteria` **383** (taban) değişmedi. Bu slice bir kabul kriteri kapatmadı — **ratchet'e
 dokunulmadı** (bilinçli: yeni testler kriter kapatmıyor, kapının ikinci dünyasını açıyor).
 
-Üretilmiş olgular tazelendi: backend collected **3610 → 3620**, frontend call site
-**718 → 719**.
+Üretilmiş olgular tazelendi: backend collected **3625 → 3635**, frontend call site
+**722 → 723** (delta +10 / +1; taban ölçümü 3610 → 3620 / 718 → 719 idi). **Sayıya değil
+`docs/generated/repository_facts.md`'ye güven.**
 
 ## Bu slice'ın öğrettikleri (tekrar etmemek için)
 

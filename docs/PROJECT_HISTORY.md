@@ -11342,7 +11342,9 @@ flag-aware yaptığında o test **kırmızıya döner ve bu kasıtlıdır** — 
 
 > **Yeniden sınıflandırma YAPILMADI** ve kabul borcu ratchet'ine (`acceptance_coverage_baseline.json`)
 > **dokunulmadı**: yeni testler var olan bir kabul kriterini kapatmıyor, kapının **ikinci
-> dünyasını** açıyor. Tavanlar (A=1 · B=69 · C=6 · D=32, açık 108) **oynamadı**.
+> dünyasını** açıyor. Bu slice hiçbir tavanı **oynatmadı**. (Tabanda A=1 · B=69 · C=6 ·
+> D=32 / açık 108 idi; **arada #757 = ADIM 75 indi** ve B'yi **66**'ya, açık borcu **105**'e
+> indirdi — o hareket #757'nindir, bu slice'ın değil.)
 
 ### DERS — bir negatif kontrol, testimin docstring'inin yalan söylediğini gösterdi
 
@@ -11363,7 +11365,8 @@ kısa devrenin arkasını ölçmez; terimleri ayrı pinle.**
   olarak koşmaz**; scratchpad yolu `nobody` için **traverse edilemez** → `/var/tmp`), böylece
   tam suite + coverage kapısı **yerelde** koştu.
 - **Üretilmiş olgular TAZELENDİ** ve aritmetiği çapraz doğruladı: backend collected
-  **3610 → 3620** (+10 test, +1 dosya), frontend call site **718 → 719** (+1). ADIM 60'ın
+  **3625 → 3635** (+10 test, +1 dosya), frontend call site **722 → 723** (+1) — taban
+  ölçümü 3610 → 3620 / 718 → 719 idi, arada #751/#755/#757 indi ve **delta aynı kaldı**. ADIM 60'ın
   dersi tekrar ısırdı: **test ekleyen slice `repository_facts` üretmek zorundadır**, yoksa
   `Backend` job'ı ~50 saniyede kırmızı olur.
 - `| tail` tuzağı bu oturumda **canlı yaşandı**: `ruff check . | tail` **exit=0** gösterdi,

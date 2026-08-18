@@ -48,6 +48,7 @@ from entropia.application.commands.readiness_check import (
     _resolve_market_data_issues,
     _resolve_research_sources,
     _resolve_signal_market_data_issues,
+    _resolve_tick_data_issues,
 )
 from entropia.application.queries import agent_workspace as agent_query
 from entropia.application.queries import library as library_query
@@ -429,6 +430,55 @@ async def test_ready_check_research_funding_leg(session) -> None:
         assert all(source.found for source in sources), "the budget must measure the resolved path"
 
     await _measure(session, "readiness_check.research_funding_leg", grow=grow, run=run)
+
+
+async def test_ready_check_tick_data_leg(session) -> None:
+    """Ready Check's tick-data availability leg (F-07i, Master Ref §6.4 / §11.2).
+
+    The fourth instance of the #617 shape, and the one with the narrowest door: the
+    loop `continue`s on a non-Strategy item, an unavailable item, a config that does
+    not parse, and — crucially — on every strategy whose ``intrabar_policy.tick_policy``
+    is not ``require``. **A fixture that leaves the default ``inherit`` measures a leg
+    that never runs**, reports a slope of 0 and proves nothing. The payload below
+    flips the policy for exactly that reason, and ``run`` asserts every item comes
+    back BLOCKED, which is the positive evidence that the read fired once per item.
+
+    The axis is one DISTINCT instrument per item. Sharing an instrument would let a
+    repeated identical query masquerade as a batch.
+    """
+    items: list[ReadinessItemInput] = []
+
+    async def grow(count: int) -> None:
+        for _ in range(count):
+            index = len(items)
+            payload = _config(
+                indicator_rev="pkg_x",
+                condition_rev="pkg_y",
+                reference_rev="pkg_z",
+                leg_revs=[],
+                market_rev="md_rev_budget",
+            ).model_dump(mode="json")
+            payload["data"]["intrabar_policy"]["tick_policy"] = "require"
+            payload["data"]["instrument_id"] = f"INSTR_{index}"
+            items.append(
+                ReadinessItemInput(
+                    item_id=f"tick_{index}",
+                    kind=MainboardItemKind.STRATEGY,
+                    root_id=f"root_{index}",
+                    revision_id=f"rev_{index}",
+                    available=True,
+                    payload=payload,
+                )
+            )
+
+    async def run() -> None:
+        issues = await _resolve_tick_data_issues(session, items)
+        # No approved tick/trade revision exists for any of these instruments, so every
+        # item must come back blocked. An empty list is ALSO what a leg that never ran
+        # returns — this assertion is what tells the two apart.
+        assert len(issues) == len(items)
+
+    await _measure(session, "readiness_check.tick_data_leg", grow=grow, run=run)
 
 
 # ------------------------------------------------- pinned resolver refs (doc 06 §7)

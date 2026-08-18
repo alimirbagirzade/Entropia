@@ -11135,3 +11135,111 @@ eşit olduğunu kanıtlar.
   endpoint / tablo / sayfa / job eklemedi.
 - **Plan §5.2 tavanı bu dalgada AŞILDI** — bir noktada altı PR açıktı (#742 #745 #746 #747
   #748 #749), tavan üç. Kayda geçirilir; yeni kod slice'ı açılmadı.
+
+## ADIM 75 — kabul borcu batch 07 (doc 07 frontend): doc 07 bitti, dokuzuncu bulgu
+
+Base **`0f0651d`** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · alembic head
+**`0043_i08_registry_strategy_fks`** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+`future_dev` **değişmedi**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+Ürün kodu **değişmedi** — test + defter slice'ı.
+
+Bu, ADIM 73'ün **tümleyenidir**: aynı sayfa belgesi (doc 07), bu kez **frontend** yüzeyi.
+ADIM 73'ün kickoff'u tam olarak bunu işaret etmişti ve gerekçesi doğru çıktı — `PC-01`
+backend-only bir partiyle kapanamıyordu çünkü `.c2` frontend'di.
+
+### 1. Kapanan üç kriter (beş clause)
+
+| Kriter | Clause | Yeni düğüm |
+|---|---|---|
+| `PC-01` | `.c2` | `createPackage.test.tsx > Create Package page > reads the literal Not Checked on the TA Pre-Check row when no scan exists (PC-01.c2)` |
+| `PC-01` | `.c3` | `test_create_package_persistence.py::test_reading_the_precheck_surface_persists_no_package_revision` |
+| `PC-17` | `.c4` | `createPackage.test.tsx > Create Package page > closing Pre-Check cancels nothing and reopening re-reads the server (PC-17.c4)` |
+| `PC-21` | `.c2` | `preCheck.test.tsx > Pre-Check page > states the canonical PASSED result line once the durable job lands (PC-21.c2)` |
+| `PC-21` | `.c3` | `preCheck.test.tsx > Pre-Check page > claims nothing about repaint, future leak, validation or approval on a PASSED result (PC-21.c3)` |
+
+**`PC-01.c3` okuma yolunu assert eder.** ADIM 67'nin dersi: saklanan satırı geri okumak tek
+başına totolojiye yakındır. Burada iddia zaten bir **yokluk** iddiasıdır — bu yüzden test
+yüzeyin gerçekten kullandığı okuma yolunu (`queries/create_package.py::get_package_request`)
+**iki kez** sürer ve `PackageRoot` / `PackageRevision` sayılarını etrafında ölçer. Mevcut
+`test_fresh_request_projects_an_empty_chain` bunu **yapamazdı**: isteği önce DRAFT'a sürüyor,
+yani zaten kökü **olan** bir istekte boş revizyon **zincirini** kanıtlıyordu.
+
+**`PC-21.c2` vakumda geçebilirdi ve geçmedi.** PASSED satırı yalnız bir koşum **kabul
+edildikten sonra** ve projeksiyon kabul anındakinden **daha yüksek** bir attempt taşıdığında
+render ediliyor (F-01a). Statik bir fixture sayfayı sonsuza dek "çalışıyor" satırında
+bırakırdı ve assertion hiç görmediği bir metni beklerdi. Test bu yüzden POST'tan önce ve
+sonra **farklı cevap veren** bir route handler'ı ile geçişi sürüyor.
+
+### 2. `PC-21.c3` — negatif kapsam, ve neden totoloji değil
+
+Clause: PASSED sonucu repaint, future leak, validation veya approval hakkında **hiçbir şey
+iddia etmemeli**. Bunlar ayrı kapılardır (validation koşumları, baseline karşılaştırma, Admin
+onayı); bunları ima eden bir Pre-Check yüzeyi kullanıcıya **hiç toplamadığı kanıta dayanarak**
+paketin güvenli olduğunu söylerdi.
+
+Defter bunu "yokluğu varsayılmış, assert edilmemiş" diye işaretlemişti — doğruydu. Test artık
+**tüm render edilmiş yüzeyi** yedi fazla-iddia kalıbına karşı pinliyor. Totoloji olmadığının
+kanıtı negatif kontroldür: PASSED satırına *"No repaint and no lookahead leak; validation
+approved."* eklendiğinde test **kırmızıya dönüyor** (`expected … not to match /repaint/i`).
+
+### 3. Altı negatif kontrol, altısı da kırmızı
+
+| Clause | Kaldırılan davranış | Gözlenen kırmızı |
+|---|---|---|
+| `PC-01.c2` | `Not Checked` literali → em dash | `Unable to find an element with the text: Not Checked` |
+| `PC-01.c3` | `get_package_request` artık paket yaratıyor | `assert 2 == 0` |
+| `PC-17.c4` (a) | `onClose` bir cancel POST'u atıyor | `expected 1 to be +0` |
+| `PC-17.c4` (b) | modal'ın `detail`'i yeniden açılışlar arası donduruldu | `Unable to find an element with the text: blocked` |
+| `PC-21.c2` | kanonik satır bare "Pre-Check passed."a kırpıldı | tam cümle matcher'ı bulamıyor |
+| `PC-21.c3` | PASSED satırına fazla iddia eklendi | `expected … not to match /repaint/i` |
+
+> **SÜREÇ DERSİ (kaydediliyor):** `PC-01.c3`'ün negatif kontrolü **iki kez yanlış sebeple**
+> düştü — yamada `PackageValidationState.NOT_RUN` ve `ApprovalState.PENDING` yazdım, ikisi de
+> yok. **Yanlış sebeple kırmızıya dönen bir negatif kontrol hiçbir şey kanıtlamaz**; enum
+> üyeleri okunup yama düzeltildi ve kontrol asıl assertion'da (`assert 2 == 0`) kırmızıya
+> döndürüldü. Kontrolün **hangi satırda** düştüğü, düştüğü kadar önemlidir.
+
+### 4. BULGU — `PC-02.c2` KURULAMAZ, kapatılmadı
+
+Clause: boş kaynak için Pre-Check yüzeyi "nihai boş-girdi metni" göstermeli (doc 07 §16).
+Ölçüm (`0f0651d`), iki bağımsız gerekçe:
+
+1. **Metin yok.** `EMPTY_SOURCE` `frontend/src` içinde **hiç geçmiyor**; Pre-Check
+   sayfasındaki tek `EmptyState` (`pages/PreCheck.tsx:123`) "No requests yet" — boş istek
+   **listesi**, boş kaynak değil.
+2. **Durum erişilemez.** Overlay `{precheckOpen && detail !== null ? <PreCheckModal … />}`
+   olarak render ediliyor (`pages/CreatePackage.tsx:765`) → kalıcı bir istek olmadan Pre-Check
+   **açılamaz**; boş kaynaklı bir istek ise `normalize_request` DB'den önce `EMPTY_SOURCE` ile
+   reddettiği için **hiç kalıcı olamaz**.
+
+Yani boş-girdi Pre-Check sonucunun render edilebileceği **erişilebilir hiçbir ekran yok** —
+bu sınıf C tanımıdır ("Production'ın kuramayacağı senaryo"), test borcu değil.
+**YENİDEN SINIFLANDIRILMADI** (B → C **C tavanını yükseltir**). `PC-20.c3`'ten farkı önemli:
+o **kurulabilir** ama sevk edilmemiş (sınıf D); bu ise hiç erişilemez. Defterde artık **DOKUZ**
+böyle bulgu var.
+
+### 5. Ratchet — tavanlar İNDİ
+
+```
+status.partial      100 -> 97
+debt_class.B         69 -> 66
+```
+
+Açık kabul borcu **108 → 105** (A=1 · B=66 · C=6 · D=32). Clause düzeyinde `covered`
+**1010 → 1015**, `uncovered` **117 → 112**; toplam **1175** ve `total_criteria` **383**
+değişmedi. Sayılar `--report` çıktısından okundu, tahmin edilmedi.
+
+### 6. Dürüst sınırlar
+
+- **Doc 07'de sınıf B kalmadı** — iki batch'te (06 backend + 07 frontend) altı kriter kapandı.
+  Kalan açık satırlar yalnız **bulgular** (`PC-02.c2`, `PC-20.c3`) ve iki sınıf-D Agent satırı
+  (`PC-15`, `PC-16`, ikisi de "Agent Pre-Check giriş noktası yok" diyor).
+- **`PC-17.c4`'ün "yeniden açılış sunucudan okur" yarısı**, sayfanın React Query önbelleğinin
+  invalidate edilmesiyle sürülüyor; gerçek üretimde bunu SSE tetikler. Test **modal'ın kendi
+  anlık görüntüsünü tutmadığını** kanıtlar — SSE yolunu değil.
+- **`PC-21.c3` bugünkü kopyayı kilitler**, gelecekteki her fazla-iddia biçimini değil: yedi
+  kalıp adlandırılmıştır, bunların dışında bir ifadeyle aynı şey ima edilebilir.
+- Ürün kodu değişmedi → containment, `ENGINE_VERSION`, golden digest'ler ve A-08 etkilenmedi.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ**; `C2`'nin **G9/G13** kapıları imzasız.
+- Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.

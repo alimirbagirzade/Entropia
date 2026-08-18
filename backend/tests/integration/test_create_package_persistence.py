@@ -38,6 +38,7 @@ from entropia.infrastructure.postgres.models import (
     ApprovalDecision,
     AuditEvent,
     DependencyScan,
+    PackageRevision,
     PackageRoot,
     Principal,
 )
@@ -363,6 +364,45 @@ async def test_precheck_projection_carries_a_display_label(session) -> None:
     # ...and the id remains available for support/audit on both surfaces.
     assert detail["request_id"] == request_id
     assert row["request_id"] == request_id
+
+
+async def test_reading_the_precheck_surface_persists_no_package_revision(session) -> None:
+    """PC-01.c3: opening the Pre-Check surface is a READ.
+
+    A request row exists, but no Package Root and no immutable Package Revision may
+    be written until the user actually reaches Create Draft Package — otherwise the
+    Package Library would accumulate revisions nobody authored, each one a
+    publishable artifact with an approval state.
+
+    `test_fresh_request_projects_an_empty_chain` cannot stand in for this: it drives
+    the request to a DRAFT first, so it proves an empty revision CHAIN on a request
+    that already HAS a root. This drives the READ PATH the surface actually uses
+    (`routes/create_package.py` -> `get_package_request`) and counts the tables.
+    """
+    await _seed_principals(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+    created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
+    await session.commit()
+
+    roots_before = await _count(session, PackageRoot)
+    revisions_before = await _count(session, PackageRevision)
+
+    # Rendered twice: a projection that wrote on read would show it on the second
+    # pass even if the first were mistaken for setup.
+    for _ in range(2):
+        projection = await cp_query.get_package_request(
+            session, OWNER, request_id=created["request_id"]
+        )
+        await session.commit()
+
+    # The surface reports "no scan, no package yet" — and the tables agree.
+    assert projection["state"] == str(CreatePackageState.REQUESTED)
+    assert projection["current_scan"] is None
+    assert projection["package_root_id"] is None
+    assert projection["draft_revision_id"] is None
+    assert await _count(session, PackageRoot) == roots_before
+    assert await _count(session, PackageRevision) == revisions_before
 
 
 async def test_scan_is_immutable_evidence(session) -> None:

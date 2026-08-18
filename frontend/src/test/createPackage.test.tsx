@@ -565,6 +565,74 @@ describe("Create Package page", () => {
     expect(preBtn).toHaveFocus();
   });
 
+  it("reads the literal Not Checked on the TA Pre-Check row when no scan exists (PC-01.c2)", async () => {
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": {
+        ...REQUEST_DETAIL,
+        state: "requested",
+        current_scan: null,
+        precheck_fresh: false,
+        can_generate_candidate: false,
+      },
+    });
+    renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    // doc 07 §16 PC-01: the initial surface reads the LITERAL "Not Checked" — not
+    // an empty cell, not a dash, and never a fabricated status token that would
+    // imply a scan the server never ran. Scoped to the TA Pre-Check row so a
+    // coincidental match elsewhere on the workspace cannot satisfy it.
+    const label = await screen.findByText("TA Pre-Check");
+    const row = label.closest(".cp-status-row");
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Not Checked")).toBeInTheDocument();
+  });
+
+  it("closing Pre-Check cancels nothing and reopening re-reads the server (PC-17.c4)", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    const client = renderPage();
+    await screen.findByText("req_1");
+    fireEvent.click(screen.getByRole("button", { name: /req_1/ }));
+
+    const preBtn = await screen.findByRole("button", { name: "Pre-Check" });
+    await waitFor(() => expect(preBtn).toBeEnabled());
+    fireEvent.click(preBtn);
+    await screen.findByRole("dialog");
+
+    const nonGetCalls = () =>
+      fetchMock.mock.calls.filter(([, init]) => (init?.method ?? "GET") !== "GET").length;
+    const before = nonGetCalls();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    // Closing the overlay is a CLIENT-side dismissal. The scan runs in a durable
+    // worker (F-01a), so the browser must issue nothing at all on the way out —
+    // no cancel, no abort, no state-changing call. A close that cancelled would
+    // make "closing this browser does not cancel it" a lie.
+    expect(nonGetCalls()).toBe(before);
+
+    // ...and the overlay keeps no snapshot of its own: with the server now
+    // reporting a BLOCKED scan, reopening must show the SERVER's status, not the
+    // passed one the modal was closed on.
+    stubApi({
+      ...BASE_ROUTES,
+      "GET /create-package/requests/req_1": {
+        ...REQUEST_DETAIL,
+        state: "precheck_blocked",
+        current_scan: { ...REQUEST_DETAIL.current_scan, status: "blocked", attempt_no: 2 },
+        can_generate_candidate: false,
+      },
+    });
+    await client.invalidateQueries();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pre-Check" }));
+    const reopened = await screen.findByRole("dialog");
+    await waitFor(() => expect(within(reopened).getByText("blocked")).toBeInTheDocument());
+  });
+
   it("gates Generate candidate on the server-side hint, never a UI guess", async () => {
     stubApi({
       ...BASE_ROUTES,

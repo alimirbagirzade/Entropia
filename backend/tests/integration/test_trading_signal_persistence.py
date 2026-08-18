@@ -46,6 +46,7 @@ from typing import Any
 import pytest
 from sqlalchemy import func, select
 
+from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.commands import trading_signal as ts_cmd
 from entropia.application.jobs.trading_signal import run_import
@@ -58,8 +59,11 @@ from entropia.infrastructure.postgres.models import (
     NormalizedSignalEventRevision,
     OutboxEvent,
     Principal,
+    TrashEntry,
     WorkObjectRevision,
 )
+from entropia.infrastructure.postgres.repositories import allocation as alloc_repo
+from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import trading_signal as ts_repo
 from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import (
@@ -74,6 +78,11 @@ pytestmark = pytest.mark.integration
 
 USER1 = Actor(principal_id="user_1", principal_type=PrincipalType.HUMAN, role=Role.USER)
 USER2 = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
+# TS-15.c2: a Supervisor is NOT an Admin. Seeded as its own principal so the denial
+# is attributable to the ROLE rather than to "some other user".
+SUPERVISOR = Actor(
+    principal_id="user_sup", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR
+)
 
 _HEADER = "source_record_id,event_time,available_time,direction,signal_type"
 _GOOD_CSV = "\n".join(
@@ -105,7 +114,7 @@ def fake_object_store(monkeypatch) -> dict[str, bytes]:
 
 
 async def _seed_principals(session) -> None:
-    for pid in ("user_1", "user_2"):
+    for pid in ("user_1", "user_2", "user_sup"):
         if await session.get(Principal, pid) is None:
             session.add(Principal(principal_id=pid, principal_type=PrincipalType.HUMAN))
     await session.flush()
@@ -459,6 +468,219 @@ async def test_soft_delete_removes_item_from_projection(session, fake_object_sto
     projection = await mb_query.get_default_mainboard(session, USER1)
     roots = [item["work_object_root_id"] for item in projection["items"]]
     assert root_id not in roots
+
+
+async def test_supervisor_cannot_mutate_another_owners_signal(session, fake_object_store) -> None:
+    """TS-15.c2: the SUPERVISOR role specifically confers no edit right.
+
+    ``test_foreign_owner_cannot_create_revision`` proves this denial for a plain USER,
+    and Admin's override is proven elsewhere — but doc 04 §15 names "User/Supervisor
+    cannot mutate other owner private Signal", and every ownership test on this page
+    seeds a second plain USER. A Supervisor sits BETWEEN User and Admin, so "a
+    non-owner is denied" does not settle it: the open question is whether the elevated
+    role leaks an edit right it was never granted.
+    """
+    await _seed_principals(session)
+    saved = await _saved_signal(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+    revisions_before = int(
+        (await session.execute(select(func.count()).select_from(WorkObjectRevision))).scalar_one()
+    )
+
+    other_csv = "\n".join(
+        [_HEADER, "r9,2024-05-03T10:00:00Z,2024-05-03T10:05:00Z,long,entry"]
+    ).encode("utf-8")
+    pipeline2 = await _run_import_pipeline(session, SUPERVISOR, other_csv)
+    payload2 = _payload(
+        pipeline2["source_asset_id"],
+        pipeline2["report"]["normalized_event_revision_id"],
+        identity={"display_name": "supervisor edit"},
+    )
+
+    with pytest.raises(AccessDeniedError):
+        await ts_cmd.create_trading_signal_revision(
+            session, SUPERVISOR, root_id=root_id, payload=payload2
+        )
+    await session.rollback()
+
+    # The refusal is durable, not cosmetic: no revision was appended to ANY root.
+    after = int(
+        (await session.execute(select(func.count()).select_from(WorkObjectRevision))).scalar_one()
+    )
+    assert after == revisions_before
+
+
+async def test_soft_delete_writes_trash_entry_audit_and_outbox(session, fake_object_store) -> None:
+    """TS-18.c2: the delete's DURABLE side effects, not just the projection drop.
+
+    ``test_soft_delete_removes_item_from_projection`` asserts only that the root
+    disappears from the active Mainboard. That is the visible half. The recoverable
+    half is what makes the delete reversible and accountable: a Trash entry to restore
+    FROM, an audit row naming who did it, and an outbox row so other planes learn of
+    it. A delete that dropped the projection while writing none of these would look
+    identical on screen and be silently unrecoverable.
+    """
+    await _seed_principals(session)
+    saved = await _saved_signal(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+
+    await mb_cmd.soft_delete_work_object(session, USER1, root_id=root_id)
+    await session.commit()
+
+    entry = (
+        await session.execute(select(TrashEntry).where(TrashEntry.entity_id == root_id))
+    ).scalar_one()
+    assert entry.deleted_by == "user_1"
+
+    audits = (
+        (
+            await session.execute(
+                select(AuditEvent).where(
+                    AuditEvent.event_kind == "entity.soft_deleted",
+                    AuditEvent.target_entity_id == root_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(audits) == 1
+    assert audits[0].actor_principal_id == "user_1"
+
+    outbox = (
+        (
+            await session.execute(
+                select(OutboxEvent).where(
+                    OutboxEvent.event_type == "entity.soft_deleted",
+                    OutboxEvent.resource_id == root_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(outbox) == 1
+
+
+async def test_enabling_allocation_preserves_the_stored_independent_capital(
+    session, fake_object_store
+) -> None:
+    """TS-10.c3: enabling shared allocation makes the pool the ACTIVE capital source
+    WITHOUT erasing what the owner typed for independent mode.
+
+    These are two different questions and only one was proven. The readiness
+    validators cover both requiredness directions, and the engine test proves the
+    pool overrides the item's own capital when allocation is on — but nothing
+    enabled allocation and then read the signal revision back. The clause exists
+    because switching back to independent mode must restore the owner's own number,
+    not a blank field.
+
+    Written as a PAIR so it cannot pass vacuously: allocation must actually be ON,
+    and the stored figure must be byte-identical afterwards — ``content_hash``
+    included, so a revision quietly rewritten underneath would fail even if the
+    capital happened to round-trip.
+    """
+    await _seed_principals(session)
+    saved = await _saved_signal(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+
+    before = await ts_query.get_trading_signal(session, USER1, root_id=root_id)
+    capital_before = before["current_revision"]["payload"]["capital"]
+    assert capital_before["independent_initial_capital"] == "10000"
+    hash_before = before["current_revision"]["content_hash"]
+
+    board = await mb_query.get_default_mainboard(session, USER1)
+    composition_id = board["workspace_id"]
+    items = await mb_repo.list_active_items(session, composition_id)
+    signal_item = next(it for it in items if str(it.item_kind) == "trading_signal")
+    await alloc_cmd.upsert_allocation_draft(
+        session,
+        USER1,
+        composition_id=composition_id,
+        expected_row_version=None,
+        enabled=True,
+        initial_capital={"amount": "50000", "currency": "USDT"},
+        compounding_mode="COMPOUND_PORTFOLIO_EQUITY",
+        reserve_cash_percent="0",
+        entries=[
+            {
+                "composition_item_id": signal_item.item_id,
+                "active": True,
+                "equity_share_percent": "100",
+            }
+        ],
+        idempotency_key="ts10-alloc-enable",
+    )
+    await session.commit()
+
+    # Allocation really is the active source now — otherwise the preservation half
+    # would be asserting nothing happened at all.
+    plan = await alloc_repo.get_plan_for_workspace(session, composition_id)
+    assert plan is not None
+    assert plan.enabled is True
+
+    # ...and the independent figure survived, read back through the SAME projection
+    # the page uses rather than off the raw row.
+    after = await ts_query.get_trading_signal(session, USER1, root_id=root_id)
+    assert after["current_revision"]["payload"]["capital"]["independent_initial_capital"] == "10000"
+    assert after["current_revision"]["content_hash"] == hash_before
+
+
+async def test_correcting_a_blocked_import_appends_and_keeps_the_old_report(
+    session, fake_object_store
+) -> None:
+    """TS-08.c3: correcting a bad mapping APPENDS a new normalized revision and leaves
+    the first report readable, unmodified, as history.
+
+    Only the forward path was exercised anywhere: that a corrected import produces a
+    new revision. The half this row actually turns on — that the FIRST report survives
+    the correction — had no assertion. It matters because the import report is the
+    evidence for why a save was refused; a correction that rewrote or dropped it would
+    erase the record of the refusal while looking perfectly healthy afterwards.
+    """
+    await _seed_principals(session)
+
+    # 1. A blocked import: the legacy Trade Log schema cannot supply a signal-event
+    #    mapping, so the save is refused (doc 04 §15 TS-08 blocking half).
+    legacy = "\n".join(
+        [
+            "entry_time,entry_price,exit_time,exit_price",
+            "2024-05-01T10:00:00Z,100,2024-05-01T12:00:00Z,110",
+        ]
+    ).encode("utf-8")
+    blocked = await _run_import_pipeline(session, USER1, legacy)
+    blocked_job_id = blocked["report"]["job_id"]
+    blocked_report = await ts_query.get_import_report(session, USER1, job_id=blocked_job_id)
+    blocked_rev = await ts_repo.get_normalized_revision_for_job(session, blocked_job_id)
+    assert blocked_rev is not None
+    # Read the id out as a plain value: the rollback below expires the ORM object,
+    # and touching it afterwards would lazy-load inside a sync frame.
+    blocked_rev_id = str(blocked_rev.normalized_revision_id)
+
+    with pytest.raises(SignalEventMappingRequiredError):
+        await ts_cmd.create_trading_signal_and_attach(
+            session,
+            USER1,
+            payload=_payload(blocked["source_asset_id"], blocked_rev_id),
+        )
+    await session.rollback()
+
+    # 2. Correcting it appends a NEW normalized revision — the old one is not reused.
+    corrected = await _run_import_pipeline(session, USER1, _GOOD_CSV)
+    corrected_rev_id = corrected["report"]["normalized_event_revision_id"]
+    assert corrected_rev_id != blocked_rev_id
+    saved = await ts_cmd.create_trading_signal_and_attach(
+        session,
+        USER1,
+        payload=_payload(corrected["source_asset_id"], corrected_rev_id),
+    )
+    await session.commit()
+    assert saved["root_id"]
+
+    # 3. The FIRST report still resolves through the same read path, byte for byte.
+    #    History is not rewritten by the correction that superseded it.
+    replay = await ts_query.get_import_report(session, USER1, job_id=blocked_job_id)
+    assert replay == blocked_report
 
 
 async def test_normalized_revision_row_persists_evidence(session, fake_object_store) -> None:

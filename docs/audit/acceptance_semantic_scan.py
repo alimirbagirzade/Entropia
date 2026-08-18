@@ -26,6 +26,8 @@ What makes it fail (exit 1):
   * a server-truth axis proven only by a jsdom render, or `async_recovery`
     proven only by a unit test  (see AXIS_RULES)
   * a `partial`/`uncovered` criterion with no `debt_class`, or a settled one carrying one
+  * an `unfalsifiable` clause marker that is not a bool, or one set true on a
+    clause whose status is not `uncovered`
 
 What makes `--ratchet` fail (exit 1):
 
@@ -118,6 +120,20 @@ DEBT_CLASSES = ("A", "B", "C", "D")
 #: "settled" statuses are already argued in `notes`; forcing a class onto them would
 #: invite re-litigating a closed decision at every edit.
 STATUSES_REQUIRING_DEBT_CLASS = ("partial", "uncovered")
+
+#: A clause may carry `unfalsifiable: true`. It is a MARKER, not a status: the
+#: clause stays `uncovered`, its criterion stays open, and every ceiling keeps
+#: counting it. What the marker records is that the clause asserts the ABSENCE of
+#: a surface that is transient or was never shipped — so the only test one could
+#: write would pass today and could not be made to fail by any realistic change.
+#: Four such clauses accumulated one slice at a time, each re-measuring the same
+#: shape; the marker exists so a future batch reads the ruling instead of paying
+#: for that measurement a fifth time.
+#:
+#: Deliberately NOT what the marker does: it does not close the clause, does not
+#: move it to class C, and does not subtract from `partial`/`uncovered`. Those
+#: would raise a ceiling, which is an adjudication of its own.
+UNFALSIFIABLE_CLAUSE_STATUS = "uncovered"
 
 #: evidence_type -> the path prefix a node of that type must live under. This is
 #: what stops "unit test" from being claimed for an integration file (and back).
@@ -601,6 +617,26 @@ def validate(document: Any, index: TestIndex) -> list[Violation]:
                         f"{len(cev)} node(s) are cited",
                     )
                 )
+            unfalsifiable = clause.get("unfalsifiable")
+            if unfalsifiable is not None:
+                if not isinstance(unfalsifiable, bool):
+                    out.append(
+                        Violation(
+                            "BAD_UNFALSIFIABLE",
+                            cwhere,
+                            f"`unfalsifiable` must be a bool, found {unfalsifiable!r}",
+                        )
+                    )
+                elif unfalsifiable and cstatus != UNFALSIFIABLE_CLAUSE_STATUS:
+                    out.append(
+                        Violation(
+                            "UNFALSIFIABLE_NOT_UNCOVERED",
+                            cwhere,
+                            f"`unfalsifiable: true` on a {cstatus!r} clause — the marker "
+                            "records that no failing test can exist, so a clause that "
+                            "already cites one may not carry it",
+                        )
+                    )
 
         # A criterion may not out-claim its own clauses: `covered` requires every
         # clause covered, and a criterion with a covered clause is at least partial.
@@ -891,6 +927,11 @@ never implemented and a criterion missing one `assert` line were the same word.
 The `Why` column is the criterion's own `notes` field, truncated. Read the full
 argument in `acceptance_semantic_map.yaml` before planning any row.
 
+Clauses marked **unfalsifiable** are listed once more at the end. They are still
+counted in every table above and in every ceiling — the marker adjudicates only
+that no test could fail on them, so no batch should keep re-measuring that. Moving
+them to class C would raise a ceiling and is a separate, unsigned decision.
+
 """
 
 
@@ -902,6 +943,15 @@ def ledger(document: dict[str, Any]) -> str:
     for cls in DEBT_CLASSES:
         lines.append(f"| {cls} | {counts.get(cls, 0)} |")
     lines.append(f"| **open total** | **{len(open_rows)}** |")
+    unfalsifiable = [
+        (r, c)
+        for r in open_rows
+        for c in r.get("clauses", [])
+        if c.get("unfalsifiable")
+    ]
+    lines.append(
+        f"| _of which unfalsifiable clauses (still counted)_ | _{len(unfalsifiable)}_ |"
+    )
 
     for cls in DEBT_CLASSES:
         rows = sorted(
@@ -922,6 +972,24 @@ def ledger(document: dict[str, Any]) -> str:
             lines.append(
                 f"| `{r['id']}` | {doc} | {r['status']} | {r['summary']} | {note} |"
             )
+
+    lines.append(f"\n## Unfalsifiable clauses ({len(unfalsifiable)})\n")
+    lines.append(
+        "Each asserts the ABSENCE of a surface that is transient or was never "
+        "shipped. A test written against one would pass today and could not be "
+        "made to fail by any realistic change, so writing it would be marking "
+        "rather than covering. They remain `uncovered` and remain counted."
+    )
+    if not unfalsifiable:
+        lines.append("\n_none_")
+    else:
+        lines.append("\n| Clause | Class | What it asserts is absent |")
+        lines.append("|---|---|---|")
+        for r, c in sorted(
+            unfalsifiable, key=lambda rc: (str(rc[0].get("document", "")), str(rc[1]["id"]))
+        ):
+            text = " ".join(str(c.get("text", "")).split())
+            lines.append(f"| `{c['id']}` | {r.get('debt_class', '?')} | {text} |")
     return "\n".join(lines)
 
 

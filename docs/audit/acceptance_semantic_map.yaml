@@ -3384,6 +3384,7 @@ criteria:
   - id: AOS-04.c2
     text: The draft is absent from the server Ready Check composition.
     status: uncovered
+    unfalsifiable: true
   production_paths:
   - backend/src/entropia/application/commands/mainboard.py
   - frontend/src/pages/TradingSignal.tsx
@@ -3402,12 +3403,23 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The transient-identity half is asserted exactly as the spec words it — the contract test
-    opens the draft and asserts unsaved is True and that root_id / revision_id / item_id are absent
-    from the body. The second half ("absent from server Ready Check composition") has no asserting
-    test: no test runs a Ready Check with an open transient draft and asserts the composition snapshot
-    omits it. Structurally the draft has no composition row to omit, but that is an argument, not
-    an assertion.'
+  notes: 'ADIM 78 FINDING - c2 is the verbatim twin of TS-02.c2 and is UNFALSIFIABLE for the same reason, so it
+    was left open rather than marked. This row''s own note already concedes the shape ("Structurally the
+    draft has no composition row to omit, but that is an argument, not an assertion"); ADIM 76 measured why
+    that argument cannot be turned into a failing test. MEASURED again on this base: the opener
+    commands/mainboard.py::start_external_work_object_draft (104-117) is a PURE function taking only (actor,
+    kind); it opens no session and its single caller routes/mainboard.py:91-95 passes ctx.actor and kind and
+    nothing else, so no database handle is in scope anywhere on that path. The draft therefore has no
+    representation the Ready Check composition snapshot (MainboardCompositionSnapshot.item_manifest, built
+    from mb_repo.list_active_items) could read. An assertion that the draft is absent would pass today and
+    could only fail after a three-point change (give the opener a session, add a write, wire the id into the
+    snapshot) - not a regression a guard catches. Closing it honestly needs a persisted-draft design (as
+    I-12 already did for Strategy) or an adjudication that the row is class C. NOT RECLASSIFIED. The
+    transient-identity half is asserted exactly as the spec words it — the contract test opens the draft and
+    asserts unsaved is True and that root_id / revision_id / item_id are absent from the body. The second
+    half ("absent from server Ready Check composition") has no asserting test: no test runs a Ready Check
+    with an open transient draft and asserts the composition snapshot omits it. Structurally the draft has
+    no composition row to omit, but that is an argument, not an assertion.'
 - id: AOS-05
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'
@@ -3416,7 +3428,9 @@ criteria:
   clauses:
   - id: AOS-05.c1
     text: Choosing Trade Log produces a draft view explicitly marked Unsaved with no server identity.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/contract/test_mainboard_contract.py::test_external_trade_log_draft_is_transient
   - id: AOS-05.c2
     text: No import job starts until an explicit child upload/import action occurs.
     status: covered
@@ -3434,27 +3448,33 @@ criteria:
     call — rendering and choosing never touch fetch (§7.1)
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > choosing Trade Log
     navigates to the Trade Log workbench
+  - backend/tests/contract/test_mainboard_contract.py::test_external_trade_log_draft_is_transient
   evidence_type:
   - frontend_component
+  - backend_contract
   positive:
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > choosing Trade Log
     navigates to the Trade Log workbench
   negative:
   - frontend/src/test/outsourceSignal.test.tsx > Add Outsource Signal chooser > performs no backend
     call — rendering and choosing never touch fetch (§7.1)
+  - backend/tests/contract/test_mainboard_contract.py::test_external_trade_log_draft_is_transient
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The "no import job yet" half is proven from the chooser side — choosing Trade Log issues
-    no request at all, so no import can have been queued. The Unsaved-transient-draft half is only
-    proven for the Trading Signal branch (test_external_trading_signal_draft_is_transient); there
-    is no equivalent assertion for the trade_log draft kind on either surface, so that clause is recorded
-    uncovered rather than borrowed from its sibling.
+  status: covered
+  notes: 'CLOSED in acceptance batch 09 (ADIM 78). The "no import job yet" half was already proven from the
+    chooser side. The Unsaved-transient half existed only for the Trading Signal branch
+    (test_external_trading_signal_draft_is_transient) and was deliberately NOT borrowed for trade_log; this
+    pins it per kind. That separation is not ceremony: doc 03 §6.2 names the two choices separately, they
+    route to different workbenches, and a special case for one kind - say minting an id early so the Trade
+    Log importer has something to bind to - would leave the sibling green while breaking this row. NEGATIVE
+    CONTROL: making start_external_work_object_draft return a root_id for the TRADE_LOG branch only fails
+    this test on assert root_id not in body while the trading_signal sibling stays green, which is exactly
+    the divergence the per-kind assertion exists to catch.'
 - id: AOS-06
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'
@@ -3470,6 +3490,7 @@ criteria:
   - id: AOS-06.c2
     text: Discarding changes no composition hash and emits no Ready Report stale event.
     status: uncovered
+    unfalsifiable: true
   production_paths:
   - backend/src/entropia/application/commands/mainboard.py
   - frontend/src/pages/OutsourceSignal.tsx
@@ -3488,12 +3509,23 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: The load-bearing fact for "no Trash Entry / no audit event" is asserted — the draft opener
-    returns a body with no root/revision/item identity, so there is no row a discard could soft delete
-    or audit. Nothing asserts the discard path itself, and nothing asserts that the composition hash
+  notes: 'ADIM 78 FINDING - c2 names an action that DOES NOT EXIST as a surface, so no test can fail on it.
+    MEASURED on this base: grepping discard across commands/mainboard.py and routes/mainboard.py returns
+    NOTHING - there is no discard command, no discard endpoint and no discard handler. The only mention
+    anywhere is a comment in frontend/src/pages/OutsourceSignal.tsx:97 stating that "leaving this page
+    discards nothing durable", which is a description of the absence, not an implementation of it.
+    Discarding an unsaved draft is simply navigating away from a client-side view whose opener never touched
+    the server (see the AOS-04.c2 finding for that measurement). Asserting that this non-action changes no
+    composition hash and emits no readiness.became_stale event would be asserting that nothing does nothing:
+    green today, and unable to go red through any single realistic change. The load-bearing no-Trash-Entry /
+    no-audit half is already asserted via the draft''s lack of identity. Same shape as TS-02.c2 and
+    AOS-04.c2. NOT RECLASSIFIED - B to C raises the C ceiling and that is an adjudication, not a test
+    slice''s call. The load-bearing fact for "no Trash Entry / no audit event" is asserted — the draft
+    opener returns a body with no root/revision/item identity, so there is no row a discard could soft
+    delete or audit. Nothing asserts the discard path itself, and nothing asserts that the composition hash
     is unchanged or that no readiness.became_stale event is emitted across a discard. The composition-hash
     invariant IS asserted for expand/collapse (presentationState.test.tsx, AOS-16) but that is a different
-    action and is not cited here.
+    action and is not cited here.'
 - id: AOS-07
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'
@@ -3862,7 +3894,9 @@ criteria:
     - backend/tests/integration/test_trade_log_persistence.py::test_foreign_owner_cannot_create_revision
   - id: AOS-13.c3
     text: A Supervisor specifically cannot edit or delete another owner external object.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   - id: AOS-13.c4
     text: Admin can act on a foreign external object.
     status: covered
@@ -3901,6 +3935,7 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_read_trading_signal
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
+  - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   evidence_type:
   - backend_integration
   - backend_contract
@@ -3918,6 +3953,7 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_read_trading_signal
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
+  - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   auth:
   - backend/tests/integration/test_mainboard_authz.py::test_attach_own_work_object_is_allowed
   - backend/tests/integration/test_mainboard_authz.py::test_attach_foreign_work_object_is_denied
@@ -3931,20 +3967,27 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_read_trading_signal
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_create_trade_log
   - backend/tests/contract/test_trade_log_contract.py::test_guest_cannot_upload_source_asset
+  - backend/tests/integration/test_mainboard_authz.py::test_supervisor_cannot_edit_or_delete_a_foreign_external_object
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: Owner-writes, foreign-denies, Admin-override, Agent-is-not-a-human and the API-enforces-it
-    clauses are all asserted server-side. The one clause the spec names by role and the suite does
-    not is Supervisor. The signal/trade-log ownership tests seed a second plain USER, not a SUPERVISOR,
-    so "Supervisor cannot edit/delete other owner external object" is asserted nowhere on this line.
-    The canonical role matrix does declare supervisor-edit=own and supervisor-delete=own (test_role_matrix_contract.py),
-    but that is a policy-table assertion about a matrix, not a request against an external work object,
-    so it is not cited as proof of the enforced behaviour.
+  status: covered
+  notes: 'CLOSED in acceptance batch 09 (ADIM 78). Owner-writes, foreign-denies, Admin-override,
+    Agent-is-not-a-human and API-enforcement were all asserted; the one role doc 03 §13 names and the suite
+    never drove was Supervisor, because every ownership test here seeds a second plain USER or an Agent.
+    Supervisor sits BETWEEN User and Admin, so "a non-owner is denied" does not settle it - the question is
+    whether the elevated role leaks a write it was never granted. The canonical role matrix does declare
+    supervisor-edit=own / supervisor-delete=own (test_role_matrix_contract.py), but that asserts a POLICY
+    TABLE rather than a request against a real object; this drives the commands themselves. BOTH verbs the
+    clause names are exercised (create_work_object_revision and soft_delete_work_object) over BOTH external
+    kinds, and the refusal is checked to be durable - the root is still ACTIVE on its original revision
+    afterwards. The edit call passes a VALID external-kind available_time on purpose: without it the call
+    would fail anti-lookahead validation even for a permitted actor and the denial would be confounded, so
+    authorization is the only thing standing between the Supervisor and a successful write. NEGATIVE
+    CONTROL: adding a Role.SUPERVISOR short-circuit to domain/identity/policy.py::can_edit fails both
+    parametrisations with DID NOT RAISE AccessDeniedError.'
 - id: AOS-14
   document: docs/spec/03_Entropia_V18_Add_Outsource_Signal_Page_Documentation_v1_1.md
   section: '14'
@@ -4486,6 +4529,7 @@ criteria:
   - id: TS-02.c2
     text: The Ready Check snapshot and the Run exclude the transient draft.
     status: uncovered
+    unfalsifiable: true
   production_paths:
   - backend/src/entropia/application/commands/mainboard.py
   - frontend/src/pages/TradingSignal.tsx
@@ -4504,9 +4548,22 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: Same split as AOS-04. The contract test asserts the draft body carries unsaved=True and omits
-    root_id/revision_id/item_id, which is the "no identity" half. Nothing runs a Ready Check or admits
-    a Run with a transient draft open and asserts the snapshot excludes it.
+  notes: 'ADIM 76 FINDING - c2 is TRUE BY CONSTRUCTION and cannot be given a test that could fail, so it was left
+    open rather than marked. MEASURED on base 0f0651d: the transient opener is
+    commands/mainboard.py::start_external_work_object_draft (lines 104-117), a PURE function taking only
+    (actor, kind) that touches no session and returns draft_id plus kind plus unsaved true; its single
+    caller routes/mainboard.py lines 91-95 passes ctx.actor and kind and nothing else, so no database handle
+    is even in scope. A transient draft therefore has no representation anywhere the Ready Check snapshot
+    (MainboardCompositionSnapshot.item_manifest, built from mb_repo.list_active_items) could read it. An
+    assertion that the draft id is absent from the manifest would pass today and could only fail if someone
+    first gave the opener a session, then a repository write, then wired the draft id into the snapshot - a
+    three-point change, not a regression a guard catches. Writing it would be marking rather than covering,
+    so the clause stays uncovered with this measurement recorded instead. Closing it honestly needs either a
+    persisted-draft design (as Stage 3b already did for Strategy in I-12, replacing the transient opener
+    with a real root) or an adjudication that the row is class C. Same split as AOS-04. The contract test
+    asserts the draft body carries unsaved=True and omits root_id/revision_id/item_id, which is the "no
+    identity" half. Nothing runs a Ready Check or admits a Run with a transient draft open and asserts the
+    snapshot excludes it.'
 - id: TS-03
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -4769,14 +4826,28 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: The test file itself admits the gap. Its module docstring says TS-07 is "asserted here at
-    SCHEMA level; the engine-side decision gate is recorded as a gap in docs/audit/acceptance_id_map.md"
-    (backend/tests/unit/test_trading_signal_events.py, lines 8-10). So the parser refuses an impossible
-    availability, but nothing runs the backtest engine over a signal whose available_time is later
-    than the bar and asserts the event is excluded from that bar decision. A sibling gate IS proven
-    for the research/funding axis (backend/tests/unit/test_backtest_available_time_gate.py), but that
-    gate is built from research availability schedules, not from normalized signal events, so it is
-    not cited as proof of this row.
+  notes: 'ADIM 76 FINDING - c2 is very likely MISCLASSIFIED and no test can close it as written. The clause names
+    an ENGINE decision gate over normalized SIGNAL events, and that pathway DOES NOT EXIST. MEASURED on base
+    0f0651d: run_engine''s parameters are strategy_config, bar_batches, execution_key, item_count,
+    indicator_plan, timeframe, allocation, funding, tick_batches, portfolio_rules and
+    builtin_breakout_fixture (domain/backtest/engine.py:3535-3545) - there is no signal-event input of any
+    kind. jobs/backtest_engine.py contains ZERO references to trading_signal, and nothing under
+    domain/backtest/ imports domain/trading_signal/events.py (its only consumers are jobs/trading_signal.py
+    and commands/trading_signal.py, i.e. the import/normalize plane). engine.py''s own SignalEventRow is an
+    OUTPUT journal - led.signal_events.append records the engine''s own stop_resolution decisions, it is not
+    an ingested feed. The only available_at gate in the engine is the funding/research axis delegated to
+    research_data.time_policy.is_eligible_for_decision, which is exactly the sibling this row was already
+    told not to borrow. The schema-level refusal is real and proven, but the engine-side half cannot be
+    asserted until a signal-event feed reaches the engine at all - product work, i.e. class D, not test
+    debt. NOT RECLASSIFIED - B to D raises the D ceiling and that is an adjudication. This makes TEN such
+    open findings across the ledger. The test file itself admits the gap. Its module docstring says TS-07 is
+    "asserted here at SCHEMA level; the engine-side decision gate is recorded as a gap in
+    docs/audit/acceptance_id_map.md" (backend/tests/unit/test_trading_signal_events.py, lines 8-10). So the
+    parser refuses an impossible availability, but nothing runs the backtest engine over a signal whose
+    available_time is later than the bar and asserts the event is excluded from that bar decision. A sibling
+    gate IS proven for the research/funding axis (backend/tests/unit/test_backtest_available_time_gate.py),
+    but that gate is built from research availability schedules, not from normalized signal events, so it is
+    not cited as proof of this row.'
 - id: TS-08
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -4803,7 +4874,9 @@ criteria:
   - id: TS-08.c3
     text: Correcting the mapping creates a NEW normalized import revision while the old report remains
       readable as history.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trading_signal_persistence.py::test_correcting_a_blocked_import_appends_and_keeps_the_old_report
   production_paths:
   - backend/src/entropia/domain/trading_signal/events.py
   - backend/src/entropia/domain/trading_signal/config.py
@@ -4817,6 +4890,7 @@ criteria:
   - backend/tests/integration/test_tl_timezone_crosscheck_attach.py::test_trading_signal_attach_is_refused_when_the_import_ran_under_another_zone
   - backend/tests/integration/test_tl_timezone_crosscheck_attach.py::test_trading_signal_attach_succeeds_when_the_zones_match
   - backend/tests/unit/test_trading_signal_events.py::test_naive_timestamp_localized_to_source_timezone
+  - backend/tests/integration/test_trading_signal_persistence.py::test_correcting_a_blocked_import_appends_and_keeps_the_old_report
   evidence_type:
   - backend_integration
   - backend_unit
@@ -4824,6 +4898,7 @@ criteria:
   - backend/tests/integration/test_instrument_registry_wiring.py::test_trading_signal_import_resolves_spot_vs_perp
   - backend/tests/integration/test_tl_timezone_crosscheck_attach.py::test_trading_signal_attach_succeeds_when_the_zones_match
   - backend/tests/unit/test_trading_signal_events.py::test_naive_timestamp_localized_to_source_timezone
+  - backend/tests/integration/test_trading_signal_persistence.py::test_correcting_a_blocked_import_appends_and_keeps_the_old_report
   negative:
   - backend/tests/integration/test_instrument_registry_wiring.py::test_trading_signal_import_unresolvable_scope_fails
   - backend/tests/unit/test_trading_signal_events.py::test_instrument_mismatch_is_skipped
@@ -4834,15 +4909,20 @@ criteria:
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_trading_signal_persistence.py::test_correcting_a_blocked_import_appends_and_keeps_the_old_report
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Both blocking halves are proven, and the timezone cross-check is proven on the attach surface
-    too. The third clause is not: no test corrects a bad symbol/zone, runs a second import, and then
-    asserts that the FIRST report row is still readable and unmodified. Only the forward path (new
-    revision appended) is exercised elsewhere; the "old report remains historical" invariant is unasserted
-    for this page.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 08 (ADIM 76). Both blocking halves were proven and the timezone cross-check
+    is proven on the attach surface too; only the forward path (a corrected import appends a new revision)
+    was exercised anywhere. The half this row actually turns on, that the FIRST report survives the
+    correction, had no assertion. It matters because the import report is the evidence for WHY a save was
+    refused; a correction that rewrote or dropped it would erase the record of the refusal while looking
+    perfectly healthy afterwards. The new test blocks on a legacy Trade Log schema
+    (SignalEventMappingRequiredError), corrects with a valid file, asserts the new normalized revision id
+    differs and the save now succeeds, then re-reads the FIRST report through the same
+    queries/trading_signal.py::get_import_report path and asserts it is byte-identical. NEGATIVE CONTROL:
+    making run_import rewrite earlier revisions'' validation_summary fails that byte-identity assertion.'
 - id: TS-09
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -4931,7 +5011,9 @@ criteria:
   - id: TS-10.c3
     text: Enabling allocation PRESERVES the previously entered independent capital rather than erasing
       it.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trading_signal_persistence.py::test_enabling_allocation_preserves_the_stored_independent_capital
   production_paths:
   - backend/src/entropia/domain/readiness/validators.py
   - backend/src/entropia/domain/trading_signal/config.py
@@ -4943,12 +5025,15 @@ criteria:
   - backend/tests/unit/test_allocation_rules.py::test_initial_capital_must_be_positive
   - backend/tests/unit/test_readiness_validators.py::test_tl11_independent_capital_not_required_when_allocation_on
   - backend/tests/unit/test_backtest_engine_allocation.py::test_allocation_overrides_initial_capital_with_the_portfolio_pool
+  - backend/tests/integration/test_trading_signal_persistence.py::test_enabling_allocation_preserves_the_stored_independent_capital
   evidence_type:
   - backend_unit
   - frontend_component
+  - backend_integration
   positive:
   - backend/tests/unit/test_readiness_validators.py::test_tl11_independent_capital_not_required_when_allocation_on
   - backend/tests/unit/test_backtest_engine_allocation.py::test_allocation_overrides_initial_capital_with_the_portfolio_pool
+  - backend/tests/integration/test_trading_signal_persistence.py::test_enabling_allocation_preserves_the_stored_independent_capital
   negative:
   - backend/tests/unit/test_readiness_validators.py::test_tl11_independent_capital_required_when_allocation_off
   - frontend/src/test/configForms.test.ts > tradingSignalForm > rejects a non-positive independent
@@ -4960,13 +5045,18 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Both requiredness directions are asserted by the readiness validators, and the engine test
-    proves the portfolio pool actually overrides the item own capital when allocation is on. The preservation
-    clause — "Allocation enabled preserves old independent capital" — has no asserting test: nothing
-    saves an independent capital, enables allocation, and then reads the revision back to assert the
-    old value is still stored and merely inactive.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 08 (ADIM 76). Both requiredness directions were asserted by the readiness
+    validators and the engine test proved the portfolio pool overrides the item''s own capital, but nothing
+    enabled allocation and then read the signal revision back, so the preservation clause was unproven. It
+    matters because switching back to independent mode must restore the owner''s own number, not a blank
+    field. The new test is written as a PAIR so it cannot pass vacuously: the allocation plan must actually
+    be enabled, AND the stored figure must be byte-identical afterwards including content_hash, read back
+    through queries/trading_signal.py::get_trading_signal rather than off the raw row. Preservation is
+    structural (capital lives in the immutable TradingSignalConfig revision while allocation is a separate
+    plan aggregate), which is what makes the guard cheap and worth having. NEGATIVE CONTROL: making
+    upsert_allocation_draft null out each revision''s independent_initial_capital on enable fails with
+    assert None == 10000.'
 - id: TS-11
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -5228,7 +5318,9 @@ criteria:
     - backend/tests/integration/test_gateway_parity_trading_signal.py::test_a_foreign_private_root_cannot_be_revised
   - id: TS-15.c2
     text: A Supervisor specifically is proven unable to mutate another owner private Signal.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trading_signal_persistence.py::test_supervisor_cannot_mutate_another_owners_signal
   - id: TS-15.c3
     text: Admin may act on a foreign object.
     status: covered
@@ -5257,6 +5349,7 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_upload_source_asset
   - frontend/src/test/tradingSignal.test.tsx > TradingSignal > hides the Advanced raw payload from
     a normal user and shows it to an admin (fail-closed)
+  - backend/tests/integration/test_trading_signal_persistence.py::test_supervisor_cannot_mutate_another_owners_signal
   evidence_type:
   - backend_integration
   - backend_contract
@@ -5273,6 +5366,7 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_upload_source_asset
   - frontend/src/test/tradingSignal.test.tsx > TradingSignal > hides the Advanced raw payload from
     a normal user and shows it to an admin (fail-closed)
+  - backend/tests/integration/test_trading_signal_persistence.py::test_supervisor_cannot_mutate_another_owners_signal
   auth:
   - backend/tests/integration/test_trading_signal_persistence.py::test_foreign_owner_cannot_create_revision
   - backend/tests/integration/test_trading_signal_persistence.py::test_export_foreign_owner_forbidden
@@ -5282,19 +5376,22 @@ criteria:
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_create_trading_signal
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_read_trading_signal
   - backend/tests/contract/test_trading_signal_contract.py::test_guest_cannot_upload_source_asset
+  - backend/tests/integration/test_trading_signal_persistence.py::test_supervisor_cannot_mutate_another_owners_signal
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Foreign-owner denial, Admin override and endpoint-level enforcement are all asserted on
-    the signal line, and the frontend admin-gating test is cited only as the UI half of "the endpoint
-    enforces it regardless of UI button visibility" — the server half is carried by the contract tests.
-    The Supervisor clause is untested: every ownership test on this page seeds a second plain USER,
-    never a SUPERVISOR principal, so the spec sentence "User/Supervisor cannot mutate other owner
-    private Signal" is only half proven.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 08 (ADIM 76). Foreign-owner denial, Admin override and endpoint-level
+    enforcement were already asserted, but every ownership test on this page seeded a second plain USER, so
+    the spec sentence "User/Supervisor cannot mutate other owner private Signal" was only half proven. A
+    Supervisor sits BETWEEN User and Admin, which is exactly why "a non-owner is denied" did not settle it:
+    the open question was whether the elevated role leaks an edit right it was never granted. The new test
+    drives create_trading_signal_revision as a seeded SUPERVISOR principal against another owner''s root and
+    also asserts the refusal is durable (no WorkObjectRevision appended). NEGATIVE CONTROL: adding a
+    Role.SUPERVISOR short-circuit to domain/identity/policy.py::can_edit fails the test with DID NOT RAISE
+    AccessDeniedError.'
 - id: TS-16
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -5402,7 +5499,9 @@ criteria:
     - backend/tests/integration/test_mainboard_persistence.py::test_soft_delete_drops_item_from_projection_and_is_idempotent
   - id: TS-18.c2
     text: The delete writes a Trash Entry plus audit and outbox rows.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trading_signal_persistence.py::test_soft_delete_writes_trash_entry_audit_and_outbox
   - id: TS-18.c3
     text: A completed historical result still resolves the signal name / revision provenance from
       the run manifest snapshot.
@@ -5421,6 +5520,7 @@ criteria:
   - backend/tests/integration/test_f07_display_labels.py::test_snapshot_manifest_pins_the_item_label
   - backend/tests/integration/test_results_history.py::test_detail_excerpt_reads_real_pinned_refs_from_manifest
   - backend/tests/integration/test_backtest_manifest_pinning.py::test_manifest_carries_all_seven_field_groups
+  - backend/tests/integration/test_trading_signal_persistence.py::test_soft_delete_writes_trash_entry_audit_and_outbox
   evidence_type:
   - backend_integration
   positive:
@@ -5429,6 +5529,7 @@ criteria:
   - backend/tests/integration/test_f07_display_labels.py::test_snapshot_manifest_pins_the_item_label
   - backend/tests/integration/test_results_history.py::test_detail_excerpt_reads_real_pinned_refs_from_manifest
   - backend/tests/integration/test_backtest_manifest_pinning.py::test_manifest_carries_all_seven_field_groups
+  - backend/tests/integration/test_trading_signal_persistence.py::test_soft_delete_writes_trash_entry_audit_and_outbox
   negative: []
   auth: []
   occ: []
@@ -5438,14 +5539,17 @@ criteria:
   - backend/tests/integration/test_f07_display_labels.py::test_snapshot_manifest_pins_the_item_label
   - backend/tests/integration/test_results_history.py::test_detail_excerpt_reads_real_pinned_refs_from_manifest
   - backend/tests/integration/test_backtest_manifest_pinning.py::test_manifest_carries_all_seven_field_groups
+  - backend/tests/integration/test_trading_signal_persistence.py::test_soft_delete_writes_trash_entry_audit_and_outbox
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Same shape as AOS-18. I read test_soft_delete_removes_item_from_projection in test_trading_signal_persistence.py
-    — it calls mb_cmd.soft_delete_work_object and then asserts only that the root_id is gone from
-    get_default_mainboard items. No trash_entry, audit_log or outbox row is queried. The historical
-    half is genuinely proven: labels and pinned refs are read from the snapshot/manifest, never re-joined
-    from live composition.'
+  status: covered
+  notes: 'CLOSED in acceptance batch 08 (ADIM 76). test_soft_delete_removes_item_from_projection asserts only that
+    the root disappears from the active Mainboard, which is the visible half. The recoverable half is what
+    makes the delete reversible and accountable, and none of it was queried: a Trash entry to restore FROM,
+    an audit row naming who did it, and an outbox row so other planes learn. A delete that dropped the
+    projection while writing none of these would look identical on screen and be silently unrecoverable. The
+    new test asserts exactly one TrashEntry (deleted_by pinned), exactly one entity.soft_deleted audit row
+    (actor pinned) and exactly one entity.soft_deleted outbox row for the root. NEGATIVE CONTROL: removing
+    the add_trash_entry call from commands/deletion.py::soft_delete_entity fails with NoResultFound.'
 - id: TS-19
   document: docs/spec/04_Entropia_V18_Trading_Signal_Page_Documentation_v1_1.md
   section: '15'
@@ -7810,6 +7914,7 @@ criteria:
   - id: PC-02.c2
     text: The Pre-Check surface shows the final empty-input text for an empty source.
     status: uncovered
+    unfalsifiable: true
     test_evidence: []
   production_paths:
   - backend/src/entropia/domain/create_package/value_objects.py
@@ -7837,7 +7942,7 @@ criteria:
     in `normalize_request`, at the route, before the DB — so "no scan job starts" and "Send rejects
     the empty request" collapse into the same proven guard. The UI half is unproven: `PreCheck.tsx`
     renders "No Pre-Check scan yet for this request." for the no-scan case and no test asserts that
-    string, nor is there an empty-input branch keyed to an empty source. ADIM 75 FINDING — c2 is very
+    string, nor is there an empty-input branch keyed to an empty source. ADIM 76 FINDING — c2 is very
     likely MISCLASSIFIED and no test can close it as written. The clause wants the Pre-Check surface
     to show a "final empty-input text" for an EMPTY SOURCE (doc 07 §16 PC-02: "UI shows TA PRE-CHECK
     RESULT with final empty-input text"). MEASURED on base 0f0651d: (1) `EMPTY_SOURCE` appears NOWHERE

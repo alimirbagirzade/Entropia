@@ -21,9 +21,9 @@
   ],
   "provenance": {
     "measured_by": "docs/audit/acceptance_semantic_scan.py --root .. --report",
-    "measured_at": "2026-08-18T10:57:47Z",
-    "slice": "acceptance batch 10 — doc 03 (Add Outsource Signal), FRONTEND surface: AOS-01 closed by its last open clause c2 (chooser keyboard parity)",
-    "base_commit": "347fe19",
+    "measured_at": "2026-08-18T12:33:00Z",
+    "slice": "acceptance batches 08 + 09 (doc 04 backend, doc 03 backend) re-frozen ON TOP OF batch 10. The ledger is a SERIAL source and these two branches forked it in parallel: batch 10 (#775, ADIM 80) froze 96 / B 65 against base 347fe19, which did not contain batches 08+09, while this branch froze 91 / B 60 against a base that did not contain batch 10. Neither number is the truth after the merge. The seven criteria closed are DISJOINT — TS-08, TS-10, TS-15, TS-18 (batch 08), AOS-05, AOS-13 (batch 09), AOS-01 (batch 10) — so the combined ceiling was RE-MEASURED with --report on the merged tree rather than picking a side or doing arithmetic on the two frozen values: 97/66 - 7 = 90 / B 59, and the scan agrees. Batch 10's own record anticipated this and said the second one to land must rebase and re-freeze.",
+    "base_commit": "4ebd413",
     "conditions": "static scan; ast + title extraction against the live test tree; no database, no network, no test run",
     "supersedes": "the batch-07 freeze (97 partial / 8 uncovered; A1 B66 C6 D32, base 0f0651d). Batch 10 is a ONE-CLAUSE batch and closes AOS-01.c2, 'keyboard navigation of the chooser matches pointer behaviour' — the last clause on doc 03 that a test could close — so partial 97 -> 96 and class B 66 -> 65; both ceilings are lowered, never raised. NO PRODUCT CODE CHANGED: parity is native, because pages/OutsourceSignal.tsx renders each choice as a react-router <Link> (an <a href>) rather than a click handler. The assertion is deliberately NOT 'the choices are links' — the pre-existing membership test already proves that and stays GREEN while the chooser is made mouse-only, since tabIndex={-1} leaves role, name and href untouched. It is about the SEQUENCE instead: inside the chooser region the keyboard is offered exactly the stops the pointer has, in the same order. TWO negative controls, each isolating the new test and leaving the other six green: tabIndex={-1} on the Link gave 'expected [] to deeply equal [<a>, <a>]', and a tabIndex={0} div added inside the chooser gave a three-element sequence against the expected two. HONEST BOUNDARY: jsdom has no native anchor activation, so Enter cannot be pressed in a component test and the test does not pretend to; what activation depends on is asserted (each stop is an <a href> carrying the same target the pointer path navigates to). A real-browser proof belongs in e2e/specs/14-keyboard-flow.spec.ts (@a11y) and was NOT added, because this container cannot run that suite (Docker Hub blob CDN answers 403) and an unverifiable assertion is not evidence. CHAINING NOTE: this freeze is measured against MAIN at 347fe19 and therefore does NOT include batches 08 and 09, which are still open in PR #768 at 91 partial / B 60. Whichever lands second must rebase and re-freeze — the ledger is a serial source and a ceiling left above the measured figure fails test_the_frozen_ceiling_leaves_no_headroom rather than passing quietly.",
     "clause_totals_at_freeze": {
@@ -50,12 +50,12 @@
   "ceilings": {
     "total_criteria": 383,
     "status": {
-      "partial": 96,
+      "partial": 90,
       "uncovered": 8
     },
     "debt_class": {
       "A": 1,
-      "B": 65,
+      "B": 59,
       "C": 6,
       "D": 32
     }

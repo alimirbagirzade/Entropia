@@ -272,6 +272,35 @@ Before stopping a working session, produce **ALL** of the following:
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 79 (kabul borcu batch 09, doc 03 backend): ÜRÜN KODU
+> DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> İki kriter kapandı: **`AOS-13.c3`** (doc 03 §13'ün adlandırdığı **SUPERVISOR** rolü hiç
+> sürülmemişti — testler ikinci bir düz USER ya da Agent seçiyordu; yeni test **iki fiili**
+> `create_work_object_revision` + `soft_delete_work_object`, **iki external kind** üzerinde
+> sürer ve reddin **kalıcı** olduğunu doğrular) ve **`AOS-05.c1`** (transient-draft sözleşmesi
+> yalnız `trading_signal` dalında kanıtlıydı; `trade_log` **ödünç alınmadı**, ayrı pinlendi).
+> **Tavanlar İNDİ: `partial` 93 → 91, `debt_class.B` 62 → 60**; açık borç **101 → 99**
+> (A=1 · B=60 · C=6 · D=32), clause `covered` 1019 → 1021.
+> **İKİ BULGU, ikisi de YANLIŞLANAMAZ:** `AOS-04.c2` `TS-02.c2`'nin **birebir ikizi**;
+> `AOS-06.c2` daha net — **`discard` ağaçta hiç yok** (komut yok, uç yok, handler yok; tek anma
+> yokluğu tarif eden bir yorum), yani clause bir **eylemsizliğin** etkisizliğini iddia ediyor.
+> **`AOS-01.c2` kapatılamadığı için değil FRONTEND olduğu için ertelendi** — chooser seçimleri
+> link, klavye pariteliği native, assertion ve negatif kontrolü **gerçek**; doc 03'ü bitirecek
+> tek satırlık bir parti. **DERS: negatif kontrolün NEDEN kırmızıya döndüğünü oku** — bu slice'ta
+> ilk kontrol yetki yerine **doğrulama** hatasıyla düştü, yani red yetkilendirmeye atfedilemiyordu;
+> test düzeltildi. **Defterde artık on üç bulgu var ve DÖRDÜ aynı yanlışlanamaz şekle sahip**
+> (`TS-02.c2`, `PC-02.c2`, `AOS-04.c2`, `AOS-06.c2`) — bu artık bir **adjudication kalemi**.
+> **SIRA — ÖLÇÜLDÜ, ZİNCİR ÇÖZÜLDÜ:** #768 tek PR olarak ADIM 78 + 79 taşır; batch 10
+> (**ADIM 80**) main'e ÖNCE indi ve tavanlarını 97/66'dan bağımsız dondurdu, bu yüzden
+> bu dal rebase edilip tavanlar YENİDEN ÖLÇÜLEREK donduruldu — defter seri bir kaynaktır.
+> **AYNI PR'DA İKİ KAYIT İNDİ:** `ADIM 78` = kabul borcu batch 08 (doc 04 backend, dört
+> kriter) bu PR'ın alt commit'idir ve kendi `CLAUDE.md` girdisini yazmamıştı — özeti
+> burada tekrarlanmaz, kaydı `PROJECT_HISTORY.md` §ADIM 78'dedir.
+> `PROJECT_HISTORY.md` §ADIM 79 · `docs/ADIM79_LANDED_KICKOFF.md` · §ADIM 78.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 77 (P1 + P4, PR #751 + #754): ÜRÜN KODU DEĞİŞTİ, gözlenebilir
 > DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** #617'nin şeklinin
 > **dördüncü ve beşinci** örneği kapandı: `readiness_check.py::_resolve_tick_data_issues`
@@ -293,6 +322,8 @@ Before stopping a working session, produce **ALL** of the following:
 > **NUMARA + DÜRÜST SINIR: ikisi de ritüelsiz açıldı ve AYRI merge edildi** (P1 = #751, P4 = #754);
 > kaydı dalgayı merge eden oturum yazdı, ölçülen ile dalın iddia ettiği kayıtta AYRI işaretli.
 > `PROJECT_HISTORY.md` §ADIM 77 · `docs/ADIM77_LANDED_KICKOFF.md`.
+>
+>
 >
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·

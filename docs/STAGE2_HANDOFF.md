@@ -6960,6 +6960,89 @@ bu kaydı dalgayı merge eden oturum ürün sahibinin talimatıyla yazdı. Kayı
 **#617 / #618 issue durumlarına dokunulmadı.** `PROJECT_HISTORY.md` §ADIM 77 ·
 `docs/ADIM77_LANDED_KICKOFF.md`.
 
+## Stage 78 — kabul borcu batch 08 (doc 04 backend): dört kriter kapandı, iki bulgu landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**, containment `future_dev`. Blocker sayısı
+**değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+Doc 04 (Trading Signal), **backend** yüzeyi. Altı sınıf-B adayının **her birinin tek açık
+clause'u** vardı, yani kapatmak satırın tamamını kapatıyordu — ama ikisi ölçümde sınıf B
+çıkmadı.
+
+| Kriter | Kapanan clause | Neden açıktı |
+|---|---|---|
+| `TS-15` | `.c2` | sayfadaki her sahiplik testi ikinci bir **düz USER** seçiyordu; **SUPERVISOR** hiç denenmemişti |
+| `TS-18` | `.c2` | yalnız projeksiyon düşüşü assert ediliyordu; **trash + audit + outbox** hiç sorgulanmamıştı |
+| `TS-10` | `.c3` | allocation açılınca bağımsız sermayenin **korunduğu** okunup doğrulanmamıştı |
+| `TS-08` | `.c3` | düzeltilen import'un **ilk raporu** bozmadığı assert edilmemişti |
+
+**Tavanlar İNDİ:** `partial` **97 → 93**, `debt_class.B` **66 → 62**. Açık kabul borcu
+**105 → 101** (A=1 · B=62 · C=6 · D=32). Clause düzeyinde `covered` **1015 → 1019**,
+`uncovered` **112 → 108**.
+
+**DÖRT negatif kontrol, dördü de kırmızı** — her biri davranışı **üründen** kaldırarak:
+`can_edit`'e `Role.SUPERVISOR` kısayolu → `DID NOT RAISE AccessDeniedError` ·
+`add_trash_entry` silinince → `NoResultFound` · allocation açılışında sermaye null'lanınca →
+`assert None == '10000'` · `run_import` eski özetleri yeniden yazınca → rapor bayt-eşitliği
+kırılıyor.
+
+**İKİ BULGU, ikisi de farklı şekilde:**
+- **`TS-07.c2` sınıf D** — motorun **hiç sinyal-olayı girdisi yok**. `run_engine`'in
+  parametreleri arasında yok, `jobs/backtest_engine.py` `trading_signal`'dan hiç söz etmiyor,
+  `domain/backtest/` altında `trading_signal.events` import edilmiyor ve engine'in kendi
+  `SignalEventRow`'u bir **çıktı** günlüğü. Motordaki tek `available_at` kapısı funding/research
+  ekseni — bu satırın ödünç almaması söylenen kardeş.
+- **`TS-02.c2` YANLIŞLANAMAZ** — transient draft açıcı (`start_external_work_object_draft`)
+  **session'sız saf bir fonksiyon**; tek çağıranı yalnız `actor` ve `kind` geçiyor. Draft'ın
+  snapshot'ta görünebileceği hiçbir yol yok, yani yeşil bir assertion **kapsamak değil
+  işaretlemek** olurdu. **Bilerek açık bırakıldı.**
+
+Doc 04'te sınıf B kalmadı; kalan satırlar iki bulgu ve önceden sınıf-D olan `TS-03`.
+`PROJECT_HISTORY.md` §ADIM 76 · `docs/ADIM76_LANDED_KICKOFF.md`.
+
+
+## Stage 79 — kabul borcu batch 09 (doc 03 backend): iki kriter kapandı, iki bulgu landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**, containment `future_dev`. Blocker sayısı
+**değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+Doc 03 (Add Outsource Signal), **backend** yüzeyi. Beş sınıf-B adayının her birinin tek açık
+clause'u vardı; **ikisi kapandı, ikisi bulgu çıktı, biri frontend olduğu için ertelendi**.
+
+| Kriter | Kapanan clause | Neden açıktı |
+|---|---|---|
+| `AOS-13` | `.c3` | doc 03 §13'ün adlandırdığı **SUPERVISOR** rolü hiç sürülmemişti (testler ikinci bir düz USER ya da Agent seçiyordu) |
+| `AOS-05` | `.c1` | transient-draft sözleşmesi yalnız **trading_signal** dalında kanıtlıydı; `trade_log` ödünç alınmamıştı |
+
+**Tavanlar İNDİ:** `partial` **93 → 91**, `debt_class.B` **62 → 60**. Açık kabul borcu
+**101 → 99** (A=1 · B=60 · C=6 · D=32). Clause düzeyinde `covered` **1019 → 1021**,
+`uncovered` **108 → 106**.
+
+**`AOS-13.c3` iki fiili de sürer** (`create_work_object_revision` **ve**
+`soft_delete_work_object`), **iki external kind** üzerinde, ve reddin **kalıcı** olduğunu
+doğrular. Edit çağrısı geçerli bir `available_time` taşır — yoksa çağrı izinli bir aktör için
+bile anti-lookahead doğrulamasına takılırdı ve **red yetkilendirmeye atfedilemezdi**.
+
+**İKİ negatif kontrol, ikisi de kırmızı:** `can_edit`'e `Role.SUPERVISOR` kısayolu → iki
+parametrizasyonda da `DID NOT RAISE AccessDeniedError`; opener yalnız `TRADE_LOG` dalında
+`root_id` döndürünce → yeni test kırmızı, **kardeşi yeşil kalıyor** (per-kind pinlemenin
+varlık sebebi tam olarak bu).
+
+**İKİ BULGU — ikisi de YANLIŞLANAMAZ:**
+- **`AOS-04.c2`** `TS-02.c2`'nin **birebir ikizi**; satırın kendi notu zaten kabul ediyordu
+  (*"bu bir argüman, assertion değil"*).
+- **`AOS-06.c2` daha da net:** `discard` `commands/mainboard.py` ve `routes/mainboard.py`
+  içinde **hiç geçmiyor** — discard komutu, ucu, handler'ı **yok**. Tek anma
+  `OutsourceSignal.tsx:97`'deki *"leaving this page discards nothing durable"* yorumu, yani
+  yokluğun **tarifi**. Clause bir **eylemsizliğin** etkisizliğini iddia ediyor.
+
+**`AOS-01.c2` ertelendi, kapatılamaz olduğu için değil FRONTEND olduğu için** — chooser
+seçimleri link olarak render ediliyor, yani klavye pariteliği native; assertion yazılabilir ve
+negatif kontrolü gerçek (link'i `div onClick` yapmak). Doc 07'nin batch 06/07 bölünmesinin
+aynısı. `PROJECT_HISTORY.md` §ADIM 78 · `docs/ADIM78_LANDED_KICKOFF.md`.
+
 
 ## Stage 80 — kabul borcu batch 10 (doc 03 frontend): AOS-01 kapandı, doc 03'ün test borcu bitti landed
 

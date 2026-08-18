@@ -594,7 +594,7 @@ verification without 19 copies of the same block.
 | Field | Value |
 |---|---|
 | **Goal** | One new module: an engine-backed participant, plus the two invariants that make dual booking safe rather than lucky. |
-| **Prerequisites** | **C2 merged** |
+| **Prerequisites** | **C2 merged** (#759, açık) + **importer-allowlist kararı** — ✅ **İMZALANDI 2026-08-18, Seçenek A** (allowlist tek adlandırılmış modülle genişler): `docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`. Gate değişikliği `C3`'e aittir ve **negatif kontrol zorunludur**. |
 | **Canonical source** | ADR §5, §8.2; P-C2 §C.1, §C.3.1–§C.3.6 |
 | **Production files** | **`domain/backtest/participant.py` — ONE new module.** Deliberately **outside** `execution/`: placing it at `domain/backtest/execution/participant.py` would dodge the containment gate's importer check *by construction*, making the guard blind rather than satisfied. Outside, the guard turns red and the allowlist must be widened **explicitly and reviewed**. |
 | **Test files** | new oracle file: the **reconciliation invariant** (portfolio-ledger attribution deltas == item `_Ledger` realized deltas, on a two-item fixture) and the **sleeve-parity invariant** (`sleeve_capital(stepper.ctx, snapshot.equity) == snapshot.sleeve_capacity[item_id]` at every tick for every item) |

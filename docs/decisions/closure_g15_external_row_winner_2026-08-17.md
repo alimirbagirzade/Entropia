@@ -203,15 +203,99 @@ sayamadı.**
 3. Repoda bu sayıyı taşıyan **üretilmiş bir artefakt yok**: `docs/generated/repository_facts.md`
    şema/route/test **sayılarını** üretir, **satır** sayılarını değil.
 
-**Sayının imzadan ÖNCE alınması gerekir ve sorgusu şudur** (salt-okuma, iki tablo için ayrı):
+**Sayının imzadan ÖNCE alınması gerekir.** Sorgu aşağıdadır ve **artık bir taslak değil,
+doğrulanmış bir betiktir** (2026-08-18'de eklendi — §"Betiğin doğrulanması"). Salt-okuma:
+yazma yok, DDL yok, düz bir `SELECT`'ten fazla kilit yok.
 
 ```sql
-SELECT work_object_revision_id, count(*) AS n
+-- =====================================================================
+-- G15 blast radius (ÖLÇÜM 3) — üretimdeki duplikasyon sayımı
+-- SALT-OKUMA. Doğrulandı: alembic head 0043_i08_registry_strategy_fks.
+-- Çalıştırma:  psql "$PROD_READONLY_URL" -f g15_blast_radius.sql
+--
+-- §İMZA SATIRI'nın BİRİNCİ kutusunu doldurur:
+--   canonical_trade_record_batch: ___   normalized_signal_event_revision: ___
+-- Seçenek A ve C bu sayı 0 çıkmadan imzalanamaz; B ve D bu sayıdan bağımsızdır.
+-- =====================================================================
+
+\echo '--- 1. SAYI (imza kutusunun istediği budur) ---'
+SELECT 'canonical_trade_record_batch' AS table_name,
+       count(*) AS revision_ids_with_duplicates,
+       coalesce(sum(n), 0) AS total_rows_involved
+FROM (
+  SELECT work_object_revision_id, count(*) AS n
+  FROM canonical_trade_record_batch
+  WHERE work_object_revision_id IS NOT NULL
+  GROUP BY work_object_revision_id HAVING count(*) > 1
+) d
+UNION ALL
+SELECT 'normalized_signal_event_revision',
+       count(*), coalesce(sum(n), 0)
+FROM (
+  SELECT work_object_revision_id, count(*) AS n
+  FROM normalized_signal_event_revision
+  WHERE work_object_revision_id IS NOT NULL
+  GROUP BY work_object_revision_id HAVING count(*) > 1
+) d;
+
+\echo '--- 2. İHLAL EDEN SATIRLAR (yukarıdaki sayı 0 ise boş) ---'
+SELECT 'canonical_trade_record_batch' AS table_name,
+       work_object_revision_id, count(*) AS n
 FROM canonical_trade_record_batch
 WHERE work_object_revision_id IS NOT NULL
-GROUP BY work_object_revision_id HAVING count(*) > 1;
--- aynısı normalized_signal_event_revision için
+GROUP BY work_object_revision_id HAVING count(*) > 1
+UNION ALL
+SELECT 'normalized_signal_event_revision',
+       work_object_revision_id, count(*)
+FROM normalized_signal_event_revision
+WHERE work_object_revision_id IS NOT NULL
+GROUP BY work_object_revision_id HAVING count(*) > 1
+ORDER BY 1, 3 DESC;
+
+\echo '--- 3. BAĞLAM: kısıt hâlâ YOK mu? (Seçenek A ön koşulu) ---'
+SELECT conrelid::regclass AS table_name, conname, contype
+FROM pg_constraint
+WHERE conrelid IN ('canonical_trade_record_batch'::regclass,
+                   'normalized_signal_event_revision'::regclass)
+  AND contype IN ('u','p')
+ORDER BY 1;
 ```
+
+**Üçüncü blok neden var:** Seçenek A'nın ön koşulu yalnız sayının 0 olması değil, kısıtın
+**hâlâ yok** olmasıdır. Bu belge o yokluğu 2026-08-17'de ölçtü; sorgu koşulduğu gün onu
+**yeniden** ölçer, çünkü aradan geçen sürede bir migration inmiş olabilir.
+
+#### Betiğin doğrulanması (2026-08-18)
+
+**Üretim sayısı HÂLÂ ALINMADI** — yukarıdaki üç gerekçe **aynen geçerlidir**. Doğrulanan şey
+sayı değil, **betiğin kendisidir**: bir gün üretimde koşturulduğunda çıkacak sonucun bir sorgu
+hatasından değil, veriden geleceği garanti edilmiştir.
+
+**Yöntem.** Yerelde Postgres 16 kuruldu ve `alembic upgrade head` ile **gerçek şema**
+(`0043_i08_registry_strategy_fks`) oluşturuldu. Betik bu şemaya karşı **iki yönde** koşturuldu:
+
+| Kontrol | Ekilen veri | Beklenen | Ölçülen |
+|---|---|---|---|
+| **Pozitif** | aynı `work_object_revision_id`'yi paylaşan **2** satır + `1` tekil satır + `1` NULL satır | yalnız paylaşılan id, `n=2` | **`worev_SHARED, n=2`** — tekil satır ve NULL satır **doğru şekilde** raporlanmadı |
+| **Negatif** | duplikasyon silindi | **0** | **0** |
+
+> **Bunun önemi:** negatif kontrol olmadan üretimden dönecek bir **`0`** iki anlama gelebilirdi
+> — *"duplikasyon yok"* ya da *"sorgu bozuk"*. İki kontrol birlikte koşturulduğu için üretimden
+> dönecek `0` **gerçek bir 0**'dır. §İMZA SATIRI'nın birinci kutusu bir *"sayıldı ve 0"*
+> işaretini ancak bu ayrım yapılabiliyorsa taşıyabilir.
+
+**Doğrulama sırasında §Ölçüm 2a bağımsız olarak YENİDEN ÖLÇÜLDÜ ve DOĞRULANDI:** pozitif
+kontrolün ekimi, aynı `work_object_revision_id`'yi taşıyan ikinci satırı **kabul etti** — ne
+şema, ne kısıt, ne de bir trigger reddetti. Duplikasyon bu şemada bugün de **fiziksel olarak
+mümkündür**.
+
+**§Ölçüm 2b'nin üç şema iddiası da aynı koşuda yeniden ölçüldü** (`0043` üzerinde,
+`information_schema` + `pg_index` + `pg_constraint`): kolon iki tabloda da var ve
+`nullable`; üzerindeki index iki tabloda da **`indisunique = f`**; iki tabloda `contype IN
+('u','p')` olan **tek** kayıt kendi PK'larıdır. **Üçü de değişmemiştir.**
+
+**Bu doğrulama repoya bir dosya EKLEMEDİ** — betik bu belgenin içinde yaşar, `scripts/`
+altında değil; kurulan Postgres **atılabilir** bir örnekti ve doğrulama bitince **silindi**.
 
 **Bu sayı hangi seçeneği ucuzlatır/pahalılaştırır:**
 

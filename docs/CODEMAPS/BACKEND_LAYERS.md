@@ -168,8 +168,9 @@ sembolü "yok" saymak da (#582 gövdesi), bağlı olmayan bir sembolü "çalış
 
 | Sembol | Tanım | Üretim çağıranı | Test çağıranı | Doğru tek cümle |
 |---|---|---|---|---|
-| `run_portfolio` | `portfolio_engine.py:550` | **SIFIR** | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** |
-| `ItemParticipant` | `portfolio_engine.py:270` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var; onu gerçekleyen üretim adapter'ı YOK.** Ayrıca **write-only**: `settle`/`finalize` yok → `C2`. |
+| `run_portfolio` | `portfolio_engine.py:717` | **SIFIR** | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** PR #759'dan beri `iter_portfolio`'nun sarmalayıcısı — imza ve semantik değişmedi. |
+| `iter_portfolio` | `portfolio_engine.py:628` (generator) | **SIFIR** | aynı harness (`run_portfolio` üzerinden) | **PR #759'da sevk edildi.** Faz döngüsünün tick-drivable biçimi; `PortfolioRun` `StopIteration.value`'dan gelir. **Containment taramasında ADLANDIRILMIŞTIR** (`_LOOP_ENTRY_POINTS`) — o ekleme olmadan üretim tüm fazları buradan sürerken assertion yeşil kalırdı. |
+| `ItemParticipant` | `portfolio_engine.py:274` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var; onu gerçekleyen üretim adapter'ı YOK** (`C3`, hâlâ açık). **Artık write-only DEĞİL:** `settle` (`:319`) ve `finalize` (`:334`) PR #759'da **zorunlu** üye olarak sevk edildi — `hasattr` ile yoklanmıyor, çünkü yoklama fail-open'dır. |
 | `project_portfolio_run` | `execution/portfolio_projection.py:513` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_projection.py` | **Gerçeklenmiş ve bağlanmamış.** |
 | `build_portfolio_manifest` | `execution/provenance.py:473` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_provenance.py` | **Gerçeklenmiş ve bağlanmamış.** |
 | `_ItemStepper` | `engine.py:818` | **`run_engine` (`:3533`) → worker `jobs/backtest_engine.py:859`** | stepper + phase suite'leri | **Gerçeklenmiş ve ÜRETİMDE AKTİF** (PR #602'den beri). **ADIM 69'den beri altı describe/book alanı da taşır.** |
@@ -215,9 +216,21 @@ olmalı ve **tek** yerde karar verilmeli.
 | `mandatory_exit(view, *, held) -> MandatoryExit \| None` | `evaluate_held(bar) -> _HeldDecision \| None` + `apply_held` | **tarif VAR** — kolu adlandırır, kapatmaz |
 | `entry(view, snapshot, *, held) -> ItemIntent \| None` | `evaluate_entry(bar) -> _EntryDecision \| None` + `apply_entry` | **tarif VAR** — ölçülmüş **sıfır** etki |
 
-**Kalan engel `ItemParticipant`'ın kendisidir: WRITE-ONLY.** Loop bir kaleme neyin
-**admitted** olduğunu söyleyemez — `settle` yok, `finalize` yok, `PHASE_ORDER`'da P10 yok
-(`portfolio_engine.py:129`, sekiz faz), `iter_portfolio` yok. `settle` olmadan book
+> **BU PARAGRAF ARTIK TARİHSELDİR — `C2` sevk edildi (PR #759, `c78b15b`, ADIM 82).**
+> Aşağıdaki *"WRITE-ONLY"* teşhisi **2026-08-18 öncesini** anlatır; ölçüm için tablodaki
+> `ItemParticipant` ve `iter_portfolio` satırlarına bak. Bugünkü gerçek: `settle`
+> (`portfolio_engine.py:319`) ve `finalize` (`:334`) **zorunlu** Protocol üyesi,
+> `PHASE_ORDER` **dokuz faz** (`:130`, P10 dahil), `iter_portfolio` (`:628`) sevk edilmiş.
+> **G9 ve G13 de artık imzasız DEĞİL** — ADR `0002` §13.2, `9fc5580` (PR #753), 2026-08-17:
+> **G9 = APPROVED**, **G13 = FOLD**. `fold_tick` (`execution/portfolio_ledger.py:799`) o
+> kararın uygulamasıdır ve **tasarım belgesinin pseudocode'unu bilerek izlemez** (o
+> `commit_tick` ile APPEND ederdi = G13'ün reddettiği seçenek). **Kalan engel `C3`'tür:**
+> Protocol'ün üretim implementor'ı hâlâ **yok**, ve önünde importer-allowlist **insan
+> incelemesi** durur (brif #761, Seçenek A imzalandı 2026-08-18).
+
+**[TARİHSEL — #759 öncesi] Kalan engel `ItemParticipant`'ın kendisidir: WRITE-ONLY.** Loop bir
+kaleme neyin **admitted** olduğunu söyleyemez — `settle` yok, `finalize` yok, `PHASE_ORDER`'da
+P10 yok (`portfolio_engine.py:129`, sekiz faz), `iter_portfolio` yok. `settle` olmadan book
 edilebilecek tek yer `entry()`'nin içidir → **arbitrasyondan ÖNCE**, arkasında
 `PortfolioSnapshot` olmayan sermaye taahhüdü.
 

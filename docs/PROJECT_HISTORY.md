@@ -11621,3 +11621,75 @@ tavan sessizce geçmez — `test_the_frozen_ceiling_leaves_no_headroom` kırmız
 **NUMARA:** main'in son kaydı **ADIM 77**; **78 ve 79 PR #768'in** (batch 08 + 09), o yüzden bu
 slice **80**. #768 bu PR'dan sonra inerse merge edilmiş ad kazanır ve bu kayıt taşınır.
 `docs/ADIM80_LANDED_KICKOFF.md`.
+
+
+## ADIM 82 — kayıtsız inen C2'nin ritüeli (PR #759): ürün kodu SEVK EDİLDİ, kaydı YOKTU
+
+> **BU KAYIT GERİYE DÖNÜKTÜR.** Slice `c78b15b` ile **2026-08-18T13:42Z**'de main'e indi;
+> `PROJECT_HISTORY.md`'de **hiç anılmadı** (`grep -c '#759'` → **0**), handoff satırı ve
+> kickoff'u yoktu. Kapanış ritüelinin 1–6. maddeleri bu slice için **hiç koşmadı**. Aynı
+> desen bu depoda tanınmıştır: **#728/#729 = ADIM 69/70** de kayıtsız inip sonradan bir
+> ritüel PR'ı ile kapatılmıştı. **Anlatı UYDURULMADI** — aşağıdaki her iddia ağaca karşı
+> yeniden ölçüldü, PR gövdesinden kopyalanmadı (bir yerinde gövde **yanlıştı**, aşağıya bak).
+
+> **ÜRÜN KODU DEĞİŞTİ, gözlenebilir DAVRANIŞ DEĞİŞMEDİ.** Migration **yok** · OpenAPI
+> **değişmedi** · `ENGINE_VERSION` **değişmedi** (`backtest-engine-v18-percent-sizing-per-fill-commission`) ·
+> `SHARED_ALLOCATION_STATUS` = **`future_dev`** · `engine_golden_digests.json` **dosya listesinde
+> YOK** (dokunulmadı). 8 dosya, **+457 / −13**. Üretimde `run_portfolio`'yu hiçbir şey
+> çağırmıyor — containment gate bunu koşuyor — dolayısıyla **sevk edilmiş hiçbir sayı oynayamaz**.
+> **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+**Ne sevk edildi (ölçüldü, `backend/src` üzerinde):**
+
+| Sembol | Yer | Ne |
+|---|---|---|
+| `ItemParticipant.settle` | `portfolio_engine.py:319` | P7'de, `set_position`'dan **sonra**; `admitted` **verilen** rakamları taşır |
+| `ItemParticipant.finalize` | `portfolio_engine.py:334` | P10, veri bitiminde zorunlu kapanış |
+| `PHASE_ORDER` | `portfolio_engine.py:130` | **8 → 9 faz**: `P10` eklendi (`…, "P7", "P9", "P10"`) |
+| `PortfolioLedger.fold_tick` | `execution/portfolio_ledger.py:799` | G13 **FOLD**'un uygulaması |
+| `iter_portfolio` | `portfolio_engine.py:628` | tick-drivable generator; `run_portfolio` (`:717`) onun sarmalayıcısı |
+
+**İki Protocol üyesi de ZORUNLU — `hasattr` ile yoklanmıyor.** Yoklama fail-open'dır:
+`settle`'ı unutan bir participant sessizce düz koşardı.
+
+**G13 sözleşmesi pseudocode'u değil, defteri izliyor.** P-C2 §C.3.10 P10'u
+`ctx.ledger.commit_tick(last_t_ms)` ile bitiriyordu; ama `commit_tick` **APPEND eder**, yani son
+tick o `t_ms`'te zaten bir nokta bıraktıysa aynı ana **ikinci** nokta konurdu — ADR-0002 §13.2'nin
+**açıkça reddettiği** seçenek. `fold_tick` noktayı `seq`'ini koruyarak **yerinde değiştirir**,
+fold edilecek bir şey yoksa append eder → her instant'ta **tam olarak bir nokta**, **A5
+by-construction** kalır. **Tasarım belgesinin talimatını harfiyen uygulamak imzalanan kararı
+ihlal eden kod üretirdi** (ADIM 70'in dersinin tekrarı: *"şu dosyaya koy" ölçülmüş bir kısıt değildir*).
+
+**PR GÖVDESİ BİR NOKTADA YANLIŞTI — kayıt ağacı izler.** Gövde *"containment gate el değmedi"*
+diyor; **değdi ve GÜÇLENDİ.** `test_oracle_portfolio_containment_gate.py` artık
+`_LOOP_ENTRY_POINTS = ("run_portfolio", "iter_portfolio")` tanımlıyor ve caller taraması **iki**
+adı birden arıyor; ayrıca YENİ bir meta-test (`test_every_public_loop_driver_is_named_in_the_caller_scan`)
+`participants` alan her public callable'ın tuple'da adlandırılmasını zorunlu kılıyor. Sebebi
+ölçülmüş bir tehlike: **C2 `iter_portfolio`'yu eklerken tarama hâlâ yalnız `run_portfolio`'yu
+arıyordu**, yani bir üretim modülü P10 dahil tüm fazları sürerken containment assertion'ı
+**yeşil kalabilirdi**. Kapı zayıflatılmadı — **genişletildi**.
+
+**`PHASE_ORDER`'ın hiç testi yokmuş.** Sabitin docstring'i *"bir test sözleşmeyi kaynağı yeniden
+okumadan assert edebilsin diye değer olarak yayımlandı"* diyor; öyle bir test **hiç yazılmamıştı**.
+Yazıldı (`test_oracle_portfolio_finalize.py`, +222).
+
+**Negatif kontroller — üçü de kendi testini izole etti:** `fold_tick` → `commit_tick` (G13'ün
+append'i) çift-nokta testini kırmızıya çevirdi · `settle` çağrısı kaldırılınca settle testi ·
+P10 devre dışı bırakılınca kapanış testi. Fold testi ayrıca **vacuity muhafızı** taşıyor (son
+tick'in gerçekten bir nokta commit ettiğini ayrıca assert ediyor), yoksa *"çift nokta yok"*
+iddiası **yanlış sebeple** geçerdi.
+
+**İMZA ZİNCİRİ TAMDI.** Bu slice ADR-0002 **§13.2**'nin (`9fc5580`, PR #753, 2026-08-17)
+imzaladığı sözleşmeyi uygular: **G9 = APPROVED**, **G13 = FOLD**. #740'ın emsali
+(*"PO imzaladı" yazıp onaylanmamış olması*) burada **tekrarlanmadı** — imza ağaçta.
+
+**BU SLICE'IN KAPATMADIKLARI:** **§16 Gate 2** (containment lift) **TALEP EDİLMEDİ** ·
+`participant.py` importer-allowlist incelemesi — `C3`'ün önündeki insan kapısı, **sonradan
+#761 ile Seçenek A olarak imzalandı** · **G11** (P2) ve **G12** (P8) açık · **A-08 DEĞİŞMEDİ**.
+**Sıradaki:** `C3` — `_EngineParticipant` adaptörü.
+
+**NUMARA:** kayıt geriye dönük olduğu için **sıradaki boş numarayı** alır (ADIM 69/70 emsali).
+78 ve 79 PR #768'in (batch 08 + 09), 80 #775'in, **81 PR #776'nın** (#769'un kapanış
+ritüeli) → bu kayıt **82**. Numara merge sırasına bağlıdır ve merge'den hemen önce yeniden
+doğrulanmıştır; **merge edilmiş ad kazanır**. Slice'ın kendi kickoff'u **yoktur ve
+yazılmamıştır** (geriye dönük kayıt; canlı seed en yüksek numaralı belgedir).

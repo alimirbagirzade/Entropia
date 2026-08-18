@@ -237,7 +237,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 80 (kabul borcu batch 10, doc 03 frontend): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 82 (kayıtsız inen `C2`'nin ritüeli, PR #759): BU SLICE
+> DEFTER, KAYDETTİĞİ SLICE ÜRÜN KODU. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> #759 (`c78b15b`) `settle`/`finalize`'ı **zorunlu** Protocol üyesi yaptı, `PHASE_ORDER`'ı
+> **8 → 9 faza** çıkardı (P10), `PortfolioLedger.fold_tick` (G13 = FOLD) ve `iter_portfolio`'yu
+> sevk etti — ama `PROJECT_HISTORY.md`'de **hiç anılmıyordu** (`grep -c '#759'` → 0), yani
+> ritüelin 1–6. maddeleri hiç koşmadı (#728/#729 = ADIM 69/70 emsali). **DERS: PR gövdesi
+> otorite değildir** — gövde *"containment gate el değmedi"* diyordu, ölçüldü: gate **güçlendi**
+> (`_LOOP_ENTRY_POINTS` artık `iter_portfolio`'yu da arıyor), o ekleme olmadan üretim tüm fazları
+> o giriş noktasından sürerken assertion **yeşil kalabilirdi**. **Sıradaki mühendislik kalemi
+> `C3`** (`execution/participant.py` yok; önünde importer-allowlist **insan incelemesi**, #761
+> ile Seçenek A imzalandı). Kickoff'u **YOK, bilerek** (geriye dönük kayıt).
+> `PROJECT_HISTORY.md` §ADIM 82.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 80 (kabul borcu batch 10, doc 03 frontend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Tek clause: **`AOS-01.c2`** (chooser klavye paritesi) — parite **native** (`OutsourceSignal.tsx`
 > seçimleri `<Link>` render eder), eksik olan **assertion**'dı. **DERS: "seçimler link" demek

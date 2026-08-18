@@ -6990,6 +6990,31 @@ yazılırdı; bu container o suite'i koşamadığı için (Docker Hub **403**) *
 `docs/ADIM80_LANDED_KICKOFF.md`.
 
 
+## Stage 82 — kayıtsız inen `C2`'nin ritüeli (PR #759): ürün kodu sevk edildi, kaydı yoktu landed
+
+**Ne indi.** Yalnız **defter** — `backend/src` altında bu slice'ta **sıfır** satır. Kaydettiği
+slice ise ürün kodu değiştirdi: **PR #759** (`c78b15b`, 2026-08-18T13:42Z) `settle` + `finalize`
+**zorunlu** Protocol üyelerini, `PHASE_ORDER`'a **P10**'u (8 → 9 faz), `PortfolioLedger.fold_tick`
+ve `iter_portfolio`'yu sevk etti. `ENGINE_VERSION` **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `engine_golden_digests.json` **dokunulmadı**.
+
+**Neden bir ritüel PR'ı.** #759 main'e indi ama `PROJECT_HISTORY.md`'de **hiç anılmıyordu**
+(`grep -c '#759'` → **0**); handoff satırı ve kickoff'u yoktu, yani kapanış ritüelinin 1–6.
+maddeleri o slice için **hiç koşmadı**. Aynı desen **#728/#729 = ADIM 69/70**'te de yaşandı ve
+sonradan bir ritüel PR'ı ile kapatılmıştı — bu onun tekrarı.
+
+**Anlatı uydurulmadı.** Her iddia ağaca karşı yeniden ölçüldü, PR gövdesinden kopyalanmadı — ve
+gövde **bir noktada yanlış çıktı**: *"containment gate el değmedi"* diyor, oysa gate **güçlendi**
+(`_LOOP_ENTRY_POINTS` artık `iter_portfolio`'yu da arıyor + yeni bir meta-test `participants`
+alan her public callable'ın tuple'da adlandırılmasını zorunlu kılıyor). O ekleme olmadan bir
+üretim modülü P10 dahil tüm fazları `iter_portfolio` üzerinden sürerken containment assertion'ı
+**yeşil kalabilirdi**.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `SHARED_ALLOCATION_STATUS` =
+`future_dev`. `PROJECT_HISTORY.md` §ADIM 82. **Kickoff'u YOK, bilerek** — geriye dönük kayıt
+(ADIM 70 emsali); canlı seed en yüksek numaralı kickoff belgesidir.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ÖNCE BUNU OKU — bu bloğun ALTINDAKİ iki güncelleme `G9`/`G13` için BAYATTIR (2026-08-18'de
@@ -7002,8 +7027,9 @@ yazılırdı; bu container o suite'i koşamadığı için (Docker Hub **403**) *
 > oturumun devir promptu tam olarak buna düştü). Alttaki iki paragraf **bilerek
 > değiştirilmedi** — ölçtükleri anı donduran slice girdileridir (ADIM 65 emsali).
 >
-> **Ölçülmüş sonuç:** `C2` (E4b) bir imza beklemiyor, **kod bekliyor** — ve `PR #759` onu
-> sevk ediyor (`settle` + `finalize` **zorunlu** Protocol üyesi, `hasattr` probe'u yok,
+> **Ölçülmüş sonuç:** `C2` (E4b) bir imza beklemiyor, **kod bekliyor** — ve `PR #759`
+> **onu sevk ETTİ ve MERGE EDİLDİ** (`c78b15b`, 2026-08-18T13:42Z; kaydı **ADIM 82**, geriye
+> dönük yazıldı). Sıradaki mühendislik kalemi artık `C2` değil **`C3`**. Sevk edilenler: (`settle` + `finalize` **zorunlu** Protocol üyesi, `hasattr` probe'u yok,
 > `PHASE_ORDER` **dokuz faz** → P10, `iter_portfolio`). **Hâlâ imzasız olan kapılar
 > başkadır:** `G12` (Karar 6 — `C6`), Karar 1 (#552 — `F3`), Karar 3 (#559 — `C9`),
 > `G4` (`F2`), ve `G10` (Gate 2 / containment lift) **hiç talep edilmedi**.

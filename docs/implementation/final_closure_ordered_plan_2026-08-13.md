@@ -287,7 +287,7 @@ The prompt names six. **This table registers sixteen (G1–G16).**
 | **G8** | **#559 DST fold/gap — is it required for shared mixed-zone?** | **UNSIGNED.** GH #559 **OPEN**, labelled `blocks-mixed-zone-axis`. **P-DEC answered the scoping question and it awaits ratification:** the decision doc's *hüküm (a)* is that #559 blocks the **mixed-zone scope only, not the axis arithmetic** — with its own `[ ] evet / [ ] hayır` box at `decisions:706-717` | PO / maintainer | `decisions §Karar 3`, ADR §12 | signature block `decisions:706-717` | **C9 only** (E6 precondition #21). **Not E4, not E5** — under fail-closed admission no shared run can reach a mixed-zone axis |
 | **G9** | **ADR §16 Gate 1** — amend ADR §6/§8 to add `settle`, `finalize`, P10, `iter_portfolio` | ✅ **SIGNED 2026-08-17** by the PO; amendment applied as ADR `0002` **§13.2** (§6 clauses 6–7, §8.2 phase P10). No product code shipped with it | PO / maintainer | `docs/adr/0002…md` §6, §8, §16 | an ADR amendment entry, same shape as the §13.1 table | **C2** |
 | **G10** | **ADR §16 Gate 2** — flag flip + `ENGINE_VERSION` bump | **NOT REQUESTED.** §16: *"should hold for ADIM 20, which is the first slice that changes a shipped number"* | PO / maintainer | ADR §14 acceptance matrix, §16 | ADR §16 approval record | **C9** |
-| **G11** | **P2 — deferred fills / resting limits on shared runs** (block at admission, or model P2) | **UNDECIDED, unbriefed.** P-C2 §C.3.7 recommends (a) block | PO / maintainer | P-C2 §C.3.7; doc 14 §9.1 taxonomy | needs a new admission blocker code + a decision entry | **C6** |
+| **G11** | **P2 — deferred fills / resting limits on shared runs** (block at admission, or model P2) | **UNDECIDED, but BRIEFED 2026-08-18** — signature block created, all boxes `[ ]`. P-C2 §C.3.7 recommends (a) block | PO / maintainer | `docs/decisions/closure_g11_deferred_fill_admission_2026-08-18.md`; P-C2 §C.3.7; doc 14 §9.1 taxonomy | that decision doc's §Karar | **C6** |
 | **G12** | **P8 — scaling on shared runs** (block at admission, or model P8) | ✅ **BRIEFED 2026-08-17 (PR #752), still UNSIGNED.** Was *"UNDECIDED, unbriefed"*. `run_portfolio` currently raises `UnsupportedIntentKindError` | PO / maintainer | P-C2 §C.3.8 | `closure_product_decisions_2026-08-13.md` §**Karar 6**, signature block `karar veren:` blank | **C6**, and the size of **C1** |
 | **G13** | **P10 end-of-data equity point** — append a new point at the last `t_ms`, or fold into it | ✅ **DECIDED 2026-08-17: FOLD** (`commit_tick` at the same `t_ms` after the closes). Appending was rejected — it would break A5's by-construction claim. Recorded in ADR `0002` §13.2 | PO / maintainer | P-C2 §C.3.10; ADR §14 A5 | ADR amendment alongside G9 | **C2** |
 | **G14** | **#544 NET cross-item conflict semantics** | GH #544 **OPEN**, `product-decision` + `blocks-adim-19` | PO / product | ADR §9.4 | GH #544 | **C9** (E6 precondition #20) |
@@ -300,6 +300,19 @@ The prompt names six. **This table registers sixteen (G1–G16).**
 > G4), each as its own file under `docs/decisions/`. **Neither is signed**, and neither can be
 > discharged by an agent — that part is unchanged. The action this plan requested has been
 > performed; the decision it requested has not.
+
+> **Addendum, 2026-08-18 — the briefed-but-unsigned set gained a fourth member, and it is not
+> the last gate in play.** The paragraph above and the *"Brifingli ama imzasız"* note below name
+> **G4, G12, G15**; **G11** now belongs with them (`closure_g11_deferred_fill_admission_2026-08-18.md`
+> — nine measurements, four options, every box `[ ]`). That note's rule applies to it unchanged:
+> **a block is not a signature, and G11 still counts as open.** No count moves.
+>
+> **A seventeenth human gate exists and this table has never registered it:** the `participant.py`
+> importer-allowlist decision (`closure_participant_importer_allowlist_2026-08-18.md`, PR #761),
+> **SIGNED 2026-08-18, Option A** — the containment gate's allowlist widens by one named module
+> when `C3` creates it. It is a real gate (it blocked `C3`, a human opened it, and it is
+> discharged) but it is **not** G1–G16, so every count in this section excludes it. Registering
+> it as `G17` would move three numbers and is deliberately **not** done here.
 
 **Count, stated three ways because the three numbers differ and each is used somewhere below:**
 

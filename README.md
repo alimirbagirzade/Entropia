@@ -80,7 +80,7 @@ This repository is built **stage by stage** from a canonical specification (see
 | `ENGINE_VERSION` | `backtest-engine-v18-percent-sizing-per-fill-commission` |
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3658 in 349 files |
+| Backend tests **collected** (static, not a pass count) | 3670 in 349 files |
 | Backend `xfail` markers | 0 (0 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 724 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |

@@ -559,6 +559,74 @@ def test_a_correctly_classified_open_criterion_passes(fake_root: Path) -> None:
         assert codes(fake_root, _open_record(debt_class=cls)) == []
 
 
+# ---------------------------------------------------------------------------
+# The `unfalsifiable` clause marker.
+#
+# Four clauses accumulated one batch at a time, each re-measuring the same shape:
+# the clause asserts the ABSENCE of a surface that is transient or was never
+# shipped, so the only writable test passes today and cannot be made to fail. The
+# marker records that ruling. It deliberately does NOT close the clause or move it
+# out of `partial`/`uncovered` — that would raise a ceiling, which is a separate
+# decision. These tests pin both halves: the marker is constrained, and it is inert
+# with respect to every count.
+
+
+def _unfalsifiable_record(**overrides: Any) -> dict[str, Any]:
+    record = _open_record()
+    record["clauses"][1]["unfalsifiable"] = True
+    record.update(overrides)
+    return record
+
+
+def test_an_unfalsifiable_marker_on_a_proven_clause_is_refused(fake_root: Path) -> None:
+    """A clause that already cites a passing test is not unfalsifiable by definition."""
+    record = _open_record()
+    record["clauses"][0]["unfalsifiable"] = True
+    assert "UNFALSIFIABLE_NOT_UNCOVERED" in codes(fake_root, record)
+
+
+def test_a_non_bool_unfalsifiable_marker_is_refused(fake_root: Path) -> None:
+    record = _open_record()
+    record["clauses"][1]["unfalsifiable"] = "yes"
+    assert "BAD_UNFALSIFIABLE" in codes(fake_root, record)
+
+
+def test_an_unfalsifiable_uncovered_clause_validates(fake_root: Path) -> None:
+    assert codes(fake_root, _unfalsifiable_record()) == []
+
+
+def test_the_marker_subtracts_from_no_count(fake_root: Path) -> None:
+    """The whole point of the ruling: it explains debt, it does not discharge it."""
+    plain = scan.measured_counts({"criteria": [_open_record()]})
+    marked = scan.measured_counts({"criteria": [_unfalsifiable_record()]})
+    assert plain == marked
+    assert marked["status"]["partial"] == 1
+    assert marked["debt_class"]["B"] == 1
+
+
+def test_the_ledger_names_every_marked_clause(fake_root: Path) -> None:
+    rendered = scan.ledger({"criteria": [_unfalsifiable_record()]})
+    assert "## Unfalsifiable clauses (1)" in rendered
+    assert "`XX-01.c2`" in rendered
+    assert "_of which unfalsifiable clauses (still counted)_ | _1_" in rendered
+
+
+def test_the_shipped_map_marks_the_four_adjudicated_clauses(
+    shipped_map: dict[str, Any],
+) -> None:
+    """The ruling itself, pinned: exactly these four, and each still open debt."""
+    marked = {
+        clause["id"]: record
+        for record in shipped_map["criteria"]
+        for clause in record.get("clauses", [])
+        if clause.get("unfalsifiable")
+    }
+    assert set(marked) == {"TS-02.c2", "PC-02.c2", "AOS-04.c2", "AOS-06.c2"}
+    for clause_id, record in marked.items():
+        assert record["status"] == "partial", clause_id
+        assert record["debt_class"], clause_id
+
+
 # ---- the ratchet -----------------------------------------------------------
 
 _BASELINE: dict[str, Any] = {

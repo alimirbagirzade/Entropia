@@ -136,6 +136,36 @@ async def test_external_trading_signal_draft_is_transient(app) -> None:
         next(gen, None)
 
 
+@pytest.mark.contract
+async def test_external_trade_log_draft_is_transient(app) -> None:
+    """AOS-05.c1: the Trade Log branch of the chooser, asserted in its own right.
+
+    Its Trading Signal sibling above proves the SAME contract for the other external
+    kind, and it would have been easy to treat that as settling both — the opener is
+    one function over a two-member set. It is not cited that way on purpose: doc 03
+    §6.2 names the two choices separately, the kinds route to different workbenches,
+    and a special case for one kind (say, minting an id early so the Trade Log
+    importer has something to bind to) would leave the sibling green while breaking
+    this row. So the transient contract is pinned per kind.
+    """
+    gen = _override(app, _actor(Role.USER, PrincipalType.HUMAN, "user_1"))
+    next(gen)
+    try:
+        async with await _client(app) as c:
+            resp = await c.post("/api/v1/external-work-object-drafts/trade_log")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["kind"] == "trade_log"
+        assert body["unsaved"] is True
+        # AT#3: an unsaved draft has no root/revision/item identity.
+        assert "root_id" not in body
+        assert "revision_id" not in body
+        assert "item_id" not in body
+        assert body["draft_id"].startswith("wodraft_")
+    finally:
+        next(gen, None)
+
+
 # NOTE: ``POST /strategy-drafts`` now creates a PERSISTED draft + root (Stage 3b,
 # doc 02 §7), superseding the 3a transient opener. Its DB-touching behavior is
 # covered by tests/integration/test_strategy_integration.py; only the Guest 401

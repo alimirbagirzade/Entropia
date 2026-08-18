@@ -7096,9 +7096,86 @@ alan her public callable'ın tuple'da adlandırılmasını zorunlu kılıyor). O
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `SHARED_ALLOCATION_STATUS` =
 `future_dev`. `PROJECT_HISTORY.md` §ADIM 82. **Kickoff'u YOK, bilerek** — geriye dönük kayıt
 (ADIM 70 emsali); canlı seed en yüksek numaralı kickoff belgesidir.
+## Stage 81 — §2 kapı tablosu tazelendi: G4/G12/G15 brifingli, sayım 11'e düzeltildi (PR #769) landed
+
+**Ne indi.** Yalnız **defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**. Tek dosya, **+93/−30**:
+`docs/implementation/final_closure_ordered_plan_2026-08-13.md` §2 (+ `F2` bloğu, mermaid kapı
+düğümleri, §6 envanteri, §7 md. 2). Squash merge **2026-08-18T17:11:11Z**.
+
+**Kapı durumları yeniden ölçüldü.** `G4` (#755), `G15` (#747) ve `G12` (#752) artık
+**BRIEFED ama İMZASIZ** — üçünün de satırı *"unbriefed" / "no owner"* diyordu. **Brifingli
+kapı ≠ imzalı kapı ve sayımı değiştirmez.** `G11` imzalanacak yeri olmayan **tek** kapı kaldı
+(PR **#771** açık, onu brifliyor).
+
+**Sayım düzeltildi: 16 kayıtlı · 11 açık · 11 bloklayan.** Çözülmüş beş: `G5` · `G6` + `G7`
+(Karar 2, imzalı 2026-08-14) · `G9` + `G13` (ADR `0002` §13.2, imzalı 2026-08-17). Eski
+*"14 bloklayan"* = *"15 açık eksi G7"*'ydi; G7 çözülünce dışlanan kalmadı.
+
+**İki hata kaydedildi (bu slice'ın asıl dersi).** (a) İlk sürüm *"13 açık"* dedi çünkü G6/G7
+bayat tablodan **ölçülmeden** taşındı — STALE-BY-DEFAULT ihlali, ve **bir kapı değil bir
+insan** yakaladı. (b) **Çift iş:** #772 aynı bölümü bağımsız tazeledi (~60 satır çakışma);
+**ölçümü daha doğru olduğu için taban #772 oldu**, bu dalın iki eklemesi üzerine taşındı, #772
+merge edilmeden kapatıldı. **Tazelemeye başlamadan önce açık PR'lara bak.**
+
+**Bayatlama canlı gözlendi:** dalın *"Karar 4/5 kutuları hâlâ boş"* cümlesi **#774** inince
+yanlış oldu ve merge'den önce düzeltildi. Kural genelleştirildi: **boş kutu kapının imzasız
+olduğunu göstermez** (imza başka belgede olabilir); işaretin kendisi de otorite değildir.
+
+**`F2` dürüst sınırı:** disposition hücreleri brifin **öncesinden** kalmadır ve yeniden
+türetilmedi. Brif **dört** disposition taşır; **(D) gözlemlenebilir clamp** hücre almadı çünkü
+brif kendi Result-artefakt şeklini *ölçülmedi* diye kaydediyor. `execution_key` **yalnız
+B-ii'de** kayar. `ENGINE_VERSION` ve `migration` beş şeklin hepsinde **yok**.
+
+**Süreç:** `cancelled ≠ failure` (bir E2E job'ı `playwright install` içinde ~30 dk asıldı,
+hiçbir test gövdesi koşmadan) · **auto-merge dalı kendi güncellemez** (`behind` durumunda
+bekler) · main bu PR açıkken **altı kez** ilerledi, dal **dört kez** güncellendi ·
+`update_pull_request_branch` bu kez kayıp yapmadı ama **kural değişmedi** (ADIM 61 emsali).
+
+**Hiçbir kapı imzalanmadı, hiçbir seçenek seçilmedi, hiçbir issue durumu değişmedi.**
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Suite **koşmadı** (ürün kodu yok);
+codemap güncellemesi **gerekmedi**. `PROJECT_HISTORY.md` §ADIM 81 ·
+`docs/ADIM81_LANDED_KICKOFF.md`.
 
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+
+> **ADIM 81 GÜNCELLEMESİ (2026-08-18, main `1741b03`) — BU BAŞLIK ARTIK `C3`'Ü ADLANDIRIYOR,
+> ve gövdesinin `C2` yarısı BAYATTIR.** Başlık **bilerek değiştirilmedi** (docs kayıt-silme
+> kapısı `^-## ` desenine bakar ve bir `## ` başlığını yeniden yazmak ona kayıt silme gibi
+> görünür — ADIM 61 emsali); düzeltme **gövdeye** yazılır. Aşağıdaki blok `C2`'yi **gelecek
+> zamanda** (*"PR #759 onu sevk ediyor"*) anlatıyordu. **`C2` İNDİ** — `c78b15b`, **PR #759**,
+> 2026-08-18T13:42Z. Ağaca karşı ölçüldü:
+> `portfolio_engine.py::ItemParticipant.settle` ve `::finalize` **zorunlu** Protocol üyesi
+> (`hasattr` probe'u **yok**), `PHASE_ORDER` **dokuz faz** — `P10` dahil —,
+> `iter_portfolio` ve `PORTFOLIO_LOOP_VERSION` yayımlı.
+> **#759'un kendi `PROJECT_HISTORY` kaydı YOKTUR** ve bu kapanış onu **yazmadı** (ADIM 69/70
+> dersi: kaydı sahibi yazar). Kayıtsız inen diğerleri: #752 #755 #747 #761 #770 #774 #773 —
+> tablo `docs/ADIM81_LANDED_KICKOFF.md` §*Bugün main'e inen … kayıt görünmeyen PR'lar*.
+>
+> **Sıradaki mühendislik kalemi `C3`.** Ölçüldü:
+> `backend/src/entropia/domain/backtest/execution/` altında **`participant.py` YOK**.
+> Önündeki kapı bir **imza değil, bir İNSAN İNCELEMESİDİR**: `portfolio_engine.__all__`
+> Protocol'ün tiplendiği altı tipin hiçbirini yeniden yayımlamıyor, o yüzden `execution/`
+> dışındaki her implementasyon containment gate'in importer kontrolünü **zorunlu olarak**
+> kırmızıya çevirir → **bilinçli ve gözden geçirilmiş** bir allowlist genişletmesi gerekir,
+> sessiz bir gevşetme değil. Brif **PR #761**'de indi
+> (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`) ve **İMZASIZDIR**.
+>
+> **İmzasız kapılar (ADIM 81 ölçümü — 11 açık):** `G1`/`G2`/`G3` (#552 → `F3`) · `G4` (`F2`,
+> brifingli #755) · `G8` (#559 → `C9`) · `G10` (Gate 2 / containment lift — **hiç talep
+> edilmedi**) · `G11` (`C6`; brif **PR #771**'de AÇIK olabilir — önce ölç) · `G12` (Karar 6,
+> brifingli #752 → `C6`) · `G14` (#544 → `C9`) · `G15` (brifingli #747; ön koşulu **bir SAYI**
+> ve alınmadı) · `G16` (A-08 — **ajan kapatamaz**).
+> **BRİFİNGLİ ≠ İMZALI.** İmzasız bir kapının arkasındaki slice'a **BAŞLAMA**.
+>
+> **Paralel hat — kabul borcu:** batch 08/09 **PR #768'de açık** (91 partial / B 60); main
+> tabanı ADIM 80 sonrası **96 / B 65**. Defter **seri bir kaynaktır** — ikinci inen taraf
+> rebase edip **yeniden dondurmalı**.
+
+> **AŞAĞIDAKİ SLICE GİRDİLERİ BİLEREK DEĞİŞTİRİLMEDİ** — ölçtükleri anı donduran kayıtlardır
+> (ADIM 65 emsali). `G9`/`G13` hakkındaki cümleleri **present tense okuma**; ikisi de
+> 2026-08-17'de imzalandı (ADR `0002` §13.2).
 
 > **ÖNCE BUNU OKU — bu bloğun ALTINDAKİ iki güncelleme `G9`/`G13` için BAYATTIR (2026-08-18'de
 > ölçüldü).** ADIM 72 ve ADIM 74 güncellemeleri *"sıradaki hamle bir İMZADIR"* ve

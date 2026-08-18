@@ -249,15 +249,19 @@ Before stopping a working session, produce **ALL** of the following:
 > `C3`** (`execution/participant.py` yok; önünde importer-allowlist **insan incelemesi**, #761
 > ile Seçenek A imzalandı). Kickoff'u **YOK, bilerek** (geriye dönük kayıt).
 > `PROJECT_HISTORY.md` §ADIM 82.
-> `future_dev`. **Son dalga — ADIM 81 (§2 kapı tablosu tazelendi, PR #769): ÜRÜN KODU
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 81 (§2 kapı tablosu tazelendi, PR #769): ÜRÜN KODU
 > DEĞİŞMEDİ, tek docs dosyası (+93/−30). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Kapı sayımı ölçüldü: **16 kayıtlı · 11 açık · 11 bloklayan** (çözülmüş: G5 G6 G7 G9 G13);
 > **`G4`/`G12`/`G15` BRIEFED ama İMZASIZ** (#755/#752/#747) — **brifingli ≠ imzalı, sayımı
 > değiştirmez**; `G11` imzalanacak yeri olmayan tek kapı (brifi **PR #771**'de açık olabilir).
 > **İki ders:** kısmi ölçüm = STALE-BY-DEFAULT ihlali (G6/G7 ölçülmeden taşındı → *"13 açık"*,
 > düzelten bir kapı değil **insan**) · **çift iş** (#772 aynı §'yı tazeledi → taban **daha doğru
-> ölçen** dal oldu; tazelemeden önce `list_pull_requests`). **Kayıtsız inen ürün slice'ı var:
-> `C2` = PR #759** (`settle`/`finalize`/P10 sevk edildi) — anlatısı **uydurulmadı**; sıradaki
+> ölçen** dal oldu; tazelemeden önce `list_pull_requests`). **O sırada kayıtsız olan ürün slice'ı
+> (`C2` = PR #759) ARTIK KAYITLI** — ADIM 82 onu geriye dönük yazdı (#778); sıradaki
 > mühendislik kalemi **`C3`** (`execution/participant.py` **yok**, önünde importer-allowlist
 > **insan incelemesi**, brif #761, imzasız).
 > `PROJECT_HISTORY.md` §ADIM 81 · `docs/ADIM81_LANDED_KICKOFF.md`.

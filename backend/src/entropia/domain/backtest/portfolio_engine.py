@@ -92,12 +92,13 @@ HONEST BOUNDARY — what this module does NOT do
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Protocol
 
 from entropia.domain.backtest.execution.arbitration import (
+    ArbitrationDecision,
     ArbitrationReport,
     ItemArbitrationProfile,
     arbitrate,
@@ -126,7 +127,7 @@ from entropia.domain.backtest.execution.portfolio_ledger import (
     ledger_for_items,
 )
 
-PHASE_ORDER: tuple[str, ...] = ("P1", "P3", "PV", "P4", "P5", "P6b", "P7", "P9")
+PHASE_ORDER: tuple[str, ...] = ("P1", "P3", "PV", "P4", "P5", "P6b", "P7", "P9", "P10")
 """The phases this loop executes, in the order it executes them (ADR §8.2).
 
 Published as a value so a test can assert the contract without re-reading the source. P0 is the
@@ -244,6 +245,9 @@ class PortfolioRun:
 
     ledger: PortfolioLedger
     ticks: tuple[PortfolioTick, ...]
+    final_closes: tuple[BookedClose, ...] = ()
+    """What P10 realized at end of data, if anything — the same shape ``PortfolioTick.closes``
+    carries, kept for the same reason: once it folds into ``E(t)`` a per-trade figure is gone."""
 
     @property
     def dated_points(self) -> tuple[PortfolioEquityPoint, ...]:
@@ -311,6 +315,31 @@ class ItemParticipant(Protocol):
 
         The item forms it with the shipped formers (``intents.form_intent``) because the sizing
         chain needs its own config; the loop validates what comes back."""
+
+    def settle(self, view: ItemTickView, *, admitted: ArbitrationDecision) -> None:
+        """P7 — "your intent was admitted, in THIS form" (ADR §6 clause 6).
+
+        The only point at which an item may book capital against an intent it formed. Called
+        once per admitted decision, after the pool has arbitrated and the shared ledger has
+        opened the position, in the same ``(pin_ordinal, item_id)`` order.
+
+        ``admitted`` carries the GRANTED figures, which are not the requested ones: arbitration
+        caps. An item that books ``intent.desired_size`` instead of ``admitted.granted_units``
+        has re-decided what the pool already decided.
+
+        Required, never ``hasattr``-probed. Probing is fail-open, and a participant that forgot
+        ``settle`` would run silently flat — the pool would hold a position the item does not
+        know it has."""
+
+    def finalize(self, view: ItemTickView) -> MandatoryExit | None:
+        """P10 — the close end-of-data forces on a still-open position, or ``None``.
+
+        A *mandatory* event in the sense of §6 clause 4, not an intent: it is not arbitrated and
+        it forms no ``ItemIntent``. Called once, after the tick loop, with the item's LAST view.
+
+        Required for the same reason ``settle`` is: an unclosed position at end of data leaves
+        ``E(t)`` holding open risk, and the composite final equity would be wrong rather than
+        merely incomplete."""
 
 
 def _ordered(participants: Sequence[ItemParticipant]) -> tuple[ItemParticipant, ...]:
@@ -486,7 +515,12 @@ def _phase_4_intents(
 
 
 def _phase_7_apply(tick: ClockTick, report: ArbitrationReport, ctx: _RunContext) -> None:
-    """P7 — open what was admitted, in the pinned order ``arbitrate`` already decided in."""
+    """P7 — open what was admitted, in the pinned order ``arbitrate`` already decided in.
+
+    Each admitted item is then told what it got, via ``settle`` (ADR §6 clause 6). The callback
+    runs AFTER ``set_position``, so the shared ledger is already the authority on the position
+    when the item books against it — the item mirrors a fact, it does not create one."""
+    views = {view.item_id: view for view in tick.views}
     ctx.ledger.begin_apply(tick.t_ms)
     for decision in report.decisions:
         if not decision.is_admitted or decision.granted_units <= _ZERO or not decision.direction:
@@ -504,6 +538,7 @@ def _phase_7_apply(tick: ClockTick, report: ArbitrationReport, ctx: _RunContext)
             size=decision.granted_units,
             entry_price=ctx.prices[decision.item_id],
         )
+        ctx.by_item[decision.item_id].settle(views[decision.item_id], admitted=decision)
 
 
 def _run_tick(tick: ClockTick, ctx: _RunContext) -> PortfolioTick:
@@ -547,7 +582,50 @@ def _run_tick(tick: ClockTick, ctx: _RunContext) -> PortfolioTick:
     )
 
 
-def run_portfolio(
+def _phase_10_finalize(
+    ctx: _RunContext, last_views: Mapping[str, ItemTickView], last_t_ms: int | None
+) -> tuple[tuple[BookedClose, ...], PortfolioEquityPoint | None]:
+    """P10 — end-of-data: close what is still open, then FOLD the settled figure in.
+
+    Runs ONCE, after the tick loop, in the same ``(pin_ordinal, item_id)`` order every other
+    ledger-writing phase uses. Without it a run ends with positions still open and ``E(t)``
+    holding unrealized risk, so the composite final equity would be wrong — not merely missing
+    a row.
+
+    ``fold_tick`` rather than ``commit_tick`` is the whole of G13 (ADR §13.2): the closes land
+    at the SAME instant the last tick already committed, and appending there would put two
+    points on one ``t_ms``. See :meth:`PortfolioLedger.fold_tick`.
+
+    A run with no ticks at all has no instant to settle at, so it books nothing."""
+    if last_t_ms is None:
+        return (), None
+    booked: list[BookedClose] = []
+    for item_id, participant in ctx.by_item.items():
+        view = last_views.get(item_id)
+        if view is None:
+            continue
+        closing = participant.finalize(view)
+        if closing is None:
+            continue
+        if ctx.ledger.positions.get(item_id) is None:
+            continue
+        ctx.ledger.close_position(item_id)
+        booked.append(
+            BookedClose(
+                item_id=item_id,
+                gross_pnl=closing.gross_pnl,
+                commission=closing.commission,
+                net_pnl=ctx.ledger.book_trade(
+                    item_id,
+                    gross_pnl=closing.gross_pnl,
+                    commission=closing.commission,
+                ),
+            )
+        )
+    return tuple(booked), ctx.ledger.fold_tick(last_t_ms)
+
+
+def iter_portfolio(
     participants: Sequence[ItemParticipant],
     *,
     pool_initial: Decimal,
@@ -557,7 +635,7 @@ def run_portfolio(
     conflict_policy: str | None = None,
     max_position_notional: Mapping[str, Decimal] | None = None,
     max_total_exposure_notional: Decimal | None = None,
-) -> PortfolioRun:
+) -> Generator[PortfolioTick, None, PortfolioRun]:
     """Co-simulate ``participants`` on ONE merged clock over ONE shared pool (ADR §3).
 
     The outer loop is the merged, deduplicated set of valuation points across every item —
@@ -620,8 +698,58 @@ def run_portfolio(
         max_total_exposure_notional=max_total_exposure_notional,
     )
 
-    ticks = tuple(_run_tick(tick, ctx) for tick in iter_ticks([p.stream for p in ordered]))
-    return PortfolioRun(ledger=ledger, ticks=ticks)
+    ticks: list[PortfolioTick] = []
+    last_views: dict[str, ItemTickView] = {}
+    last_t_ms: int | None = None
+    for tick in iter_ticks([p.stream for p in ordered]):
+        for view in tick.views:
+            if view.is_decision:
+                last_views[view.item_id] = view
+        last_t_ms = tick.t_ms
+        committed = _run_tick(tick, ctx)
+        ticks.append(committed)
+        yield committed
+
+    final_closes, _final_point = _phase_10_finalize(ctx, last_views, last_t_ms)
+    return PortfolioRun(ledger=ledger, ticks=tuple(ticks), final_closes=final_closes)
+
+
+def run_portfolio(
+    participants: Sequence[ItemParticipant],
+    *,
+    pool_initial: Decimal,
+    shares: Mapping[str, Decimal],
+    reserve_percent: Decimal = _ZERO,
+    compound: bool = True,
+    conflict_policy: str | None = None,
+    max_position_notional: Mapping[str, Decimal] | None = None,
+    max_total_exposure_notional: Decimal | None = None,
+) -> PortfolioRun:
+    """:func:`iter_portfolio`, exhausted. Signature and semantics unchanged.
+
+    Every caller that does not need to interleave work between ticks — the oracles, the harness
+    — keeps using this and sees no difference. A caller that DOES need to (the worker, whose
+    cancellation check is ``async`` and cannot run from inside a synchronous loop) drives the
+    generator instead and takes the run from ``StopIteration.value``, which is what ``yield
+    from`` returns."""
+    ticks = iter_portfolio(
+        participants,
+        pool_initial=pool_initial,
+        shares=shares,
+        reserve_percent=reserve_percent,
+        compound=compound,
+        conflict_policy=conflict_policy,
+        max_position_notional=max_position_notional,
+        max_total_exposure_notional=max_total_exposure_notional,
+    )
+    # Drained by hand rather than with ``for``: a plain loop DISCARDS a generator's return
+    # value, and the assembled ``PortfolioRun`` is exactly that value.
+    while True:
+        try:
+            next(ticks)
+        except StopIteration as exhausted:
+            run: PortfolioRun = exhausted.value
+            return run
 
 
 __all__ = [
@@ -638,5 +766,6 @@ __all__ = [
     "PortfolioTick",
     "UnpriceableAdmissionError",
     "UnsupportedIntentKindError",
+    "iter_portfolio",
     "run_portfolio",
 ]

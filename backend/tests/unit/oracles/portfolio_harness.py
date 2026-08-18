@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from entropia.domain.backtest.execution.arbitration import ArbitrationDecision
 from entropia.domain.backtest.execution.clock import ItemBarStream, ItemTickView
 from entropia.domain.backtest.execution.intents import (
     ClosingSize,
@@ -205,6 +206,21 @@ class _ScriptedParticipant:
             units=Decimal(units),
             price=view.bars[-1].close,
         )
+
+    def settle(self, view: ItemTickView, *, admitted: ArbitrationDecision) -> None:
+        """P7 — the scripted item keeps no book of its own, so there is nothing to mirror.
+
+        A deliberate no-op, not an oversight: the fixture's story is told entirely through the
+        SHARED ledger, and an item-local echo of the grant would be a second copy of a number
+        the pool already owns. Present because the Protocol requires it (ADR §6 clause 6) — the
+        point of requiring it is that forgetting it is a type error, not a silent flat run."""
+
+    def finalize(self, view: ItemTickView) -> MandatoryExit | None:
+        """P10 — scripted fixtures state their exits explicitly, so none is forced at the end.
+
+        Returning ``None`` is what keeps every portfolio oracle byte-identical across this
+        slice: P10 books nothing, so no equity point moves and no digest shifts."""
+        return None
 
 
 def simulate(

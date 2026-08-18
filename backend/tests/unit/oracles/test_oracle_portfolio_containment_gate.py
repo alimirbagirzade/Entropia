@@ -54,6 +54,12 @@ _PHASE_LOOP_MODULES = (
     "execution.provenance",
 )
 
+#: Every public way INTO the phase loop. The caller scan below is a text search, so it
+#: covers exactly the names listed here. ``iter_portfolio`` (C2) is the tick-drivable form
+#: and is the one a worker would reach for first, so omitting it would leave the loop's
+#: most likely production entry point unguarded.
+_LOOP_ENTRY_POINTS = ("run_portfolio", "iter_portfolio")
+
 
 def _item_run(item_id: str, closes: list[tuple[str, str]]) -> ItemRun:
     """One finished per-item run — the shape ``jobs/backtest_engine.py`` still folds."""
@@ -177,12 +183,16 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
         )
 
     # The containment itself: nothing CALLS the loop, and the worker is untouched.
+    # BOTH entry points are named. Greping only for ``run_portfolio`` would let a production
+    # module drive the whole phase loop — P10 included — through ``iter_portfolio`` with this
+    # assertion still green, which is exactly the wiring this gate exists to make impossible.
     callers = sorted(
         str(path.relative_to(_SRC))
         for path, text in sources.items()
-        if path != loop and ("run_portfolio(" in text or "import run_portfolio" in text)
+        if path != loop
+        and any(f"{name}(" in text or f"import {name}" in text for name in _LOOP_ENTRY_POINTS)
     )
-    assert callers == [], f"run_portfolio gained a production caller: {callers}"
+    assert callers == [], f"the phase loop gained a production caller: {callers}"
 
     worker = sources[_SRC / "application" / "jobs" / "backtest_engine.py"]
     assert "combine_item_runs(" in worker
@@ -254,3 +264,35 @@ def test_the_manifest_carries_none_of_the_policy_fields_the_lift_requires() -> N
         "mark_staleness_policy",
     ):
         assert field not in manifest
+
+
+def test_every_public_loop_driver_is_named_in_the_caller_scan() -> None:
+    """The caller scan cannot be wider than the names it greps for.
+
+    The scan in the containment test is a TEXT search, so it covers exactly the entry
+    points ``_LOOP_ENTRY_POINTS`` lists and nothing else. That is a standing hazard, and
+    it already bit once: C2 added ``iter_portfolio`` to the phase-loop module as a public
+    export — the only form a worker can drive, since its cancellation check is ``async``
+    and cannot run inside a synchronous loop — while the scan still named only
+    ``run_portfolio``. A production module could have imported it and driven every phase,
+    P10 included, with the containment assertion green.
+
+    This derives the answer from the module rather than restating it: every public
+    callable taking ``participants`` IS a way into the loop. A third entry point therefore
+    turns this red until someone adds it to the tuple, instead of silently narrowing the
+    containment assertion the way the second one did.
+    """
+    import inspect
+
+    from entropia.domain.backtest import portfolio_engine as pe
+
+    drivers = sorted(
+        name
+        for name in pe.__all__
+        if inspect.isfunction(getattr(pe, name))
+        and "participants" in inspect.signature(getattr(pe, name)).parameters
+    )
+    assert drivers == sorted(_LOOP_ENTRY_POINTS), (
+        "a new public way into the phase loop appeared; add it to _LOOP_ENTRY_POINTS or the "
+        f"containment caller scan will not see it. Found: {drivers}"
+    )

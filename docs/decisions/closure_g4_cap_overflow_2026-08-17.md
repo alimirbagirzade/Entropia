@@ -16,10 +16,11 @@
 - **İlgili kapı:** G4 (ordered plan §2) = STOP-GATE 4 (`closure_design_financial_research_2026-08-13.md` §5).
   **Bloklar:** slice **F2** (ordered plan §3: *"Prerequisites: G4 — and G4 has no signature
   block yet. A brief must be written first. **Do not start.**"*)
-- **Numara verilmedi, bilerek.** `closure_product_decisions_2026-08-13.md` bugün **beş** karar
-  taşıyor (Karar 4 = G9, Karar 5 = G13, ikisi de 2026-08-17'de eklendi) ve G15 belgesi kendi
-  bloğunu *"Karar 4"* diye numaralandırdı — yani **"Karar 4" adı bu depoda zaten iki ayrı şeye
-  işaret ediyor.** Üçüncü bir çakışma üretmemek için bu blok **kapı koduyla (G4)** adlandırıldı.
+- **Numara verilmedi, bilerek.** `closure_product_decisions_2026-08-13.md` bugün **altı** karar
+  taşıyor (Karar 4 = G9, Karar 5 = G13, Karar 6 = G12; üçü de 2026-08-17'de eklendi) ve G15
+  belgesi kendi bloğunu *"Karar 4"* diye numaralandırdı — yani **"Karar 4" adı bu depoda zaten
+  iki ayrı şeye işaret ediyor.** Üçüncü bir çakışma üretmemek için bu blok **kapı koduyla (G4)**
+  adlandırıldı.
 
 ---
 
@@ -33,6 +34,23 @@ tasarımından, ordered plan'dan veya slice talebinden **kopyalanmamıştır**. 
 
 Satır numarası **bilerek yazılmamıştır** (`CLAUDE.md` §Conventions: sembol adı yaz). Bu belgedeki
 her kod göndermesi bir **sembol** adıdır; her kanon göndermesi bir **bölüm** adıdır.
+
+> **BU BÖLÜM YENİDEN ÖLÇÜLDÜ (2026-08-18, PR incelemedeyken).** Belge `0f0651d` üzerinde
+> yazıldı; PR açıkken `main` **üç commit** ilerledi (`#748`, `#752`, `#753` → `dc0fb3b`) ve dal
+> ruleset gereği onun üstüne **merge** edildi. Üçü de **yalnız `docs/`** dosyalarına dokunur —
+> `backend/src`, `frontend/src`, `backend/migrations` ve test ağacı **değişmedi** (ölçüldü:
+> `git diff --stat` → `CLAUDE.md`, `docs/adr/0002…`, `docs/decisions/closure_product_decisions…`,
+> `docs/implementation/final_closure_ordered_plan…`). **Bu yüzden bu belgedeki hiçbir KOD ölçümü
+> etkilenmez** ve hiçbiri yeniden okunmamıştır.
+>
+> Etkilenen **tek** şey bir sayımdı ve düzeltildi: karar dokümanı artık **altı** blok taşıyor
+> (`#752` **Karar 6 = G12**'yi ekledi). Ayrıca `#753` ile **G9 imzalandı ve G13 FOLD olarak
+> karara bağlandı** (ADR `0002` §13.2) — yani bu belgenin *"Karar 4 = G9, Karar 5 = G13"*
+> göndermeleri artık **imzalanmış** kapılara işaret ediyor. **G4 bundan etkilenmez:** G9/G13
+> `C2`'yi açar, `F2`'yi değil, ve G4 hâlâ `F2`'nin tek ön koşuludur.
+>
+> **G4 ve G15 hâlâ imzasızdır.** Ölçülen değişiklik kapı sayısını değil, imzalanmış kapı
+> sayısını oynattı.
 
 ## Bu belgede kanıt olarak kullanılmayan şeyler
 
@@ -53,7 +71,7 @@ her kod göndermesi bir **sembol** adıdır; her kanon göndermesi bir **bölüm
 | # | Devralınan iddia | Kaynak | Ölçülen gerçek |
 |---|---|---|---|
 | 1 | *"OpenAPI: yalnız (B) — `PositionSizeLimits` yayımlanmış bir component."* | P-C1 §2.1, slice talebi | **YANLIŞ.** `docs/openapi.json`'da **157 schema** var; `PositionSizeLimits`, `PositionSizing`, `StrategyConfig` **hiçbiri yok** (grep = 0). Strateji config'i API sınırını `payload` / `initial_payload` olarak, `additionalProperties: true` ile geçiyor. **Hiçbir disposition OpenAPI drift guard'ını tetiklemez.** |
-| 2 | *"Karar dokümanı ÜÇ brifing taşıyor."* | slice talebi | **BAYAT.** Bugün **beş** taşıyor: Karar 4 (G9, ADR §6/§8 amendment) ve Karar 5 (G13, P10 equity noktası) 2026-08-17'de eklendi. Üçü değil, **beşinin** yapısı aynalandı. |
+| 2 | *"Karar dokümanı ÜÇ brifing taşıyor."* | slice talebi | **BAYAT.** Bugün **altı** taşıyor: Karar 4 (G9, ADR §6/§8 amendment), Karar 5 (G13, P10 equity noktası) ve Karar 6 (G12, paylaşımlı koşuda scaling) — üçü de 2026-08-17'de eklendi. Üçü değil, **altısının** yapısı aynalandı. |
 | 3 | *"Açık kalan: G15 — HÂLÂ sahipsiz."* | slice talebi | **BAYAT.** G15'in imza bloğu **bu belgeden önce yaratıldı** (`closure_g15_external_row_winner_2026-08-17.md`, PR #747, bu belgenin tabanı). G15 **hâlâ imzasızdır** ama artık **sahipsiz değildir** — imzalanacak bir yeri vardır. G4 bu tarifin geçerli olduğu **son** kapıydı. |
 
 **Devralınıp DOĞRULANAN her şey** ayrıca ölçüldü ve aşağıda ölçüm olarak geçer: `ENGINE_VERSION`
@@ -480,15 +498,15 @@ than re-interpreting the value silently."*
 
 ### Bu belgenin ÖNERMEDİĞİ şey
 
-Karar 1/2/3/4/5'in aksine burada **"Önerilen seçenek" başlığı YOKTUR ve bu bilinçlidir** —
+Karar 1–6'nın aksine burada **"Önerilen seçenek" başlığı YOKTUR ve bu bilinçlidir** —
 G15 belgesiyle aynı gerekçe. Ordered plan G4'ü *"kimsenin sahiplenmediği"* iki kapıdan biri
 olarak kaydediyor ve *"neither can be substituted by an agent's judgement"* diyor. Ölçüm dört
 şekli **eşit ölçüde belgelenmiş** hâle getirdi; aralarındaki seçim bir
 **doğruluk / geriye-dönük geçerlilik / kullanıcı maliyeti** takasıdır ve **ürün sahibinindir**.
 
 **Not (dürüstlük):** slice talebi *"Karar 1/2/3 de seçmiyor"* diyordu. Ölçüldü ve bu **yanlış**:
-Karar 1, 2, 3, 4 ve 5'in **hepsinde** *"Önerilen seçenek + gerekçe (BU BİR ÖNERİDİR, KARAR
-DEĞİL)"* başlıklı bir bölüm var. Bu belge o bölümü **bilerek taşımaz** — yapı aynalanırken bu
+Karar 1'den Karar 6'ya **altısının hepsinde** *"Önerilen seçenek + gerekçe (BU BİR ÖNERİDİR,
+KARAR DEĞİL)"* başlıklı bir bölüm var. Bu belge o bölümü **bilerek taşımaz** — yapı aynalanırken bu
 tek sapma **kasıtlıdır** ve G15'in emsalini izler.
 
 ---

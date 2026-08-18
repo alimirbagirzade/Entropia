@@ -260,7 +260,9 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 77 · `docs/ADIM77_LANDED_KICKOFF.md`.
 >
 >
-> Öncesinde **ADIM 76 (P-E6/C8: containment kapısının İKİNCİ
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> **`future_dev` (DEĞİŞMEDİ)**. Öncesinde **ADIM 76 (P-E6/C8: containment kapısının İKİNCİ
 > DÜNYASI): ÜRÜN KODU DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.** **22 containment ön koşulunun 2'si yeşil** → **flag'e DOKUNULMADI**
 > (`G8`/`G14` = #559/#544 **açık**; **`G10` (Gate 2 — lift onayı) TALEP EDİLMEDİ**;

@@ -6963,6 +6963,25 @@ bu kaydı dalgayı merge eden oturum ürün sahibinin talimatıyla yazdı. Kayı
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
+> **ÖNCE BUNU OKU — bu bloğun ALTINDAKİ iki güncelleme `G9`/`G13` için BAYATTIR (2026-08-18'de
+> ölçüldü).** ADIM 72 ve ADIM 74 güncellemeleri *"sıradaki hamle bir İMZADIR"* ve
+> *"`C2`/`C3`/`C4` → G9 + G13 imzasız"* der. **İkisi de artık yanlıştır:** ürün sahibi
+> **2026-08-17**'de ADR §16 **Gate 1**'i imzaladı — **`G9` APPROVED as stated**, **`G13` =
+> FOLD** — kayıt **ADR-0002 §13.2** (`9fc5580`, PR #753, main'de). Düzeltme **yukarıdaki
+> ADIM 76 girdisinde** zaten yazılıydı; bayat cümleler başlığın **ALTINDA**
+> kaldığı için `## Next:`'i giriş noktası olarak okuyan **yanlış** sonuca varıyordu (bu
+> oturumun devir promptu tam olarak buna düştü). Alttaki iki paragraf **bilerek
+> değiştirilmedi** — ölçtükleri anı donduran slice girdileridir (ADIM 65 emsali).
+>
+> **Ölçülmüş sonuç:** `C2` (E4b) bir imza beklemiyor, **kod bekliyor** — ve `PR #759` onu
+> sevk ediyor (`settle` + `finalize` **zorunlu** Protocol üyesi, `hasattr` probe'u yok,
+> `PHASE_ORDER` **dokuz faz** → P10, `iter_portfolio`). **Hâlâ imzasız olan kapılar
+> başkadır:** `G12` (Karar 6 — `C6`), Karar 1 (#552 — `F3`), Karar 3 (#559 — `C9`),
+> `G4` (`F2`), ve `G10` (Gate 2 / containment lift) **hiç talep edilmedi**.
+> **Bir kapının imzasını `docs/decisions/closure_product_decisions_2026-08-13.md`'nin boş
+> kutusundan okuma** — G9/G13'ün imzası orada DEĞİL, ADR'dedir; o belgenin banner'ı artık
+> altı kararın tamamı için imzanın **yerini** tablo hâlinde söyler.
+
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:
 > `ItemParticipant.settle` + `.finalize`, P10, `iter_portfolio`.**
 

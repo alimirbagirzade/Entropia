@@ -237,7 +237,30 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> **`future_dev` (DEĞİŞMEDİ)**. **Son dalga — ADIM 76 (P-E6/C8: containment kapısının İKİNCİ
+> `future_dev`. **Son dalga — ADIM 77 (P1 + P4, PR #751 + #754): ÜRÜN KODU DEĞİŞTİ, gözlenebilir
+> DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** #617'nin şeklinin
+> **dördüncü ve beşinci** örneği kapandı: `readiness_check.py::_resolve_tick_data_issues`
+> (**1 → 11**, slope 1) ve `backtest_run.py::_resolve_tick_pins` (**3 → 23**, slope 2) — ikisi de
+> artık `per_item: 0`. P4 **admission yolundaki İLK bütçe satırıdır**; o yüzey `README.md` §8'de
+> adlandırılmasına rağmen hiç ölçülmemişti. İki yeni çoğul okuyucu **mevcut aynaların kopyası**
+> (`find_approved_tick_revisions_for_instruments` ← `get_dataset_roots`, `get_strategy_revisions`
+> ← `get_work_object_revisions`) — üçüncü idiom YOK. **`_resolve_strategy_payload` opsiyonel bir
+> prefetch haritası alır** (`mirrors=None`), böylece "mirror NEDİR" sorusunun tek tanımı kalır ve
+> eski çağıranlar statement statement değişmez. **ASIL NOKTA: "batch aynı satırı seçer" bir hız
+> iddiası DEĞİL, bir GİRDİ iddiasıdır** — pinlenen revizyon değişmez manifest'e girer (doc 15
+> §15, INF-04/INF-05); `DISTINCT ON` yalnız sıra **TOTAL** olduğu için güvenlidir ve test bunu
+> **eşit `created_at`'li** bir fixture ile sürer (ayrı damgalarla tie-break hiç koşmaz, her
+> implementasyon geçer). **Leg 3 (`_resolve_external`) bilerek ONARILMADI** — orada per-item
+> kazanan tanımsız, o bir **ürün kararıdır (G15)**; satırı `per_item: 1`'de bırakıldı.
+> **DERS: fail-closed bir bacakta FIXTURE ölçümün kendisidir** — kapıyı açmayan bir fixture hiç
+> koşmamış bir bacak için yeşil slope raporlar. **DERS 2: `cancelled` ≠ `failure`** — bu dalgada
+> iki bağımsız PR `playwright install` içinde ~60 dk asıldı, hiçbir test gövdesi koşmadan.
+> **NUMARA + DÜRÜST SINIR: ikisi de ritüelsiz açıldı ve AYRI merge edildi** (P1 = #751, P4 = #754);
+> kaydı dalgayı merge eden oturum yazdı, ölçülen ile dalın iddia ettiği kayıtta AYRI işaretli.
+> `PROJECT_HISTORY.md` §ADIM 77 · `docs/ADIM77_LANDED_KICKOFF.md`.
+>
+>
+> Öncesinde **ADIM 76 (P-E6/C8: containment kapısının İKİNCİ
 > DÜNYASI): ÜRÜN KODU DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.** **22 containment ön koşulunun 2'si yeşil** → **flag'e DOKUNULMADI**
 > (`G8`/`G14` = #559/#544 **açık**; **`G10` (Gate 2 — lift onayı) TALEP EDİLMEDİ**;

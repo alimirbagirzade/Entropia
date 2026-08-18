@@ -11243,3 +11243,130 @@ değişmedi. Sayılar `--report` çıktısından okundu, tahmin edilmedi.
 - **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
 - **Karar 1 (#552) ve Karar 3 (#559) HÂLÂ İMZASIZ**; `C2`'nin **G9/G13** kapıları imzasız.
 - Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.
+
+## ADIM 76 — kabul borcu batch 08 (doc 04 backend): dört kriter kapandı, iki bulgu
+
+> **NUMARA NOTU.** Bu slice, henüz merge EDİLMEMİŞ ADIM 75'in (batch 07, PR #757) üstüne
+> **yığılarak** yazıldı. Gerekçe kolaylık değil, **defterin seri bir kaynak olması**:
+> `acceptance_coverage_baseline.json`'ın `supersedes` alanı bir zincirdir ve batch 08'in
+> batch 07'nin dondurduğu sayıları (97/66) devralması gerekir, main'in bayat 100/69'unu
+> değil. Main'den bağımsız dallanmak iki PR'a **aynı** tavanları indirtir ve ikinci merge
+> bozuk bir zincir bırakırdı. Kural değişmedi: **merge edilmiş ad kazanır** — #758 sıra
+> beklerken ADIM 74'ü aldı, batch 07 75'e taşındı ve bu kayıt da 75'ten **76**'ya
+> taşındı — kural tam olarak böyle işliyor.
+
+Base **`79c1011`** (ADIM 75'in tepesi; ölçüm anında main `0f0651d`) · migration **YOK** ·
+`ENGINE_VERSION` **değişmedi** · alembic head **`0043_i08_registry_strategy_fks`** · OpenAPI
+**değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ
+(1 — yalnız A-08), verdict BLOCKED.** Ürün kodu **değişmedi**.
+
+### 1. Parti nasıl seçildi
+
+ADIM 74'ün kickoff'u doc 04'ü "en temiz sıradaki parti (6 kriter, hiçbiri şüpheli işaretli
+değil)" diye işaret etmişti. Ölçüm bunu **kısmen** doğruladı: altı adayın **her birinin tek
+açık clause'u** vardı (yani her biri satırını kapatabilirdi) ve **altısı da backend**'di — ama
+ikisi "sınıf B" iddiasını ölçümde taşımadı (§4). Parti bu yüzden **dört** kriter.
+
+### 2. Kapanan dört kriter
+
+| Kriter | Clause | Yeni düğüm |
+|---|---|---|
+| `TS-15` | `.c2` | `test_supervisor_cannot_mutate_another_owners_signal` |
+| `TS-18` | `.c2` | `test_soft_delete_writes_trash_entry_audit_and_outbox` |
+| `TS-10` | `.c3` | `test_enabling_allocation_preserves_the_stored_independent_capital` |
+| `TS-08` | `.c3` | `test_correcting_a_blocked_import_appends_and_keeps_the_old_report` |
+
+**`TS-15.c2` bir rol sorusuydu, bir sahiplik sorusu değil.** Yabancı-sahip reddi, Admin
+override'ı ve endpoint düzeyi zorlama zaten assert ediliyordu; ama sayfadaki her sahiplik
+testi ikinci bir **düz USER** seçiyordu. Supervisor **User ile Admin arasında** durur, o yüzden
+"sahibi olmayan reddedilir" bu satırı kapatmaz: soru, yükseltilmiş rolün hiç verilmemiş bir
+düzenleme hakkını **sızdırıp sızdırmadığıdır**. Test reddin **kalıcı** olduğunu da assert eder
+(hiçbir `WorkObjectRevision` eklenmedi).
+
+**`TS-18.c2` silmenin görünür yarısını değil kurtarılabilir yarısını pinler.** Mevcut test
+yalnız kökün aktif Mainboard'dan düştüğünü söylüyordu. Trash kaydı, audit satırı ve outbox
+satırı **hiç sorgulanmamıştı** — üçünü de yazmayan bir silme ekranda birebir aynı görünür ve
+**sessizce kurtarılamaz** olurdu.
+
+**`TS-10.c3` bir ÇİFT olarak yazıldı ki boşa geçmesin:** allocation planının gerçekten açık
+olması **ve** saklanan rakamın `content_hash` dâhil **bayt bayt aynı** kalması. Koruma
+yapısaldır (sermaye değişmez `TradingSignalConfig` revizyonunda yaşar, allocation ayrı bir
+aggregate'tir) — bu da guard'ı ucuz ve değerli kılar.
+
+**`TS-08.c3`'ün önemsediği yarı ileri yol değil geriye dönük olandır.** Düzeltilmiş import'un
+yeni revizyon eklediği başka yerlerde koşuluyordu; **ilk raporun** düzeltmeden sağ çıktığı
+koşulmuyordu. Rapor, kaydın **neden reddedildiğinin** kanıtıdır; onu yeniden yazan bir düzeltme
+reddin kaydını siler ve sonrasında kusursuz görünür.
+
+### 3. Dört negatif kontrol, dördü de kırmızı
+
+| Clause | Kaldırılan davranış | Gözlenen kırmızı |
+|---|---|---|
+| `TS-15.c2` | `can_edit`'e `Role.SUPERVISOR` kısayolu | `Failed: DID NOT RAISE AccessDeniedError` |
+| `TS-18.c2` | `soft_delete_entity`'den `add_trash_entry` silindi | `NoResultFound` |
+| `TS-10.c3` | `upsert_allocation_draft` sermayeyi null'luyor | `assert None == '10000'` |
+| `TS-08.c3` | `run_import` eski `validation_summary`'leri yeniden yazıyor | rapor bayt-eşitliği kırıldı |
+
+### 4. İKİ BULGU — ve ikisi FARKLI şekilde açık
+
+**`TS-07.c2` — motorun sinyal-olayı girdisi YOK (sınıf D).** Clause "motor karar kapısı
+available_time'dan önceki bir bardan sinyal olayını alıkoyar" diyor. Ölçüm: `run_engine`'in
+parametreleri `strategy_config, bar_batches, execution_key, item_count, indicator_plan,
+timeframe, allocation, funding, tick_batches, portfolio_rules, builtin_breakout_fixture`
+(`engine.py:3535-3545`) — **sinyal-olayı girdisi yok**. `jobs/backtest_engine.py`
+`trading_signal`'dan **hiç** söz etmiyor; `domain/backtest/` altında
+`domain/trading_signal/events.py` **import edilmiyor** (tek tüketicileri import/normalize
+düzlemi). Engine'in kendi `SignalEventRow`'u bir **ÇIKTI** günlüğü —
+`led.signal_events.append` motorun kendi `stop_resolution` kararlarını yazar, alınan bir besleme
+değildir. Motordaki tek `available_at` kapısı funding/research ekseni
+(`is_eligible_for_decision`) — ki bu satıra "onu ödünç alma" denmişti. Şema düzeyi ret gerçek ve
+kanıtlı; motor yarısı ise **bir sinyal beslemesi motora ulaşana kadar** assert edilemez.
+
+**`TS-02.c2` — YANLIŞLANAMAZ, bu yüzden İŞARETLENMEDİ.** Clause "Ready Check snapshot'ı ve Run
+transient draft'ı dışlar" diyor. Açıcı `commands/mainboard.py::start_external_work_object_draft`
+(`:104-117`) **yalnız `(actor, kind)` alan saf bir fonksiyon**; session açmaz,
+`{draft_id, kind, unsaved: True}` döner ve tek çağıranı (`routes/mainboard.py:91-95`) `ctx.actor`
+ile `kind`'den başka bir şey geçmez — o yolda **hiçbir veritabanı tutamağı kapsamda değil**.
+Draft'ın `MainboardCompositionSnapshot.item_manifest`'e (ki `mb_repo.list_active_items`'tan
+kurulur) ulaşabileceği bir yol **yok**. "Draft id manifest'te değil" diyen bir assertion bugün
+geçer ve ancak **üç noktalı** bir değişiklikten sonra düşer (açıcıya session ver, yazma ekle,
+id'yi snapshot'a bağla) — bu bir guard'ın yakaladığı regresyon değildir. Yazmak scanner'ı tatmin
+eder ama hiçbir şey kanıtlamazdı; bu defter tam olarak bunu reddediyor. **Bilerek `uncovered`
+bırakıldı.**
+
+> **DERS:** bir clause üç şekilde kapatılamaz olabilir ve üçü aynı şey değildir —
+> **sevk edilmemiş** (PC-20.c3, TS-07.c2: kurulabilir ama kod yok), **kurulamaz**
+> (PC-02.c2: erişilebilir ekran yok) ve **yanlışlanamaz** (TS-02.c2: kod var, doğru, ama
+> bozulabileceği bir dikiş yok). Üçü de sınıf B değildir; hiçbiri bir test slice'ının
+> yeniden sınıflandıracağı şey değildir.
+
+Hiçbiri **YENİDEN SINIFLANDIRILMADI** — B → C/D bir tavanı **yükseltir** ve bu bir
+adjudication'dır. Defterde artık **ON BİR** böyle açık bulgu var.
+
+### 5. Ratchet
+
+```
+status.partial      97 -> 93
+debt_class.B        66 -> 62
+```
+
+Açık kabul borcu **105 → 101** (A=1 · B=62 · C=6 · D=32). Clause `covered` **1015 → 1019**,
+`uncovered` **112 → 108**; toplam **1175**, `total_criteria` **383** değişmedi. Sayılar
+`--report` çıktısından okundu.
+
+### 6. Dürüst sınırlar
+
+- **Doc 04'te sınıf B kalmadı**, ama bu "doc 04 kapandı" demek değil: `TS-02` ve `TS-07` iki
+  bulgu olarak, `TS-03` önceden sınıf-D olarak açık.
+- **Bu slice merge EDİLMEMİŞ bir dalın üstünde duruyor.** #757 inmeden batch 08 merge
+  edilemez; #757 rebase edilirse bu dal da rebase ister.
+- **`TS-10.c3` yapısal bir gerçeği pinler** (sermaye ayrı bir aggregate'te yaşar), davranışsal
+  bir dönüşümü değil — negatif kontrolü gerçek ama senaryosu ("yardımsever" bir temizleme)
+  varsayımsaldır.
+- **`TS-15.c2` yalnız `create_trading_signal_revision` yüzeyini sürer**; Supervisor'ın diğer
+  mutasyon uçlarındaki davranışı bu satırla kapanmaz.
+- Ürün kodu değişmedi → containment, `ENGINE_VERSION`, golden digest ve A-08 etkilenmedi.
+- **A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+- **G9 ve G13 artık İMZALI** (#753, main'e indi) — `C2` imzasız kapıların arkasında **değil**;
+  bu slice bunu kullanmadı ama sıradaki paket-C dilimi `docs/adr/0002`'yi doğrulamalı.
+- Codemap **tazelenmedi ve gerekmedi**: yeni endpoint / tablo / sayfa / job yok.

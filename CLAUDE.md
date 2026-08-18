@@ -237,23 +237,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 75 (kabul borcu batch 07, doc 07 frontend): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 76 (kabul borcu batch 08, doc 04 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
-> Batch 06'nın **tümleyeni**: aynı belge, frontend yüzeyi. Üç kriter daha kapandı —
-> **`PC-01`** (`.c2` literal `Not Checked` pill + `.c3` render etmek revizyon yazmaz, okuma
-> yolu sürülerek), **`PC-17.c4`** (kapanış hiç non-GET istek atmaz **ve** yeniden açılış
-> sunucudan okur) ve **`PC-21`** (`.c2` kanonik PASSED metni + `.c3` **negatif kapsam**:
-> yüzey repaint/lookahead/validation/approval iddia etmez). **ALTI negatif kontrol, altısı da
-> kırmızı.** **Tavanlar İNDİ: `partial` 100 → 97, `debt_class.B` 69 → 66**; açık borç
-> **108 → 105** (A=1 · B=66 · C=6 · D=32), clause `covered` 1010 → 1015. **DOC 07'DE SINIF B
-> KALMADI** — iki batch altı kriter kapattı; kalan satırlar yalnız bulgular ve iki sınıf-D
-> Agent satırı (`PC-15`, `PC-16`). **BULGU: `PC-02.c2` HİÇ KURULAMAZ** (sınıf C şeklinde) —
-> overlay yalnız `detail !== null` iken render edilir, boş kaynaklı istek route'ta DB'den önce
-> reddedilir, yani boş-girdi Pre-Check sonucunun çizileceği ekran **yok**;
-> **yeniden sınıflandırılmadı**, defterde artık **dokuz** böyle bulgu var. **DERS: yanlış
-> sebeple kırmızıya dönen negatif kontrol hiçbir şey kanıtlamaz** — kırmızının **hangi
-> assertion'da** olduğunu oku. **`C2` hâlâ BLOKLU — G9 + G13 imzasız.**
-> `PROJECT_HISTORY.md` §ADIM 75 · `docs/ADIM75_LANDED_KICKOFF.md`.
+> Doc 04'ün dört kriteri kapandı — **`TS-15.c2`** (SUPERVISOR rolü **özellikle**: sayfadaki her
+> sahiplik testi ikinci bir düz USER seçiyordu), **`TS-18.c2`** (silmenin **kurtarılabilir**
+> yarısı: trash + audit + outbox, daha önce yalnız projeksiyon düşüşü assert ediliyordu),
+> **`TS-10.c3`** (allocation açılınca bağımsız sermaye **korunur**, `content_hash` ile çift
+> assertion) ve **`TS-08.c3`** (düzeltilen import ilk raporu **bozmaz**, bayt bayt).
+> **DÖRT negatif kontrol, dördü de kırmızı.** **Tavanlar İNDİ: `partial` 97 → 93,
+> `debt_class.B` 66 → 62**; açık borç **105 → 101** (A=1 · B=62 · C=6 · D=32), clause `covered`
+> 1015 → 1019. **DOC 04'TE DE SINIF B KALMADI** (doc 07 bir önceki dalgada bitmişti).
+> **İKİ BULGU, ikisi FARKLI şekilde:** `TS-07.c2` **sevk edilmemiş** — `run_engine`'in
+> **hiç sinyal-olayı girdisi yok**, engine'in `SignalEventRow`'u bir **çıktı** günlüğü (sınıf D);
+> `TS-02.c2` ise **YANLIŞLANAMAZ** — transient draft açıcısı session'sız saf bir fonksiyon, yani
+> draft'ın snapshot'a ulaşabileceği **dikiş yok**, yeşil bir test **kapsamak değil işaretlemek**
+> olurdu, o yüzden **bilerek açık bırakıldı**. **DERS: "kapatılamaz"ın üç şekli var —
+> sevk edilmemiş / kurulamaz / yanlışlanamaz — ve hiçbiri bir test slice'ının yeniden
+> sınıflandıracağı şey değildir.** Defterde artık **on bir** bulgu.
+> **SIRA:** bu slice **merge edilmemiş** ADIM 75'in (PR #757) üstünde **yığılı**; #758 sıra
+> beklerken ADIM 74'ü aldı, batch 07 → 75, bu kayıt → **76** taşındı.
+> `PROJECT_HISTORY.md` §ADIM 76 · `docs/ADIM76_LANDED_KICKOFF.md`.
 >
 >
 > Öncesinde **ADIM 74 (R2 + R3, PR #742 + #745): ÜRÜN DAVRANIŞI DEĞİŞMEDİ —

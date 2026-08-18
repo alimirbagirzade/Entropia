@@ -6832,6 +6832,48 @@ ve iki sınıf-D Agent satırı (`PC-15`, `PC-16`). `PROJECT_HISTORY.md` §ADIM 
 `docs/ADIM75_LANDED_KICKOFF.md`.
 
 
+## Stage 76 — kabul borcu batch 08 (doc 04 backend): dört kriter kapandı, iki bulgu landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**, containment `future_dev`. Blocker sayısı
+**değişmedi** (1 — yalnız A-08), verdict **BLOCKED**.
+
+Doc 04 (Trading Signal), **backend** yüzeyi. Altı sınıf-B adayının **her birinin tek açık
+clause'u** vardı, yani kapatmak satırın tamamını kapatıyordu — ama ikisi ölçümde sınıf B
+çıkmadı.
+
+| Kriter | Kapanan clause | Neden açıktı |
+|---|---|---|
+| `TS-15` | `.c2` | sayfadaki her sahiplik testi ikinci bir **düz USER** seçiyordu; **SUPERVISOR** hiç denenmemişti |
+| `TS-18` | `.c2` | yalnız projeksiyon düşüşü assert ediliyordu; **trash + audit + outbox** hiç sorgulanmamıştı |
+| `TS-10` | `.c3` | allocation açılınca bağımsız sermayenin **korunduğu** okunup doğrulanmamıştı |
+| `TS-08` | `.c3` | düzeltilen import'un **ilk raporu** bozmadığı assert edilmemişti |
+
+**Tavanlar İNDİ:** `partial` **97 → 93**, `debt_class.B` **66 → 62**. Açık kabul borcu
+**105 → 101** (A=1 · B=62 · C=6 · D=32). Clause düzeyinde `covered` **1015 → 1019**,
+`uncovered` **112 → 108**.
+
+**DÖRT negatif kontrol, dördü de kırmızı** — her biri davranışı **üründen** kaldırarak:
+`can_edit`'e `Role.SUPERVISOR` kısayolu → `DID NOT RAISE AccessDeniedError` ·
+`add_trash_entry` silinince → `NoResultFound` · allocation açılışında sermaye null'lanınca →
+`assert None == '10000'` · `run_import` eski özetleri yeniden yazınca → rapor bayt-eşitliği
+kırılıyor.
+
+**İKİ BULGU, ikisi de farklı şekilde:**
+- **`TS-07.c2` sınıf D** — motorun **hiç sinyal-olayı girdisi yok**. `run_engine`'in
+  parametreleri arasında yok, `jobs/backtest_engine.py` `trading_signal`'dan hiç söz etmiyor,
+  `domain/backtest/` altında `trading_signal.events` import edilmiyor ve engine'in kendi
+  `SignalEventRow`'u bir **çıktı** günlüğü. Motordaki tek `available_at` kapısı funding/research
+  ekseni — bu satırın ödünç almaması söylenen kardeş.
+- **`TS-02.c2` YANLIŞLANAMAZ** — transient draft açıcı (`start_external_work_object_draft`)
+  **session'sız saf bir fonksiyon**; tek çağıranı yalnız `actor` ve `kind` geçiyor. Draft'ın
+  snapshot'ta görünebileceği hiçbir yol yok, yani yeşil bir assertion **kapsamak değil
+  işaretlemek** olurdu. **Bilerek açık bırakıldı.**
+
+Doc 04'te sınıf B kalmadı; kalan satırlar iki bulgu ve önceden sınıf-D olan `TS-03`.
+`PROJECT_HISTORY.md` §ADIM 76 · `docs/ADIM76_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 71 (C1) SONRASI — sıradaki adım `C2` / E4b:

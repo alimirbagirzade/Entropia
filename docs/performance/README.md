@@ -226,9 +226,40 @@ widening the band in the workflow alone is not possible.
 | [#618](https://github.com/alimirbagirzade/Entropia/issues/618) | Approve Package pinned-resolver re-validation | 2 round trips per pin | open — batch both reads |
 
 Both were found by the budget gate on the run that introduced it, and both are recorded
-in `query_budgets.json` rather than repaired: the slice that measures should not also be
-the slice that changes a fail-closed admission path. Each issue names the acceptance —
-tighten the budget row to `per_item: 0` — so the fix and its proof arrive together.
+in `query_budgets.json` rather than repaired: **the slice that introduces the gate**
+should not also be the slice that changes a fail-closed admission path. Each issue names
+the acceptance — tighten the budget row to `per_item: 0` — so the fix and its proof
+arrive together.
+
+### That rule is about the *measuring* slice, not a ban on ever repairing admission
+
+Stated because P4 has now done both halves in one slice and the sentence above, read
+alone, would forbid it. The rule's subject was always the slice that **shipped the
+counter**: it had every surface's first number in hand at once, and repairing a
+fail-closed path in the same change would have left no independent measurement of the
+before-state to check the repair against. A *later*, single-surface slice is the opposite
+situation, and the acceptance those issues name — tighten the row to `per_item: 0` — only
+has meaning if some slice eventually does both.
+
+What a slice touching admission owes instead is the evidence the measuring slice would
+have lacked, and P4 (`backtest_run.admission_tick_pins`) is the worked example:
+
+* the row lands at its **measured pre-repair slope first** (3 → 23, `per_item: 2`), so
+  the before-state is recorded as a fact rather than reconstructed from a diff;
+* the fixture is shown to actually **execute** the leg before any number is believed —
+  this leg is fail-closed and skips every strategy that does not demand tick data, so a
+  green `0` is equally consistent with "batched" and "never ran";
+* behaviour parity is proved separately from cost (`test_backtest_tick_pin_batch.py`):
+  the 422 keeps its code and both promoted envelope fields and still names the first
+  failing item in **manifest order**, and — because the pinned revision id enters the
+  immutable manifest — the batch is shown to pick the same row as the per-item reader
+  against a deliberate equal-`created_at` tie;
+* the negative control runs against a **pristine** file, and runs once per batched read
+  rather than once for the pair, so neither can be decoration.
+
+Leg 3 of Ready Check (`_resolve_external`) is still not repairable on these terms and is
+still unscheduled: there the per-item winner is undefined, so no fixture can pin "the
+same row" and the change is a product decision (gate G15), not a performance one.
 
 ---
 

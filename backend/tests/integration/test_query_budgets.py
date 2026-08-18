@@ -44,6 +44,7 @@ from sqlalchemy import event
 
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.commands import readiness_check as readiness_cmd
+from entropia.application.commands.backtest_run import _resolve_tick_pins
 from entropia.application.commands.readiness_check import (
     _resolve_market_data_issues,
     _resolve_research_sources,
@@ -75,12 +76,16 @@ from entropia.domain.lifecycle.enums import (
     VisibilityScope,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
 from entropia.domain.package.catalog import CatalogFilters
 from entropia.domain.package.enums import PackageValidationState
 from entropia.domain.readiness.issues import ReadinessItemInput
+from entropia.domain.strategy.enums import ValidationStatusEnum
 from entropia.infrastructure.postgres.models import (
     AgentRuntime,
     BacktestResult,
+    EntityRegistry,
+    MarketDatasetRevision,
     MetricValueRow,
     Principal,
     ResultSummary,
@@ -88,7 +93,9 @@ from entropia.infrastructure.postgres.models import (
 from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import esp as esp_repo
+from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
+from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.pagination import PageParams
 from tests.integration.test_readiness_query_count import (
     _config,
@@ -479,6 +486,145 @@ async def test_ready_check_tick_data_leg(session) -> None:
         assert len(issues) == len(items)
 
     await _measure(session, "readiness_check.tick_data_leg", grow=grow, run=run)
+
+
+# ---------------------------------------------------- RUN admission (doc 15 §15)
+
+
+def _require_tick_config(index: int) -> dict[str, Any]:
+    """A StrategyConfig that DEMANDS tick data, on its own instrument.
+
+    Both edits are load-bearing. ``tick_policy`` must be ``require`` or
+    ``tick_data_required`` is false and the leg's loop ``continue``s past every item;
+    the instrument must be DISTINCT per item or eleven identical per-item queries
+    would collapse in the fixture and a per-item read would read as batched.
+    """
+    payload = _config(
+        indicator_rev="pkg_x",
+        condition_rev="pkg_y",
+        reference_rev="pkg_z",
+        leg_revs=[],
+        market_rev="md_rev_budget",
+    ).model_dump(mode="json")
+    payload["data"]["intrabar_policy"]["tick_policy"] = "require"
+    payload["data"]["instrument_id"] = f"INSTR_{index}"
+    return payload
+
+
+async def _approved_tick_revision(session, index: int) -> str:
+    """One APPROVED tick/trade revision on its own ACTIVE root, for ``INSTR_<index>``.
+
+    Availability is not decoration here: ``_resolve_tick_pins`` is FAIL-CLOSED and
+    raises 422 on the FIRST instrument it cannot pin, so a fixture without these rows
+    would measure a leg that stopped after one item.
+    """
+    root = EntityRegistry(
+        entity_id=f"budget_tick_root_{index}",
+        entity_type="market_dataset",
+        owner_principal_id="user_1",
+        created_by_principal_id="user_1",
+        lifecycle_state="active",
+    )
+    session.add(root)
+    await session.flush()
+    revision = MarketDatasetRevision(
+        revision_id=f"budget_tick_rev_{index}",
+        entity_id=root.entity_id,
+        revision_no=1,
+        market_data_type=MarketDataType.TICK_TRADES,
+        revision_state=MarketRevisionState.APPROVED,
+        instrument_id=f"INSTR_{index}",
+        payload={},
+        content_hash="c" * 64,
+        created_by_principal_id="user_1",
+    )
+    session.add(revision)
+    root.current_revision_id = revision.revision_id
+    await session.flush()
+    return revision.revision_id
+
+
+async def _mirror_pinned_strategy_item(session, index: int) -> dict[str, Any]:
+    """One manifest entry in the doc 02 §7.1 MIRROR shape (the Strategy-editor path).
+
+    The pinned work-object revision carries only ``strategy_revision_id``; the real
+    config lives on the typed ``StrategyRevision`` behind it. That is what makes the
+    mirror deref a SECOND per-item read on this leg, on top of the tick probe.
+    """
+    registry_root, strategy_root, _work_root, _draft = await strat_repo.create_strategy(
+        session,
+        owner_principal_id="user_1",
+        created_by_principal_id="user_1",
+        display_name=f"Budget strategy {index}",
+        rationale_family_id=None,
+        initial_payload={"data": {}},
+    )
+    await session.flush()
+    strategy_revision = await strat_repo.append_strategy_revision(
+        session,
+        strategy_root,
+        payload=_require_tick_config(index),
+        config_hash="0" * 64,
+        validation_status=ValidationStatusEnum.VALID,
+        created_by_principal_id="user_1",
+    )
+    await session.flush()
+    mirror = await mb_repo.append_work_object_revision(
+        session,
+        registry_root,
+        object_kind=MainboardItemKind.STRATEGY,
+        payload={"strategy_revision_id": strategy_revision.revision_id},
+        source_provenance={"strategy_revision_id": strategy_revision.revision_id},
+        created_by_principal_id="user_1",
+    )
+    await session.flush()
+    return {
+        "item_id": f"tick_pin_{index}",
+        "kind": str(MainboardItemKind.STRATEGY),
+        "root_id": registry_root.entity_id,
+        "revision_id": mirror.revision_id,
+        "enabled": True,
+    }
+
+
+async def test_run_admission_tick_pins(session) -> None:
+    """RUN admission's tick-pin leg — the first budget row on the admission path.
+
+    ``docs/performance/README.md`` §8 names Run admission as the surface whose DB cost
+    is gated deterministically *instead of* by the nightly load run, because driving a
+    mutation per repeat would measure the seeding. That gate did not exist: no row in
+    ``query_budgets.json`` measured admission at all.
+
+    Two properties of this leg make the fixture, not the assertion, the hard part:
+
+    * it is **fail-closed** — an instrument with no approved tick revision raises 422
+      ``TICK_DATA_UNAVAILABLE`` from inside the loop, so a fixture that blocks measures
+      a leg that stopped at item one and reports a comfortable, meaningless slope. Every
+      item here is pinnable, and ``run`` asserts the returned map to prove the loop ran
+      to completion over every item;
+    * its door is narrow — a strategy whose ``intrabar_policy.tick_policy`` is left at
+      the default ``inherit`` is skipped entirely, so a green ``0`` can equally mean
+      "batched" and "never executed". The payload flips the policy for that reason.
+    """
+    await _principal(session, "user_1")
+    items: list[dict[str, Any]] = []
+    expected: dict[str, str] = {}
+
+    async def grow(count: int) -> None:
+        for _ in range(count):
+            index = len(items)
+            expected[f"tick_pin_{index}"] = await _approved_tick_revision(session, index)
+            items.append(await _mirror_pinned_strategy_item(session, index))
+
+    async def run() -> None:
+        pins = await _resolve_tick_pins(session, {"items": items})
+        # Positive evidence that the leg FIRED, once per item: ``None`` is what a leg
+        # whose every item was skipped returns, and it is indistinguishable from a
+        # batched one by statement count alone.
+        assert pins is not None
+        assert {item_id: pin["tick_revision_id"] for item_id, pin in pins.items()} == expected
+
+    await _measure(session, "backtest_run.admission_tick_pins", grow=grow, run=run)
 
 
 # ------------------------------------------------- pinned resolver refs (doc 06 §7)

@@ -64,6 +64,7 @@ from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     MainboardWorkingItem,
     PortfolioAllocationPlanRevision,
+    StrategyRevision,
 )
 from entropia.infrastructure.postgres.repositories import allocation as alloc_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
@@ -354,8 +355,22 @@ async def _build_item_inputs(
     return inputs
 
 
+def _mirror_ref(payload: Mapping[str, Any]) -> str | None:
+    """The doc 02 §7.1 mirror pin a work-object payload carries, or ``None``.
+
+    Split out so a caller that dereferences a whole composition at once can collect
+    the refs for one batched read BEFORE the loop, without owning a second copy of
+    what "is a mirror" means. ``""`` and a missing key are the same absence the
+    resolver's own falsy test treats them as.
+    """
+    ref = payload.get("strategy_revision_id")
+    return str(ref) if ref else None
+
+
 async def _resolve_strategy_payload(
-    session: AsyncSession, payload: dict[str, Any]
+    session: AsyncSession,
+    payload: dict[str, Any],
+    mirrors: Mapping[str, StrategyRevision] | None = None,
 ) -> dict[str, Any]:
     """Resolve a Strategy-editor MIRROR pin to its typed canonical config.
 
@@ -365,11 +380,26 @@ async def _resolve_strategy_payload(
     ``save_strategy_revision`` appends. Ready Check must always validate the
     REAL immutable configuration, so the mirror is dereferenced here; an
     unresolvable mirror falls through unchanged and fails config validation
-    visibly (never silently passes)."""
-    mirror_ref = payload.get("strategy_revision_id")
-    if not mirror_ref:
+    visibly (never silently passes).
+
+    ``mirrors`` is an OPTIONAL prefetched ``{revision_id: StrategyRevision}`` map for
+    a caller that already batched the whole composition's mirror pins (P4). It exists
+    so the mirror semantics keep exactly ONE definition — this function — rather than
+    being re-implemented next to every batch. Omitting it keeps the per-item
+    ``session.get``, so every existing caller is unchanged, statement for statement.
+    A ref that is ABSENT from a supplied map is treated exactly as the ``session.get``
+    miss it stands in for: the payload falls through unchanged. That equivalence is
+    why the batch may be consulted instead of the read and never in addition to it —
+    ``get_strategy_revisions`` omits only ids that have no row.
+    """
+    ref = _mirror_ref(payload)
+    if ref is None:
         return payload
-    revision = await strat_repo.get_strategy_revision(session, str(mirror_ref))
+    revision = (
+        mirrors.get(ref)
+        if mirrors is not None
+        else await strat_repo.get_strategy_revision(session, ref)
+    )
     if revision is None:
         return payload
     return dict(revision.payload)

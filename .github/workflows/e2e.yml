@@ -126,28 +126,6 @@ jobs:
           E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
         run: npm run visual
 
-      # TEMPORARY — remove in the commit that lands the refreshed baseline.
-      # The runner's own output is the only correct source for a screenshot
-      # baseline (this repo records that a local run is NOT equal to a CI Linux
-      # runner), and neither the artifact store nor a local Docker stack is
-      # reachable from the authoring container. So when the visual gate fails,
-      # regenerate and print the changed PNGs as base64 for exact reconstruction.
-      # Prints only; commits nothing.
-      - name: TEMP — emit refreshed visual baselines as base64
-        if: failure()
-        working-directory: frontend/e2e
-        env:
-          E2E_BASE_URL: http://localhost:8080
-          E2E_ADMIN_EMAIL: e2e_admin@e2e.entropia.test
-        run: |
-          npm run screenshots:update || true
-          cd "${GITHUB_WORKSPACE}"
-          for f in $(git diff --name-only -- 'frontend/e2e/specs/*-snapshots/*.png'); do
-            echo "=====BASELINE_BEGIN ${f}"
-            base64 -w 120 "${f}"
-            echo "=====BASELINE_END ${f}"
-          done
-
       - name: Dump Compose logs on failure
         if: failure()
         run: docker compose logs --tail 500

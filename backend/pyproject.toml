@@ -26,7 +26,7 @@ dependencies = [
   "boto3>=1.43.67,<2.0",
   # --- Columnar data toolchain ---
   "polars>=1.43.2,<2.0",
-  "pyarrow>=17.0",
+  "pyarrow>=25.0.1",
   # --- Observability ---
   "structlog>=24.4",
   # --- Authentication (M1 / Master §20: local auth, argon2id password hashes) ---

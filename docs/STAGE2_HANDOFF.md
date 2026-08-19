@@ -7138,6 +7138,53 @@ codemap güncellemesi **gerekmedi**. `PROJECT_HISTORY.md` §ADIM 81 ·
 `docs/ADIM81_LANDED_KICKOFF.md`.
 
 
+## Stage 83 — kabul borcu batch 11 (doc 18 backend): dört kriter kapandı, doc 18'in backend borcu bitti landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi** (`backend/src` ve `frontend/src`
+altında sıfır dosya), migration **yok**, OpenAPI **değişmedi**, `ENGINE_VERSION` **değişmedi**.
+Belge + yüzey: **doc 18 (Analysis Lab), backend**.
+
+**Kapananlar.** `AL-05` (queued directive'in audit + outbox satırı, directive id'sine kapsanmış,
+sevk edilen `agent.directive.queued` adına pinli) · `AL-09` (Supervisor reddinden sonra runtime
+satırı **geri okunuyor**: pending control yok, `row_version` kıpırdamamış) · `AL-10` (Stop
+admission'dan **sonra**, `run_backtest`'ten **bir sınır önce**: `BacktestRun` var, `BacktestResult`
+yok; stop öncesi checkpoint'ler + controlled cancellation'ın kendi `safe_checkpoint`'i hayatta) ·
+`AL-18` (aynı kökte yeni revizyon indikten sonra pinlenmiş context manifest kaymıyor; üç bağımsız
+okuyucu + "yeni revizyon → yeni manifest → yeni task" yarısı). Ayrıca `AL-06.c2` (reddedilen boş
+directive hiçbir satır bırakmıyor).
+
+**`AL-10` vacuous olabilirdi.** Hiç backtest admit etmeden "Result yok" demek totolojidir. Test bu
+yüzden durable executor'ı (`jobs/agent_executor.py`) sürüyor ve Admin Stop'unu **`backtest_requested`
+checkpoint'inde** bastırıyor — `BacktestRun` satırı ve engine job'ı **vardır**, `run_backtest`
+**bir sonraki satırdadır**. Basış executor'ın kendi `_checkpoint` yardımcısı sarılarak enjekte
+edilir; koşan komut üretimdeki `stop_run`'dır.
+
+**Altı negatif kontrol, altısı da yalnız yeni testi düşürdü** — her birinde aynı kriterin **mevcut**
+testleri yeşil kaldı. En öğreticisi: `data_bundle.resolve` taze manifest'i çağıran task'a
+damgalayınca (kriterin yasakladığı naif implementasyon) **tüm** gateway + executor + e2e agent
+suite'i yeşil kalıyor, yalnız yeni test kırmızı.
+
+**Tavanlar:** `partial` **90 → 86**, `debt_class.B` **59 → 55**, açık borç **98 → 94**
+(A=1 · B=55 · C=6 · D=32). Clause `covered` 1022 → **1028**, `uncovered` 105 → **99**.
+`total_criteria` **383** ve `uncovered` **kriter** sayısı **8** değişmedi. Doc 18: **13 covered /
+5 partial → 17 covered / 1 partial**.
+
+**Açık kalan tek satır yüzey yüzünden açık:** `AL-06.c3` frontend'dir (`analysisLab.test.tsx`'te
+directive doğrulama testi yok) → sıradan sınıf-B borcu, **bulgu değil**; bir doc 18 **frontend**
+partisi bekler. **Bu partide yeni bulgu YOK** — seçilen beş clause'un adlandırdığı davranışın hepsi
+sevk edilmişti ve parti seçilmeden önce okunarak doğrulandı.
+
+**Dürüst sınır:** frontend kapıları bu container'da koşulmadı (`node_modules` yok, slice frontend'de
+tek satır değiştirmedi) → otorite CI. `@a11y`/e2e'ye assertion yazılmadı (Docker Hub **403**).
+
+**Zincir notu:** freeze **main `aecd72c`**'ye karşı ölçüldü — batch 08/09/10 zaten içinde, bir
+önceki freeze zincir borcunu kapattı. Paralel bir batch önce inerse bu dal rebase edilip **yeniden
+dondurulmalı**.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 83 ·
+`docs/ADIM83_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 81 GÜNCELLEMESİ (2026-08-18, main `1741b03`) — BU BAŞLIK ARTIK `C3`'Ü ADLANDIRIYOR,
@@ -7316,6 +7363,12 @@ codemap güncellemesi **gerekmedi**. `PROJECT_HISTORY.md` §ADIM 81 ·
 > **ADR §16 insan kapısı + ADR amendment'ı** gerekir. **Ondan önce başlanmaz.**
 > Ayrıntı, seam sıralaması ve tripwire tasarımı:
 > `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
+
+> **ADIM 83 (2026-08-19) bunu DEĞİŞTİRMEDİ** — kabul borcu partisi, motor eksenine dokunmadı.
+> İki hattın **ölçülmüş** sıradaki adımı: mühendislik hattında **`C3`**
+> (`execution/participant.py` adaptörü; importer-allowlist kararı #761'de **imzalandı**,
+> Seçenek A, negatif kontrol zorunlu), kabul-borcu hattında bir **doc 18 FRONTEND** partisi
+> (tek açık satır `AL-06.c3`). İkisi de **bağımsızdır** ve ikisi de PR B'yi açmaz.
 
 > **ADIM 38, 39, 40, 41, 45, 46, 47 ve 48 bunu DEĞİŞTİRMEDİ** — hepsi test/kapı/belge
 > ya da sunum slice'ıydı, motor eksenine dokunmadı. **P8-B2'nin PO yarısı ADIM 47'de KAPANDI**

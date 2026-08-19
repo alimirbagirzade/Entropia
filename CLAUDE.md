@@ -237,7 +237,29 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 82 (kayıtsız inen `C2`'nin ritüeli, PR #759): BU SLICE
+> `future_dev`. **Son dalga — ADIM 83 (kabul borcu batch 11, doc 18 backend): ÜRÜN KODU
+> DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Dört kriter kapandı — **`AL-05`** (queued directive'in audit + outbox satırı, directive **id'sine**
+> kapsanmış) · **`AL-09`** (Supervisor reddinden sonra runtime satırı **geri okunuyor**) ·
+> **`AL-10`** (Stop admission'dan SONRA, `run_backtest`'ten BİR SINIR ÖNCE: `BacktestRun` **var**,
+> `BacktestResult` **yok**; checkpoint'ler hayatta) · **`AL-18`** (yeni revizyon pinlenmiş context
+> manifest'e **kaymıyor**) — ayrıca `AL-06.c2`. **DERS 1: "Result yok" iddiasını hiç backtest admit
+> edilmemişken ölçmek TOTOLOJİDİR** → test durable executor'ı sürer ve Admin Stop'unu
+> `backtest_requested` checkpoint'inde bastırır (üretimdeki `stop_run` koşar). **DERS 2: guard'ı
+> mutasyonun ALTINA taşımak istisnayı AYNI ŞEKİLDE fırlatır** → `pytest.raises` tek başına bir
+> "durum değişmedi" clause'unu asla kapatmaz, satırı **geri oku**. **Altı negatif kontrol, altısı da
+> yalnız yeni testi düşürdü**; en öğreticisi `data_bundle.resolve`'un manifest'i çağıran task'a
+> damgalaması — **tüm** gateway/executor/e2e suite'i yeşil kalıyordu. **Tavanlar İNDİ: `partial`
+> 90 → 86, `debt_class.B` 59 → 55**; açık borç **94** (A=1 · B=55 · C=6 · D=32), clause `covered`
+> 1022 → 1028. **Doc 18'in backend borcu BİTTİ**; tek açık satır `AL-06.c3` **frontend olduğu için**
+> açık (bulgu DEĞİL, sıradan sınıf-B). **BU PARTİDE YENİ BULGU YOK.** **DÜRÜST SINIR:** frontend
+> kapıları koşulmadı (`node_modules` yok, frontend'de sıfır satır) → otorite CI.
+> `PROJECT_HISTORY.md` §ADIM 83 · `docs/ADIM83_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 82 (kayıtsız inen `C2`'nin ritüeli, PR #759): BU SLICE
 > DEFTER, KAYDETTİĞİ SLICE ÜRÜN KODU. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > #759 (`c78b15b`) `settle`/`finalize`'ı **zorunlu** Protocol üyesi yaptı, `PHASE_ORDER`'ı
 > **8 → 9 faza** çıkardı (P10), `PortfolioLedger.fold_tick` (G13 = FOLD) ve `iter_portfolio`'yu

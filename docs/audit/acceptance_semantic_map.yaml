@@ -17452,7 +17452,9 @@ criteria:
     - backend/tests/integration/test_analysis_lab.py::test_consume_defers_while_control_pending
   - id: AL-05.c3
     text: An audit row is written when the directive is queued.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_analysis_lab.py::test_directive_queue_writes_an_audit_row_for_that_directive
   production_paths:
   - backend/src/entropia/application/commands/agent_control.py
   - backend/src/entropia/application/commands/agent_coordinator.py
@@ -17460,12 +17462,14 @@ criteria:
   - backend/tests/integration/test_analysis_lab.py::test_high_directive_queued_then_consumed_at_checkpoint
   - backend/tests/integration/test_analysis_lab.py::test_directive_high_consumed_before_normal
   - backend/tests/integration/test_analysis_lab.py::test_consume_defers_while_control_pending
+  - backend/tests/integration/test_analysis_lab.py::test_directive_queue_writes_an_audit_row_for_that_directive
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_analysis_lab.py::test_high_directive_queued_then_consumed_at_checkpoint
   - backend/tests/integration/test_analysis_lab.py::test_directive_high_consumed_before_normal
   - backend/tests/integration/test_analysis_lab.py::test_consume_defers_while_control_pending
+  - backend/tests/integration/test_analysis_lab.py::test_directive_queue_writes_an_audit_row_for_that_directive
   negative: []
   auth: []
   occ: []
@@ -17473,13 +17477,14 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The queue half is fully proven. The audit half is not: agent_control.py::create_directive
-    does write an "agent.directive.queued" audit event and outbox event, but no test in the suite
-    reads either row back. Grepping the whole tests/ tree for "agent.directive.queued" returns nothing;
-    the only hits for the agent audit family are taxonomy/classification tests over the string "agent.runtime.pause",
-    which assert how a kind is bucketed, not that any command emits it. Emission is therefore unasserted.'
+  status: covered
+  notes: 'ADIM 83 (acceptance batch 11, doc 18 backend). The queue half was already proven; the audit
+    half is now asserted directly. The new test scopes the read to THIS directive''s id — a bare count
+    over audit_events would pass on any unrelated agent activity — and pins the SHIPPED kind
+    "agent.directive.queued" (the O-02/O-31 rule: a shipped name is canonical), its new_state, its
+    actor and its metadata, plus the outbox twin the doc 19 Logs plane actually reads. Negative control:
+    deleting the add_audit_event call from commands/agent_control.py::create_directive turns ONLY this
+    test red — the three queue-ordering tests stay green, which is exactly why the clause was open.'
 - id: AL-06
   document: docs/spec/18_Entropia_V18_Analysis_Lab_Page_Documentation_v1_1.md
   section: '15'
@@ -17493,7 +17498,9 @@ criteria:
     - backend/tests/integration/test_analysis_lab.py::test_empty_directive_rejected
   - id: AL-06.c2
     text: The rejected submit writes no directive row, no queue entry and no audit row.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_analysis_lab.py::test_empty_directive_rejected
   - id: AL-06.c3
     text: The textarea content is preserved for the user after the rejection.
     status: uncovered
@@ -17515,11 +17522,15 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'Only the rejection itself is asserted. The test raises and stops — it never counts directive/audit
-    rows afterwards, so "no mutation" rests on reading the command body rather than on a test. The
-    text-preservation clause is a frontend behaviour with no corresponding vitest case: analysisLab.test.tsx
-    has no directive-validation test at all, so nothing pins that a rejected submit leaves the textarea
-    populated.'
+  notes: 'ADIM 83 (acceptance batch 11, doc 18 backend) closed the BACKEND half. The rejection test now
+    counts TaskDirective, AuditEvent, OutboxEvent and AgentEvent rows after the raise, so c2 no longer
+    rests on reading the command body: a validation guard placed BELOW the writes raises identically
+    while leaving rows behind. Negative control: moving the empty-text check under add_audit_event in
+    commands/agent_control.py::create_directive turns this test red on the TaskDirective count while
+    its pytest.raises half still passes — the new assertion is what does the work. The criterion stays
+    PARTIAL on c3, which is out of this batch''s surface: the text-preservation clause is a frontend
+    behaviour with no corresponding vitest case (analysisLab.test.tsx has no directive-validation test
+    at all, so nothing pins that a rejected submit leaves the textarea populated).'
 - id: AL-07
   document: docs/spec/18_Entropia_V18_Analysis_Lab_Page_Documentation_v1_1.md
   section: '15'
@@ -17629,31 +17640,39 @@ criteria:
   - id: AL-09.c2
     text: The runtime state is unchanged after the denial (no pending_control set, status and row_version
       untouched).
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_analysis_lab.py::test_supervisor_lifecycle_denial_leaves_the_runtime_untouched
   production_paths:
   - backend/src/entropia/application/commands/agent_control.py
   - backend/src/entropia/domain/identity/policy.py
   test_evidence:
   - backend/tests/integration/test_analysis_lab.py::test_supervisor_lifecycle_denied
+  - backend/tests/integration/test_analysis_lab.py::test_supervisor_lifecycle_denial_leaves_the_runtime_untouched
   evidence_type:
   - backend_integration
   positive: []
   negative:
   - backend/tests/integration/test_analysis_lab.py::test_supervisor_lifecycle_denied
+  - backend/tests/integration/test_analysis_lab.py::test_supervisor_lifecycle_denial_leaves_the_runtime_untouched
   auth:
   - backend/tests/integration/test_analysis_lab.py::test_supervisor_lifecycle_denied
+  - backend/tests/integration/test_analysis_lab.py::test_supervisor_lifecycle_denial_leaves_the_runtime_untouched
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The test asserts only that both calls raise. It never re-reads the AgentRuntime row afterwards,
-    so "runtime state değişmez" is inferred from the guard's position in the command rather than proven
-    — a regression that moved the policy check below the pending_control write would still pass this
-    test. The third expectation (an audit-relevant denial record) is explicitly optional in the spec
-    text ("oluşabilir"), so it is not counted as a missing clause here.
+  status: covered
+  notes: 'ADIM 83 (acceptance batch 11, doc 18 backend). test_supervisor_lifecycle_denied asserts only
+    that both calls raise; the new test re-reads the AgentRuntime after EACH denial and pins
+    pending_control, control_correlation_id, status, active_task_id and row_version, then shows the
+    pre-denial version is still the live one by driving an Admin pause with it. It also asserts the
+    denial left no agent_run_control_requested event and no audit row at all. Negative control: moving
+    require_admin BELOW the pending_control write in pause_runtime turns ONLY this test red —
+    test_supervisor_lifecycle_denied stays green, which is exactly the regression the clause names.
+    The third spec expectation (an audit-relevant denial record) is explicitly optional in doc 18 §15
+    ("oluşabilir"), so it is not counted as a missing clause here.'
 - id: AL-10
   document: docs/spec/18_Entropia_V18_Analysis_Lab_Page_Documentation_v1_1.md
   section: '15'
@@ -17674,42 +17693,63 @@ criteria:
     - backend/tests/integration/test_analysis_lab.py::test_stop_without_active_run_rejected
   - id: AL-10.c3
     text: The last checkpoint / partial diagnostics survive the cancellation on the Agent stop path.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_agent_executor.py::test_stop_after_admission_cancels_before_the_engine_and_publishes_no_result
   - id: AL-10.c4
     text: The cancelled Agent run publishes no normal Backtest Result.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_agent_executor.py::test_stop_after_admission_cancels_before_the_engine_and_publishes_no_result
   production_paths:
   - backend/src/entropia/application/commands/agent_control.py
   - backend/src/entropia/application/commands/agent_coordinator.py
+  - backend/src/entropia/application/jobs/agent_executor.py
   test_evidence:
   - backend/tests/integration/test_analysis_lab.py::test_admin_stop_cancels_run
   - backend/tests/integration/test_agent_coordinator_loop.py::test_stop_cancels_active_run_no_result
   - backend/tests/integration/test_analysis_lab.py::test_stop_without_active_run_rejected
+  - backend/tests/integration/test_agent_executor.py::test_stop_after_admission_cancels_before_the_engine_and_publishes_no_result
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_analysis_lab.py::test_admin_stop_cancels_run
   - backend/tests/integration/test_agent_coordinator_loop.py::test_stop_cancels_active_run_no_result
+  - backend/tests/integration/test_agent_executor.py::test_stop_after_admission_cancels_before_the_engine_and_publishes_no_result
   negative:
   - backend/tests/integration/test_analysis_lab.py::test_stop_without_active_run_rejected
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_agent_executor.py::test_stop_after_admission_cancels_before_the_engine_and_publishes_no_result
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The clearest name-vs-assertion gap in this slice. test_stop_cancels_active_run_no_result
-    is NAMED for the no-Result guarantee but its body never queries BacktestResult — it asserts only
-    task CANCELLED, runtime ACTIVE and active_task_id cleared. Nothing on the Agent stop path asserts
-    a Result count. Likewise, agent_coordinator.py::apply_pending_control does call advance_to_safe_checkpoint
-    before cancelling and returns the checkpoint_id, but no test reads that checkpoint back after
-    a STOP (the checkpoint assertion exists only on the PAUSE path, in test_admin_pause_applies_at_safe_checkpoint).
-    The cancelled-run-yields-no-Result property IS proven, but only for HUMAN runs and only in the
-    doc 15 suite — tests/integration/test_backtest_run_cancellation.py, notably test_cancelling_a_queued_run_is_terminal_and_produces_no_result
-    and test_cancelled_run_never_reaches_results_history. Those exercise backtest_run.cancel, a different
-    command from the Agent runtime stop, so they cannot be cited as evidence for this row.
+  status: covered
+  notes: 'ADIM 83 (acceptance batch 11, doc 18 backend). The gap was real and is described below as it
+    was found. test_stop_cancels_active_run_no_result is NAMED for the no-Result guarantee but its body
+    never queries BacktestResult — it asserts only task CANCELLED, runtime ACTIVE and active_task_id
+    cleared. Nothing on the Agent stop path asserts a Result count. Likewise,
+    agent_coordinator.py::apply_pending_control does call advance_to_safe_checkpoint before cancelling
+    and returns the checkpoint_id, but no test reads that checkpoint back after a STOP (the checkpoint
+    assertion exists only on the PAUSE path, in test_admin_pause_applies_at_safe_checkpoint). The
+    cancelled-run-yields-no-Result property IS proven, but only for HUMAN runs and only in the doc 15
+    suite — tests/integration/test_backtest_run_cancellation.py, notably
+    test_cancelling_a_queued_run_is_terminal_and_produces_no_result and
+    test_cancelled_run_never_reaches_results_history. Those exercise backtest_run.cancel, a different
+    command from the Agent runtime stop, so they cannot be cited as evidence for this row. CLOSED by
+    driving the ONE boundary where the guarantee is load-bearing: the durable executor
+    (jobs/agent_executor.py) admits the run — a BacktestRun row and its engine job exist — and the
+    Admin Stop lands at the "backtest_requested" checkpoint, one boundary before run_backtest. The new
+    test asserts the task reaches CANCELLED with BacktestRun == 1 and BacktestResult == 0 (c4,
+    non-vacuous: the engine was one step away), and that every pre-stop checkpoint plus the controlled
+    cancellation''s own safe_checkpoint survive with runtime.last_checkpoint_id resolving to it and the
+    two pre-stop tool-call rows intact (c3). The Admin press is injected by wrapping the executor''s
+    own _checkpoint helper; the production stop_run command is what runs. TWO negative controls, each
+    red on ONLY this test: (1) deleting the _pending_control_interrupt before run_backtest still
+    cancels the task but publishes a Result; (2) skipping advance_to_safe_checkpoint on the STOP branch
+    of apply_pending_control drops the surviving checkpoint. Both left test_admin_stop_cancels_run and
+    test_stop_cancels_active_run_no_result green.'
 - id: AL-11
   document: docs/spec/18_Entropia_V18_Analysis_Lab_Page_Documentation_v1_1.md
   section: '15'
@@ -18155,7 +18195,9 @@ criteria:
   - id: AL-18.c3
     text: When the dataset gains a NEW revision after the manifest is pinned, the current task does
       not move to it — a new task/context manifest is required.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_agent_tool_gateway.py::test_new_dataset_revision_does_not_slide_into_a_pinned_context_manifest
   production_paths:
   - backend/src/entropia/application/commands/agent_coordinator.py
   - backend/src/entropia/application/jobs/agent_tools.py
@@ -18163,12 +18205,14 @@ criteria:
   - backend/tests/integration/test_analysis_lab.py::test_admin_pause_applies_at_safe_checkpoint
   - backend/tests/integration/test_agent_tool_gateway.py::test_data_bundle_execution_allows_research_backtest
   - backend/tests/integration/test_e2e_agent_loop.py::test_agent_loop_directive_to_hypothesis_without_ui
+  - backend/tests/integration/test_agent_tool_gateway.py::test_new_dataset_revision_does_not_slide_into_a_pinned_context_manifest
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_analysis_lab.py::test_admin_pause_applies_at_safe_checkpoint
   - backend/tests/integration/test_agent_tool_gateway.py::test_data_bundle_execution_allows_research_backtest
   - backend/tests/integration/test_e2e_agent_loop.py::test_agent_loop_directive_to_hypothesis_without_ui
+  - backend/tests/integration/test_agent_tool_gateway.py::test_new_dataset_revision_does_not_slide_into_a_pinned_context_manifest
   negative: []
   auth: []
   occ: []
@@ -18177,15 +18221,22 @@ criteria:
   historical_integrity:
   - backend/tests/integration/test_analysis_lab.py::test_admin_pause_applies_at_safe_checkpoint
   - backend/tests/integration/test_e2e_agent_loop.py::test_agent_loop_directive_to_hypothesis_without_ui
+  - backend/tests/integration/test_agent_tool_gateway.py::test_new_dataset_revision_does_not_slide_into_a_pinned_context_manifest
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: Pinning is proven; the anti-drift scenario the row actually describes is not. No test seeds
-    a NEWER dataset revision after an Agent context manifest exists and then re-reads the task to
-    show it still resolves the OLD revision. The closest analogue, test_backtest_manifest_pinning.py::test_soft_deleted_market_dataset_fails_the_run_without_latest_fallback,
-    does prove no-latest-fallback with a newer approved revision present — but on the BACKTEST run
-    manifest, a different artifact from the Agent context manifest this row is about, so it is not
-    cited as evidence here.
+  status: covered
+  notes: 'ADIM 83 (acceptance batch 11, doc 18 backend). Pinning (c1/c2) was already proven; what no
+    test drove was the DRIFT scenario the row is actually about. The new test resolves a data bundle
+    onto revision 1, hands the manifest to a RUNNING task, then appends revision 2 to the SAME root
+    so the root head moves, and re-reads three independent surfaces: the durable AgentToolCall row
+    (still input_manifest_id M1, response_ref research_revision_ids == [v1] — the pin is by exact
+    revision id, never by root head), the Agent''s own agent.task.query, and a checkpoint written AFTER
+    the drift (what a resumed task reads back). The second half is asserted too: revision 2 is reachable
+    only through a NEW manifest carried by a NEW task (followup_task.enqueue), and taking it leaves the
+    running task on M1. Negative control: making _handle_data_bundle_resolve stamp its fresh manifest
+    onto the calling task — the naive implementation the criterion forbids — turns ONLY this test red;
+    the whole gateway, executor and e2e agent suite stays green. The closest pre-existing analogue,
+    test_backtest_manifest_pinning.py::test_soft_deleted_market_dataset_fails_the_run_without_latest_fallback,
+    is on the BACKTEST run manifest, a different artifact, so it is still not cited here.'
 - id: PM-01
   document: docs/spec/19_Entropia_V18_Panel_Management_Logs_Page_Documentation_v1_1.md
   section: '14'

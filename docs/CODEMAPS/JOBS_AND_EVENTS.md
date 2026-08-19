@@ -190,6 +190,31 @@ Silinen yardımcı: `_enqueue_completed_job` (eski "in-transaction stub" satır�
 - **At-least-once guard değişmedi**: terminal run asla yeniden koşmaz. Terminal olmayan
   (worker öldürülmüş) bir run gerçekten yarımdır; redelivery onu yeniden dener ve aynı
   sequence'a yeni olaylar ekler.
+- **Paylaşımlı saat dalı (`C4` / E5, 2026-08-19) — WIRED, ERİŞİLEMEZ.** RUNNING artık
+  **iki** replay yolu taşır ve seçimi **tek** bir yer yapar:
+  `backtest_engine.py::_use_unified_clock(capital_execution)` =
+  `shared_allocation_is_executable() and shared_allocation_requested(capital_execution)`.
+  **İki conjunct da taşıyıcıdır** — biri eksikse her BAĞIMSIZ kompozit Result sessizce
+  yeniden fiyatlanır (bayraksız, `ENGINE_VERSION` bump'sız). Dal ayrıca ADR-0002 §3.2'nin
+  `len(prepared_items) > 1` koşulunu taşır: tek yürüyen item'da birleşik eksen zaten o
+  item'ın bar ekseni olduğu için A14 `run_engine`'i şart koşar.
+  Bayrak `future_dev` olduğu ve admission (`commands/backtest_run.py`) her paylaşımlı run'ı
+  reddettiği için **hiçbir istek bu dala giremez**; bayrağı çeviren `C9`/ADIM 20'dir.
+  Yol: `_shared_clock_inputs` (saf; item başına `_build_stepper` →
+  `participant.build_engine_participant`, `pin_ordinal` **manifest** pin sırasından, `shares`
+  allocation planından — worker phase loop'un sözlüğünü **import etmez**, o yüzden imzalı
+  importer allowlist'i değişmedi) →
+  `_replay_shared_clock` (`iter_portfolio` generator'ını elle sürer) →
+  `project_portfolio_run`. Bir refüz (`UnsupportedStrategyShapeError`, `InvalidParticipantError`,
+  projeksiyon fail-closed'ları) **terminal `RUN_FAILED_ENGINE_ERROR`** olur, degrade run değil.
+- **Kontrol noktası artık BEŞ, ve #3b yenidir.** Birleşik eksen "iki item arası" sınırını
+  sildiği için #3 paylaşımlı yolda hiç koşmaz; yerine `_replay_shared_clock` **tick-strided**
+  bir kontrol koyar (`_TICK_CHECKPOINT_STRIDE`, gerekçesi sabitin yanında yazılı) — ADR-0002
+  §14 **A21**. `PortfolioRun` ancak generator tükendikten sonra kurulur, yani buradaki bir
+  cancel her zaman Result'tan öncedir. **#4 yerinde kaldı** ve artık **iki yolda da** çalışır:
+  ilerleme sözlüğü (`replay_progress`) dal öncesinde bağlanır — eskiden yalnız bağımsız kolun
+  bağladığı `item_runs`'ı okuyordu. Paylaşımlı iptalin `detail`'i `unified_clock: true`
+  taşır, #3b ayrıca `replayed_tick_count` yazar (ikisini ayıran alan budur).
 
 ### Manifest'in iki hash'i — `manifest_hash` vs `execution_key`
 

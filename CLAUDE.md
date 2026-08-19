@@ -237,7 +237,26 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 86 (kayıtsız inen İKİ slice'ın ritüeli: P1-proof #765 +
+> `future_dev` (**DEĞİŞMEDİ**). **Son dalga — ADIM 88 (`C4`/E5, worker'ın paylaşımlı saat dalı):
+> ÜRÜN KODU DEĞİŞTİ (tek dosya), gözlenebilir ÜRETİM DAVRANIŞI DEĞİŞMEDİ; 50 golden digest BAYT
+> BAYT AYNI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `_use_unified_clock` **tek**
+> yerde (iki conjunct da taşıyıcı), dal item döngüsünün **kardeşi** + ADR §3.2'nin
+> `len(prepared_items) > 1` koşulu, `iter_portfolio` elle sürülür, **checkpoint #3b** (A21).
+> Tripwire **DARALTILDI, silinmedi** — iki dokunulmaz assertion yeşil. **İMPORTER ALLOWLIST'İ
+> DEĞİŞMEDİ:** worker'da `ItemIdentity`/`ItemBarStream` kurmak **üç dosyada beş assertion**
+> kırmızıya çeviriyordu (sayıldı) ve imzalı listeyi **ikinci, imzasız** bir modülle büyütürdü →
+> genişletmek yerine **tasarım değişti**, `participant.py::build_engine_participant` (no-touch
+> listesinde DEĞİL). Kaçınma vacuous değil: import'lar geri konunca üç guard kırmızı.
+> **DERS: negatif kontrol GERÇEK bir kusur buldu** — checkpoint #4'ün
+> ilerleme sözlüğü yalnız bağımsız kolun bağladığı `item_runs`'ı okuyordu → paylaşımlı iptalde
+> `UnboundLocalError`; **yedi test de yeşildi** çünkü hepsi daha erken #3b'de iptal oluyordu.
+> **Sıradaki kalem KOD DEĞİL, İKİ İMZA** (`G11`+`G12` → `C6`); `C5` zaten sevk edilmiş.
+> `PROJECT_HISTORY.md` §ADIM 88 · `docs/ADIM88_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 86 (kayıtsız inen İKİ slice'ın ritüeli: P1-proof #765 +
 > P2 #766): BU SLICE DEFTER; kaydettiği #766 19 satır ürün kodudur, #765 test-only. Blocker
 > sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** İkisi de main'deydi, ikisinin de kaydı
 > **yoktu** (`grep -c` → 0/0). **Sonuç: P-C2 §D.1'in üç N+1 bacağından İKİSİ artık flat** —

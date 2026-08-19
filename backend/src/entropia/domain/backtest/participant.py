@@ -47,9 +47,10 @@ impossible before `C6` exists, instead of merely improbable.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Any
 
 from entropia.domain.backtest.engine import _EntryDecision, _ItemStepper
 from entropia.domain.backtest.execution.arbitration import ArbitrationDecision
@@ -462,6 +463,55 @@ class _EngineParticipant:
         return self._current
 
 
+def build_engine_participant(
+    *,
+    item_id: str,
+    item_kind: str,
+    pin_ordinal: int,
+    root_id: str | None,
+    selected_revision_id: str | None,
+    item_label: str | None,
+    instrument_id: str | None,
+    stepper: _ItemStepper,
+    bar_batches: Iterable[list[dict[str, Any]]],
+) -> ItemParticipant:
+    """One engine-backed participant, from values a CALLER already holds.
+
+    Exists so the worker can wire the shared branch (`C4`) without importing
+    ``ItemIdentity`` or ``ItemBarStream``. Those two live in ``execution/clock.py`` and
+    ``execution/intents.py``, whose production importers are the allowlist a human signed on
+    2026-08-18 with **exactly one** module in it (``docs/decisions/
+    closure_participant_importer_allowlist_2026-08-18.md``). Building the pair in the worker
+    would have widened that list by a SECOND, unsigned module — and a guard widened outside
+    the scope its signature measured is exactly the debt GH #731 already tracks. So the
+    worker becomes a CALLER of the phase loop without becoming an IMPORTER of its types, and
+    the signed list is left where the signature put it.
+
+    Every parameter is a plain value the caller resolved for its own reasons: the stepper
+    from ``engine._build_stepper`` over the pins it already resolved, ``pin_ordinal`` from
+    the MANIFEST's deterministic pin order (never a list position — ``ItemBarStream``'s own
+    docstring and ADR §4.4 both say so), and the identity fields from the same immutable
+    manifest the Result will be named from.
+
+    Returns the ``ItemParticipant`` Protocol rather than the concrete class, because the
+    concrete class is this module's business and the loop's contract is what a caller needs.
+    Refusals (:class:`UnsupportedStrategyShapeError` for a shape the shared clock cannot
+    drive) are raised HERE, at construction, before a single bar is admitted."""
+    return _EngineParticipant(
+        identity=ItemIdentity(
+            item_id=item_id,
+            item_kind=item_kind,
+            pin_ordinal=pin_ordinal,
+            root_id=root_id,
+            selected_revision_id=selected_revision_id,
+            item_label=item_label,
+        ),
+        stream=ItemBarStream(item_id=item_id, pin_ordinal=pin_ordinal, batches=bar_batches),
+        stepper=stepper,
+        instrument_id=instrument_id,
+    )
+
+
 def _protocol_check(participant: _EngineParticipant) -> ItemParticipant:
     """mypy's structural proof that the adapter IS an ``ItemParticipant``.
 
@@ -476,4 +526,5 @@ __all__ = [
     "EngineParticipantError",
     "ParticipantDivergenceError",
     "UnsupportedStrategyShapeError",
+    "build_engine_participant",
 ]

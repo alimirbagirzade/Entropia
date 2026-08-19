@@ -12597,3 +12597,191 @@ ancak ikinci merge'de bir git conflict'i olarak konuşur. Bu dalganın bedeli **
 
 **HÂLÂ KAYITSIZ (işaret edildi, anlatısı YAZILMADI):** #752 · #755 · #747 · #761 · #770 ·
 #774 · #773 · #762. Bunlar karar/brif belgeleridir; kaydı **sahibinin** yazması gerekir.
+
+---
+
+## ADIM 88 — `C4` / E5: worker'ın paylaşımlı saat dalı, iptal kontrol noktası, daraltılmış tripwire
+
+> **NUMARA — 87 ATLANDI, BİLEREK.** Bu slice **ADIM 87 yazıldı**; kapanış PR'ı açılmadan önce
+> açık PR'lar tarandı (ADIM 85 §4'ün kuralı) ve **PR #797** (kabul borcu batch 13, docs-only)
+> hem `## ADIM 87` kaydını hem de **`docs/ADIM87_LANDED_KICKOFF.md` dosyasını EKLİYOR**.
+> Çakışan şey başlık değil **DOSYA YOLUDUR**: iki dal aynı yolu eklerse ikinci merge bir
+> **add/add conflict** verir ve `check_classification` bunu asla yakalayamaz (her dal kendi
+> içinde tutarlıdır, tek `current` taşır). Numara bu yüzden **88**'e taşındı ve çakışma
+> **kaldırıldı, yönetilmedi**.
+>
+> **REBASE YÜKÜMLÜLÜĞÜ:** #797 önce inerse ağaçta `ADIM87_LANDED_KICKOFF.md` **`current`**
+> olarak bulunur ve bu dal onu da **`historical`a demote etmelidir** — aksi halde iki `current`
+> kalır ve `check_classification` kırmızı verir. Demote, numarayla **AYNI commit'te** taşınır.
+
+> **ÜRÜN KODU DEĞİŞTİ, tek dosyada; gözlenebilir ÜRETİM DAVRANIŞI DEĞİŞMEDİ.** Migration
+> **yok** · OpenAPI **değişmedi** · `ENGINE_VERSION` **değişmedi**
+> (`backtest-engine-v18-percent-sizing-per-fill-commission`) · alembic head
+> **`0043_i08_registry_strategy_fks`** (tek head) · `SHARED_ALLOCATION_STATUS` =
+> **`future_dev` (DEĞİŞMEDİ)** · **50 golden digest BAYT BAYT AYNI**
+> (`git diff --exit-code -- backend/tests/unit/engine_golden_digests.json` → 0).
+> **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> Ön koşul: `C3` merged (#777). Dokunulmayanlar (planın no-touch listesi, hepsi ölçüldü):
+> `manifest.py`, `engine.py`, `portfolio_engine.py`, `capability.py`.
+
+Tek üretim dosyası: **`application/jobs/backtest_engine.py`**. `C1` describe/book bölmesini,
+`C2` `settle`/`finalize`/P10/`iter_portfolio`'yu, `C3` `_EngineParticipant` adaptörünü indirmişti
+ve hiçbirinin **üretim çağıranı yoktu**. Bu slice o çağıranı yazar — ve **kimsenin giremeyeceği**
+bir dal olarak.
+
+### Dalı seçen tek yer, ve neden iki conjunct da taşıyıcı
+
+```
+def _use_unified_clock(capital_execution: Any) -> bool:
+    return shared_allocation_is_executable() and shared_allocation_requested(capital_execution)
+```
+
+Simetrik değiller: `shared_allocation_requested` düşerse **her** çok-item'lı run paylaşımlı
+loop'a girer; `shared_allocation_is_executable` düşerse snapshot'ı paylaşımlı *görünen* her run
+girer. İkisi de her **bağımsız** kompozit Result'ı **sessizce yeniden fiyatlardı** — bayrak yok,
+`ENGINE_VERSION` bump'ı yok, okurun görebileceği hiçbir şey yok. Bağımsız çok-item'lı koşu
+birinci sınıf bir moddur (doc 13 §1.1), yani bu varsayımsal değil, üretimin çoğu.
+
+**`A and B` kısa devre yapar**, o yüzden bileşik cevabı sınamak `B` silinince de yeşil kalır
+(ADIM 76'nın ölçülmüş dersi). `tests/unit/test_shared_clock_branch_predicate.py` bu yüzden
+**2×2'yi tek tek** yazar ve her hücre hangi terimi `False`'ta tuttuğunu adıyla söyler.
+
+### Üçüncü koşul: ADR §3.2, ve neden predicate'in İÇİNDE değil
+
+Dal `len(prepared_items) > 1 and _use_unified_clock(...)` diye okunur. ADR-0002 §3.2 kelimesi
+kelimesine *"a new entry point (`run_portfolio`) that the worker calls **only when more than one
+item executes**"* der: tek yürüyen item'da birleşik eksen **zaten** o item'ın bar eksenidir ve
+paylaşımlı defter onun defteridir, yani **A14** (tek-Strategy kompozisyonu bayt bayt aynı)
+`run_engine`'i şart koşar. Koşul çağrı yerinde durur çünkü **farklı kaynaklı farklı bir
+değişmezdir**; iki gerekçeyi tek predicate'e katlamak ikisini de ifadesiz bırakırdı.
+
+### Yol, ve neyi yeniden türetmediği
+
+| Adım | Sembol | Not |
+|---|---|---|
+| girdiler (saf) | `_shared_clock_inputs` | item başına `_build_stepper` — **`_replay_strategy`'nin argüman listesiyle**, `portfolio_rules=None` |
+| katılımcı | `_EngineParticipant` | `pin_ordinal` **manifest** pin sırasından (liste konumundan DEĞİL), `shares` allocation planından |
+| sürücü | `_replay_shared_clock` | `iter_portfolio` generator'ını **elle** tüketir |
+| projeksiyon | `project_portfolio_run` | `items` = her **enabled** pinlenmiş satır (yürümeyen Trading Signal / Trade Log dahil) |
+
+- **`portfolio_rules=None` bir ihmal değil, ADR §12 satır 19.** Çapraz-item önceliği paylaşımlı
+  yolda **emekliye ayrılır**: loop conflict ve exposure'ı P5/P6b'de **global** olarak arbitre eder,
+  item'a bir de sıralı `PortfolioRules` vermek aynı kuralı iki farklı sıra-bağımlılığı altında
+  iki kez uygulardı. `prior_intervals` bağımsız kolun içinde kurulur ve hiçbir katılımcıya geçmez.
+  (Adaptör bunu zaten **reddediyor**: `_unsupported_shapes`'in 2. maddesi.)
+- **Yüzde → tutar dönüşümü icat edilmedi.** `max_total_exposure_notional`, motor prologunun
+  uyguladığı dönüşümün **aynısıdır** (aynı taban = havuz, aynı quantize), ve
+  `exposure_percent_invalid` yine **SIFIR** cap'e fail-closed olur. Bir yapılandırılmış yüzde,
+  hangi kol replay ettiğine göre iki tutar anlamına gelemez.
+- **`max_position_notional` BİLEREK verilmedi.** §6 per-item cap'i **yüzde** olarak saklanır ve
+  ancak bir giriş fiyatında paraya çözülür; sizing zinciri onu zaten `desired_size` içinde
+  bağlar (`planned_size` → `_position_size` → `_clamp_to_limits`). `arbitrate`'in parametresi
+  aynı limitin defter-katmanı biçimidir ve kendi docstring'i *"never inferred"* der.
+- **Havuz P0/R0/compounding ilk item'dan okunur** çünkü onlar **planın** özellikleridir: her
+  `AllocationExecution` aynı `capital_execution` snapshot'ından projekte edilir, yalnız
+  `item_share_percent` item'a göre değişir.
+
+### Kontrol noktası artık BEŞ, ve #3b yenidir (ADR §14 **A21**)
+
+Birleşik eksen "iki item arası" sınırını siler, yani O-06 #3 paylaşımlı yolda hiç koşmaz —
+onsuz uzun bir paylaşımlı run **iptal edilemez** olurdu. `_replay_shared_clock` generator'ı
+elle sürer (düz bir `for` generator'ın **dönüş değerini atar**, ve kurulan `PortfolioRun`
+tam olarak o değerdir) ve iki **commit edilmiş** tick arasında `await _cancellation_requested`
+çağırır. `next(ticks)` `try`'ın **içinde**, iptal `await`'i **dışındadır**: checkpoint'teki bir
+veritabanı hatası motor hatası diye yeniden etiketlenip run'ı gömmez, retryable job exception'ı
+olarak kalır. Stride bir **sabittir ve gerekçesi yanında yazılıdır**; #4 koşulsuz koştuğu için
+yanlış bir stride'ın **en kötü** bedeli gecikmedir, asla iptal edilmiş bir run'ın Result'ı değil.
+
+### NEGATİF KONTROLÜN BULDUĞU GERÇEK KUSUR (review değil, ölçüm)
+
+`#4` ilerleme sözlüğü `len(item_runs)` okuyordu — `item_runs`'ı **yalnız bağımsız kol bağlar**.
+Paylaşımlı bir run'da #4'te gözlenen bir iptal, run'ı iptal etmek yerine **`UnboundLocalError`**
+fırlatıyordu. **Bu slice'ın yedi testinin yedisi de yeşildi**: hepsi daha ERKEN, #3b'de iptal
+oluyor ve o satıra hiç varmıyordu. Kusur ancak **NC-4** (in-loop checkpoint'i kaldır) koşunca
+göründü. Onarım: `replay_progress` dal ÖNCESİNDE bağlanır; paylaşımlı kol `unified_clock: true`
++ `replayed_item_count` yazar, #3b ayrıca `replayed_tick_count` yazar — **ikisini ayıran alan
+budur** ve `test_checkpoint_four_also_cancels_a_shared_run_and_writes_no_result` onu pinler.
+**DERS: bir kolu test eden yedi yeşil test, o kolun İKİNCİ çıkışını hiç ölçmemiş olabilir.**
+
+### Tripwire DARALTILDI, silinmedi — ama İMZALI ALLOWLIST'E DOKUNULMADI
+
+`assert callers == []` artık `assert callers == _AUTHORISED_LOOP_CALLERS` (aynısı projeksiyon
+için). Yerine geçen davranışsal iddia: **`assert "shared_allocation_is_executable" in worker`** —
+bir metin taraması erişilebilirliği kanıtlayamaz, ama tek yetkili çağıranın bayrağı **dalda**
+okuduğunu kanıtlayabilir. **Dokunulmayan iki assertion yeşil kaldı** (`combine_item_runs(`,
+`for prepared in prepared_items:`) ve projeksiyon testine de eklendi.
+
+**İmporter allowlist'i DEĞİŞMEDİ, ve bu bir tasarım kararıdır.** İlk yazım worker'ın içinde
+`ItemIdentity` + `ItemBarStream` kuruyordu; **gevşetmeden önce sayıldı (ADIM 85 §4 md. 1)** ve
+ağaç **üç dosyada beş assertion** dedi (containment gate ×3, `test_backtest_unified_clock` ×1,
+`test_backtest_item_intents` ×1; ledger / arbitration / attribution / provenance / layer-boundaries
+**yeşil kaldı**). O genişletme **imzalı bir allowlist'i ikinci, İMZASIZ bir modülle** büyütürdü —
+tam olarak GH #731'in izlediği borç. **Bu yüzden genişletilmedi, TASARIM DEĞİŞTİ:**
+`participant.py` bir fabrika kazandı (`build_engine_participant`) ve worker phase loop'un
+**ÇAĞIRANI** oldu, **sözlüğünün IMPORTER'I olmadan**. `participant.py` `C4`'ün no-touch
+listesinde **değildir** (`manifest.py`, `engine.py`, `portfolio_engine.py`, `capability.py` —
+dördü de el değmedi).
+
+**Kaçınma vacuous DEĞİL, ölçüldü:** NC-9 worker'a o iki import'u geri koyar ve **üç guard birden
+kırmızıya döner**. Ayrıca kalıcı bir assertion eklendi —
+`assert "application/jobs/backtest_engine.py" not in live` — yoksa bir sonraki slice arka kapıdan
+listeye girebilirdi ve gerekçe bir yoruma çürürdü.
+
+### Ölçülen, ölçülmeyen
+
+**Sekiz negatif kontrol koştu, sekizi de kırmızı — ve hangi assertion'da kırmızı olduğu okundu:**
+
+| # | Üründen kaldırılan | Kırmızıya dönen |
+|---|---|---|
+| 1 | `shared_allocation_requested` conjunct'ı | predicate `..._lifting_the_flag_alone...` + entegrasyon `..._a_lifted_flag_alone...` |
+| 2 | `shared_allocation_is_executable` conjunct'ı | predicate `..._the_shipped_world_never_takes_the_branch` |
+| 3 | ADR §3.2 item-sayısı kapısı | `..._a_single_strategy_shared_composition_stays_on_run_engine` |
+| 4 | tick-strided checkpoint | `..._a_cancel_inside_the_tick_loop...` — **ilk koşuda `UnboundLocalError`** (yukarıdaki kusur), onarımdan sonra **`replayed_tick_count` yok** üzerinde |
+| 5 | `_shared_clock_inputs` etrafındaki `except` | `..._a_strategy_shape_the_shared_clock_cannot_drive_fails_the_run_closed` (run FAILED yerine exception) |
+| 6 | (ekleme) ikinci üretim loop çağıranı | containment gate loop caller allowlist'i |
+| 7 | (ekleme) ikinci üretim projeksiyon çağıranı | containment gate projection caller allowlist'i |
+| 8 | `#4`'ün paylaşımlı ilerleme alanları | `..._checkpoint_four_also_cancels_a_shared_run...` |
+| 9 | (ekleme) worker'da doğrudan `ItemIdentity`/`ItemBarStream` import'u | **üç guard birden** — kaçınmanın vacuous olmadığının kanıtı |
+| 10 | `C4` öncesi `callers == []` geri konur | iki gate testi de — daraltma zorunluydu, kozmetik değil |
+
+**Bir süreç dersi daha:** negatif kontrolün temizliğini `git checkout <dosya>` ile yapma — index'ten
+geri yükler ve **commit edilmemiş çalışma ağacını siler** (bu slice'ta gate dosyasının yeniden
+tasarımını bir kez sildi, `cp` yedeğiyle geri kondu).
+
+**Dal GERÇEKTEN koşuyor.** `test_a_shared_two_strategy_run_reaches_the_unified_loop_when_lifted`
+`C1`→`C3`'ün kurduğu tüm zinciri worker'dan ilk kez sürer ve **kalıcı** Result'ın
+`engine_kind == "v1_unified_clock_portfolio"`, `tick_count >= 1` ve **kalıcı equity noktalarının
+zaman-sıralı** olduğunu (A5) okur. Bunsuz `C4` yalnızca tip denetiminden geçen bir dal yazmış
+olurdu.
+
+**İKİ YANLIŞ VARSAYIM ÖLÇÜMLE DÜZELTİLDİ:**
+1. `COMPOSITION_CURVE_WARNING` **paylaşımlı havuza özgü DEĞİL** — bağımsız iki-item'lı fold da
+   yayımlıyor. Yani o uyarı *"paylaşımlı sermaye istendi"* değil *"sıralı fold koştu"* demektir;
+   assertion o okumaya göre yeniden yazıldı (sıralı yolda **var**, birleşik yolda **yok**).
+2. Test-sahipli iptal, aynı session'da `flush` **olmadan** görünmez: `_cancellation_requested`
+   satırı `refresh` eder ve **flush edilmemiş bir alanı DÜŞÜRÜR**. Üretimde baskı başka bir
+   bağlantıdan commit'li gelir; test o sıralamayı yeniden üretir, assertion'ın yerine geçmez.
+
+**ÖLÇÜLDÜ, KAPATILMADI (bilerek):**
+- **`C3`'ün devrettiği iki kalem duruyor.** Giriş fill'i komisyonu havuza aynalanmıyor
+  (loop'ta o fazda book kanalı yok — pin `test_the_entry_fills_commission_is_the_one_leg_the_loop_cannot_mirror`);
+  `same_direction_stacking` **şema varsayılanı** `allow_stacking` ve adaptör onu reddediyor.
+  İkincisinin boyutu bu slice'ta **ölçüldü**: standart fixture'ın strateji payload'u
+  **üç** maddeden düşüyor (`entry_timing`, `exit_timing`, stacking) →
+  `test_a_strategy_shape_the_shared_clock_cannot_drive_fails_the_run_closed` bunu terminal bir
+  `RUN_FAILED_ENGINE_ERROR` olarak pinler. **Bugünkü şema varsayılanıyla kayıtlı stratejilerin
+  ÇOĞU paylaşımlı saatte koşamaz** — bunu kullanıcıya görünür bir admission blocker'a çevirmek
+  `C6`'dır ve bir **ÜRÜN KARARIDIR** (`G11`/`G12`, imzasız).
+- **`pin_ordinal`'ın manifest'ten gelmesi DAVRANIŞSAL olarak yanlışlanamaz.** `prepared_items`
+  manifest sırasının strateji'ye filtrelenmiş hâlidir, yani liste konumu ile manifest indeksi
+  **aynı göreli sırayı** verir ve `_ordered` yalnız göreli sırayı okur. Sözleşme (ADR §4.4,
+  `ItemBarStream` docstring'i) manifest'i şart koştuğu için kod manifest'i okur; **vacuous bir
+  test yazılmadı**, sınır burada kaydedildi.
+
+**KOŞULMAYAN:** frontend kapıları (`node_modules` yok; frontend'de **sıfır satır** değişti) →
+otoritesi CI. `npm run visual` / `a11y` bu container'da koşmuyor.
+
+**A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+**Containment AÇILMADI:** `G10` (ADR §16 Gate 2) hâlâ **talep edilmedi**; `G8`/`G11`/`G12`/`G14`
+açık; Karar 1 (#552 komisyon tabanı) ve Karar 3 (#559) **imzasız**. Sıradaki plan kalemi `C5`
+(zaten sevk edilmiş, ADIM 72'de ölçüldü) değil, **`C6`** — ve onun önünde iki imza var.

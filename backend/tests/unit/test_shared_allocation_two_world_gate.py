@@ -263,17 +263,60 @@ def test_the_worker_fold_never_consults_the_capability_flag() -> None:
 
     A behavioural test alone would keep passing if the worker grew a flag branch that
     happened not to change this fixture's numbers. The source-level assertion is the one
-    that survives that. When ``C4`` lands ``_use_unified_clock``, this test is the file that
-    must be updated — deliberately, as part of wiring the branch.
+    that survives that.
+
+    **Updated deliberately at `C4` (E5), which is the update the paragraph below asked for.**
+    Before `C4` this asserted the flag was ABSENT from the worker. It is now present — the
+    shared-clock branch is exactly the flag branch this test was written to notice — so the
+    absence check would have had to be either deleted (losing the property) or weakened to a
+    substring (which proves nothing about where the flag is read). Neither is done here.
+
+    The property that actually holds, and the one the sibling test above depends on, is
+    narrower than absence and stronger than presence: **the capability is consulted in
+    exactly ONE function, and the fold is not it.** That is asserted over the parsed AST
+    rather than over the text, because a text scan cannot tell a call from a docstring — a
+    trap measured at `C4`, where deleting a conjunct from ``_use_unified_clock``'s return
+    expression left every substring assertion in the containment gate green.
+
+    So the fold still never reads the flag: ``combine_item_runs``, the item loop and the
+    per-item capital probe all sit in functions that do not call it, and a second reader
+    appearing anywhere in the worker turns this red.
     """
-    worker = (_SRC / "application" / "jobs" / "backtest_engine.py").read_text(encoding="utf-8")
-    for absent in (
-        "shared_allocation_is_executable",
-        "SHARED_ALLOCATION_STATUS",
-        "_use_unified_clock",
-        "run_portfolio",
-    ):
-        assert absent not in worker, f"{absent!r} reached the worker — re-read this docstring"
+    import ast
+
+    source = (_SRC / "application" / "jobs" / "backtest_engine.py").read_text(encoding="utf-8")
+
+    # Still absent, and for unchanged reasons: the worker never reads the raw containment
+    # constant (it goes through the capability predicate, ADR §11's one-constant rollback),
+    # and it drives the phase loop through ``iter_portfolio`` — the tick-drivable form its
+    # async cancellation check requires — never through the exhausting wrapper.
+    for absent in ("SHARED_ALLOCATION_STATUS", "run_portfolio("):
+        assert absent not in source, f"{absent!r} reached the worker — re-read this docstring"
+
+    tree = ast.parse(source)
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+
+    def _enclosing_function(node: ast.AST) -> str:
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                return node.name
+        return "<module>"
+
+    readers = sorted(
+        {
+            _enclosing_function(call)
+            for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "shared_allocation_is_executable"
+        }
+    )
+    assert readers == ["_use_unified_clock"], (
+        "the capability flag is read outside `_use_unified_clock`. It decides shared vs "
+        "independent in ONE place (P-C2 §C.5); a second reader is a second answer, and the "
+        f"sequential fold must never be one of them. Found: {readers}"
+    )
 
 
 # --------------------------------------------------------------------------- #

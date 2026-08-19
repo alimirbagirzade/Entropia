@@ -975,10 +975,15 @@ def _use_unified_clock(capital_execution: dict[str, Any] | None) -> bool:
     separately by the tests rather than only through this function's combined answer.
 
     ``shared_allocation_is_executable()`` is READ here, never cached at import: the flag is
-    a one-constant rollback (ADR §11) and a cached copy would survive it.
+    a one-constant rollback (ADR §11) and a cached copy would survive it. This is also the
+    ONLY function in this module allowed to call it —
+    ``tests/unit/test_shared_allocation_two_world_gate.py`` proves that over the parsed AST,
+    so a second reader anywhere here is a red build. That test also scans this file's TEXT
+    for the containment constant's name, and a text scan cannot tell a docstring from a
+    read: do not spell that constant out in a comment here, name the capability instead.
 
-    While ``SHARED_ALLOCATION_STATUS`` is ``future_dev`` the first conjunct is ``False``, so
-    this returns ``False`` for every request that exists — and admission
+    While the containment capability is unavailable in this build the first conjunct is
+    ``False``, so this returns ``False`` for every request that exists — and admission
     (``commands/backtest_run.py``) has already refused any shared run long before the worker
     runs. The shared branch is therefore wired and unreachable, which IS the containment."""
     return shared_allocation_is_executable() and shared_allocation_requested(capital_execution)
@@ -1148,8 +1153,8 @@ async def _replay_shared_clock(
     """Co-simulate every prepared Strategy on ONE merged clock over ONE shared pool.
 
     The sibling of the item loop, not its replacement: it is entered only through
-    :func:`_use_unified_clock`, and while ``SHARED_ALLOCATION_STATUS`` is ``future_dev``
-    that gate is closed for every request that can exist. Everything below therefore runs
+    :func:`_use_unified_clock`, and while the containment capability is unavailable in this
+    build that gate is closed for every request that can exist. Everything below therefore runs
     only under a test that forces the flag — which is exactly the containment ADR §11
     describes, and why this slice bumps no ``ENGINE_VERSION``.
 

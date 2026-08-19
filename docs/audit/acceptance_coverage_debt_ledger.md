@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 52 |
+| B | 51 |
 | C | 6 |
 | D | 32 |
-| **open total** | **91** |
+| **open total** | **90** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (52)
+## Class B (51)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -74,7 +74,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `TL-11` | 05 | partial | Independent capital is required only while allocation is off; an active run uses the allocation snapshot. | The readiness conditionality is proven in both directions. The run-time half is not: the capital-source assertions in test_backtest_persistence.py (test_worker_independent_run_uses_the_strategy_own_capital) run over a STRATEGY item, and no test drives an allocation-enabled run whose capitalised item is a Trade Log. ADIM 49 FINDING — this row is very likely MISCLASSIFIED. c3 names a run over an … |
 | `TL-14` | 05 | partial | Import returns a durable job id; the worker owns the work and the UI recovers from job state. | test_trade_log_import_is_handed_off_to_its_data_actor is the PR #528 regression guard: it asserts the tool call is admitted (status succeeded) while the WORK is still queued (import_status == "queued", import_job_kind == TRADE_LOG_IMPORT) and that worker_actors._dispatch_pending_data_job sends run_trade_log_import for that job_id — the exact hand-off the Gateway plane used to skip, leaving agen… |
 | `TL-16` | 05 | partial | Concurrent editors on the same expected head — exactly one wins, the other gets a 409. | c3 CLOSED by acceptance batch 11 (doc 05 backend); c4 MEASURED AND FOUND UNSHIPPED, and the criterion therefore stays partial/class B. c3: test_stale_expected_head_conflicts raises on a FABRICATED token and stops, which proves the guard rejects a token that never existed — it cannot distinguish that from last-write-wins between two real writers who both read the same real head, because the lose… |
-| `TL-18` | 05 | uncovered | Expand/collapse writes no revision, no audit, no composition hash and no readiness state. | Nothing in the suite asserts this. The Mainboard jsdom tests use expandRow() only as a navigation step to reach inner controls; none of them assert that no request was issued or that no state changed. The closest backend fact is test_mainboard_persistence.py::test_patch_reorder_does_not_change_hash, which proves REORDER is presentation-only — a different action, on a different (server-side) axi… |
 | `CP-03` | 06 | partial | A visible-but-not-usable package is refused by Add Strategy From Package server-side; the UI clears stale selection state. | The server-side half is fully proven: can_view/can_use are independent in the projection and the derive command refuses both the unusable-but-visible revision (PackageNotDerivableError) and the foreign private one (AccessDeniedError). What is NOT asserted anywhere is the row's second sentence — that the UI clears stale selection state after such a denial. The mainboard test proves the picker di… |
 | `CP-09` | 06 | partial | The same Send Idempotency-Key returns the same request/job identity; the same C.D.P key creates no second draft. | `submit_candidate_generation` does accept `idempotency_key` and wraps its body in `run_idempotent`, but no test in the suite passes a key to it twice: a grep for `idempotency_key` across the create-package integration tests hits only the C.D.P call. The Send-replay half is therefore an untested code path, not a proven one. |
 | `CP-13` | 06 | partial | Supervisor/Agent may request approval but only Admin executes publish and the ESP registry transition; the backend guard holds regardless of UI state. | The prohibition half is proven on both surfaces and for both principals. The permission half — "Supervisor veya Agent valid candidate için approval request oluşturabilir" — is not: no test drives `request_approval` (or the create-package equivalent) with a SUPERVISOR or AGENT actor; the permission unit tests only exercise owner/foreign-user/admin. So the row's affirmative clause is unproven. |

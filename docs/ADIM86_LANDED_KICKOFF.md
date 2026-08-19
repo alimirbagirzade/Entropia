@@ -1,9 +1,8 @@
 <!-- doc-status: historical -->
-> **HISTORICAL KICKOFF — canlı olan `docs/ADIM87_LANDED_KICKOFF.md`'dir.**
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM88_LANDED_KICKOFF.md`'dir.**
 > Bu belge yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat
 > olabilir. Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
 > `docs/generated/repository_facts.md` (üretilmiş).
-
 # ADIM 86 LANDED — kayıtsız inen P1-proof (#765) + P2 (#766) kaydedildi · sıradaki slice için kickoff
 
 > Ölçüm anı: **2026-08-19**, taban main **`a5bc27f`** (ADIM 83 = #781 dahil). Bu belgedeki her sayı o commit'e karşı

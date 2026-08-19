@@ -6702,28 +6702,54 @@ criteria:
   - id: TL-18.c1
     text: Expanding or collapsing a Trade Log row produces no revision, no audit row, no composition-hash
       change and no readiness state change.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - frontend/src/test/presentationState.test.tsx > Mainboard row presentation state (TS-16 / TL-18
+      / AOS-16) > expands and collapses every row kind without issuing a single write request
+    - frontend/src/test/presentationState.test.tsx > Mainboard row presentation state (TS-16 / TL-18
+      / AOS-16) > leaves the composition hash and every pinned revision untouched across the toggles
   production_paths:
   - frontend/src/pages/Mainboard.tsx
   - backend/src/entropia/application/commands/mainboard.py
-  test_evidence: []
-  evidence_type: []
-  positive: []
-  negative: []
+  test_evidence:
+  - frontend/src/test/presentationState.test.tsx > Mainboard row presentation state (TS-16 / TL-18
+    / AOS-16) > expands and collapses every row kind without issuing a single write request
+  - frontend/src/test/presentationState.test.tsx > Mainboard row presentation state (TS-16 / TL-18
+    / AOS-16) > leaves the composition hash and every pinned revision untouched across the toggles
+  evidence_type:
+  - frontend_component
+  positive:
+  - frontend/src/test/presentationState.test.tsx > Mainboard row presentation state (TS-16 / TL-18
+    / AOS-16) > expands and collapses every row kind without issuing a single write request
+  negative:
+  - frontend/src/test/presentationState.test.tsx > Mainboard row presentation state (TS-16 / TL-18
+    / AOS-16) > leaves the composition hash and every pinned revision untouched across the toggles
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: uncovered
-  debt_class: B
-  notes: Nothing in the suite asserts this. The Mainboard jsdom tests use expandRow() only as a navigation
-    step to reach inner controls; none of them assert that no request was issued or that no state
-    changed. The closest backend fact is test_mainboard_persistence.py::test_patch_reorder_does_not_change_hash,
-    which proves REORDER is presentation-only — a different action, on a different (server-side) axis.
-    Expand/collapse is pure client disclosure and never reaches the server, which is exactly why an
-    explicit "no request was made" assertion is the only thing that could prove it.
+  status: covered
+  notes: 'CLOSED by acceptance batch 14 WITHOUT A NEW TEST — the coverage was already shipped and
+    the ledger simply never cited it. frontend/src/test/presentationState.test.tsx landed in d012a63
+    (ADIM 60, PR #719) and its describe block is literally named "Mainboard row presentation state
+    (TS-16 / TL-18 / AOS-16)"; TS-16 and AOS-16 have cited those two nodes as covered ever since,
+    while TL-18 was left uncovered. That is a bookkeeping miss, not missing coverage — the same
+    shape as RD-09.c4 in ADIM 68. The two nodes cover all four halves of this clause: the write-side
+    ("no revision, no audit row") via writeRequests(fetchMock) == [] across expand AND collapse of
+    all three row kinds, plus a mainboard-scoped non-GET filter that is also empty; the
+    composition-hash half by re-reading the rendered hash_abc after the toggles; and the readiness
+    half by re-reading the rendered "Backtest Ready: Ready" summary. The first test also carries a
+    vacuity guard — it asserts the disclosure actually opened (the editor section for each label
+    appears) — so the empty write list cannot be the result of a toggle that never fired.
+    FALSIFIABILITY MEASURED, not assumed: this is NOT the unfalsifiable shape of TL-02.c2. Breaking
+    it takes a ONE-point change, and the negative control was run — adding a PATCH to the three
+    onClick handlers in pages/Mainboard.tsx turned BOTH tests red ("expected [ …(6) ] to deeply
+    equal []" and "expected [ …(2) ] to deeply equal []"). Note the first attempt at that control
+    modified nothing because the handler string occurs three times and the patch asserted a single
+    occurrence; the run stayed green and would have been a false negative control had the assertion
+    not caught it.'
 - id: TL-19
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'

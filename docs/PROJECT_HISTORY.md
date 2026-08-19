@@ -12743,3 +12743,78 @@ PR'ların **ekleyeceği kickoff dosya yollarını** listele, başlıklarını de
 düzeltme: modül `execution/participant.py` **DEĞİL** `domain/backtest/participant.py` olarak
 sevk edildi — bilerek `execution/` **dışında**, çünkü içeride containment gate'in importer
 taraması **kör** olurdu.
+
+## ADIM 88 — kabul borcu batch 14 (doc 05 frontend): TL-18 YENİ TEST YAZILMADAN kapandı, `uncovered` tavanı ilk kez indi
+
+> **ÜRÜN KODU DEĞİŞMEDİ, TEST KODU DA DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Diff yalnız **defter + üretilmiş artefakt**: `backend/` ve `frontend/`
+> altında **sıfır** satır.
+
+**Kapanan tek kriter `TL-18` ve bedeli SIFIR TEST oldu — çünkü kapsama zaten sevk edilmişti.**
+`frontend/src/test/presentationState.test.tsx` **`d012a63` (ADIM 60, PR #719)** ile inmiş ve
+describe bloğunun adı birebir şu: *"Mainboard row presentation state (**TS-16 / TL-18 /
+AOS-16**)"*. Kardeş iki kriter (`TS-16`, `AOS-16`) o günden beri bu **iki düğümü** `covered`
+olarak cite ediyor; `TL-18` ise `uncovered` bırakılmış ve notunda *"Nothing in the suite asserts
+this"* yazıyordu. **Bu eksik kapsama değil, defterde bir gözden kaçmadır** — ADIM 68'in
+`RD-09.c4`'ü ile aynı şekil.
+
+**Clause'un dört yarısının dördü de o iki düğümde karşılanıyor** (ölçüldü, varsayılmadı):
+
+| Clause'un istediği | Düğümün kanıtı |
+|---|---|
+| revizyon yok · audit satırı yok | `writeRequests(fetchMock)` **`[]`** — üç satır tipinin expand **VE** collapse'ı boyunca; ayrıca `/mainboard` kapsamlı non-GET filtresi de boş |
+| composition hash değişmez | toggle'lardan sonra render edilen `hash_abc` yeniden okunuyor |
+| readiness durumu değişmez | render edilen `Backtest Ready: Ready` özeti yeniden okunuyor |
+
+Birinci test ayrıca **vacuity muhafızı** taşıyor: her etiket için editor bölümünün açıldığını
+assert ediyor, yani boş yazma listesi *"hiç açılmayan bir toggle"*ın sonucu olamaz.
+
+**YANLIŞLANABİLİRLİK ÖLÇÜLDÜ, VARSAYILMADI.** Bu satır `TL-02.c2`'nin **yanlışlanamaz** şekli
+DEĞİL: orada assertion'ı kırmak üç noktalı bir değişiklik ister, burada **tek noktalı**.
+Negatif kontrol koşuldu — `pages/Mainboard.tsx`'teki **üç** `onClick` handler'ına bir `PATCH`
+eklemek **her iki düğümü de** kırmızıya çevirdi
+(`expected [ …(6) ] to deeply equal []` ve `expected [ …(2) ] to deeply equal []`).
+
+**DERS — sahte negatif kontrol az kalsın kaydediliyordu.** İlk denemede yama tek eşleşme
+varsaydı, oysa handler dizesi **üç yerde** geçiyor: dosya **hiç değişmedi**, koşu **yeşil**
+kaldı ve bu *"kontrol geçti"* diye okunabilirdi. Yakalayan şey testin kendisi değil, yamaya
+konmuş `assert count == 3` idi. **Negatif kontrolün ürünü GERÇEKTEN değiştirdiğini ayrıca
+doğrula** — yeşil bir kontrol, davranışın korunduğunu değil çoğu zaman kontrolün hiç
+uygulanmadığını gösterir (ADIM 71'in *"geçen negatif kontrol yolun hiç koşulmadığını söyler"*
+tespitinin ikizi).
+
+**Tavanlar İNDİ ve bu sefer FARKLI bir sayaç oynadı:** `uncovered` **kriter** tavanı **8 → 7**
+— bu sayı **altı dalgadır** hiç kıpırdamamıştı (ADIM 73/75/78/79/80/84'ün hepsi yalnız
+`partial`/`B` indirmişti). `debt_class.B` **52 → 51**; açık borç **91 → 90**
+(A=1 · B=51 · C=6 · D=32). Clause düzleminde `covered` 1033 → **1034**, `uncovered` 96 → **95**.
+`total_criteria` **383** (TABAN) ve `partial` **83** değişmedi. **Bu sayılar #785'in ÜSTÜNDE,
+merged ağaçta ölçüldü** — dal `ccdd4fd` tabanında 8 → 7 / 53 → 52 ölçmüştü ve o taban artık
+geçerli değil. `TL-18`'in tek clause'u
+`covered` olduğu için **`debt_class` KALDIRILDI**.
+
+**ZİNCİR NOTU.** Taban `cfce51e`. Dal `ccdd4fd`'de dondurulmuştu; PR açıkken **#795** (CI
+düzeltmesi) ve **#785** (batch 13, doc 18 frontend, `AL-06`) indi. #785 kabul borcuna DOKUNDU
+(`partial` 84 → 83, B 53 → 52), yani dalın freeze'i merge sonrası **geçersizdi**. Kriter
+kümeleri **AYRIK** (`AL-06` / `TL-18`) olduğu için fark alınabilirdi — **alınmadı**: dal rebase
+edilip `--report` **merged ağaçta yeniden koşuldu** (`83/7`, B **51**).
+
+**DOC 05 BİTTİ (test slice'ının kapatabileceği anlamda).** Kalan TL satırları: `TL-01.c4` (yol
+sapması) · `TL-02.c2` (yanlışlanamaz şekil) · `TL-11.c3` (sınıf C bulgusu) · `TL-14.c4` ·
+`TL-16.c4` (ADIM 84'ün bulgusu, sınıf D şekli) — **hiçbiri bir test slice'ının kalemi değil**.
+
+**A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+Hiçbir issue durumu değişmedi, hiçbir ürün sorusu karara bağlanmadı.
+
+**NUMARA — bu slice TAŞINDI, ve İKİNCİ KEZ aynı şekilde.** Kapanış yazılırken main'in son
+kaydı **ADIM 86** idi ve bu slice **87 / batch 13** yazıldı. PR açıkken **#785 merge edildi** ve
+o kayıt hem **ADIM 87**'yi hem **`batch 13`** etiketini aldı (doc 18 frontend, `AL-06`).
+**Merge edilmiş ad kazanır** → bu kayıt **ADIM 88**, partisi **batch 14**. Dal ve commit mesajı
+`adim-87` / `batch 13` yazar; numaralar yeniden atanmaz. **Bu, ADIM 84'te #781 ile yaşananın
+birebir tekrarıdır** — aynı oturumda iki kez numara+etiket çalındı, yani çakışma kaza değil
+**yapısal**: kabul borcu hattında paralel oturumlar aynı sırayı tüketiyor. Kickoff'un devir
+promptu bu yüzden **hem numarayı hem parti etiketini** commit'ten hemen önce yeniden
+doğrulatıyor. İki batch'in kriterleri **AYRIK** (#785: doc 18 `AL-06`; bu: doc 05 `TL-18`), o
+yüzden tavan iki freeze'in farkından türetilmedi — dal rebase edilip `--report` ile **merged
+ağaçta yeniden ölçüldü**. `docs/ADIM88_LANDED_KICKOFF.md`.

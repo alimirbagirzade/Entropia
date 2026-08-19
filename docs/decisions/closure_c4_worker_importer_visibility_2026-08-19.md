@@ -1,8 +1,9 @@
 <!-- doc-status: current -->
 # `C4`'ün worker'ı containment importer guard'ına GÖRÜNÜR mü olmalı?
 
-> **KARAR VERİLMEMİŞTİR.** Bu belge bir **hazırlıktır** ve hiçbir seçeneği seçmez.
-> İmza bloğu §Karar'da, boş.
+> **KARAR İMZALANDI (2026-08-19): Seçenek A (#799).** Bu belge bir **hazırlık** olarak
+> yazıldı ve hiçbir seçeneği seçmiyordu; imza §Karar'da, doldurulmuş hâlde durur.
+> Aşağıdaki ölçümler imza öncesi hâliyle **değiştirilmeden** korunmuştur.
 >
 > Çerçeve: `C4` (E5) worker'ı paylaşımlı saat dalına bağlar. Bunu yapmanın **iki** yolu var
 > ve ikisi de sevk edilebilir durumda — **iki ayrı açık PR olarak yazıldılar** (#799 ve #800).
@@ -24,7 +25,7 @@
   **çağıran** daraltması (`assert callers == []` → `_AUTHORISED_*_CALLERS`) bu kararın
   kapsamı **DIŞINDADIR**: iki PR de onu aynı şekilde ve zorunlu olarak yapıyor, çünkü `C4`'ün
   tanımı bunu içeriyor (`STAGE2_HANDOFF.md` §Next, ADIM 85 bloğu).
-- **Yazarın rolü:** hazırlık. **Bu belgede hiçbir karar verilmemiştir.**
+- **Yazarın rolü:** hazırlık. **Karar ürün sahibine aittir ve §Karar'da imzalanmıştır.**
 - **Bloklar:** `C4`. `C4` inmeden `C6` → `C7` → `C8` → `C9` zinciri de açılamaz.
 
 ---
@@ -83,17 +84,21 @@ değiştirir — kapsam dışı ve daha riskli).
 
 ---
 
-## Karar — İMZA BEKLİYOR
+## Karar — İMZALANDI
 
-**Seçenek:** ☐ A (#799) ☐ B (#800) ☐ C (başka: ______________________)
+**Seçenek:** ☑ **A (#799)** ☐ B (#800) ☐ C (başka: ______________________)
 
 **Gerekçe (bir cümle yeterli):**
 
 ```
+2026-08-18'de imzalanmış tek-modüllü allowlist'in kapsamı içinde kalınır; ikinci bir
+importer genişletmesi C4'ü bir imza daha beklerken bloklamasın diye Seçenek A seçildi.
+Seçenek A'nın bu belgede ÖLÇÜLMÜŞ bedeli — worker'ın contained alt sisteme uzanımının
+guard'a GÖRÜNMEZ olması — kabul edilmiş bir honest boundary'dir, gözden kaçmış değildir.
 ```
 
-- **karar veren:** ______________________
-- **tarih:** ______________________
+- **karar veren:** alimirbagirzade (ürün sahibi)
+- **tarih:** 2026-08-19
 
 ### İmzadan sonra ne olur
 

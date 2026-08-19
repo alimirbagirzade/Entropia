@@ -7408,6 +7408,57 @@ etiketini commit'ten hemen önce yeniden doğrulatır.
 `PROJECT_HISTORY.md` §ADIM 88 · `docs/ADIM88_LANDED_KICKOFF.md`.
 
 
+## Stage 89 — kabul borcu batch 15 (doc 02 Add Strategy, backend): dört kriter kapandı landed
+
+**Ne indi.** Beş yeni integration case (`backend/tests/integration/test_strategy_integration.py`)
++ kabul defteri + üretilmiş artefakt. **`backend/src` altında sıfır satır**, migration yok,
+OpenAPI değişmedi, `ENGINE_VERSION` değişmedi.
+
+**Kapananlar: `AT-01` (c2) · `AT-11` (c2 + c3) · `AT-22` (c3) · `AT-23` (c3).** Doc 02 bugüne
+kadar **hiç parti görmemişti** ve en büyük dokunulmamış sınıf-B havuzuydu. Dördünde de eksik
+olan **mekanizma değil DİKİŞTİ**:
+
+- **`AT-01.c2`** artık projeksiyon bayrağından değil, kompozisyona giren **tek kapıdan**
+  ölçülüyor: kaydedilmemiş draft'ın kökünde **hiç `work_object_revision` yok**, `attach_mainboard_item`
+  tam `(root_id, revision_id)` çifti ister (L5) → iki sahte-id dalı da reddedilir; Save + kendi
+  mirror revizyonu **pozitif kontroldür**. Ödünç-revizyon dalı **sınıfla değil ekolanan alanla**
+  pinlenir (aksi halde AOS-12 kind kontrolü testi yeşil tutardı).
+- **`AT-11.c2`** saklanan `strategy_revision.payload` **ve** pinlenmiş
+  `protection_stop_indicator` bağımlılık kenarını geri okur; kapalı ve açık kardeşler **aynı
+  Save'de** gider, yani bölümü toptan düşürerek geçilemez. **`AT-11.c3`** kapalı stopu
+  `gt 0`'ı ihlal eden bir değerle kaydeder (Save kabul eder), sonra draft'ın **kendi saklanmış**
+  bölümünü yalnız `enabled` çevrilmiş hâlde geri gönderir → 422 yalnız saklanan değerden gelebilir.
+- **`AT-22.c3`** Supervisor ve Admin'i **aynı yabancı draft** üzerinde sürer; Admin gerçek bir
+  revizyon yazar ve kökün sahibi **değişmez** (grant = düzenleme, devralma değil).
+- **`AT-23.c3`** **zaten revizyonu olan** bir kökü Clear'lar; revizyon, kenarları ve head
+  pointer sağ kalır, `trash_entries` doğrudan sorgulanır (c2'nin dolaylı yarısı artık doğrudan).
+
+**Yedi negatif kontrol, hepsi kırmızı ve hepsi doğru assertion'da**; her biri koşmadan önce
+**yamasının uygulandığını** (tek eşleşme sayısı) assert etti. Biri özellikle öğretici:
+aynı ürün kırılması hem payload hem bağımlılık-kenarı assertion'ını düşürdüğü için **ilk
+kırmızı ikincisini gölgeliyordu** → kontrol, testin payload satırını da geçici olarak düşürüp
+redin **kenar** assertion'ına inmesini ölçtü.
+
+**Tavanlar İNDİ: `partial` 83 → 79, `debt_class.B` 51 → 47**; açık borç **90 → 86**
+(A=1 · B=47 · C=6 · D=32). Clause `covered` 1034 → 1039, `uncovered` 95 → 91. Taban `ee5ab38`,
+freeze **taze bir `--report` koşusundan** (fark alınmadı).
+
+**Doc 02'nin backend borcu bitti.** Kalan tek test-kapatılabilir satır **`AT-07`** ve o
+**frontend** (bulgu değil). Diğer beşi sınıf D. **Bu partide yeni bulgu yok.**
+
+**Yan iş:** `acceptance_semantic_traceability.md`'nin **doc 05 satırı bayattı** (ADIM 88'in
+`TL-18` kapanışı bu üretilmiş belgeye yansımamıştı; dosya `--check` kapsamında değil) →
+yeniden üretildi.
+
+**Ortam:** bu container'da **Postgres 16 ikilileri kurulu**; yerel bir cluster kaldırılıp
+integration suite'i **gerçekten koşuldu**. Son beş dalganın *"Postgres yok → otorite CI"*
+sınırı artık zorunlu değil. **Dürüst sınır:** frontend kapıları koşulmadı (`node_modules` yok,
+frontend'de sıfır satır); tam suite'in **geçen** sayısı ve coverage yüzdesi CI'ın otoritesinde.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
+`PROJECT_HISTORY.md` §ADIM 89 · `docs/ADIM89_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 85 GÜNCELLEMESİ (2026-08-19) — BAŞLIK BİLEREK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

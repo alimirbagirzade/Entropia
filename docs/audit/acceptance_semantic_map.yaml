@@ -1936,9 +1936,10 @@ criteria:
       draft editor without navigation'
   - id: AT-01.c2
     text: An unsaved draft cannot enter the Ready Check / RUN input.
-    status: partial
+    status: covered
     test_evidence:
     - backend/tests/integration/test_strategy_integration.py::test_list_strategy_drafts_returns_owner_drafts_newest_first
+    - backend/tests/integration/test_strategy_integration.py::test_unsaved_draft_cannot_be_pinned_into_a_mainboard_composition
   production_paths:
   - backend/src/entropia/application/commands/strategy_draft.py
   - backend/src/entropia/application/queries/strategy.py
@@ -1946,6 +1947,7 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_strategy_integration.py::test_create_draft_persists_root_and_draft_without_revision
   - backend/tests/integration/test_strategy_integration.py::test_list_strategy_drafts_returns_owner_drafts_newest_first
+  - backend/tests/integration/test_strategy_integration.py::test_unsaved_draft_cannot_be_pinned_into_a_mainboard_composition
   - frontend/src/test/strategy.test.tsx > StrategyDetails > creates a draft (no OCC token, fresh Idempotency-Key)
     and opens the editor
   - 'frontend/e2e/specs/08-mainboard-inline-editors.spec.ts > Strategy: Add Strategy opens the inline
@@ -1956,23 +1958,31 @@ criteria:
   - e2e
   positive:
   - backend/tests/integration/test_strategy_integration.py::test_create_draft_persists_root_and_draft_without_revision
+  - backend/tests/integration/test_strategy_integration.py::test_unsaved_draft_cannot_be_pinned_into_a_mainboard_composition
   - frontend/src/test/strategy.test.tsx > StrategyDetails > creates a draft (no OCC token, fresh Idempotency-Key)
     and opens the editor
   - 'frontend/e2e/specs/08-mainboard-inline-editors.spec.ts > Strategy: Add Strategy opens the inline
     draft editor without navigation'
-  negative: []
+  negative:
+  - backend/tests/integration/test_strategy_integration.py::test_unsaved_draft_cannot_be_pinned_into_a_mainboard_composition
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The draft-open half is proven server-side and end-to-end. The gating half is not: `test_list_strategy_drafts_returns_owner_drafts_newest_first`
-    only asserts the projection flags `has_revision is False` / `is_attached is False`; no test drives
-    a Ready Check or a RUN admission with an unsaved draft and asserts the refusal, so the "cannot
-    enter Ready Check/RUN input" clause has no asserting test.'
+  status: covered
+  notes: 'CLOSED by acceptance batch 15 (doc 02, backend surface). The gating half is now asserted
+    on the seam that actually enforces it: a composition admits a work object only through `attach_mainboard_item`,
+    which resolves an exact `(root_id, revision_id)` pair (L5, no name/latest resolution), and an
+    unsaved draft has NO `work_object_revision` row at all — the test asserts that emptiness first,
+    then drives both forged-id branches a client could take (a nonexistent revision id, and a REAL
+    same-kind revision borrowed from another strategy root, which must fail the belongs-to-root check
+    rather than the AOS-12 kind check — pinned by the echoed field rather than by exception class).
+    Saving the same draft and attaching its own mirror revision is the positive control, so the refusal
+    is attributable to the missing revision and not to a broken harness. Negative control: deleting
+    the `revision.entity_id != root_id` check in commands/mainboard.py turns the borrowed-revision
+    branch red (DID NOT RAISE) — a one-point break.'
 - id: AT-02
   document: docs/spec/02_Entropia_V18_Add_Strategy_Strategy_Details_Page_Documentation_v1_1.md
   section: '12'
@@ -2403,12 +2413,14 @@ criteria:
   - id: AT-11.c2
     text: The saved revision / manifest dependency set actually drops the disabled Percentage/Trailing/Absolute/Logic
       stop.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_strategy_integration.py::test_disabled_stops_leave_the_saved_revision_and_its_dependency_edges
   - id: AT-11.c3
     text: Re-enabling a previously disabled stop revalidates its old value.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_strategy_integration.py::test_re_enabling_a_disabled_stop_revalidates_its_stored_value
   production_paths:
   - backend/src/entropia/domain/strategy/compiler.py
   - backend/src/entropia/domain/strategy/config.py
@@ -2416,9 +2428,12 @@ criteria:
   test_evidence:
   - backend/tests/unit/test_strategy_config_validation.py::test_enabled_percentage_stop_preserved
   - backend/tests/unit/test_strategy_config_validation.py::test_disabled_percentage_stop_produces_none
+  - backend/tests/integration/test_strategy_integration.py::test_disabled_stops_leave_the_saved_revision_and_its_dependency_edges
+  - backend/tests/integration/test_strategy_integration.py::test_re_enabling_a_disabled_stop_revalidates_its_stored_value
   - frontend/src/test/strategyForm.test.tsx > mergeFlatSections > keeps only enabled stops semantically
     representable (server filters disabled)
   evidence_type:
+  - backend_integration
   - backend_unit
   - frontend_component
   positive:
@@ -2427,21 +2442,36 @@ criteria:
     representable (server filters disabled)
   negative:
   - backend/tests/unit/test_strategy_config_validation.py::test_disabled_percentage_stop_produces_none
+  - backend/tests/integration/test_strategy_integration.py::test_disabled_stops_leave_the_saved_revision_and_its_dependency_edges
+  - backend/tests/integration/test_strategy_integration.py::test_re_enabling_a_disabled_stop_revalidates_its_stored_value
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_strategy_integration.py::test_disabled_stops_leave_the_saved_revision_and_its_dependency_edges
   agent_parity: []
-  status: partial
-  debt_class: B
+  status: covered
   notes: '`test_disabled_percentage_stop_produces_none` does NOT do what its name says — its body
     only asserts `stops.percentage_stop.enabled is False`, i.e. that the model accepts a disabled
     stop. The real filter lives in `compiler.py::filter_disabled_sections` (lines ~275-295, "only
     keep enabled stops"), and `grep -rn filter_disabled backend/tests` returns nothing: no test asserts
     a disabled stop is dropped from the compiled payload, from `pins.py`''s dependency extraction,
     or from the run manifest. The scaling sibling of this rule IS proven (`test_disabled_scaling_is_filtered_to_none`);
-    the stop sibling is not. Re-enable revalidation has no test at all.'
+    the stop sibling is not. Re-enable revalidation has no test at all. CLOSED by acceptance batch
+    15 (doc 02, backend surface), which measured both halves against a real database rather than against
+    the filter in isolation. c2: one Save carries a DISABLED percentage stop and a DISABLED Logic
+    stop block alongside an ENABLED trailing stop and an ENABLED Logic block, so the assertions cannot
+    pass by dropping the section wholesale — the stored canonical `strategy_revision.payload` keeps
+    exactly the enabled pair, and the pinned `protection_stop_indicator` dependency edge exists for
+    the enabled block''s package only. c3: the disabled stop is saved carrying a value that VIOLATES
+    `PercentageStop.loss_percentage` (gt 0) and Save accepts it (disabled sections are filtered before
+    parsing, Binding Decision #2); the re-enable patch then resupplies the draft''s OWN persisted
+    stop section with `enabled` flipped and nothing else, so the resulting 422 can only come from
+    the stored value. Three negative controls, each red at the assertion under test: keeping disabled
+    fixed stops (payload), keeping disabled Logic blocks (payload), and the same break with the payload
+    line elided so the red is forced onto the dependency-edge assertion. A fourth relaxed the `gt
+    0` constraint and turned c3 red (DID NOT RAISE).'
 - id: AT-12
   document: docs/spec/02_Entropia_V18_Add_Strategy_Strategy_Details_Page_Documentation_v1_1.md
   section: '12'
@@ -3005,8 +3035,9 @@ criteria:
     - backend/tests/integration/test_strategy_rationale_family_set.py::test_foreign_owner_rejected
   - id: AT-22.c3
     text: An Admin CAN mutate another owner's normal Strategy Root.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_strategy_integration.py::test_admin_may_save_another_owners_strategy_but_supervisor_may_not
   production_paths:
   - backend/src/entropia/domain/identity/policy.py
   - backend/src/entropia/application/commands/strategy_draft.py
@@ -3015,10 +3046,12 @@ criteria:
   - backend/tests/integration/test_strategy_rationale_family_set.py::test_foreign_owner_rejected
   - backend/tests/integration/test_acceptance_agent_parity_gaps.py::test_agent_strategy_save_honours_idempotency_and_ownership
   - backend/tests/unit/test_identity_policy.py::test_can_edit_only_own
+  - backend/tests/integration/test_strategy_integration.py::test_admin_may_save_another_owners_strategy_but_supervisor_may_not
   evidence_type:
   - backend_integration
   - backend_unit
-  positive: []
+  positive:
+  - backend/tests/integration/test_strategy_integration.py::test_admin_may_save_another_owners_strategy_but_supervisor_may_not
   negative:
   - backend/tests/integration/test_strategy_integration.py::test_foreign_user_cannot_save
   - backend/tests/integration/test_strategy_rationale_family_set.py::test_foreign_owner_rejected
@@ -3028,18 +3061,24 @@ criteria:
   - backend/tests/integration/test_strategy_integration.py::test_foreign_user_cannot_save
   - backend/tests/integration/test_strategy_rationale_family_set.py::test_foreign_owner_rejected
   - backend/tests/integration/test_acceptance_agent_parity_gaps.py::test_agent_strategy_save_honours_idempotency_and_ownership
+  - backend/tests/integration/test_strategy_integration.py::test_admin_may_save_another_owners_strategy_but_supervisor_may_not
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The denial half is well proven on the strategy surface itself. The GRANT half is not: `test_can_edit_only_own`
+  status: covered
+  notes: 'The denial half is well proven on the strategy surface itself. The GRANT half was not: `test_can_edit_only_own`
     exercises only the owner/non-owner pair and never an Admin actor, and no strategy test drives
     a save/patch/clear as ADMIN against another owner''s root. `test_list_strategy_drafts_admin_sees_every_owner`
-    is a READ, so it cannot stand in for a mutation grant. There is also no test for a Supervisor
-    actor specifically, which the criterion names alongside User.'
+    is a READ, so it cannot stand in for a mutation grant. There was also no test for a Supervisor
+    actor specifically, which the criterion names alongside User. CLOSED by acceptance batch 15 (doc
+    02, backend surface): one test drives BOTH actors the criterion names against the SAME foreign
+    draft — the Supervisor is refused with ACCESS_DENIED, the Admin writes a real `strategy_revision`
+    stamped with the admin principal, and the root''s `owner_principal_id` is re-read afterwards to
+    show the grant is an edit and not a takeover. Negative control: deleting the two-line `if actor.is_admin:
+    return True` grant in domain/identity/policy.py turns the Admin save red with AccessDeniedError
+    — a one-point break.'
 - id: AT-23
   document: docs/spec/02_Entropia_V18_Add_Strategy_Strategy_Details_Page_Documentation_v1_1.md
   section: '12'
@@ -3060,13 +3099,15 @@ criteria:
     - backend/tests/integration/test_strategy_integration.py::test_clear_resets_draft_without_deleting_root
   - id: AT-23.c3
     text: A prior immutable revision survives a Clear untouched.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_strategy_integration.py::test_clear_leaves_a_prior_immutable_revision_untouched
   production_paths:
   - backend/src/entropia/application/commands/strategy_draft.py
   - frontend/src/pages/StrategyDetails.tsx
   test_evidence:
   - backend/tests/integration/test_strategy_integration.py::test_clear_resets_draft_without_deleting_root
+  - backend/tests/integration/test_strategy_integration.py::test_clear_leaves_a_prior_immutable_revision_untouched
   - frontend/src/test/strategy.test.tsx > StrategyDetails > clear requires a two-step confirm before
     posting the OCC body token
   evidence_type:
@@ -3076,20 +3117,27 @@ criteria:
   - backend/tests/integration/test_strategy_integration.py::test_clear_resets_draft_without_deleting_root
   - frontend/src/test/strategy.test.tsx > StrategyDetails > clear requires a two-step confirm before
     posting the OCC body token
-  negative: []
+  negative:
+  - backend/tests/integration/test_strategy_integration.py::test_clear_leaves_a_prior_immutable_revision_untouched
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_strategy_integration.py::test_clear_leaves_a_prior_immutable_revision_untouched
   agent_parity: []
-  status: partial
-  debt_class: B
+  status: covered
   notes: '`test_clear_resets_draft_without_deleting_root` clears a draft that was never saved, so
     the "does not delete a prior immutable revision" clause is never exercised: no test saves a revision,
     clears the draft and then re-reads the revision. The "creates no Trash record" clause is only
     indirect — the test asserts `deletion_state == ACTIVE` on the root rather than the absence of
-    a `trash_entry` row.'
+    a `trash_entry` row. CLOSED by acceptance batch 15 (doc 02, backend surface): the new test Clears
+    a draft over a root that ALREADY carries a saved revision and then re-reads that revision — its
+    `revision_number`, `config_hash`, canonical payload and its pinned dependency edges are unchanged,
+    the `strategy_root.current_revision_id` head pointer still resolves to it, and a direct query
+    shows NO `trash_entries` row for the root (the indirect half of c2 is now asserted head-on). Two
+    negative controls, each red at the assertion under test: letting Clear null the head pointer,
+    and letting it tamper with the stored revision payload — both one-point breaks.'
 - id: AT-24
   document: docs/spec/02_Entropia_V18_Add_Strategy_Strategy_Details_Page_Documentation_v1_1.md
   section: '12'

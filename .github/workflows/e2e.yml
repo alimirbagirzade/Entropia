@@ -104,7 +104,8 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 12
+        run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the E2E suite
         working-directory: frontend/e2e
@@ -227,7 +228,8 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 12
+        run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the axe-core a11y scan
         working-directory: frontend/e2e
@@ -345,7 +347,8 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 12
+        run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the Lighthouse ratchet
         working-directory: frontend/e2e
@@ -444,9 +447,10 @@ jobs:
       # no-op and keeps the browser layer real.
       - name: Install E2E dependencies + Chromium with system deps
         working-directory: frontend/e2e
+        timeout-minutes: 12
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the five acceptance flows
         env:
@@ -572,7 +576,8 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 12
+        run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the dev-auth acceptance spec
         working-directory: frontend/e2e

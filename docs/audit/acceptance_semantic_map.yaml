@@ -6378,17 +6378,20 @@ criteria:
     - backend/tests/integration/test_trade_log_persistence.py::test_explicit_pin_changes_composition_hash
   - id: TL-13.c3
     text: The prior readiness report goes stale as a result of that hash change.
-    status: partial
+    status: covered
     test_evidence:
     - backend/tests/unit/test_readiness_validators.py::test_is_stale_detects_fingerprint_change
+    - backend/tests/integration/test_trade_log_persistence.py::test_explicit_pin_reports_the_prior_readiness_report_stale
   production_paths:
   - backend/src/entropia/application/commands/trade_log.py
   - backend/src/entropia/application/commands/mainboard.py
   - backend/src/entropia/domain/readiness/validators.py
+  - backend/src/entropia/application/queries/readiness_check.py
   test_evidence:
   - backend/tests/integration/test_trade_log_persistence.py::test_new_revision_does_not_auto_repin
   - backend/tests/integration/test_trade_log_persistence.py::test_explicit_pin_changes_composition_hash
   - backend/tests/unit/test_readiness_validators.py::test_is_stale_detects_fingerprint_change
+  - backend/tests/integration/test_trade_log_persistence.py::test_explicit_pin_reports_the_prior_readiness_report_stale
   evidence_type:
   - backend_integration
   - backend_unit
@@ -6396,19 +6399,29 @@ criteria:
   - backend/tests/integration/test_trade_log_persistence.py::test_new_revision_does_not_auto_repin
   - backend/tests/integration/test_trade_log_persistence.py::test_explicit_pin_changes_composition_hash
   - backend/tests/unit/test_readiness_validators.py::test_is_stale_detects_fingerprint_change
+  - backend/tests/integration/test_trade_log_persistence.py::test_explicit_pin_reports_the_prior_readiness_report_stale
   negative: []
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_trade_log_persistence.py::test_explicit_pin_reports_the_prior_readiness_report_stale
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The pin semantics are proven end to end on a real Trade Log. The staleness clause is only
-    half-proven: test_is_stale_detects_fingerprint_change asserts the predicate is_stale("a","b")
-    is True, but no test carries an existing readiness report through a Trade Log pin change and asserts
-    the report is then reported stale.'
+  status: covered
+  notes: 'CLOSED by acceptance batch 11 (doc 05 backend). The pin semantics were already proven end
+    to end on a real Trade Log, and the staleness predicate was unit-asserted as is_stale("a","b")
+    is True — but nothing joined the two: no test carried an EXISTING report across a Trade Log pin.
+    That join is the whole clause, because currentness is never stored (queries/readiness_check.py
+    recomputes it per read), so the only observable is reading the same immutable report back and
+    seeing its EFFECTIVE state move while its STORED state does not. The new test asserts the report
+    is_current BEFORE the pin (without which the stale assertion could pass on a report that was
+    never current), then state == ReadinessState.STALE, is_current False and
+    composition_fingerprint != current_fingerprint after it, plus stored_state and the pinned
+    fingerprint unchanged — a staleness flag WRITTEN onto the report would satisfy the first three
+    and violate doc 14 §12.2. Negative-controlled in BOTH directions: forcing stale=False in the
+    query turned the post-pin assertion red (ready != stale), forcing stale=True turned the
+    pre-pin is_current assertion red.'
 - id: TL-14
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6558,7 +6571,9 @@ criteria:
       detail and appends an OCC-guarded revision
   - id: TL-16.c3
     text: Exactly one of two concurrent writers succeeds and the loser's update is not lost.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trade_log_persistence.py::test_two_writers_on_one_head_append_exactly_one_revision
   - id: TL-16.c4
     text: The 409 envelope carries the server's canonical current state.
     status: uncovered
@@ -6570,6 +6585,7 @@ criteria:
   - backend/tests/integration/test_trade_log_persistence.py::test_stale_expected_head_conflicts
   - frontend/src/test/tradeLog.test.tsx > TradeLog > renders the historical (no available_time) detail
     and appends an OCC-guarded revision
+  - backend/tests/integration/test_trade_log_persistence.py::test_two_writers_on_one_head_append_exactly_one_revision
   evidence_type:
   - backend_integration
   - frontend_component
@@ -6578,20 +6594,34 @@ criteria:
     and appends an OCC-guarded revision
   negative:
   - backend/tests/integration/test_trade_log_persistence.py::test_stale_expected_head_conflicts
+  - backend/tests/integration/test_trade_log_persistence.py::test_two_writers_on_one_head_append_exactly_one_revision
   auth: []
   occ:
   - backend/tests/integration/test_trade_log_persistence.py::test_stale_expected_head_conflicts
+  - backend/tests/integration/test_trade_log_persistence.py::test_two_writers_on_one_head_append_exactly_one_revision
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The conflict is raised on a stale token, and the frontend test proves the client transmits
-    expected_head_revision_id. Neither the "exactly one write survives" nor the "409 carries the server
-    canonical state" clause is asserted: the integration test raises and stops, and nothing inspects
-    the error body''s details. Trade Log is intentionally NOT in the dual-token matrix (test_occ_dual_token_contract.py
-    has no trade-log param) — it takes a body token only.'
+  notes: 'c3 CLOSED by acceptance batch 11 (doc 05 backend); c4 MEASURED AND FOUND UNSHIPPED, and
+    the criterion therefore stays partial/class B. c3: test_stale_expected_head_conflicts raises on a
+    FABRICATED token and stops, which proves the guard rejects a token that never existed — it cannot
+    distinguish that from last-write-wins between two real writers who both read the same real head,
+    because the loser silently replacing the winner would leave it green. The new test drives both
+    writers off the SAME observed head, then counts what the root holds: revision_no == [1, 2], the
+    head is the winner''s revision id, and the loser''s display_name appears in NO revision payload.
+    Negative control: deleting the expected_head_revision_id guard in commands/trade_log.py turned it
+    red with DID NOT RAISE. c4 is the FINDING and was NOT acted on. The raise site is a bare
+    "raise WorkObjectRevisionConflictError()" (commands/trade_log.py, mirrored in trading_signal.py
+    and mainboard.py); AppError.__init__ then sets details=[] and leaves scope_id/field_path None,
+    so the 409 envelope carries the class-level code, message, category, retryable and
+    suggested_action and NOTHING about the server''s current head. The canonical state the clause
+    names does not exist on the wire, which is the class D definition, not test debt: no test can
+    assert a field the product never populates. It was NOT moved — B -> D would RAISE the D ceiling,
+    and ceilings only fall except by adjudication. Trade Log is intentionally NOT in the dual-token
+    matrix (test_occ_dual_token_contract.py has no trade-log param) — it takes a body token only.'
 - id: TL-17
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -6859,28 +6889,37 @@ criteria:
     - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_import_is_handed_off_to_its_data_actor
   - id: TL-22.c3
     text: Provenance is recorded on a durable AgentToolCall row carrying the outcome/failure code.
-    status: partial
+    status: covered
     test_evidence:
     - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_foreign_owner_revision_denial_parity
+    - backend/tests/integration/test_gateway_parity_s4.py::test_successful_trade_log_tool_call_records_its_own_provenance
   - id: TL-22.c4
     text: The human Mainboard is not auto-mutated by the Agent's work.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_gateway_parity_s4.py::test_agent_trade_log_work_leaves_the_human_mainboard_untouched
   production_paths:
   - backend/src/entropia/application/jobs/agent_tools.py
   - backend/src/entropia/application/commands/trade_log.py
+  - backend/src/entropia/application/commands/mainboard.py
   test_evidence:
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_create_and_revision_via_gateway
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_import_is_handed_off_to_its_data_actor
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_foreign_owner_revision_denial_parity
+  - backend/tests/integration/test_gateway_parity_s4.py::test_successful_trade_log_tool_call_records_its_own_provenance
+  - backend/tests/integration/test_gateway_parity_s4.py::test_agent_trade_log_work_leaves_the_human_mainboard_untouched
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_create_and_revision_via_gateway
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_import_is_handed_off_to_its_data_actor
+  - backend/tests/integration/test_gateway_parity_s4.py::test_successful_trade_log_tool_call_records_its_own_provenance
   negative:
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_foreign_owner_revision_denial_parity
+  - backend/tests/integration/test_gateway_parity_s4.py::test_agent_trade_log_work_leaves_the_human_mainboard_untouched
   auth:
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_foreign_owner_revision_denial_parity
+  - backend/tests/integration/test_gateway_parity_s4.py::test_agent_trade_log_work_leaves_the_human_mainboard_untouched
   occ: []
   idempotency: []
   async_recovery:
@@ -6890,15 +6929,31 @@ criteria:
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_create_and_revision_via_gateway
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_import_is_handed_off_to_its_data_actor
   - backend/tests/integration/test_gateway_parity_s4.py::test_trade_log_foreign_owner_revision_denial_parity
-  status: partial
-  debt_class: B
-  notes: 'create / create_revision / request_import are all driven through dispatch_tool_call with
-    no HTTP or browser. Provenance is only half-proven: the durable AgentToolCall row and its failure_code
-    are asserted on the DENIAL path; the success path asserts the returned dict but never re-reads
-    the tool-call row for owner / task / checkpoint provenance. "Human Mainboard not auto-mutated"
-    is unproven — the Agent create runs with attach=True onto its own default board and no test asserts
-    a separate human''s composition is untouched. (auto_repinned is False is a different guarantee:
-    the pin does not move, not that another actor''s board is unaffected.)'
+  - backend/tests/integration/test_gateway_parity_s4.py::test_successful_trade_log_tool_call_records_its_own_provenance
+  - backend/tests/integration/test_gateway_parity_s4.py::test_agent_trade_log_work_leaves_the_human_mainboard_untouched
+  status: covered
+  notes: 'CLOSED by acceptance batch 11 (doc 05 backend). create / create_revision / request_import
+    were already driven through dispatch_tool_call with no HTTP or browser. c3 was half-proven: the
+    durable AgentToolCall row and its failure_code were asserted only on the DENIAL path, while the
+    success path asserted the dict the dispatcher builds in memory — a handler that never wrote a
+    terminal row, or wrote one under the wrong agent/task, returns the same dict. The new test passes
+    a real AgentTask id plus a checkpoint id and re-reads the row: status SUCCEEDED, failure_code and
+    failure_message None (the same column the denial path pins, asserted from the other side),
+    tool_name / agent_id / actor_principal_id / actor_kind / policy_scope / task_id / checkpoint_id /
+    correlation_id, and response_ref + artifact_output_ref resolving the created object. Negative-
+    controlled twice: passing task_id=None, checkpoint_id=None into create_tool_call turned it red,
+    and writing a non-terminal RUNNING status turned it red. c4: auto_repinned is False is a DIFFERENT
+    guarantee (a pin does not move, not that another actor''s board is unaffected). The new test seeds
+    a human board with two items, has the Agent run trade_log.create with attach=True and no
+    workspace_id, then asserts the resolved workspace is not the human''s, the human item ids,
+    composition_hash and row_version are unchanged, and the Agent''s row landed on the Agent''s own
+    board. MEASURED while negative-controlling c4: the property is defended by TWO independent gates,
+    so making _resolve_attach_workspace resolve the default board WITHOUT the actor turned the test
+    red at "status == succeeded" — mainboard.py::_require_owned_workspace refuses the foreign board
+    before anything is written. That first control was therefore red for the wrong reason and is not
+    counted; disabling BOTH gates turned the workspace-identity assertion red, and leaking a
+    row_version bump onto a bystander board inside _recompute_composition_hash turned the
+    board-state assertion red.'
 - id: TL-23
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'

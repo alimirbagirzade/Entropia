@@ -237,7 +237,25 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev` (**DEĞİŞMEDİ**). **Son dalga — ADIM 85 (C3 / E4c, `_EngineParticipant`):
+> `future_dev`. **Son dalga — ADIM 86 (kayıtsız inen İKİ slice'ın ritüeli: P1-proof #765 +
+> P2 #766): BU SLICE DEFTER; kaydettiği #766 19 satır ürün kodudur, #765 test-only. Blocker
+> sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** İkisi de main'deydi, ikisinin de kaydı
+> **yoktu** (`grep -c` → 0/0). **Sonuç: P-C2 §D.1'in üç N+1 bacağından İKİSİ artık flat** —
+> leg 1 `tick_data_leg` (1/1, P1 = #751), leg 2 `strategy_mirror_leg` (2/2, #766: #754'ün
+> attığı `mirrors` dikişini **bağladı**); **leg 3 AÇIK ve bilerek** (`run_readiness_check`
+> `per_item: 1`, 8 → 18) — anahtarı UNIQUE değil, batch'lemek **hangi satırın kazandığı**
+> sorusudur = **`G15` ürün kararı, imzasız → İNDİRME.** **DERS: bir ratchet satırının
+> SINIRINI da ölç** — batch kaldırılınca `assert 12 <= 2` (kırmızı), ama batch yerindeyken
+> per-item okuma geri konunca **yeşil kalır** (ısınmış identity map); satır **kaldırılmış
+> batch'i** yakalar, gereksiz okumayı değil. **DERS 2: slice'a başlamadan önce AÇIK PR'LARI
+> tara** — bu dalgada iki slice de paralel yazıldı, #764 kapatıldı ve P2'nin rakip mekanizması
+> düşürüldü. **G9/G13 İMZALI** (ADR-0002 §13.2, #753) — devir promptu yanlış biliyordu.
+> `PROJECT_HISTORY.md` §ADIM 86 · `docs/ADIM86_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev` (**DEĞİŞMEDİ**). Öncesinde **ADIM 85 (C3 / E4c, `_EngineParticipant`):
 > ÜRÜN KODU DEĞİŞTİ ama ÜRETİMDE ÇAĞIRANI YOK; 50 golden digest BAYT BAYT AYNI. Blocker
 > sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Yeni tek modül
 > `domain/backtest/participant.py` — bilerek `execution/` **DIŞINDA** (içeride containment

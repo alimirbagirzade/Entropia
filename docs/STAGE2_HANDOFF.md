@@ -7458,6 +7458,75 @@ frontend'de sıfır satır); tam suite'in **geçen** sayısı ve coverage yüzde
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
 `PROJECT_HISTORY.md` §ADIM 89 · `docs/ADIM89_LANDED_KICKOFF.md`.
 
+## Stage 91 — kabul borcu batch 15 (doc 17 backend): dört kriter kapandı landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi** (`backend/src` ve `frontend/src`
+altında sıfır satır), migration **yok**, OpenAPI **değişmedi**, `ENGINE_VERSION` **değişmedi**.
+Belge + yüzey: **doc 17 (Arrange Metrics), backend**.
+
+**Kapananlar.** `AM-03` (`.c2` + `.c3`) · `AM-05` (`.c2`) · `AM-06` (`.c3`) · `AM-07` (`.c2`).
+Dördünde de bu **son** açık clause'du → dördü **covered**, dördünün **`debt_class` KALDIRILDI**.
+
+**Parti ölçümle seçildi.** Doc 03 / 07 / 18 kapalı; doc 05 açık bir PR tarafından sürülüyordu
+(**#797**, `TL-18`, frontend — bu dal açıkken **indi**); `HAT B` (`C4`) **üç** açık PR taşıyordu
+(**#799** · **#800** · **#801**) → bu oturum ikisine de **hiç dokunmadı**. Doc 17'nin dört
+sınıf-B satırı tek bir komuta (`commands/metric_profile.py::create_metric_profile_revision`)
+bakıyordu.
+
+**Dördü de "yanlış dünyada ölçülmüş" şekline sahipti.** `AM-05.c2`: mevcut test boş seçimi
+**hiç revizyonu olmayan** SYSTEM DEFAULT sentinel'ine gönderiyor, korunacak revizyon yok.
+`AM-07.c2`: sürülen tek sahiplik kapısı **kilitsiz** profil + **değişmiş** seçim (o `AM-14`'ün
+senaryosu). `AM-06.c3`: lock/unlock testi bir `BacktestResult` satırına hiç dokunmuyor.
+`AM-03.c2`: e2e'nin manifest assertion'ının arasından bir Trash delete+restore geçiyor →
+iddia Apply'a **kapsanmış değil**; `.c3` için hiçbir yerde run/job satırı sayılmıyordu.
+
+**Ölçüm kararları.** Boş tabloda "run oluşmuyor" zayıftır → önce **SUCCEEDED bir `BacktestRun`
++ `Job`** seed edilir ve sayı değil **kimlik listesi** karşılaştırılır · Apply'ın **gerçekten
+indiği** ayrıca assert edilir (yoksa "hiçbir şey kıpırdamadı" hiçbir şey yapmayan bir çağrı için
+de geçer) · satırlar `flush()` + `expire_all()` sonrası **veritabanından** okunur · `AM-06`
+**dokuz kodun tamamını** uygular (projeksiyon daralamaz) ve **NULL metrik karşılaştırılan
+kümenin içindedir** · `AM-07`'de aynı çağrı **sahibi** tarafından da yapılır ve **başarılı
+olur** → red kimin çağırdığına atfedilebilir.
+
+**BEŞ negatif kontrol, hepsi elle koştu, her birinde HANGİ assertion'ın kırmızı olduğu okundu.**
+(1) Boş-seçim `raise`'ini `normalize_selection`'dan alıp `_op` içinde **append'in ALTINA**
+taşımak → **yalnız** yeni `AM-05` testi, **tam olarak head assertion'ında**;
+`test_min_selection_blocked` **yeşil kalır** — bu yüzden `pytest.raises` tek başına o clause'u
+asla kapatamazdı. (2) Head kilitliyken `ensure_can_edit`'i atlamak → **yalnız** yeni `AM-07`
+testi; `test_foreign_profile_role_guard` **yeşil kalır**, çünkü kilitsiz profil sürer — **eski
+testin yeşil kalması kusur değil KANITTIR**. (3) Lock'un `metric_value` satırlarını sıfırlaması
+→ **yalnız** yeni `AM-06` testi, çevrim ortasındaki kart karşılaştırmasında. (4) Apply'ın `Job`
+eklemesi → job-listesi assertion'ı. (5) Apply'ın `BacktestRun.manifest_hash`'i yeniden yazması
+→ manifest tuple'ı. Her kontrolden sonra ürün kodu bayt bayt geri yüklendi.
+
+**Sayılar (ölçüldü, aritmetik YAPILMADI).** Tavanlar İNDİ: `partial` **83 → 79**,
+`debt_class.B` **51 → 47**; açık borç **90 → 86** (A=1 · B=47 · C=6 · D=32). Clause:
+`covered` **1034 → 1039**, `partial` **7 → 6**, `uncovered` **95 → 91**. `total_criteria`
+**383** (TABAN) ve `uncovered` kriter sayısı **7** değişmedi. Doc 17: covered **7 → 11**.
+**Yeni bulgu YOK**, hiçbir kriter yeniden sınıflandırılmadı.
+
+**Dürüst sınır.** Bu container'a **PostgreSQL 16 KURULDU** (+ `alembic upgrade head`), o yüzden
+dört case ve beş negatif kontrolün hepsi **gerçekten koştu** (`test_arrange_metrics.py`
+**17 → 21 passed**). Frontend'e sıfır satır dokunuldu → frontend kapıları koşulmadı, otorite CI.
+e2e / `@a11y` suite'lerine **hiçbir assertion yazılmadı**. Koşulanlar: `ruff check` 0 ·
+`ruff format --check` 0 · `mypy src` 0 · acceptance `--ratchet` 0 ·
+`generate_repository_facts.py --check` 0.
+**İki tuzak kaydedildi:** `pytest … | tail` **`tail`'in** exit code'unu verir (200 collection
+error `exit 0` göründü) · yerelde **`alembic upgrade head` koşulmadan** tam suite ~40 sahte hata
+verir (contract testleri migrate edilmiş `DATABASE_URL` DB'sini kullanır).
+
+**Zincir notu — UYARI ATEŞLENDİ.** Dal önce `a5b46ab`'ye karşı donduruldu (79/8, B 48); PR
+açıkken **#797 (ADIM 88 / batch 14)** indi ve **aynı serial dosyalara** dokundu → dal
+`ee5ab38`'e taşındı, yama orada **yeniden uygulandı**, `--ratchet` **yeniden koşuldu** (79/7,
+B 47). **`partial` tesadüfen aynı, `B` ve `uncovered` DEĞİL** — iki freeze'i elle çıkarmak
+yanlış tavan üretirdi.
+
+**NUMARA.** Bu kayıt `ADIM 89` yazıldı, **`ADIM 91`**'e taşındı: **#799**
+`docs/ADIM89_LANDED_KICKOFF.md`, **#802** `docs/ADIM90_LANDED_KICKOFF.md` **ekliyor**, ikisi de
+açık. **Çakışma başlıkta değil DOSYA YOLUNDADIR.** Parti numarası taşınmadı (batch 14 = #797).
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 91 ·
+`docs/ADIM91_LANDED_KICKOFF.md`.
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 

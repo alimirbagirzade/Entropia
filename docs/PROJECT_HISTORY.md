@@ -12913,3 +12913,140 @@ numarayı hem `batch` etiketini yeniden doğrulamak, rebase edip tavanı **kendi
 koşusuyla** yeniden dondurmak zorundadır. Bu hafta bunun **iki emsali** var (#781, #785 —
 ikisi de numarayı VE parti etiketini birden aldı). **Merge edilmiş ad kazanır.**
 `docs/ADIM89_LANDED_KICKOFF.md`.
+---
+
+## ADIM 91 — kabul borcu batch 15 (doc 17 backend): `AM-03` `AM-05` `AM-06` `AM-07` kapandı
+
+> **ÜRÜN KODU DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Diff'te `backend/src` ve `frontend/src` altında **sıfır** satır; değişen
+> kod **tek** test dosyası (`backend/tests/integration/test_arrange_metrics.py`, +4 case
+> +2 yardımcı) + üretilmiş/defter belgeleri.
+
+**Belge + yüzey:** doc 17 (Arrange Metrics), **backend**. Parti seçimi tercihle değil
+**ölçümle** yapıldı: doc 03 / 07 / 18 kapalı, doc 05 **açık bir PR tarafından sürülüyordu**
+(#797, `TL-18`, frontend — bu dal açıkken **indi**), `HAT B` (`C4`) **üç açık PR** taşıyordu
+(#799 · #800 · #801) → bu oturum ikisine de **hiç dokunmadı**. Doc 17'nin dört sınıf-B satırı
+tek bir komuta (`commands/metric_profile.py::create_metric_profile_revision`) bakıyordu, yani
+tek harness'ta kapanabilirlerdi.
+
+| Kriter | Kapanan clause | Yeni assertion neyi ölçüyor |
+|---|---|---|
+| `AM-03` | `.c2` + `.c3` | Apply'ın **kendisi** etrafında: run/job satırı **eklenmiyor**, run ve Result manifest hash'i **kıpırdamıyor** |
+| `AM-05` | `.c2` | Reddedilen boş seçim, **var olan** kanonik revizyonu yerinde bırakıyor (head + row_version + revision_no) |
+| `AM-06` | `.c3` | Lock → Unlock çevriminde Result metrik **değerleri** birebir aynı kalıyor |
+| `AM-07` | `.c2` | **Kilitli** bir profile yabancı bir çağıranın **unlock**'u reddediliyor; kilit bir yetki vermiyor |
+
+Dördünde de bu **son** açık clause'du → dördü de **covered**, dördünün de **`debt_class`
+KALDIRILDI**.
+
+### Her satır neden açıktı — dördü de "yanlış dünyada ölçülmüş" şeklinde
+
+**`AM-05.c2`.** Mevcut `test_min_selection_blocked` boş seçimi **SYSTEM DEFAULT sentinel**'ine
+karşı gönderiyor, yani **hiç revizyonu olmayan** bir profile. Kriterin *"önceki kanonik
+revizyon korunur"* sözü o testin kapsamında **yapısal olarak** yoktu: korunacak bir revizyon
+yoktu. Yeni test refüzü **iki revizyonu olan** bir profile karşı sürer ve sonra kökü **geri
+okur** (head, `row_version`, `max_revision_no`, çözümlenmiş projeksiyon).
+
+**`AM-07.c2`.** Suite'in sürdüğü tek sahiplik kapısı **KİLİTSİZ** bir profile **DEĞİŞMİŞ** bir
+seçimdi (`test_foreign_profile_role_guard`) — o aslında `AM-14`'ün senaryosu. Kriterin kendi
+senaryosu (kilitli profil + saf unlock + yabancı çağıran) hiç sürülmemişti, yani *"kilit bir
+yetki değildir"* paylaşılan koddan **çıkarsanıyordu**.
+
+**`AM-06.c3`.** Lock/unlock mekaniği ve devre dışı kalan UI kanıtlıydı; hiçbir test çevrimin
+**iki ucunda** Result metrik projeksiyonunu okumuyordu — lock/unlock testi bir `BacktestResult`
+satırına hiç dokunmuyor.
+
+**`AM-03.c2`/`.c3`.** e2e pipeline testi manifest hash'ini gerçekten yeniden assert ediyor, ama
+**aradan bir Trash soft-delete + restore geçiyor** → iddia Apply'a **kapsanmış değil**. Ve
+hiçbir yerde bir Apply'ın etrafında `BacktestRun`/`Job` satırı **sayılmıyordu**.
+
+### Ölçüm kararları (bunlar testin değerini taşıyan yerler)
+
+- **Boş tabloda "run oluşmuyor" demek zayıftır** → test önce **SUCCEEDED bir `BacktestRun`
+  ve onun `Job` satırını** seed eder; iddia böylece boş bir tabloya değil **dolu** bir tabloya
+  karşı ölçülür. Sayı değil **kimlik listesi** karşılaştırılır (`_run_and_job_ids`), yani bir
+  satırın eklenip başkasının silinmesi de yakalanır.
+- **Apply'ın gerçekten indiği ayrıca assert edilir** (`revision_no == 1`, seçim) — yoksa
+  "hiçbir şey kıpırdamadı" iddiası **hiçbir şey yapmayan** bir çağrı için de geçerdi.
+- **Satırlar identity map'ten değil veritabanından okunur**: `await session.flush()` +
+  `session.expire_all()` sonra `session.get` / `select`.
+- **`AM-06` için dokuz seçilebilir kodun TAMAMI uygulanır** → projeksiyon daralamaz, çevrimin
+  her adımında kart listesi karşılaştırılabilir; **NULL metrik (`romad`) karşılaştırılan kümenin
+  içindedir**, yani "değişmedi" yalnız sayılar hakkında bir hikâye değil.
+- **`AM-07`'de aynı çağrı SAHİBİ tarafından da yapılır ve başarılı olur** → red **kimin
+  çağırdığına** atfedilebilir, bozuk bir isteğe değil (ADIM 79'un dersi: negatif kontrolün
+  *hangi* eksende kırmızıya döndüğünü oku).
+
+### BEŞ NEGATİF KONTROL — hepsi elle koştu, hepsinde HANGİ assertion'ın kırmızı olduğu okundu
+
+| # | Ürüne enjekte edilen kusur | Kırmızıya dönen |
+|---|---|---|
+| 1 | `normalize_selection`'ın boş-seçim `raise`'i **kaldırıldı**, aynı istisna `_op` içinde **append'in ALTINDA** fırlatıldı | **yalnız** `AM-05` testi, **tam olarak** head assertion'ında (`test_min_selection_blocked` **YEŞİL** kaldı) |
+| 2 | Head revizyon kilitliyken `ensure_can_edit` **atlandı** (kilit = yetki) | **yalnız** `AM-07` testi, `pytest.raises` satırında (`test_foreign_profile_role_guard` **YEŞİL** kaldı) |
+| 3 | Lock, `metric_value` satırlarını **sıfırladı** | **yalnız** `AM-06` testi, çevrim ortasındaki kart karşılaştırmasında (dosyadaki diğer 20 test yeşil) |
+| 4 | Apply bir `Job` satırı **ekledi** | `AM-03` testi, job-listesi assertion'ında |
+| 5 | Apply `BacktestRun.manifest_hash`'i **yeniden yazdı** | `AM-03` testi, manifest tuple'ında |
+
+Her kontrolden sonra ürün kodu **bayt bayt** geri yüklendi (`git diff backend/src` **boş**).
+
+**DERS 1 (ADIM 83'ün dersinin doğrudan uygulaması).** NK-1 tam da ADIM 83'ün yazdığı şeyi
+gösterdi: *guard'ı mutasyonun ALTINA taşımak istisnayı AYNI ŞEKİLDE fırlatır.* `pytest.raises`
+tek başına `AM-05.c2`'yi **asla** kapatamazdı — kapatan şey **satırı geri okumak**.
+
+**DERS 2 (eski testin yeşil kalması KANITTIR).** NK-2 altında `test_foreign_profile_role_guard`
+yeşil kaldı ve bu bir kusur değil: o test **kilitsiz** bir profil sürer, yani kusurun bulunduğu
+dalı **hiç geçmez**. Bir sahiplik kapısının "zaten test edilmiş" görünmesi, kapının **her
+durumunun** test edildiği anlamına gelmiyor.
+
+### Sayılar (ölçüldü, `--ratchet` çıktısından — aritmetik YAPILMADI)
+
+**Tavanlar İNDİ: `partial` 83 → 79, `debt_class.B` 51 → 47.** Açık borç **90 → 86**
+(A=1 · B=47 · C=6 · D=32). Clause düzlemi: `covered` **1034 → 1039**, `partial` **7 → 6**,
+`uncovered` **95 → 91**. `total_criteria` **383** (TABAN) ve `uncovered` **kriter** sayısı **7**
+değişmedi. Doc 17: **7 → 11 covered**, `partial` **7 → 3**, `uncovered` **2** (değişmedi).
+
+**Doc 17'de testle kapanacak sınıf-B satır KALMADI.** Kalan üç `partial` + iki `uncovered`
+satır bu partinin kapsamı dışındadır.
+
+### Bu partide YENİ BULGU YOK
+
+Dört satır da doğru sınıflandırılmıştı (B) ve dördü de **yazıldığı gibi** kapandı. Defterdeki
+yanlışlanamaz/yanlış-sınıflandırılmış bulgular ve adjudication kalemleri **değişmedi**; hiçbir
+kriter yeniden sınıflandırılmadı.
+
+### Dürüst sınırlar
+
+- **Postgres bu container'a KURULDU** (PostgreSQL 16, `initdb` + `pg_ctl`, `entropia`/`entropia`
+  @ 5432, sonra `alembic upgrade head`) — dolayısıyla dört yeni case ve beş negatif kontrolün
+  **hepsi gerçekten koştu**: `test_arrange_metrics.py` **17 → 21 passed**.
+- **Frontend'e sıfır satır** dokunuldu → frontend kapıları koşulmadı; otorite CI.
+- **e2e / `@a11y` suite'lerine hiçbir assertion yazılmadı.**
+- Koşulan kapılar: `ruff check` **0** · `ruff format --check` **0** · `mypy src` **0**
+  (400 dosya) · acceptance `--ratchet` **0** · `generate_repository_facts.py --check` **0**.
+- **TUZAK 1, birinci elden:** `uv run pytest -q | tail` çağrısı **`tail`'in exit code'unu**
+  verir ve 200 collection error'ü `exit 0` gibi gösterdi. `CLAUDE.md` bunu zaten yazıyordu;
+  yine de yapıldı. Çıktıyı **dosyaya yaz**, exit code'u **ayrı** oku.
+- **TUZAK 2, ve bu yeni:** ilk tam-suite koşusu bu diff'le **hiç ilgisi olmayan** ~40 hata
+  verdi. Sebep ölçüldü, varsayılmadı: ad-hoc veritabanına **`alembic upgrade head`
+  koşulmamıştı** (integration conftest `create_all` ile kendi şemasını kurar, ama contract
+  testleri **migrate edilmiş** `DATABASE_URL` veritabanını kullanır) → `relation "human_users"
+  does not exist`. Atıf **kanıtla** yapıldı: bu dalın **hiç dokunmadığı** bir contract dosyası
+  ayrı bir veritabanında sürüldü ve **aynı hatayı** verdi. **Yerelde tam suite koşmadan önce
+  `alembic upgrade head` koş.**
+
+### Zincir + numara notu — UYARI ATEŞLENDİ, TATBİKAT DEĞİLDİ
+
+Dal önce **`a5b46ab`**'ye karşı donduruldu (**79 partial / 8 uncovered / B 48**). PR açıkken
+**#797 = ADIM 88 / batch 14** (doc 05 frontend, `TL-18`) indi ve **aynı serial defter
+dosyalarına** dokunuyordu. Dal **`ee5ab38`**'e taşındı, map yaması orada **yeniden uygulandı**
+ve `--ratchet` **yeniden koşuldu**: **79 partial / 7 uncovered / B 47**. **Dikkat: `partial`
+tesadüfen aynı, `B` ve `uncovered` DEĞİL** — iki freeze'i elle çıkarmak **yanlış** bir tavan
+üretirdi. İki parti **ayrık** kriterler kapatır (`TL-18` ↔ `AM-03/05/06/07`).
+
+**NUMARA: bu kayıt `ADIM 89` yazıldı, `ADIM 91`'e taşındı.** Sebep ADIM 90'ın dersinin
+uygulanmasıdır: çakışma **başlıkta değil DOSYA YOLUNDA** aranır. Ölçüldü — **#799**
+`docs/ADIM89_LANDED_KICKOFF.md` **ekliyor** ve **#802** `docs/ADIM90_LANDED_KICKOFF.md`
+**ekliyor**, ikisi de açık → bu kayıt **91**. **Parti numarası taşınmadı** (batch 14 = #797,
+başka hiçbir açık PR kabul partisi değil). Dal adı numara taşımaz; **merge edilmiş ad kazanır**
+ve **ikisi de merge'den hemen önce yeniden doğrulanmalıdır**.

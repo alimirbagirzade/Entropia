@@ -16717,24 +16717,28 @@ criteria:
     - backend/tests/integration/test_arrange_metrics.py::test_result_metrics_presentation_and_null
   - id: AM-03.c2
     text: The run manifest hash is the same before and after the Arrange Metrics Apply.
-    status: partial
+    status: covered
     test_evidence:
     - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+    - backend/tests/integration/test_arrange_metrics.py::test_profile_apply_creates_no_run_and_leaves_manifest_untouched
   - id: AM-03.c3
     text: Applying a profile creates no BacktestRun / job row.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_arrange_metrics.py::test_profile_apply_creates_no_run_and_leaves_manifest_untouched
   production_paths:
   - backend/src/entropia/application/commands/metric_profile.py
   - backend/src/entropia/application/queries/metric_profile.py
   test_evidence:
   - backend/tests/integration/test_arrange_metrics.py::test_result_metrics_presentation_and_null
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_arrange_metrics.py::test_profile_apply_creates_no_run_and_leaves_manifest_untouched
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_arrange_metrics.py::test_result_metrics_presentation_and_null
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_arrange_metrics.py::test_profile_apply_creates_no_run_and_leaves_manifest_untouched
   negative: []
   auth: []
   occ: []
@@ -16742,14 +16746,11 @@ criteria:
   async_recovery: []
   historical_integrity:
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_arrange_metrics.py::test_profile_apply_creates_no_run_and_leaves_manifest_untouched
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The e2e pipeline test does apply a metric profile revision and later re-asserts `manifest_after.manifest_hash
-    == admit["manifest_hash"]`, but a Trash soft-delete and restore happen in between, so the assertion
-    is not scoped to the profile change and the READY/RUN state is never re-inspected around it. No
-    test anywhere counts `BacktestRun` / `Job` rows before and after an Apply, which is the criterion's
-    literal "Backtest Run oluşmaz" clause.
+  status: covered
+  notes: "Closed by `test_profile_apply_creates_no_run_and_leaves_manifest_untouched`, which scopes both open clauses to the Apply itself: a queued BacktestRun and its Job row are seeded first (so \"no run is created\" is measured against a non-empty table), the run/job id lists and the run's manifest hash/id/state/row_version plus the Result row and its ResultManifestSnapshot are captured, the Apply lands (revision_no 1, asserted), and every row is re-read from the database after expire_all(). Negative controls: making the command enqueue a Job reddens the job-list assertion, and making it rewrite BacktestRun.manifest_hash reddens the manifest tuple - each is the only failure in the file."
+
 - id: AM-04
   document: docs/spec/17_Entropia_V18_Arrange_Metrics_Page_Documentation_v1_1.md
   section: '15'
@@ -16813,14 +16814,16 @@ criteria:
     - backend/tests/unit/test_arrange_metrics.py::test_normalize_selection_empty_raises
   - id: AM-05.c2
     text: The previously canonical revision is preserved (no revision is appended by the refused Apply).
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_arrange_metrics.py::test_empty_selection_refusal_leaves_canonical_revision_in_place
   production_paths:
   - backend/src/entropia/domain/metric_profile/profile.py
   - backend/src/entropia/application/commands/metric_profile.py
   test_evidence:
   - backend/tests/integration/test_arrange_metrics.py::test_min_selection_blocked
   - backend/tests/unit/test_arrange_metrics.py::test_normalize_selection_empty_raises
+  - backend/tests/integration/test_arrange_metrics.py::test_empty_selection_refusal_leaves_canonical_revision_in_place
   evidence_type:
   - backend_integration
   - backend_unit
@@ -16828,18 +16831,16 @@ criteria:
   negative:
   - backend/tests/integration/test_arrange_metrics.py::test_min_selection_blocked
   - backend/tests/unit/test_arrange_metrics.py::test_normalize_selection_empty_raises
+  - backend/tests/integration/test_arrange_metrics.py::test_empty_selection_refusal_leaves_canonical_revision_in_place
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: '`test_min_selection_blocked` empties the selection against the SYSTEM DEFAULT sentinel,
-    i.e. on a profile that has no revision yet, so the "previous canonical revision korunur" clause
-    is structurally out of scope for it: no test creates a revision, then submits an empty selection,
-    then re-reads the head to prove it did not move.'
+  status: covered
+  notes: "Closed by `test_empty_selection_refusal_leaves_canonical_revision_in_place`, which drives the refusal against a profile that already has TWO revisions and then re-reads the root: head, row_version, max_revision_no and the resolved projection all stand still. Negative control: moving the empty-selection raise from `normalize_selection` to below the append inside `_op` keeps `test_min_selection_blocked` green (the exception is still raised) and reddens exactly the head assertion - which is why pytest.raises alone could never have closed this clause."
+
 - id: AM-06
   document: docs/spec/17_Entropia_V18_Arrange_Metrics_Page_Documentation_v1_1.md
   section: '15'
@@ -16862,8 +16863,9 @@ criteria:
       and offers a pure unlock
   - id: AM-06.c3
     text: Result values do not change across a lock/unlock cycle.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_arrange_metrics.py::test_lock_unlock_cycle_leaves_result_values_unchanged
   production_paths:
   - backend/src/entropia/application/commands/metric_profile.py
   - backend/src/entropia/domain/metric_profile/profile.py
@@ -16873,6 +16875,7 @@ criteria:
   - backend/tests/unit/test_arrange_metrics.py::test_transition_reason_apply_lock_unlock
   - frontend/src/test/arrangeMetrics.test.tsx > Arrange Metrics page > refuses edits while locked
     and offers a pure unlock
+  - backend/tests/integration/test_arrange_metrics.py::test_lock_unlock_cycle_leaves_result_values_unchanged
   evidence_type:
   - backend_integration
   - backend_unit
@@ -16880,6 +16883,7 @@ criteria:
   positive:
   - backend/tests/integration/test_arrange_metrics.py::test_lock_blocks_change_then_unlock
   - backend/tests/unit/test_arrange_metrics.py::test_transition_reason_apply_lock_unlock
+  - backend/tests/integration/test_arrange_metrics.py::test_lock_unlock_cycle_leaves_result_values_unchanged
   negative:
   - backend/tests/integration/test_arrange_metrics.py::test_lock_blocks_change_then_unlock
   - frontend/src/test/arrangeMetrics.test.tsx > Arrange Metrics page > refuses edits while locked
@@ -16888,13 +16892,12 @@ criteria:
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_arrange_metrics.py::test_lock_unlock_cycle_leaves_result_values_unchanged
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: Lock/unlock mechanics and the disabled UI are both proven. Nothing reads the result metric
-    projection before and after a lock to assert the values are identical — the lock/unlock test never
-    touches a BacktestResult, so the "result values değişmez" clause has no asserting test.
+  status: covered
+  notes: "Closed by `test_lock_unlock_cycle_leaves_result_values_unchanged`, which selects all nine selectable codes so the projection cannot narrow, then compares the full `metrics` card list before / while locked / after unlocking, asserts the cycle really happened (reason lock then unlock, profile.is_locked flipping) and re-reads the metric_value rows from the database at the end. The NULL metric is in the set, so \"unchanged\" is not only a claim about numbers. Negative control: a Lock that rewrites metric values reddens the mid-cycle comparison and nothing else in the file."
+
 - id: AM-07
   document: docs/spec/17_Entropia_V18_Arrange_Metrics_Page_Documentation_v1_1.md
   section: '15'
@@ -16909,32 +16912,32 @@ criteria:
   - id: AM-07.c2
     text: An unauthorized actor calling UNLOCK specifically on a LOCKED profile is denied, and the
       lock preference grants no role.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_arrange_metrics.py::test_foreign_unlock_denied_and_the_lock_preference_grants_nothing
   production_paths:
   - backend/src/entropia/application/commands/metric_profile.py
   - backend/src/entropia/domain/identity/policy.py
   test_evidence:
   - backend/tests/integration/test_arrange_metrics.py::test_foreign_profile_role_guard
+  - backend/tests/integration/test_arrange_metrics.py::test_foreign_unlock_denied_and_the_lock_preference_grants_nothing
   evidence_type:
   - backend_integration
   positive: []
   negative:
   - backend/tests/integration/test_arrange_metrics.py::test_foreign_profile_role_guard
+  - backend/tests/integration/test_arrange_metrics.py::test_foreign_unlock_denied_and_the_lock_preference_grants_nothing
   auth:
   - backend/tests/integration/test_arrange_metrics.py::test_foreign_profile_role_guard
+  - backend/tests/integration/test_arrange_metrics.py::test_foreign_unlock_denied_and_the_lock_preference_grants_nothing
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The one ownership guard the suite exercises is an unlocked profile with a CHANGED selection
-    (`test_foreign_profile_role_guard`, which is really AM-14's scenario). The unlock path — a locked
-    profile, `is_locked=false`, an unauthorized caller — is never driven, so "lock is not authorization"
-    is inferred from shared code rather than asserted. Cited here because the same `ensure_can_edit`
-    gate runs on every revision call, but it is not the criterion's own scenario.
+  status: covered
+  notes: "Closed by `test_foreign_unlock_denied_and_the_lock_preference_grants_nothing`, which drives the criterion's own scenario - a LOCKED profile, a pure unlock (same selection, is_locked false), a foreign caller - and then re-reads the root to show the head, its row_version and the lock flag did not move. The byte-identical call from the owner succeeds afterwards, so the denial is attributable to WHO called rather than to a malformed request. Negative control: skipping `ensure_can_edit` when the head revision is locked (lock as a grant) leaves `test_foreign_profile_role_guard` green - it drives an unlocked profile - and reddens only the new test."
+
 - id: AM-08
   document: docs/spec/17_Entropia_V18_Arrange_Metrics_Page_Documentation_v1_1.md
   section: '15'

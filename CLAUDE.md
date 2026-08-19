@@ -262,6 +262,43 @@ Before stopping a working session, produce **ALL** of the following:
 > `stage-91` + *"batch 15"* AÇIKKEN yazıldı — kriterler ayrık, etiket çakışık; ikinci inen
 > rebase edip yeniden dondurmalı.** `PROJECT_HISTORY.md` §ADIM 89 ·
 > `docs/ADIM89_LANDED_KICKOFF.md`.
+> `future_dev`. **Son dalga — ADIM 91 (kabul borcu batch 15, doc 17 BACKEND): ÜRÜN KODU
+> DEĞİŞMEDİ, dört yeni pytest case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> BLOCKED.** Dört kriter kapandı — **`AM-03`** (`.c2`+`.c3`) · **`AM-05`** (`.c2`) ·
+> **`AM-06`** (`.c3`) · **`AM-07`** (`.c2`); dördünde de son açık clause'du → dördünün de
+> **`debt_class` KALDIRILDI**. **Dördü de AYNI şekle sahipti: iddia yanlış dünyada ölçülmüştü**
+> — boş seçim **hiç revizyonu olmayan** sentinel'e gönderiliyordu (`AM-05`), sürülen tek
+> sahiplik kapısı **kilitsiz** profildi (`AM-07`, o aslında `AM-14`'ün senaryosu), lock/unlock
+> testi bir `BacktestResult`'a **hiç dokunmuyordu** (`AM-06`), ve e2e'nin manifest
+> assertion'ının arasından bir **Trash delete+restore** geçtiği için iddia Apply'a
+> **kapsanmamıştı** (`AM-03`). **DERS: "hiçbir şey kıpırdamadı" iddiası İKİ yerden vacuous
+> olur** — işlemin *gerçekten indiği* ayrıca assert edilmezse hiçbir şey yapmayan bir çağrı
+> için de geçer, ve *boş* bir tabloda ölçülen "run oluşmuyor" dolu bir tablodakinden zayıftır
+> (test önce SUCCEEDED bir `BacktestRun` + `Job` seed eder ve sayı değil **kimlik listesi**
+> karşılaştırır). **BEŞ negatif kontrol, beşi de hangi assertion'da kırmızıya döndüğü
+> OKUNARAK:** boş-seçim `raise`'ini append'in **ALTINA** taşımak `test_min_selection_blocked`'ı
+> **yeşil bırakır** ve yalnız yeni testin **head** assertion'ını düşürür (→ `pytest.raises` tek
+> başına o clause'u asla kapatamazdı) · kilit varken `ensure_can_edit`'i atlamak
+> `test_foreign_profile_role_guard`'ı **yeşil bırakır** (o kilitsiz profil sürer — **eski testin
+> yeşil kalması KANITTIR**, kusur değil) · Lock'un metrik değerlerini sıfırlaması yalnız
+> çevrim-ortası kart karşılaştırmasını düşürür · Apply'ın `Job` eklemesi / `manifest_hash`
+> yazması ilgili assertion'ları düşürür. **Tavanlar İNDİ: `partial` 83 → 79, `debt_class.B`
+> 51 → 47**; açık borç **86** (A=1 · B=47 · C=6 · D=32), clause `covered` 1034 → 1039.
+> **Doc 17'de testle kapanacak sınıf-B satır KALMADI.** **DÜRÜST SINIR:** bu container'a
+> **Postgres 16 KURULDU** (+ `alembic upgrade head`) → dört case ve beş negatif kontrol
+> **gerçekten koştu** (`test_arrange_metrics.py` 17 → 21 passed); frontend'e sıfır satır
+> dokunuldu → frontend kapıları koşulmadı, otorite CI; e2e/`@a11y` **yazılmadı**.
+> **İKİ TUZAK, birinci elden:** `pytest -q | tail` **200 collection error'ü `exit 0` gösterdi**
+> (çıktıyı dosyaya yaz, exit code'u ayrı oku) · yerelde **`alembic upgrade head` koşulmadan**
+> tam suite bu diff'le ilgisi olmayan **~40 hata** verir (contract testleri migrate edilmiş
+> `DATABASE_URL` DB'sini kullanır; atıf, dalın hiç dokunmadığı bir contract dosyasını ayrı bir
+> DB'de sürerek **kanıtlandı**). **ZİNCİR ATEŞLENDİ:** dal önce `a5b46ab`'ye donduruldu
+> (79/8, B 48), **#797** açıkken indi → `ee5ab38`'e taşındı ve `--ratchet` **yeniden koşuldu**
+> (79/7, B 47) — **`partial` tesadüfen aynı, `B`/`uncovered` DEĞİL**, elle çıkarma yanlış tavan
+> üretirdi. **NUMARA: `ADIM 89` yazıldı, `ADIM 91`'e TAŞINDI** — #799 `ADIM89`, #802 `ADIM90`
+> kickoff **dosya yolunu** ekliyor; **çakışma başlıkta değil DOSYA YOLUNDADIR** ve
+> `check_classification` bunu yakalayamaz. Parti numarası taşınmadı (batch 14 = #797).
+> `PROJECT_HISTORY.md` §ADIM 91 · `docs/ADIM91_LANDED_KICKOFF.md`.
 >
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·

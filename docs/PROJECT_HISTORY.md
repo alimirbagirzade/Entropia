@@ -12704,13 +12704,22 @@ site **724 → 725**) — **test ekleyen slice olguları TAZELEMELİ**, kapı bu
   koşturmanın meşru olduğu tek durum tam olarak budur (kurulum/checkout/runner, test gövdesi
   koşmadan).
 
-**ZİNCİR NOTU.** Taban **`a5bc27f`** — batch 08, 09, 10 **ve 11** zaten içinde. Dal önce
-`7f331c7`'den kesildi, sonra **`a5bc27f`'e rebase edildi** (#779, yalnız bir plan belgesi —
-kabul dosyalarında sıfır satır; `strict: true` ruleset'i güncellik ister, o yüzden **merge değil
-rebase**, ADIM 61 emsali). Freeze **her iki tabana karşı da** `--ratchet` ile **yeniden ölçüldü**
-ve ikisi de **85 / 8 · A1 B54 C6 D32** verdi; iki dondurulmuş değer üzerinde aritmetik
-yapılmadı. Kabul defteri **seri bir kaynaktır**: paralel bir batch önce inerse bu dal rebase
-edilip **yeniden dondurulmalıdır**.
+**ZİNCİR NOTU — UYARI İKİ KEZ ATEŞLENDİ, TATBİKAT DEĞİL.** Bu notun kendi son cümlesi
+*"paralel bir batch önce inerse bu dal rebase edilip yeniden dondurulmalıdır"* diyordu ve **tam
+olarak o oldu, üstelik iki kez**. Dal **DÖRT tabandan** geçti:
+`7f331c7` (kesildiği yer) → **`a5bc27f`** (#779, yalnız bir plan belgesi — kabul dosyalarında
+sıfır satır) → **`ea55aa7`** (**#784 = ADIM 84**, kabul borcu batch 12 — **bu kaydın dokunduğu on
+serial defter dosyasının onuna birden dokunuyor**) → **`ccdd4fd`** (**#777 = ADIM 85** ve
+**#780 = ADIM 86**). Her seferinde **merge DEĞİL rebase/fast-forward** (`strict: true` ruleset'i
+güncellik ister; ADIM 61 emsali: bir `## ` başlığını yeniden yazan sunucu-taraflı merge, docs
+kayıt-silme kapısına **kayıt silme** gibi görünür) ve **her tabanda `--ratchet` YENİDEN koşuldu**:
+ilk iki taban **85 / 8 · A1 B54 C6 D32**, `ea55aa7` **83 / 8 · A1 B52 C6 D32**, `ccdd4fd` yine
+**83 / 8** ve *"fell below"* satırı **vermedi** — yani #777 ile #780 kabul defterine dokunmuyor.
+**İki dondurulmuş değer üzerinde hiçbir noktada aritmetik yapılmadı**; doğru sayı ancak iki
+partinin map değişikliği **aynı ağaçta** durduğunda ölçülebilirdi. **Birleşmenin temiz olmasının
+sebebi kriterlerin AYRIK olması**: #784 `TL-13` + `TL-22` (doc 05), bu kayıt `AL-06` (doc 18).
+`ea55aa7` birleşmesinde altı dosyada çakışma çıktı ve altısı da elle çözüldü;
+`acceptance_semantic_map.yaml` **kendiliğinden** birleşti.
 
 **NUMARA: bu kayıt 85 YAZILDI, 87'ye TAŞINDI — parti etiketi de 12'den 13'e.** Yazıldığında
 main'in son kaydı **ADIM 83** (#781) ve tek rakip **#780** (`ADIM 84`) görünüyordu → **85**

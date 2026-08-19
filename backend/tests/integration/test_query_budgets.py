@@ -46,6 +46,7 @@ from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.commands.backtest_run import _resolve_tick_pins
 from entropia.application.commands.readiness_check import (
+    _build_item_inputs,
     _resolve_market_data_issues,
     _resolve_research_sources,
     _resolve_signal_market_data_issues,
@@ -70,6 +71,7 @@ from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
     ActorKind,
     ApprovalState,
+    DeletionState,
     PackageKind,
     PrincipalType,
     Role,
@@ -81,14 +83,18 @@ from entropia.domain.package.catalog import CatalogFilters
 from entropia.domain.package.enums import PackageValidationState
 from entropia.domain.readiness.issues import ReadinessItemInput
 from entropia.domain.strategy.enums import ValidationStatusEnum
+from entropia.domain.strategy.enums import ValidationStatusEnum as StrategyValidationStatus
 from entropia.infrastructure.postgres.models import (
     AgentRuntime,
     BacktestResult,
     EntityRegistry,
+    MainboardWorkingItem,
     MarketDatasetRevision,
     MetricValueRow,
     Principal,
     ResultSummary,
+    StrategyRevision,
+    WorkObjectRevision,
 )
 from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
@@ -486,6 +492,94 @@ async def test_ready_check_tick_data_leg(session) -> None:
         assert len(issues) == len(items)
 
     await _measure(session, "readiness_check.tick_data_leg", grow=grow, run=run)
+
+
+async def test_ready_check_strategy_mirror_leg(session) -> None:
+    """Ready Check's Strategy mirror deref — flat after P2.
+
+    ``_build_item_inputs`` used to dereference each Strategy item's doc-02 §7.1 mirror
+    pin with its own ``get_strategy_revision``. The pins are now collected from the
+    work-object payloads the first batch already returned and asked for once.
+
+    Every item gets its OWN mirror revision: items sharing one pin would collapse to a
+    single lookup and stay flat even if the per-item deref came back.
+    """
+    await _principal(session, "user_1")
+    await session.commit()
+    enabled: list[tuple[MainboardWorkingItem, bool]] = []
+
+    async def grow(count: int) -> None:
+        for _ in range(count):
+            index = len(enabled)
+            # L1 FK insert order: both revision tables reference entity_registry, so
+            # the roots are added and flushed BEFORE the revisions that point at them.
+            for entity_id in (f"strat_entity_{index}", f"wo_mirror_{index}"):
+                session.add(
+                    EntityRegistry(
+                        entity_id=entity_id,
+                        entity_type="work_object",
+                        owner_principal_id=None,
+                        created_by_principal_id=None,
+                        lifecycle_state="draft",
+                        deletion_state=DeletionState.ACTIVE,
+                        current_revision_id=None,
+                        row_version=1,
+                    )
+                )
+            await session.flush()
+            strategy_rev = StrategyRevision(
+                revision_id=f"strat_mirror_{index}",
+                entity_id=f"strat_entity_{index}",
+                revision_number=1,
+                payload={"data": {"instrument_id": f"MIRROR_{index}"}},
+                config_hash=f"{index:064d}",
+                content_hash=f"{index:064d}",
+                schema_version="v1",
+                validation_status=StrategyValidationStatus.VALID,
+                validation_errors=[],
+                created_by_principal="user_1",
+            )
+            session.add(strategy_rev)
+            work_rev = WorkObjectRevision(
+                revision_id=f"wo_mirror_rev_{index}",
+                entity_id=f"wo_mirror_{index}",
+                revision_no=1,
+                object_kind=MainboardItemKind.STRATEGY.value,
+                payload={"strategy_revision_id": f"strat_mirror_{index}"},
+                content_hash=f"{index:064d}",
+                created_by_principal_id=None,
+            )
+            session.add(work_rev)
+            await session.flush()
+            enabled.append(
+                (
+                    # Transient on purpose: _build_item_inputs only READS these, so
+                    # they are never added to the session and need no workspace row.
+                    MainboardWorkingItem(
+                        item_id=f"mirror_item_{index}",
+                        workspace_entity_id="ws_mirror",
+                        item_kind=MainboardItemKind.STRATEGY,
+                        work_object_root_id=f"wo_mirror_{index}",
+                        pinned_revision_id=f"wo_mirror_rev_{index}",
+                        position_index=index,
+                        is_enabled=True,
+                        row_version=1,
+                    ),
+                    True,
+                )
+            )
+
+    async def run() -> None:
+        inputs = await _build_item_inputs(session, enabled)
+        # Each mirror must actually RESOLVE: a fixture whose pins all miss would stay
+        # flat while measuring the branch that never dereferences anything.
+        assert len(inputs) == len(enabled)
+        assert all(
+            item.payload.get("data", {}).get("instrument_id", "").startswith("MIRROR_")
+            for item in inputs
+        ), "every item must have been resolved through its mirror"
+
+    await _measure(session, "readiness_check.strategy_mirror_leg", grow=grow, run=run)
 
 
 # ---------------------------------------------------- RUN admission (doc 15 §15)

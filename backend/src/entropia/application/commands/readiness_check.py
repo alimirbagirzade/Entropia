@@ -331,6 +331,23 @@ async def _build_item_inputs(
     revisions = await mb_repo.get_work_object_revisions(
         session, [item.pinned_revision_id for item, available in enabled if available]
     )
+    # P2: leg 2. The mirror pins live in the payloads the read above just returned, so
+    # they are collected with `_mirror_ref` — the seam P4 split out for exactly this —
+    # and dereferenced in ONE batch before the loop. `_resolve_strategy_payload` keeps
+    # the only definition of the mirror semantics; supplying `mirrors` swaps the read
+    # for a map lookup and changes nothing else, because an absent ref is the same
+    # fall-through as the `session.get` miss it stands in for.
+    mirror_refs: list[str] = []
+    for item, available in enabled:
+        if not available or item.item_kind != MainboardItemKind.STRATEGY:
+            continue
+        revision = revisions.get(item.pinned_revision_id)
+        if revision is None:
+            continue
+        ref = _mirror_ref(revision.payload)
+        if ref is not None:
+            mirror_refs.append(ref)
+    mirrors = await strat_repo.get_strategy_revisions(session, mirror_refs)
     for item, available in enabled:
         payload: dict[str, Any] = {}
         external: ExternalImportState | None = None
@@ -338,7 +355,7 @@ async def _build_item_inputs(
             revision = revisions.get(item.pinned_revision_id)
             payload = dict(revision.payload) if revision is not None else {}
             if item.item_kind == MainboardItemKind.STRATEGY:
-                payload = await _resolve_strategy_payload(session, payload)
+                payload = await _resolve_strategy_payload(session, payload, mirrors)
             if item.item_kind in _EXTERNAL_KINDS:
                 external = await _resolve_external(session, item)
         inputs.append(

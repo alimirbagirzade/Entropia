@@ -94,6 +94,16 @@
       "per_item": 0,
       "note": "Flat since P1. The FOURTH instance of the #617 shape: _resolve_tick_data_issues called market_repo.find_approved_tick_revision_for_instrument INSIDE `for item in items:`, one round trip per require-tick Strategy. Now one IN() read (market_repo.find_approved_tick_revisions_for_instruments, mirroring get_dataset_roots field for field), with _tick_data_demands collecting the require-tick items first. Measured at 1 -> 11 statements, slope 1, immediately before the repair. THE FIXTURE IS THE WHOLE MEASUREMENT HERE: the loop skips non-Strategy items, unavailable items, unparseable configs and — the narrow door — every strategy whose intrabar_policy.tick_policy is not 'require'. A fixture leaving the default 'inherit' measures 0 statements at BOTH sizes and reports a green slope of 0 for a leg that never ran; that was measured too, so this row's test flips the policy and asserts every item comes back BLOCKED. The batch picks the same row per instrument as the per-item reader: DISTINCT ON (instrument_id) over an ORDER BY whose per-item form was already TOTAL (created_at DESC, revision_id DESC), so there is no ordering ambiguity here — unlike leg 3, which stays unbatched behind gate G15."
     },
+    "readiness_check.strategy_mirror_leg": {
+      "title": "Ready Check - Strategy mirror deref (doc 02 7.1)",
+      "axis": "Strategy item pinning a doc-02 7.1 mirror revision",
+      "n_small": 1,
+      "n_large": 11,
+      "queries_small": 2,
+      "queries_large": 2,
+      "per_item": 0,
+      "note": "FLAT, and measured that way (P2 / P-C2 Section D.1 leg 2). P4 (#754) added the seam - _mirror_ref, get_strategy_revisions and the optional `mirrors` parameter - but _build_item_inputs still called _resolve_strategy_payload WITHOUT a map, so Ready Check's mirror deref stayed per-item. P2 is that wiring: the refs are collected from the payloads the work-object batch already returned and dereferenced once. The two statements are those two batches and neither grows with the item count. Measured 2 at n=1 and 2 at n=11, slope 0.0. Every item gets its OWN mirror revision on purpose: items sharing one pin collapse to a single lookup and would stay flat even if the per-item deref came back. LIMIT OF THIS ROW, measured: restoring the per-item read while LEAVING the batch in place stays flat, because session.get on a PK the batch already warmed issues no SQL - the identity-map blind spot this file's header names. So this row catches a REMOVED batch, not a redundant read. Ratchet only. Leg 3 (_resolve_external) is NOT this row and stays per-item behind gate G15."
+    },
     "backtest_run.admission_tick_pins": {
       "title": "RUN admission — pin the approved tick revision per tick-demanding Strategy (F-07i B, doc 15 §15)",
       "axis": "tick-demanding Strategy item in the composition",

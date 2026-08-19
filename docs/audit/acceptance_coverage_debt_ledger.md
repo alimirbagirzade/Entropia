@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 51 |
+| B | 47 |
 | C | 6 |
 | D | 32 |
-| **open total** | **90** |
+| **open total** | **86** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (51)
+## Class B (47)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -97,10 +97,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `RC-17` | 14 | partial | An unauthorized user checking a private composition gets a permission-safe rejection. | c2 has no asserting test: nothing asserts the 403 envelope for a readiness denial is free of composition/dependency detail. The suite does have this shape of assertion elsewhere (contract/test_mainboard_contract.py::test_guest_default_mainboard_does_not_leak_workspace_or_composition checks a leak-key set against both the body and error object), so the pattern exists — it just was never applied … |
 | `RH-13` | 16 | partial | Dropping a metric from the Result View profile never deletes historic values or the manifest. | c2 has no asserting test: no test lists Results History before and after applying a narrower metric profile to prove the row-level key_metrics digest is unaffected by a presentation preference. c3 is proven only incidentally — the pipeline test applies a personal profile revision and later asserts manifest_after.manifest_hash equals the admission hash, but the assertion is framed around the Tra… |
 | `RH-14` | 16 | partial | A headless Agent queries a result and writes a provenance-linked artifact without mutating the Result. | c3 has no asserting test: the agent-loop test asserts the artifact, its source_task_id and its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary) after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash… |
-| `AM-03` | 17 | partial | A profile change creates no Backtest Run and leaves the Result manifest and engine outputs unchanged. | The e2e pipeline test does apply a metric profile revision and later re-asserts `manifest_after.manifest_hash == admit["manifest_hash"]`, but a Trash soft-delete and restore happen in between, so the assertion is not scoped to the profile change and the READY/RUN state is never re-inspected around it. No test anywhere counts `BacktestRun` / `Job` rows before and after an Apply, which is the cri… |
-| `AM-05` | 17 | partial | Clearing all nine checkboxes and applying is blocked with METRIC_SELECTION_EMPTY; the previous canonical revision survives. | `test_min_selection_blocked` empties the selection against the SYSTEM DEFAULT sentinel, i.e. on a profile that has no revision yet, so the "previous canonical revision korunur" clause is structurally out of scope for it: no test creates a revision, then submits an empty selection, then re-reads the head to prove it did not move. |
-| `AM-06` | 17 | partial | Lock Metrics creates a new locked revision; checkboxes/Apply go disabled, Unlock enabled; result values are unchanged. | Lock/unlock mechanics and the disabled UI are both proven. Nothing reads the result metric projection before and after a lock to assert the values are identical — the lock/unlock test never touches a BacktestResult, so the "result values değişmez" clause has no asserting test. |
-| `AM-07` | 17 | partial | Lock is a preference, not a grant — an unauthorized user calling unlock gets a server policy denial. | The one ownership guard the suite exercises is an unlocked profile with a CHANGED selection (`test_foreign_profile_role_guard`, which is really AM-14's scenario). The unlock path — a locked profile, `is_locked=false`, an unauthorized caller — is never driven, so "lock is not authorization" is inferred from shared code rather than asserted. Cited here because the same `ensure_can_edit` gate runs… |
 | `TR-07` | 20 | partial | Deleting a Rationale Family with an active assignment is blocked with no dangling assignment and no Trash Entry. | The blocker and the no-dangling-state half are directly asserted (entry count unchanged plus the family absent from the listing). The "repair plan required" half is not: nothing inspects the raised RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and no test walks the sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for restore and for assi… |
 | `TR-08` | 20 | partial | An Admin restore reactivates the same entity and revision with the owner unchanged and no new revision appended. | Three of four clauses are strongly asserted, including the subtle "no new revision" one (root.current_revision_id is captured before the delete and compared after the restore). The outbox half is the gap: commands/deletion.py does call add_outbox_event alongside the "trash.restored" audit row, but the test reads back only AuditEvent.event_kind. No test in the Trash suite queries OutboxEvent on … |
 | `UM-08` | 21 | partial | Soft-deleting an appended document removes it from reader/sidebar/search and writes a Trash snapshot plus a soft-delete audit event. | The event IS emitted — commands/manual.py writes a ManualPublicationEvent event_type="manual_document_soft_deleted" (manual.py:626) and an audit/outbox pair with event_kind="manual.document_soft_deleted" (manual.py:635-638) — but NO test asserts either. The suite asserts the analogous event only for purge (test_manual_purge_writes_event_and_removes_every_revision reads _publication_event(..., "… |

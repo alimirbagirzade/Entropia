@@ -104,7 +104,12 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        timeout-minutes: 12
+        # MUST stay above the script's worst case (2 x PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS
+        # = 14.2 min at the 420s default, plus npm ci and the lock cleanup). Set to 12
+        # first, which was MEASURED to kill the retry mid-flight at +720s when the retry
+        # needed until +835s — an outer bound tighter than the inner one makes the retry
+        # unreachable. Lower PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS before lowering this.
+        timeout-minutes: 17
         run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the E2E suite
@@ -228,7 +233,12 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        timeout-minutes: 12
+        # MUST stay above the script's worst case (2 x PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS
+        # = 14.2 min at the 420s default, plus npm ci and the lock cleanup). Set to 12
+        # first, which was MEASURED to kill the retry mid-flight at +720s when the retry
+        # needed until +835s — an outer bound tighter than the inner one makes the retry
+        # unreachable. Lower PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS before lowering this.
+        timeout-minutes: 17
         run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the axe-core a11y scan
@@ -347,7 +357,12 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        timeout-minutes: 12
+        # MUST stay above the script's worst case (2 x PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS
+        # = 14.2 min at the 420s default, plus npm ci and the lock cleanup). Set to 12
+        # first, which was MEASURED to kill the retry mid-flight at +720s when the retry
+        # needed until +835s — an outer bound tighter than the inner one makes the retry
+        # unreachable. Lower PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS before lowering this.
+        timeout-minutes: 17
         run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the Lighthouse ratchet
@@ -447,7 +462,12 @@ jobs:
       # no-op and keeps the browser layer real.
       - name: Install E2E dependencies + Chromium with system deps
         working-directory: frontend/e2e
-        timeout-minutes: 12
+        # MUST stay above the script's worst case (2 x PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS
+        # = 14.2 min at the 420s default, plus npm ci and the lock cleanup). Set to 12
+        # first, which was MEASURED to kill the retry mid-flight at +720s when the retry
+        # needed until +835s — an outer bound tighter than the inner one makes the retry
+        # unreachable. Lower PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS before lowering this.
+        timeout-minutes: 17
         run: |
           npm ci
           ../../scripts/ci-install-playwright-chromium.sh
@@ -576,7 +596,12 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: frontend/e2e
-        timeout-minutes: 12
+        # MUST stay above the script's worst case (2 x PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS
+        # = 14.2 min at the 420s default, plus npm ci and the lock cleanup). Set to 12
+        # first, which was MEASURED to kill the retry mid-flight at +720s when the retry
+        # needed until +835s — an outer bound tighter than the inner one makes the retry
+        # unreachable. Lower PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS before lowering this.
+        timeout-minutes: 17
         run: ../../scripts/ci-install-playwright-chromium.sh
 
       - name: Run the dev-auth acceptance spec

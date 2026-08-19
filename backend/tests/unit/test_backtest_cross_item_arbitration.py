@@ -1048,6 +1048,14 @@ def test_the_arbitration_layer_is_reachable_only_through_the_phase_loop() -> Non
     the property that has to hold instead: arbitration is reached from the phase loop and
     nowhere else, so nothing can arbitrate outside the P5/P6b window.
 
+    **Widened deliberately at `C3` (E4c), by ONE NAMED module.** ``domain/backtest/participant.py``
+    is the engine-backed ``ItemParticipant`` adapter; it names the phase loop's own types in
+    its signatures, so it cannot exist without appearing here. It sits OUTSIDE ``execution/``
+    on purpose — inside, the containment gate's importer scan would have exempted it and the
+    guard would have gone blind rather than satisfied. The widening is a named entry, never a
+    wildcard, so a THIRD importer is still a red build. Signed 2026-08-18, Option A:
+    ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``.
+
     ``execution/provenance.py`` remains the other named importer (ADIM 19): it pins the
     resolved ``ConflictPolicyRule`` and ``ARBITRATION_POLICY_VERSION`` into the manifest
     section, and is itself still contained — ``test_backtest_portfolio_provenance.py`` asserts
@@ -1064,6 +1072,7 @@ def test_the_arbitration_layer_is_reachable_only_through_the_phase_loop() -> Non
     )
     assert importers == [
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/participant.py",
         "domain/backtest/portfolio_engine.py",
     ]
 

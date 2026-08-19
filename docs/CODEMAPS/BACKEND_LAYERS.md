@@ -170,7 +170,8 @@ sembolü "yok" saymak da (#582 gövdesi), bağlı olmayan bir sembolü "çalış
 |---|---|---|---|---|
 | `run_portfolio` | `portfolio_engine.py:717` | **SIFIR** | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** PR #759'dan beri `iter_portfolio`'nun sarmalayıcısı — imza ve semantik değişmedi. |
 | `iter_portfolio` | `portfolio_engine.py:628` (generator) | **SIFIR** | aynı harness (`run_portfolio` üzerinden) | **PR #759'da sevk edildi.** Faz döngüsünün tick-drivable biçimi; `PortfolioRun` `StopIteration.value`'dan gelir. **Containment taramasında ADLANDIRILMIŞTIR** (`_LOOP_ENTRY_POINTS`) — o ekleme olmadan üretim tüm fazları buradan sürerken assertion yeşil kalırdı. |
-| `ItemParticipant` | `portfolio_engine.py:274` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var; onu gerçekleyen üretim adapter'ı YOK** (`C3`, hâlâ açık). **Artık write-only DEĞİL:** `settle` (`:319`) ve `finalize` (`:334`) PR #759'da **zorunlu** üye olarak sevk edildi — `hasattr` ile yoklanmıyor, çünkü yoklama fail-open'dır. |
+| `ItemParticipant` | `portfolio_engine.py:274` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var, adapter VAR (`C3`), wiring YOK (`C4`)** — implementor `participant.py::_EngineParticipant`, ama `backend/src`'te onu **inşa eden** satır yok. **Artık write-only DEĞİL:** `settle` (`:319`) ve `finalize` (`:334`) PR #759'da **zorunlu** üye olarak sevk edildi — `hasattr` ile yoklanmıyor, çünkü yoklama fail-open'dır. |
+| `_EngineParticipant` | `participant.py` (`C3`) | **SIFIR** — `backend/src`'te hiçbir modül onu inşa etmez | `tests/unit/oracles/test_oracle_engine_participant.py` | **Gerçeklenmiş ve bağlanmamış.** `_ItemStepper`'ın describe/book yarılarını `ItemParticipant`'a çevirir; sürücüsü olan tek yer testlerdir. Bilerek `execution/` DIŞINDA — içeride containment gate'in importer taraması **kör** olurdu.
 | `project_portfolio_run` | `execution/portfolio_projection.py:513` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_projection.py` | **Gerçeklenmiş ve bağlanmamış.** |
 | `build_portfolio_manifest` | `execution/provenance.py:473` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_provenance.py` | **Gerçeklenmiş ve bağlanmamış.** |
 | `_ItemStepper` | `engine.py:818` | **`run_engine` (`:3533`) → worker `jobs/backtest_engine.py:859`** | stepper + phase suite'leri | **Gerçeklenmiş ve ÜRETİMDE AKTİF** (PR #602'den beri). **ADIM 69'den beri altı describe/book alanı da taşır.** |
@@ -234,8 +235,27 @@ P10 yok (`portfolio_engine.py:129`, sekiz faz), `iter_portfolio` yok. `settle` o
 edilebilecek tek yer `entry()`'nin içidir → **arbitrasyondan ÖNCE**, arkasında
 `PortfolioSnapshot` olmayan sermaye taahhüdü.
 
-Bunu kapatmak `C2`'dir ve **`Accepted`** bir ADR'yi değiştirir → **G9** (ADR §6/§8
-amendment) + **G13** (P10 equity noktası) **imzasız insan kapıları**.
+**Kalan engel artık ŞEKİL değil WIRING'dir.** `backend/src` içinde hiçbir satır bir
+`_EngineParticipant` inşa etmez ve hiçbir satır `run_portfolio`/`iter_portfolio` çağırmaz —
+worker hâlâ `for prepared in prepared_items:` döngüsünü koşar ve `combine_item_runs` ile
+katlar. Onu değiştirmek **`C4`**'tür (bayrak korumalı dal + tick-adımlı iptal kontrol noktası
++ daraltılmış tripwire) ve **containment'ı AÇMAZ**: `SHARED_ALLOCATION_STATUS` `future_dev`
+kalır, lift **`C9`** ve ADR §16 **Gate 2** ayrı bir insan kapısıdır (**talep edilmedi**).
+
+**Adapter'ın REDDETTİKLERİ codemap'e aittir** (`participant.py::_unsupported_shapes`): ertelenen
+ya da dinlenen entry/exit fill'i, limit/stop emir tipi, kısmi kapanış, scaling, `allow_stacking`
+/ `replace_existing`, `close_existing` hedge, `PortfolioRules`, allocation'sız koşu ve düşmüş bir
+fail-closed capability kapısı. Bunlar `_phase_tail` / `_phase_open_fills` gerektirir ve
+arbitrasyon olmadan sermaye taahhüt eder → adapter **inşa anında** reddeder. **`C6`'nın
+admission blocker listesi bu listeyle aynı olmalıdır**; `same_direction_stacking` şema
+**varsayılanı** `allow_stacking` olduğu için bu bir ürün kararı doğurur (P-C2 §C.3.7/§C.3.8'in
+**üçüncü** kardeşi, hiçbir belgede kayıtlı değildi).
+
+**Importer allowlist'i `participant.py` ile TEK ADLANDIRILMIŞ modül kadar genişledi** (imzalı
+karar, 2026-08-18, Seçenek A): containment gate + `execution.clock` / `execution.intents` /
+`execution.portfolio_ledger` / `execution.arbitration` guard'ları. Üçüncü bir importer hâlâ
+kırmızı verir ve bu negatif kontrol testtedir
+(`test_widening_the_importer_allowlist_did_not_disable_it`).
 
 **Ayrıca `_phase_tail`'in scaling bölümü AYRILAMAZ** (ADIM 69 ölçtü): guard'ı `position`
 ve `len(led.trades) == trades_before_bar` okur, stacking bölümü ikisini de yazar

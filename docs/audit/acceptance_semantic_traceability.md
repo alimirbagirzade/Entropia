@@ -54,7 +54,7 @@ for this map.
 | 02 | 15 | 8 | 2 | 0 | 0 | 0 | 25 |
 | 03 | 18 | 2 | 1 | 0 | 0 | 0 | 21 |
 | 04 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
-| 05 | 16 | 6 | 1 | 0 | 0 | 0 | 23 |
+| 05 | 17 | 6 | 0 | 0 | 0 | 0 | 23 |
 | 06 | 10 | 5 | 1 | 0 | 0 | 0 | 16 |
 | 07 | 18 | 3 | 1 | 0 | 0 | 0 | 22 |
 | 08 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
@@ -66,21 +66,21 @@ for this map.
 | 14 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 15 | 7 | 1 | 0 | 1 | 0 | 0 | 9 |
 | 16 | 14 | 2 | 0 | 0 | 0 | 0 | 16 |
-| 17 | 7 | 7 | 2 | 0 | 0 | 0 | 16 |
+| 17 | 11 | 3 | 2 | 0 | 0 | 0 | 16 |
 | 18 | 18 | 0 | 0 | 0 | 0 | 0 | 18 |
 | 19 | 4 | 2 | 0 | 1 | 1 | 0 | 8 |
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 4 | 5 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **277** | **83** | **8** | **8** | **7** | **0** | **383** |
+| **all** | **282** | **79** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1033 |
-| partial | 7 |
-| uncovered | 96 |
+| covered | 1039 |
+| partial | 6 |
+| uncovered | 91 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -94,19 +94,19 @@ for this map.
 | backend_integration | 321 |
 | backend_unit | 131 |
 | e2e | 16 |
-| frontend_component | 131 |
+| frontend_component | 132 |
 
 ## Open debt by class
 
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 52 |
+| B | 47 |
 | C | 6 |
 | D | 32 |
-| **open total** | **91** |
+| **open total** | **86** |
 
-## Partial criteria (83)
+## Partial criteria (79)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -171,10 +171,6 @@ for this map.
 | `BR-08` | C | The V18 prototype's local booleans, hard-coded metrics and DOM delete do not stand in for Production. | This row mixes two kinds of claim, so it is split. c1/c2 are real product behaviour and are asserted. c3 is a document-conformance statement about the V18 mockup file (docs/spec/index_guncellenmis_duzeltilmis_v18.html) not being the canonical Production spec — there is no product behaviour to assert, and CLAUDE.md records the Graphic View renderer as deliberately out of V1 scope, so no test could prove it without inventing a renderer. Rolled up to partial rather than covered because one clause carries no product assertion at all. |
 | `RH-13` | B | Dropping a metric from the Result View profile never deletes historic values or the manifest. | c2 has no asserting test: no test lists Results History before and after applying a narrower metric profile to prove the row-level key_metrics digest is unaffected by a presentation preference. c3 is proven only incidentally — the pipeline test applies a personal profile revision and later asserts manifest_after.manifest_hash equals the admission hash, but the assertion is framed around the Trash round trip, not the profile change. Add a direct list_backtest_results comparison across a create_metric_profile_revision call. ADIM 55 measured c2 and deferred it rather than rushing: `results_history._digest_from_rows` filters on the CONSTANT KEY_METRIC_KEYS, so a Result View profile revision cannot reach the digest — but proving it needs the metric REGISTRY seeded before create_metric_profile_revision will validate a selection (MetricCodeUnknownError otherwise). Plumbing, not doubt about the behaviour. |
 | `RH-14` | B | A headless Agent queries a result and writes a provenance-linked artifact without mutating the Result. | c3 has no asserting test: the agent-loop test asserts the artifact, its source_task_id and its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary) after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash snapshot before and after the artifact.create dispatch. ADIM 55 measured c3 and deferred it rather than rushing: create_analysis_artifact is capability-gated, so the proof needs the capability registry walked to Limited (test_capability_output_history::_walk_to_limited), whose seeding helper collides with this module's principals. Plumbing, not doubt about the behaviour. |
-| `AM-03` | B | A profile change creates no Backtest Run and leaves the Result manifest and engine outputs unchanged. | The e2e pipeline test does apply a metric profile revision and later re-asserts `manifest_after.manifest_hash == admit["manifest_hash"]`, but a Trash soft-delete and restore happen in between, so the assertion is not scoped to the profile change and the READY/RUN state is never re-inspected around it. No test anywhere counts `BacktestRun` / `Job` rows before and after an Apply, which is the criterion's literal "Backtest Run oluşmaz" clause. |
-| `AM-05` | B | Clearing all nine checkboxes and applying is blocked with METRIC_SELECTION_EMPTY; the previous canonical revision survives. | `test_min_selection_blocked` empties the selection against the SYSTEM DEFAULT sentinel, i.e. on a profile that has no revision yet, so the "previous canonical revision korunur" clause is structurally out of scope for it: no test creates a revision, then submits an empty selection, then re-reads the head to prove it did not move. |
-| `AM-06` | B | Lock Metrics creates a new locked revision; checkboxes/Apply go disabled, Unlock enabled; result values are unchanged. | Lock/unlock mechanics and the disabled UI are both proven. Nothing reads the result metric projection before and after a lock to assert the values are identical — the lock/unlock test never touches a BacktestResult, so the "result values değişmez" clause has no asserting test. |
-| `AM-07` | B | Lock is a preference, not a grant — an unauthorized user calling unlock gets a server policy denial. | The one ownership guard the suite exercises is an unlocked profile with a CHANGED selection (`test_foreign_profile_role_guard`, which is really AM-14's scenario). The unlock path — a locked profile, `is_locked=false`, an unauthorized caller — is never driven, so "lock is not authorization" is inferred from shared code rather than asserted. Cited here because the same `ensure_can_edit` gate runs on every revision call, but it is not the criterion's own scenario. |
 | `AM-11` | D | Total Stops and Max Stop Streak follow the trade root's terminal reason; a partial stop leg shows only in diagnostics. | The decisive clause is untested AND the implementation looks like it contradicts the criterion: `booking.py::close_position` increments `led.stops_hit` / `led.stop_streak` whenever `reason == "stop_loss"` regardless of `is_full`, while the TradeRow it appends is relabelled `partial_exit`. So a partial stop leg would appear to count toward Total Stops. `grep -rn partial_exit backend/tests` finds six hits, none of which asserts `total_stops` / `max_stop_streak`, so no test would catch it either way. This one deserves a product/engineering decision, not just a test. |
 | `AM-12` | D | When a selected code becomes future in the registry, historical revisions survive, the active profile shows a repair warning and Apply with the invalid code fails. | Only the "Apply with an invalid code never succeeds" clause has a test, and it tests a code that was ALWAYS future rather than one that DRIFTED after being selected. No test mutates a `metric_definition.availability_status` after a profile revision pinned that code, so neither the historical-revision-survives clause nor the repair warning has any evidence; grepping the registry/profile modules turns up no repair/warning concept to point at. |
 | `AM-16` | C | The V18 screen keeps its nine default metrics, future reference list, action labels and status wording; the V10 typo is fixed in Production V1. | The registry-shape and label clauses have real asserting tests. The third clause ("Production V1'de V10 typo düzeltilir") is a document-conformance statement about the V18 mockup's own text, not a product behaviour a test can assert, so it is marked not_applicable with no evidence — which keeps the criterion as a whole at partial rather than covered. Note also that the frontend fixture uses a 3-metric registry, so the "nine checked in registry order" rendering is proven on the backend side only. |
@@ -194,14 +190,13 @@ for this map.
 | `FD-09` | D | WFA/Monte Carlo run as an Analysis Artifact recording method/split/seed/input refs, never writing an authoritative metric back onto an immutable Backtest Result. | Two real gaps, not just missing assertions. (1) c4 is a MODEL gap: the shipped AnalysisArtifact row records artifact_type, capability_key, input_manifest_refs, method_version, output_ref and owner — there is no split-definition and no random-seed column anywhere in commands/capability.py::create_analysis_artifact or the repository helper, so the criterion's "method/split/random seed" triple is only one third modelled and no test could assert the other two. (2) c5 repeats the FD-04/FD-05 non-mutation hole: no test re-reads the Backtest Result after artifact creation to prove no metric was back-written. Reproducibility of a WFA/MC run is exactly what a seed and split are for, so c4 is worth a schema follow-up rather than only a test. |
 | `FD-13` | D | A non-Admin lifecycle transition call is denied server-side with CAPABILITY_ACCESS_DENIED, no state transition and an audit-relevant denial. | c4 is NOT IMPLEMENTED. domain/identity/policy.py::require_capability_admin raises CapabilityAccessDeniedError immediately (policy.py:76) BEFORE commands/capability.py::transition_capability reaches any _audit_and_outbox call, so a refused transition writes no AuditEvent and no OutboxEvent row — the cited test's "zero activation events" assertion is consistent with that. There is also no route-level contract test for this endpoint (no capability file exists under backend/tests/contract/), so the 403 status code itself is inferred from the ForbiddenError base class rather than asserted over HTTP. Two follow-ups: persist a denial audit row, and add a contract test pinning 403 + CAPABILITY_ACCESS_DENIED on the transition route. |
 
-## Uncovered criteria (8)
+## Uncovered criteria (7)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
 | `AT-06` | D | A client-forged incompatible condition revision must produce a server-side compatibility blocker on Save. | No compatibility rule exists to test. `backend/src/entropia/domain/strategy/compiler.py` declares six blocker codes (SIZING_METHOD_NOT_EXCLUSIVE, TRIGGER_SOURCE_CONDITION_REQUIRED, ENTRY_REQUIRED_BLOCK_MISSING, SIGNAL_SUPPORTING_REQUIREMENT_UNMET, ENTRY_DIRECTION_INCOHERENT, RESTRICTION_MIN_COUNT_UNSATISFIABLE) and none of them compares a condition block's pinned revision against the indicator it conditions. The nearest server-side guard, `strategy_draft.py::_assert_references_active` (REFERENCE_NOT_ACTIVE), only rejects a soft-deleted dependency root and has no test of its own either. Mapping AT-05's condition-required tests here would be dishonest: they assert a MISSING condition, not an INCOMPATIBLE one. |
 | `AT-07` | B | Removing the first of two entry blocks renumbers the display order but preserves the survivor's original UUID. | No test in `frontend/src/test/strategyGraph.test.tsx` removes an entry block; the suite only extracts, seeds and round-trips blocks. `grep -rn display_order backend/tests` finds no strategy test asserting identity stability across a removal either. The dynamic-identity invariant (display number is derived, block_id is stable) is therefore unasserted on both lines. |
 | `AOS-02` | D | No default type is preselected, and continuing without a choice yields a specific UI message. | The literal message the spec demands does not exist anywhere in the codebase. The shipped chooser is built so that "continue without a choice" is unconstructible — each choice is itself the navigation action, so there is no separate Continue control and therefore no state in which the message could fire. That is a reasonable design, but the row states a product behaviour the spec asserts (a named string shown to a user), so the honest status is uncovered rather than not_applicable. Nothing asserts the absence of a default preselection either. |
-| `TL-18` | B | Expand/collapse writes no revision, no audit, no composition hash and no readiness state. | Nothing in the suite asserts this. The Mainboard jsdom tests use expandRow() only as a navigation step to reach inner controls; none of them assert that no request was issued or that no state changed. The closest backend fact is test_mainboard_persistence.py::test_patch_reorder_does_not_change_hash, which proves REORDER is presentation-only — a different action, on a different (server-side) axis. Expand/collapse is pure client disclosure and never reaches the server, which is exactly why an explicit "no request was made" assertion is the only thing that could prove it. |
 | `CP-16` | D | An Agent starts candidate generation with the same request schema and produces job/test/draft artifacts with no browser or DOM dependency. | Verified empirically rather than taken from the audit map. `domain/agent_lab/ tool_gateway.py::ToolName` has no create-package / pre-check / candidate member at all (the closest is `package.proposal.create`, which only mints a CANDIDATE hypothesis artifact and explicitly cannot approve or publish). Grepping `PrincipalType.AGENT` across the create-package tests returns exactly one hit — `contract/test_create_package_contract.py::test_agent_approve_rejected` — which is a DENIAL, the opposite of the parity this row claims, and is already cited under CP-13. `docs/audit/acceptance_id_map.md` §C.1 lists this contract file as CP-16's covering test; that attribution does not survive reading the test body. This is an implementation gap (§E.3-style) as much as a test gap. |
 | `PC-15` | D | An Agent runs Pre-Check through the Tool Gateway with the browser closed and the scan/audit/checkpoint provenance is stored. | Empirically re-checked, not inherited: `domain/agent_lab/tool_gateway.py::ToolName` enumerates task/data-bundle/proposal/backtest/result/artifact/followup/documentation/ view-dataset/allocation/trade-log/strategy/trading-signal families and contains no pre-check or create-package member; grepping the gateway for `precheck` / `create_package` returns nothing. No test drives `run_precheck` with an AGENT principal either. This is the doc 07 face of the §E.3 Tool Gateway gap — an implementation gap first, a test gap second. |
 | `AM-13` | D | An Agent asking a Result for net_profit/max_drawdown/romad gets registry metadata plus immutable values, leaving the human profile untouched. | There is no metric-bearing Agent surface to test. The only result-facing tool literal is `ToolName.RESULT_QUERY = "result.query"`, and `agent_tools.py::_handle_result_query` returns exactly `{found, result_id, run_id}` (or `{found, run_id, state, result_id}`) — no metric keys, no registry metadata. The `agent_dataset` export composes trade_ledger / signal_events / equity_curve / diagnostics / summary rows and is likewise metric-free (`test_agent_dataset_composes_every_persisted_artifact` enumerates the kinds). So no test can honestly be mapped here. |

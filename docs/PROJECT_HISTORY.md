@@ -12055,3 +12055,95 @@ imzaladığı sözleşmeyi uygular: **G9 = APPROVED**, **G13 = FOLD**. #740'ın 
 ritüeli) → bu kayıt **82**. Numara merge sırasına bağlıdır ve merge'den hemen önce yeniden
 doğrulanmıştır; **merge edilmiş ad kazanır**. Slice'ın kendi kickoff'u **yoktur ve
 yazılmamıştır** (geriye dönük kayıt; canlı seed en yüksek numaralı belgedir).
+
+## ADIM 83 — kabul borcu batch 11 (doc 18 backend): dört kriter kapandı, doc 18'in backend borcu bitti
+
+> **ÜRÜN KODU DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Diff'te `backend/src` ve `frontend/src` altında **sıfır** dosya; değişen
+> kod üç test dosyası (`test_analysis_lab.py`, `test_agent_executor.py`,
+> `test_agent_tool_gateway.py`) + üretilmiş/defter belgeleri.
+
+**Belge + yüzey:** doc 18 (Analysis Lab), **backend**. Doc 03 ve doc 07 batch 09/10 ve 73/75 ile
+bitmişti; doc 18 sınıf-B'de **beş** satırla en yoğun açık belgeydi. Dördü kapandı — `AL-05`,
+`AL-09`, `AL-10`, `AL-18` — ve `AL-06`'nın backend yarısı (`c2`) da kapandı.
+
+**Kapananlar ve her birinin gerçek ekseni:**
+
+| Kriter | Kapanan clause | Yeni assertion neyi ölçüyor |
+|---|---|---|
+| `AL-05` | `.c3` | Kuyruğa giren directive'in **audit + outbox** satırı — o directive'in **id'sine** kapsanmış, sevk edilen `agent.directive.queued` adına pinli |
+| `AL-06` | `.c2` | Reddedilen boş directive **hiçbir** satır bırakmıyor (directive / audit / outbox / agent event) |
+| `AL-09` | `.c2` | Supervisor reddinden sonra **runtime satırı geri okunuyor** — pending control yok, `row_version` kıpırdamamış, kontrol event'i ve audit satırı yok |
+| `AL-10` | `.c3` + `.c4` | Stop **admission'dan SONRA**, `run_backtest`'ten **BİR SINIR ÖNCE** düşüyor: `BacktestRun` **var**, `BacktestResult` **yok**; stop öncesi her checkpoint + controlled cancellation'ın kendi `safe_checkpoint`'i **hayatta** |
+| `AL-18` | `.c3` | Aynı research kökünde **YENİ revizyon** indikten sonra pinlenmiş context manifest **kaymıyor** — üç bağımsız okuyucu hâlâ eski pini adlandırıyor |
+
+**ASIL NOKTA — `AL-10` bu partinin tek gerçek testiydi ve VACUOUS OLABİLİRDİ.** "Cancelled run
+Result publish etmez" iddiasını hiçbir backtest admit etmeden ölçmek totolojidir: run yoksa Result
+da yoktur. Kriterin koruduğu kusur, motorun **çalışmaya bir adım kala** iptal edilen bir koşuyu
+yine de tamamlamasıdır. Bu yüzden test durable executor'ı (`jobs/agent_executor.py`) sürüyor ve
+Admin'in Stop'unu **`backtest_requested` checkpoint'inde** bastırıyor: o noktada `BacktestRun`
+satırı ve engine job'ı **vardır**, `run_backtest` çağrısı **bir sonraki satırdadır**. Admin
+basışı executor'ın **kendi** `_checkpoint` yardımcısı sarılarak enjekte edilir; koşan komut
+üretimdeki `stop_run`'dır, kontrol yolunda hiçbir şey taklit edilmez.
+
+**ALTI NEGATİF KONTROL, ALTISI DA YALNIZ YENİ TESTİ DÜŞÜRDÜ.** Her birinde aynı kriterin
+**mevcut** testleri yeşil kaldı — clause'ların neden açık olduğunun kanıtı budur:
+
+| Kaldırılan/taşınan davranış | Gözlenen kırmızı | Yeşil kalan |
+|---|---|---|
+| `create_directive`'den `add_audit_event` silindi | audit listesi boş | üç kuyruk-sırası testi |
+| `create_directive`'in boş-metin kapısı yazmaların ALTINA taşındı | `TaskDirective` sayacı 1 | `pytest.raises` yarısı **geçmeye devam etti** |
+| `pause_runtime`'da `require_admin` mutasyonun ALTINA taşındı | `pending_control` PAUSE | `test_supervisor_lifecycle_denied` |
+| `run_backtest` öncesindeki `_pending_control_interrupt` silindi | task yine CANCELLED ama **`BacktestResult` 1** | `test_admin_stop_cancels_run`, `test_stop_cancels_active_run_no_result` |
+| `apply_pending_control`'ün STOP kolu `advance_to_safe_checkpoint`'i atladı | `safe_checkpoint` yok | aynı ikisi |
+| `data_bundle.resolve` taze manifest'i çağıran task'a damgaladı | task M1 → M2 kaydı | **tüm** gateway + executor + e2e agent suite'i |
+
+Sonuncusu partinin en öğretici kontrolüdür: kriterin yasakladığı **naif implementasyon**
+(resolve'un manifest'i canlı task'a yazması) bugünkü suite'in **hiçbir** testini kırmıyordu.
+
+**`AL-09`'un kontrolü neden bu şekilde:** guard'ı mutasyonun altına taşımak istisnayı **aynı
+şekilde** fırlatır, yani `.c1`'in testi (yalnız `pytest.raises`) yeşil kalır. Yeni test bu yüzden
+satırı **geri okur** ve reddin ardından bir Admin kontrolünü **red öncesi `expected_row_version`**
+ile sürer: sessizce artmış bir `row_version` hayalet bir 409 üretirdi.
+
+**`AL-18`'in üç okuyucusu bilerek ayrı:** durable `AgentToolCall` satırı (`input_manifest_id` +
+`response_ref.research_revision_ids` — pin **açık revizyon id'siyle**, kök head'iyle değil),
+Agent'ın kendi `agent.task.query`'si, ve **drift'ten SONRA** yazılan bir checkpoint (resume eden
+bir task'ın geri okuduğu şey). İkinci yarı da asserted: revizyon 2'ye ancak **YENİ** bir manifest
+taşıyan **YENİ** bir task (`followup_task.enqueue`) üzerinden ulaşılır ve bunu almak koşan task'ı
+M1'de bırakır.
+
+**Tavanlar İNDİ.** `partial` **90 → 86**, `debt_class.B` **59 → 55**; açık kabul borcu
+**98 → 94** (A=1 · B=55 · C=6 · D=32). Clause düzleminde `covered` 1022 → **1028**,
+`uncovered` 105 → **99**. `total_criteria` **383** (taban) ve `uncovered` **kriter** sayısı **8**
+değişmedi. Dört kriterin bütün clause'ları `covered` olduğu için `debt_class` **KALDIRILDI**
+(settled satır sınıf taşıyamaz — `DEBT_CLASS_NOT_ALLOWED`). Doc 18: **13 covered / 5 partial** →
+**17 covered / 1 partial**.
+
+**AÇIK KALAN TEK SATIR YÜZEY YÜZÜNDEN AÇIK.** `AL-06.c3` (*"textarea texti kullanıcıda
+korunur"*) bir **frontend** clause'udur ve bu parti doc 18'in backend yüzeyine kapsanmıştı —
+batch 01'den beri geçerli tek-belge-tek-yüzey kuralı. Satır **kapatılabilir**
+(`analysisLab.test.tsx`'te directive doğrulama testi hiç yok), yani sıradan sınıf-B test borcudur,
+**bulgu değildir**; bir doc 18 **frontend** partisi bekler. Bu yüzden `AL-06` sınıf B'de kaldı ve
+hiçbir yeniden sınıflandırma yapılmadı. **Doc 18'in backend'de test edilebilir borcu bitti.**
+
+**BULGU YOK.** Bu parti defterin on üç açık bulgusuna yenisini eklemedi: seçilen beş clause'un
+adlandırdığı davranışın **hepsi** `backend/src`'te sevk edilmiş durumdaydı ve parti seçilmeden
+önce okunarak doğrulandı (`agent_control.py::create_directive`, `::pause_runtime`, `::stop_run`,
+`agent_coordinator.py::apply_pending_control`, `agent_executor.py::_pending_control_interrupt`,
+`agent_tools.py::_handle_data_bundle_resolve`).
+
+**DÜRÜST SINIR.** Frontend kapıları bu container'da **koşulmadı** — `frontend/node_modules` yok
+ve slice frontend'de tek satır değiştirmedi; otorite CI'dır. `@a11y`/e2e suite'lerine hiçbir
+assertion yazılmadı (Docker Hub blob CDN **403**). `AL-10`'un testi bir monkeypatch ile Admin
+basışının **zamanlamasını** enjekte eder; **davranışı** değil — patch `_checkpoint`'i sarar,
+gerçek `stop_run` komutunu çağırır ve `_pending_control_interrupt` üretimdeki hâliyle koşar.
+
+**ZİNCİR NOTU.** Taban **`aecd72c`** — batch 08, 09 **ve** 10 zaten içinde (bir önceki freeze
+zincir borcunu kapattı). Bu freeze o ağaca karşı `--report` ile **yeniden ölçüldü**, iki dondurulmuş
+değer üzerinde aritmetik yapılmadı. Kabul defteri **seri bir kaynaktır**: paralel bir batch önce
+inerse bu dal rebase edilip **yeniden dondurulmalıdır**.
+
+**NUMARA:** main'in son kaydı **ADIM 82** (#778) → bu kayıt **83**. Numara merge sırasına bağlıdır
+ve merge'den hemen önce yeniden doğrulanır; **merge edilmiş ad kazanır**.

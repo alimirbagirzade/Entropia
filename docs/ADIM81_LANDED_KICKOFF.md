@@ -101,9 +101,13 @@
   imzasız, `docs/decisions/` altından okunur, bu satırdan değil:
   `grep -l 'karar veren' docs/decisions/*.md` ve kutunun dolu olup olmadığına **bak**.
   **İkinci bir brif YAZMA** — önce `list_pull_requests` (ADIM 81'in (b) dersi).
-- **Kabul borcu hattı ayrı ilerliyor:** batch 08/09 **PR #768'de açık** (91 partial / B 60),
-  main'de ADIM 80 sonrası taban **96 / B 65**. **Kabul defteri SERİ bir kaynaktır** — ikinci
-  inen taraf rebase edip **yeniden dondurmalı**.
+- **Kabul borcu hattı ayrı ilerliyor. #768 İNDİ** (batch 08 + 09 = ADIM 78 + 79, bu PR CI'da
+  beklerken) ve **zinciri doğru çözdü**: ADIM 80'in **96 / B 65** tabanının üstüne rebase edip
+  **yeniden dondurdu** → main'de ölçülen taban artık **90 partial / B 59**
+  (`uncovered` 8, `total_criteria` 383 **taban**). **Kabul defteri SERİ bir kaynaktır** ve bu
+  onun kanıtıdır. **BU SAYILARI BURADAN OKUMA — bayatlarlar** (bu satır bir kez bayatladı):
+  tek otorite `docs/audit/acceptance_coverage_baseline.json` `ceilings`, ve ölçüm
+  `acceptance_semantic_scan.py --root .. --report --ratchet`. **Ratchet YALNIZ AŞAĞI iner.**
 
 ### Bugün main'e inen, PROJECT_HISTORY kaydı GÖRÜNMEYEN PR'lar (ölçüldü, anlatı YAZILMADI)
 
@@ -184,8 +188,11 @@ SIRADAKİ MÜHENDİSLİK KALEMİ: C3 — execution/participant.py adaptörü.
 
 ALTERNATİF HAT — kabul borcu batch 11: sınıf-B'den TEK belge + TEK yüzey seç.
   cd backend && uv run python ../docs/audit/acceptance_semantic_scan.py --root .. --report
-  ZİNCİR: batch 08/09 PR #768'de açık (91 / B 60), main tabanı 96 / B 65.
-  İkinci inen rebase edip YENİDEN DONDURMALI.
+  ZİNCİR: #768 (batch 08+09) İNDİ ve yeniden dondurdu. TABANI DOSYADAN OKU,
+  bu prompttan DEĞİL: docs/audit/acceptance_coverage_baseline.json .ceilings
+  (bu satır yazılırken 90 partial / B 59 / uncovered 8 / total 383 taban idi).
+  Defter SERİ bir kaynaktır: senden önce başka bir batch inerse rebase edip
+  YENİDEN DONDUR. Ratchet YALNIZ AŞAĞI iner.
 
 KAYITSIZ İNEN SLICE'LAR (yalnız işaret et, ANLATI UYDURMA): #752 #755 #747
   #761 #770 #774 #773 — ve #762 #765 #778, bunlar bu PR açıkken indi.

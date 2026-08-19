@@ -7172,9 +7172,11 @@ codemap güncellemesi **gerekmedi**. `PROJECT_HISTORY.md` §ADIM 81 ·
 > ve alınmadı) · `G16` (A-08 — **ajan kapatamaz**).
 > **BRİFİNGLİ ≠ İMZALI.** İmzasız bir kapının arkasındaki slice'a **BAŞLAMA**.
 >
-> **Paralel hat — kabul borcu:** batch 08/09 **PR #768'de açık** (91 partial / B 60); main
-> tabanı ADIM 80 sonrası **96 / B 65**. Defter **seri bir kaynaktır** — ikinci inen taraf
-> rebase edip **yeniden dondurmalı**.
+> **Paralel hat — kabul borcu: #768 İNDİ** (batch 08 + 09 = ADIM 78 + 79, bu PR CI'da
+> beklerken) ve zinciri doğru çözdü — ADIM 80'in **96 / B 65** tabanının üstüne rebase edip
+> yeniden dondurdu, main'de ölçülen taban artık **90 partial / B 59**. Defter **seri bir
+> kaynaktır** ve bu onun kanıtıdır. **Sayıyı buradan alma** — otorite
+> `docs/audit/acceptance_coverage_baseline.json` `ceilings`; **ratchet yalnız aşağı iner**.
 
 > **AŞAĞIDAKİ SLICE GİRDİLERİ BİLEREK DEĞİŞTİRİLMEDİ** — ölçtükleri anı donduran kayıtlardır
 > (ADIM 65 emsali). `G9`/`G13` hakkındaki cümleleri **present tense okuma**; ikisi de

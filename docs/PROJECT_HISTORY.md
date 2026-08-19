@@ -12693,9 +12693,22 @@ site **724 → 725**) — **test ekleyen slice olguları TAZELEMELİ**, kapı bu
   `--ratchet` **0**, `generate_repository_facts.py --check` **0**.
 - **Yeni bulgu YOK.** Defterdeki dokuz yanlışlanamaz bulgu ve dört adjudication kalemi
   **değişmedi**; hiçbir kriter yeniden sınıflandırılmadı.
+- **CI'da ADIM 74'ün DERS 2'si TEKRARLADI ve bu kez ÜÇ job'ı birden vurdu.** İlk koşuda
+  `Backend` (**46 dk**), `Frontend`, `Acceptance flows`, üç `CodeQL` ve kalan her şey **yeşil**;
+  ama `E2E` workflow'unun tarayıcıya bağlı **üç** job'ı da `Install Playwright browsers`
+  adımında **asıldı** — `E2E (F-23)` 29 dk sonra, `A11Y (R2-14)` 39 dk sonra `cancelled`,
+  `Lighthouse` 56 dk boyunca hâlâ `in_progress`. **Hiçbirinde tek bir test gövdesi koşmadı**
+  (adım 10+ hepsinde `skipped`/`pending`), yani bu **bir başarısızlık DEĞİL bir kesintidir** ve
+  bu PR'ın diff'iyle ilgisi yoktur: diff bir vitest dosyası + belgelerdir, `E2E` workflow'u
+  onların hiçbirini tüketmez. Kayıt için: **`cancelled` ≠ `failure`**, ve bir job'ı yeniden
+  koşturmanın meşru olduğu tek durum tam olarak budur (kurulum/checkout/runner, test gövdesi
+  koşmadan).
 
-**ZİNCİR NOTU.** Taban **`7f331c7`** — batch 08, 09, 10 **ve 11** zaten içinde. Bu freeze o
-ağaca karşı `--ratchet` ile **yeniden ölçüldü**, iki dondurulmuş değer üzerinde aritmetik
+**ZİNCİR NOTU.** Taban **`a5bc27f`** — batch 08, 09, 10 **ve 11** zaten içinde. Dal önce
+`7f331c7`'den kesildi, sonra **`a5bc27f`'e rebase edildi** (#779, yalnız bir plan belgesi —
+kabul dosyalarında sıfır satır; `strict: true` ruleset'i güncellik ister, o yüzden **merge değil
+rebase**, ADIM 61 emsali). Freeze **her iki tabana karşı da** `--ratchet` ile **yeniden ölçüldü**
+ve ikisi de **85 / 8 · A1 B54 C6 D32** verdi; iki dondurulmuş değer üzerinde aritmetik
 yapılmadı. Kabul defteri **seri bir kaynaktır**: paralel bir batch önce inerse bu dal rebase
 edilip **yeniden dondurulmalıdır**.
 

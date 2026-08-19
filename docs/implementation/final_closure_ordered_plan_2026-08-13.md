@@ -277,20 +277,20 @@ The prompt names six. **This table registers sixteen (G1–G16).**
 
 | # | Gate | Status at `c49f5e7` | **Who opens it** | **Looking at what** | **Evidence written where** | Blocks |
 |---|---|---|---|---|---|---|
-| **G1** | **#552 commission — incidence** (per-fill vs round trip) | **UNSIGNED.** `decisions:276` all four boxes `[ ]`, `karar veren:` blank. GH #552 is **closed** (by #720) — *issue CLOSED ≠ çözüldü* | PO / maintainer | `decisions §Karar 1`; Master Ref §8 `:7513`, §6.2 `:7425`, §7 item 7 `:7738` | signature block `decisions:276-283` | **F3** |
+| **G1** | **#552 commission — incidence** (per-fill vs round trip) | **UNSIGNED.** `decisions §Karar 1 ▸ İMZA SATIRI` all four boxes `[ ]`, `karar veren:` blank. GH #552 is **closed** (by #720) — *issue CLOSED ≠ çözüldü* | PO / maintainer | `decisions §Karar 1`; Master Ref §8 `:7513`, §6.2 `:7425`, §7 item 7 `:7738` | signature block `decisions §Karar 1 ▸ İMZA SATIRI` | **F3** |
 | **G2** | **#552 commission — base** (flat amount vs bps on notional) | **UNSIGNED, and untouched by #720.** Shipped schema says flat (`config.py`, *"Per-trade fee"*); Master Ref §2.3 `:3110` gives the only concrete example as *bps on notional* | PO / maintainer | same block, Option C | same signature block | **F3**, and the only Package A item that can bump `ENGINE_VERSION` |
-| **G3** | **`execution_content.commission_model` manifest field** — required by Master Ref §8 *regardless of which model wins*; absent today | **UNSIGNED** (mandatory addendum, `decisions:280`) | PO / maintainer | `decisions:460-465` | same signature block, `[ ] evet / [ ] hayır` | **F3** |
+| **G3** | **`execution_content.commission_model` manifest field** — required by Master Ref §8 *regardless of which model wins*; absent today | **UNSIGNED** (mandatory addendum, the `execution_content.commission_model` box in `decisions §Karar 1 ▸ İMZA SATIRI`) | PO / maintainer | `decisions §Karar 1` | same signature block, `[ ] evet / [ ] hayır` | **F3** |
 | **G4** | **#550 cap-overflow disposition** — Master Ref §10.2 says *"clamp değil"*; the engine clamps silently and **no validator compares base against the cap** | ✅ **BRIEFED 2026-08-17 (PR #755), still UNSIGNED.** Was *"NOT BRIEFED — no owner"*; first recorded in P-C1 §2.1 / STOP-GATE 4 | PO / maintainer | `docs/decisions/closure_g4_cap_overflow_2026-08-17.md`; Master Ref §10.2 vs doc 02 field table + ⓘ panel; §11.4 *"kırpılıp açılmaz"*; sleeve precedent | signature block in that file — **4 dispositions (A blocker / B-i / B-ii cap policy / C canonical / D observable clamp), all boxes `[ ]`**. **NOT** a fourth entry in `closure_product_decisions…` — it landed as its own file, following G15's precedent | **F2** |
 | **G5** | **#550 canonical option** (percent vs unit-count) | ✅ **DISCHARGED.** GH #550 body: *"Decision recorded in the comments: adopt canon (option A)"*; closed `completed` by #720 | — | GH #550 body + comments; `sizing.py::_percent_of_capital` | GH #550, PR #720 | nothing |
-| **G6** | **#558 research bundle shape** (A1 / A2 / A1+A2 / B / C) + 2 sub-decisions | **UNSIGNED.** `decisions:467-477` all boxes `[ ]`. GH #558 **OPEN**, `product-decision` | PO / maintainer | `decisions §Karar 2`; doc 12 §9.1/§9.2 | signature block `decisions:467-477` | **R2, R4** |
-| **G7** | **§9.2's two class-D fields** (`alignment_policy_versions[]`, `missing_and_stale_policies[]`) | **UNSIGNED**, and **out of scope regardless** — measured 0 hits in `backend/src`, `frontend/src`; no column exists | PO / maintainer | `decisions:472` sub-decision | same signature block | nothing (excluded) |
-| **G8** | **#559 DST fold/gap — is it required for shared mixed-zone?** | **UNSIGNED.** GH #559 **OPEN**, labelled `blocks-mixed-zone-axis`. **P-DEC answered the scoping question and it awaits ratification:** the decision doc's *hüküm (a)* is that #559 blocks the **mixed-zone scope only, not the axis arithmetic** — with its own `[ ] evet / [ ] hayır` box at `decisions:706-717` | PO / maintainer | `decisions §Karar 3`, ADR §12 | signature block `decisions:706-717` | **C9 only** (E6 precondition #21). **Not E4, not E5** — under fail-closed admission no shared run can reach a mixed-zone axis |
+| **G6** | **#558 research bundle shape** (A1 / A2 / A1+A2 / B / C) + 2 sub-decisions | ✅ **SIGNED 2026-08-14** by the PO (`alimirbagirzade`): `[x] A1+A2`, plus both sub-decisions. Was *"**UNSIGNED.** `decisions:467-477` all boxes `[ ]`. GH #558 **OPEN**, `product-decision`"* — **both halves were stale**: the boxes are ticked and GH #558 is **closed** (`completed`, 2026-08-17), its closing comment answering all three decision questions in writing | PO / maintainer | `decisions §Karar 2`; doc 12 §9.1/§9.2 | signature block `decisions §Karar 2 ▸ İMZA SATIRI`, with a signature note recording the reasoning; shipped by #730 | **R2, R4** — **both unblocked** |
+| **G7** | **§9.2's two class-D fields** (`alignment_policy_versions[]`, `missing_and_stale_policies[]`) | ✅ **ANSWERED 2026-08-14** as Karar 2's third sub-decision — `[x] yalnız türetilebilir ikisi`, i.e. these two stay **out**, recorded as a **signed class-D deviation**. Was *"**UNSIGNED**"*. The *"**out of scope regardless**"* finding was **correct and is retained** — 0 hits in `backend/src`, `frontend/src`; no column exists. Deliberately **not** emitted as empty arrays: `[]` would assert *"there are none"* (a provenance **lie**) where the truth is a provenance **gap**; the absence is asserted by a test | PO / maintainer | `decisions §Karar 2 ▸ İMZA SATIRI`, third sub-decision | same signature block, plus the **İMZALI SAPMA** note beneath it | nothing (excluded) |
+| **G8** | **#559 DST fold/gap — is it required for shared mixed-zone?** | **UNSIGNED — and it stays that way.** GH #559 was **closed** (`completed`) 2026-08-18 with **no comment, no closing PR and no recorded decision**; was *"GH #559 **OPEN**"*. `decisions §Karar 3 ▸ İMZA SATIRI` is **still blank**, so by this table's own G1 rule — *issue CLOSED ≠ çözüldü* — the gate is untouched. Still labelled `blocks-mixed-zone-axis`. **P-DEC answered the scoping question and it awaits ratification:** the decision doc's *hüküm (a)* is that #559 blocks the **mixed-zone scope only, not the axis arithmetic** — with its own `[ ] evet / [ ] hayır` box in `decisions §Karar 3 ▸ İMZA SATIRI` | PO / maintainer | `decisions §Karar 3`, ADR §12 | signature block `decisions §Karar 3 ▸ İMZA SATIRI` | **C9 only** (E6 precondition #21). **Not E4, not E5** — under fail-closed admission no shared run can reach a mixed-zone axis |
 | **G9** | **ADR §16 Gate 1** — amend ADR §6/§8 to add `settle`, `finalize`, P10, `iter_portfolio` | ✅ **SIGNED 2026-08-17** by the PO; amendment applied as ADR `0002` **§13.2** (§6 clauses 6–7, §8.2 phase P10). No product code shipped with it | PO / maintainer | `docs/adr/0002…md` §6, §8, §16 | an ADR amendment entry, same shape as the §13.1 table | **C2** |
 | **G10** | **ADR §16 Gate 2** — flag flip + `ENGINE_VERSION` bump | **NOT REQUESTED.** §16: *"should hold for ADIM 20, which is the first slice that changes a shipped number"* | PO / maintainer | ADR §14 acceptance matrix, §16 | ADR §16 approval record | **C9** |
 | **G11** | **P2 — deferred fills / resting limits on shared runs** (block at admission, or model P2) | **UNDECIDED, but BRIEFED 2026-08-18** — signature block created, all boxes `[ ]`. P-C2 §C.3.7 recommends (a) block | PO / maintainer | `docs/decisions/closure_g11_deferred_fill_admission_2026-08-18.md`; P-C2 §C.3.7; doc 14 §9.1 taxonomy | that decision doc's §Karar | **C6** |
 | **G12** | **P8 — scaling on shared runs** (block at admission, or model P8) | ✅ **BRIEFED 2026-08-17 (PR #752), still UNSIGNED.** Was *"UNDECIDED, unbriefed"*. `run_portfolio` currently raises `UnsupportedIntentKindError` | PO / maintainer | P-C2 §C.3.8 | `closure_product_decisions_2026-08-13.md` §**Karar 6**, signature block `karar veren:` blank | **C6**, and the size of **C1** |
 | **G13** | **P10 end-of-data equity point** — append a new point at the last `t_ms`, or fold into it | ✅ **DECIDED 2026-08-17: FOLD** (`commit_tick` at the same `t_ms` after the closes). Appending was rejected — it would break A5's by-construction claim. Recorded in ADR `0002` §13.2 | PO / maintainer | P-C2 §C.3.10; ADR §14 A5 | ADR amendment alongside G9 | **C2** |
-| **G14** | **#544 NET cross-item conflict semantics** | GH #544 **OPEN**, `product-decision` + `blocks-adim-19` | PO / product | ADR §9.4 | GH #544 | **C9** (E6 precondition #20) |
+| **G14** | **#544 NET cross-item conflict semantics** | **UNDECIDED — and the issue state no longer says so.** GH #544 was **closed** (`completed`) 2026-08-18; was *"GH #544 **OPEN**"*. **Measured before trusting the closure:** zero comments, no closing PR, and the body still ends on *"What must be decided"* — so **no decision is recorded anywhere**, unlike **G5**, which the issue body genuinely discharged. *issue CLOSED ≠ çözüldü.* Still labelled `product-decision` + `blocks-adim-19` | PO / product | ADR §9.4 | GH #544 — **and it is currently empty of a decision**; discharging G14 needs one written there | **C9** (E6 precondition #20) |
 | **G15** | **Ready Check leg 3 — which row wins** (`work_object_revision_id` is **not UNIQUE**, so today's per-item winner is undefined) | ✅ **BRIEFED 2026-08-17 (PR #747), still UNSIGNED.** Was *"UNDECIDED, unbriefed"*. Batching changes readiness answers | PO / product | `docs/decisions/closure_g15_external_row_winner_2026-08-17.md`; `CLAUDE.md` §ADIM 62 measurement; P-C2 §D.1 leg 3 | signature block in that file — 4 options, all boxes `[ ]`, and a **precondition box that is a NUMBER** (production duplication count, still **untaken**) | **nothing in this plan** — leg 3 has no slice by design |
 | **G16** | **A-08 human screen-reader audit** (#514) | **OPEN, in progress.** 2/184 Section A cells, 0/10 flows, SR-1 never started, exit criteria **0/4** | **human auditor only** (`human-only` label) | `docs/audit/a11y_screen_reader_audit_results.md` §5 exit criteria | that ledger | **the final RC verdict** |
 
@@ -313,6 +313,36 @@ The prompt names six. **This table registers sixteen (G1–G16).**
 > when `C3` creates it. It is a real gate (it blocked `C3`, a human opened it, and it is
 > discharged) but it is **not** G1–G16, so every count in this section excludes it. Registering
 > it as `G17` would move three numbers and is deliberately **not** done here.
+
+> **GÜNCELLEME 2026-08-19 — G6/G7 satırları sayım tablosuyla ÇELİŞİYORDU; çelişki kapandı.**
+> *"Still open"* satırı 2026-08-18'den beri **G6 + G7'yi çözülmüş** sayıyor, ama yirmi satır
+> yukarıdaki G6 satırı hâlâ *"UNSIGNED, all boxes `[ ]`"*, G7 satırı da *"UNSIGNED"* diyordu.
+> **Çelişen taraf kapı sicilinin kendisiydi — yani bu belgenin tek işlevi.** Satırlar
+> ölçülerek düzeltildi: `decisions §Karar 2 ▸ İMZA SATIRI` kutuları **işaretli**
+> (`[x] A1+A2`, `[x] evet`, `[x] yalnız türetilebilir ikisi`) ve **`karar veren:
+> alimirbagirzade, tarih 2026-08-14`** doludur. **Hiçbir kutu bu güncellemeyle doldurulmadı**
+> ve **hiçbir sayı oynamadı** — sayım zaten doğruydu, satırlar bayattı.
+>
+> **Yan ölçüm: bu tablodaki ALTI `decisions:NNN` satır referansının ALTISI DA bayattı** —
+> hiçbiri iddia ettiği yeri göstermiyordu (ör. `decisions:467-477` artık öneri paragrafının
+> ortası, imza bloğu değil). Hepsi **bölüm adına** çevrildi (`CLAUDE.md` §Conventions:
+> *satır no değil sembol yaz*), böylece bir daha kaymazlar.
+>
+> **Yan ölçüm 2 — üç issue durumu bayattı, ve İKİSİ KAPIYI AÇMAZ.** Tablo #558, #559 ve
+> #544'ü **OPEN** diye yazıyordu; **üçü de kapalı**. Ama kapanış tek başına hiçbir şey
+> kanıtlamaz — bu tablonun kendi G1 kuralı *issue CLOSED ≠ çözüldü* der ve burada üç kez
+> farklı sonuç verdi:
+>
+> | issue | kapanış | kayıtlı karar var mı | kapı |
+> |---|---|---|---|
+> | **#558** (G6/G7) | 2026-08-17, `completed` | **EVET** — kapanış yorumu üç karar sorusunu da yazılı cevaplıyor, ve imza `decisions §Karar 2`'de bağımsız olarak duruyor | **çözüldü** |
+> | **#559** (G8) | 2026-08-18, `completed` | **HAYIR** — yorum yok, closing PR yok; `§Karar 3` imza bloğu **boş** | **AÇIK kalır** |
+> | **#544** (G14) | 2026-08-18, `completed` | **HAYIR** — sıfır yorum, closing PR yok, gövde hâlâ *"What must be decided"* ile bitiyor | **AÇIK kalır** |
+>
+> G14 bu ayrımın en kolay yanlış okunacağı yerdir, çünkü *"Evidence written where"* sütunu
+> **issue'nun kendisini** gösterir — G5 gerçekten gövdesinde karara bağlanmıştı, G14 ise
+> kapatıldı ve **boş bırakıldı**. Kapalı bir issue'yu imza yerine saymak on bir açık kapıyı
+> dokuza indirirdi; **indirilmedi**.
 
 **Count, stated three ways because the three numbers differ and each is used somewhere below:**
 
@@ -837,7 +867,7 @@ flowchart TD
     subgraph GATES["HUMAN GATES — 11 open as of 2026-08-18, none dischargeable by an agent"]
         G1G2G3["G1/G2/G3 · #552 commission<br/>incidence + base + manifest field<br/>UNSIGNED"]
         G4["G4 · #550 cap overflow<br/>BRIEFED #755 · UNSIGNED"]
-        G6["G6 · #558 bundle shape<br/>UNSIGNED"]
+        G6["G6 · #558 bundle shape<br/>SIGNED 2026-08-14 · Karar 2"]
         G8["G8 · #559 DST<br/>UNSIGNED · scope-only per hüküm (a)"]
         G9["G9 · ADR §16 Gate 1<br/>SIGNED 2026-08-17 · ADR §13.2"]
         G10["G10 · ADR §16 Gate 2<br/>flip + bump"]

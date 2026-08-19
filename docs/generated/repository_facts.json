@@ -2,17 +2,17 @@
   "acceptance": {
     "clause_count": 1175,
     "clauses_by_status": {
-      "covered": 1032,
+      "covered": 1033,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "partial": 7,
-      "uncovered": 97
+      "uncovered": 96
     },
     "criteria_by_status": {
-      "covered": 276,
+      "covered": 277,
       "deliberate_future_dev": 8,
       "not_applicable": 7,
-      "partial": 84,
+      "partial": 83,
       "uncovered": 8
     },
     "criteria_count": 383

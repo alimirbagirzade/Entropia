@@ -54,7 +54,7 @@ for this map.
 | 02 | 15 | 8 | 2 | 0 | 0 | 0 | 25 |
 | 03 | 18 | 2 | 1 | 0 | 0 | 0 | 21 |
 | 04 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
-| 05 | 14 | 8 | 1 | 0 | 0 | 0 | 23 |
+| 05 | 16 | 6 | 1 | 0 | 0 | 0 | 23 |
 | 06 | 10 | 5 | 1 | 0 | 0 | 0 | 16 |
 | 07 | 18 | 3 | 1 | 0 | 0 | 0 | 22 |
 | 08 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 4 | 5 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **275** | **85** | **8** | **8** | **7** | **0** | **383** |
+| **all** | **277** | **83** | **8** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1029 |
-| partial | 9 |
-| uncovered | 98 |
+| covered | 1033 |
+| partial | 7 |
+| uncovered | 96 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 54 |
+| B | 52 |
 | C | 6 |
 | D | 32 |
-| **open total** | **93** |
+| **open total** | **91** |
 
-## Partial criteria (85)
+## Partial criteria (83)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -132,10 +132,8 @@ for this map.
 | `TL-02` | B | A transient Trade Log draft row is marked Unsaved and is not a Ready Check / Run input. | The jsdom test proves the visible Unsaved draft row exists, mounts the inline editor and discards cleanly. Nothing asserts the exclusion half: no readiness or RUN test seeds a composition that also carries a revision-less draft and asserts the snapshot ignores it. The draft never becomes a Mainboard item so the exclusion holds by construction, but no test states it. |
 | `TL-04` | D | Save Draft may omit the file; Validate & Save Ready without one returns SOURCE_FILE_REQUIRED. | DOCSTRING-ONLY COVERAGE, DELIBERATELY NOT COUNTED. The string SOURCE_FILE_REQUIRED appears in the whole repository's test suite only inside two docstrings — backend/tests/unit/test_trade_log_config.py lines 66 and 77 ("the issue commands.trade_log._raise_for_issues maps to the typed SOURCE_FILE_REQUIRED 422"). Both tests assert nothing more than `any(str(i["field"]).startswith("import_binding") ...)`; neither calls the command, the route, or asserts the error code. No other backend or frontend test references the code at all. So the field issue is proven and the promised typed 422 mapping is unproven. The Save-Draft-without-a-file half is also unproven: the Trade Log surface has no draft-save command (the transient draft is client-side, TL-02), so nothing exercises it. |
 | `TL-11` | B | Independent capital is required only while allocation is off; an active run uses the allocation snapshot. | The readiness conditionality is proven in both directions. The run-time half is not: the capital-source assertions in test_backtest_persistence.py (test_worker_independent_run_uses_the_strategy_own_capital) run over a STRATEGY item, and no test drives an allocation-enabled run whose capitalised item is a Trade Log. ADIM 49 FINDING — this row is very likely MISCLASSIFIED. c3 names a run over an ALLOCATION-ENABLED composition, but shared capital allocation is fail-closed at ADMISSION in this build: domain/allocation/capability.py sets SHARED_ALLOCATION_STATUS = 'future_dev' and commands/backtest_run.py raises ALLOCATION_SHARED_MODE_NOT_IN_BUILD before any run, manifest or job is created (test_shared_allocation_run_is_refused_and_leaves_nothing_behind pins exactly that). So the run this clause describes CANNOT BE ADMITTED and no test can construct it — that is the class C definition ('a V1 feature deliberately left closed'), not class B. It was left at B deliberately: moving it would RAISE the C ceiling, which is an adjudication and not a test slice's call. ADIM 48's kickoff recommended this row as closable; that recommendation was WRONG and is corrected here. |
-| `TL-13` | B | A new ready revision never moves an existing pin; an explicit pin changes the composition hash. | The pin semantics are proven end to end on a real Trade Log. The staleness clause is only half-proven: test_is_stale_detects_fingerprint_change asserts the predicate is_stale("a","b") is True, but no test carries an existing readiness report through a Trade Log pin change and asserts the report is then reported stale. |
 | `TL-14` | B | Import returns a durable job id; the worker owns the work and the UI recovers from job state. | test_trade_log_import_is_handed_off_to_its_data_actor is the PR #528 regression guard: it asserts the tool call is admitted (status succeeded) while the WORK is still queued (import_status == "queued", import_job_kind == TRADE_LOG_IMPORT) and that worker_actors._dispatch_pending_data_job sends run_trade_log_import for that job_id — the exact hand-off the Gateway plane used to skip, leaving agent imports QUEUED until an Admin ran manual redelivery. The session-termination clause is unproven: no test terminates a session or drops a client and then asserts the job still completes. The durable QUEUED row makes it true by construction, but nothing states it. |
-| `TL-16` | B | Concurrent editors on the same expected head — exactly one wins, the other gets a 409. | The conflict is raised on a stale token, and the frontend test proves the client transmits expected_head_revision_id. Neither the "exactly one write survives" nor the "409 carries the server canonical state" clause is asserted: the integration test raises and stops, and nothing inspects the error body's details. Trade Log is intentionally NOT in the dual-token matrix (test_occ_dual_token_contract.py has no trade-log param) — it takes a body token only. |
-| `TL-22` | B | The Agent drives the whole Trade Log line through the Tool Gateway with no browser. | create / create_revision / request_import are all driven through dispatch_tool_call with no HTTP or browser. Provenance is only half-proven: the durable AgentToolCall row and its failure_code are asserted on the DENIAL path; the success path asserts the returned dict but never re-reads the tool-call row for owner / task / checkpoint provenance. "Human Mainboard not auto-mutated" is unproven — the Agent create runs with attach=True onto its own default board and no test asserts a separate human's composition is untouched. (auto_repinned is False is a different guarantee: the pin does not move, not that another actor's board is unaffected.) |
+| `TL-16` | B | Concurrent editors on the same expected head — exactly one wins, the other gets a 409. | c3 CLOSED by acceptance batch 11 (doc 05 backend); c4 MEASURED AND FOUND UNSHIPPED, and the criterion therefore stays partial/class B. c3: test_stale_expected_head_conflicts raises on a FABRICATED token and stops, which proves the guard rejects a token that never existed — it cannot distinguish that from last-write-wins between two real writers who both read the same real head, because the loser silently replacing the winner would leave it green. The new test drives both writers off the SAME observed head, then counts what the root holds: revision_no == [1, 2], the head is the winner's revision id, and the loser's display_name appears in NO revision payload. Negative control: deleting the expected_head_revision_id guard in commands/trade_log.py turned it red with DID NOT RAISE. c4 is the FINDING and was NOT acted on. The raise site is a bare "raise WorkObjectRevisionConflictError()" (commands/trade_log.py, mirrored in trading_signal.py and mainboard.py); AppError.__init__ then sets details=[] and leaves scope_id/field_path None, so the 409 envelope carries the class-level code, message, category, retryable and suggested_action and NOTHING about the server's current head. The canonical state the clause names does not exist on the wire, which is the class D definition, not test debt: no test can assert a field the product never populates. It was NOT moved — B -> D would RAISE the D ceiling, and ceilings only fall except by adjudication. Trade Log is intentionally NOT in the dual-token matrix (test_occ_dual_token_contract.py has no trade-log param) — it takes a body token only. |
 | `CP-03` | B | A visible-but-not-usable package is refused by Add Strategy From Package server-side; the UI clears stale selection state. | The server-side half is fully proven: can_view/can_use are independent in the projection and the derive command refuses both the unusable-but-visible revision (PackageNotDerivableError) and the foreign private one (AccessDeniedError). What is NOT asserted anywhere is the row's second sentence — that the UI clears stale selection state after such a denial. The mainboard test proves the picker disables an ineligible row up-front, which is a different assertion from clearing an already made selection once the server refuses it. |
 | `CP-06` | C | Changing the target runtime after a Passed Pre-Check makes the report stale and Send refuses to start candidate generation. | The staleness mechanism and the Send refusal are both proven, but the stale test mutates `PackageRequest.context_hash` directly rather than changing the target runtime. `test_context_hash_changes_with_each_input` varies the source hash and the declared dependencies, never `target_runtime`, so no test proves that a runtime change alone moves the hash. Note the scenario is also unreachable in Production — `SUPPORTED_TARGET_RUNTIMES == {python}` (CP-05) — which is exactly why the clause is recorded as unproven rather than quietly rolled up. |
 | `CP-09` | B | The same Send Idempotency-Key returns the same request/job identity; the same C.D.P key creates no second draft. | `submit_candidate_generation` does accept `idempotency_key` and wraps its body in `run_idempotent`, but no test in the suite passes a key to it twice: a grep for `idempotency_key` across the create-package integration tests hits only the C.D.P call. The Send-replay half is therefore an untested code path, not a proven one. |

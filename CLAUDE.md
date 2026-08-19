@@ -253,6 +253,23 @@ Before stopping a working session, produce **ALL** of the following:
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 81 (§2 kapı tablosu tazelendi, PR #769): ÜRÜN KODU
+> DEĞİŞMEDİ, tek docs dosyası (+93/−30). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Kapı sayımı ölçüldü: **16 kayıtlı · 11 açık · 11 bloklayan** (çözülmüş: G5 G6 G7 G9 G13);
+> **`G4`/`G12`/`G15` BRIEFED ama İMZASIZ** (#755/#752/#747) — **brifingli ≠ imzalı, sayımı
+> değiştirmez**; `G11` de **#771 ile brieflendi** (bu PR beklerken indi) → **brifsiz kapı
+> KALMADI, sayım yine DEĞİŞMEDİ**.
+> **İki ders:** kısmi ölçüm = STALE-BY-DEFAULT ihlali (G6/G7 ölçülmeden taşındı → *"13 açık"*,
+> düzelten bir kapı değil **insan**) · **çift iş** (#772 aynı §'yı tazeledi → taban **daha doğru
+> ölçen** dal oldu; tazelemeden önce `list_pull_requests`). **O sırada kayıtsız olan ürün slice'ı
+> (`C2` = PR #759) ARTIK KAYITLI** — ADIM 82 onu geriye dönük yazdı (#778); sıradaki
+> mühendislik kalemi **`C3`** (`execution/participant.py` **yok**; importer-allowlist kararı
+> **#761'de İMZALANDI — Seçenek A**, negatif kontrol zorunlu).
+> `PROJECT_HISTORY.md` §ADIM 81 · `docs/ADIM81_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 80 (kabul borcu batch 10, doc 03 frontend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Tek clause: **`AOS-01.c2`** (chooser klavye paritesi) — parite **native** (`OutsourceSignal.tsx`

@@ -11858,6 +11858,132 @@ tavan sessizce geçmez — `test_the_frozen_ceiling_leaves_no_headroom` kırmız
 slice **80**. #768 bu PR'dan sonra inerse merge edilmiş ad kazanır ve bu kayıt taşınır.
 `docs/ADIM80_LANDED_KICKOFF.md`.
 
+## ADIM 81 — §2 kapı tablosu tazelendi: G4/G12/G15 brifingli, sayım 11'e düzeltildi (PR #769)
+
+> **ÜRÜN KODU DEĞİŞMEDİ.** Migration yok · alembic head `0043_i08_registry_strategy_fks`
+> (değişmedi) · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> Diff **tek dosya, +93/−30**: `docs/implementation/final_closure_ordered_plan_2026-08-13.md`.
+> `backend/src`, `frontend/src`, `backend/migrations` ve her test ağacında **sıfır** satır.
+> Squash merge **2026-08-18T17:11:11Z**, merged_by **alimirbagirzade**; PR 09:49:35Z'de açıldı
+> (**~7 sa 22 dk** açık kaldı, 6 commit).
+
+**Ne kapandı.** §2 kapı tablosunun bayat DURUM hücreleri. Sorular, sahipler ve blokladıkları
+slice'lar **değişmedi** — yeniden ölçülen tek şey her kapının *durumu*:
+
+| Kapı | Eski satır | Bugün |
+|---|---|---|
+| **G4** (#550 cap-overflow) | *"NOT BRIEFED — no owner"* | **BRIEFED** 2026-08-17 (PR #755, kendi dosyası) · **HÂLÂ İMZASIZ** |
+| **G15** (Ready Check leg 3) | *"UNDECIDED, unbriefed"* | **BRIEFED** 2026-08-17 (PR #747, kendi dosyası) · **HÂLÂ İMZASIZ** |
+| **G12** (P8 shared runs) | *"UNDECIDED, unbriefed"* | **BRIEFED** 2026-08-17 (PR #752, Karar 6) · **HÂLÂ İMZASIZ** |
+
+**BRİFİNGLİ ≠ İMZALI, ve sayıyı DEĞİŞTİRMEZ.** Bir blok yaratmak bir kapıyı kapatmaz; üçü de
+**açık** sayılır. Bu, belgenin en kolay yanlış okunan yeriydi ve artık yazılı. İki brif de
+planın öngördüğü *"`closure_product_decisions`'a dördüncü girdi"* biçiminde **inmedi** — ikisi
+de `docs/decisions/` altında **kendi dosyası** olarak indi (G15 emsali).
+
+**`G11` artık imzalanacak yeri OLMAYAN TEK kapıdır** — satırı bilerek değiştirilmedi, çünkü
+orada *"unbriefed"* hâlâ doğru.
+
+**SAYIM DÜZELTİLDİ: 16 kayıtlı · 11 açık · 11 bloklayan.** Çözülmüş beş: **G5** (#550 kanonik
+seçenek, #720 ile sevk edildi) · **G6 + G7** (Karar 2, imzalı 2026-08-14) · **G9 + G13**
+(ADR `0002` §13.2, imzalı 2026-08-17). Eski *"14 bloklayan"* = *"15 açık eksi G7 (kapsam
+dışı)"*'ydı; **G7 artık çözülmüş** olduğu için dışlanan bir şey kalmadı ve iki sayı eşitlendi.
+Açık kalanlar: **G1, G2, G3, G4, G8, G10, G11, G12, G14, G15, G16**.
+
+**Giriş cümlesi YAZILDIĞI GÜN yanlıştı, yalnızca bayat değildi.** *"Measurement finds
+**thirteen**, of which two are already discharged"* diyordu; belgeyi getiren commit `2a314ae`'de
+tablo **zaten on altı satır** taşıyordu ve **yalnız G5** çözülmüştü. Cümle **silinmedi,
+alıntılandı** — altındaki sayım tabloları onun üzerine kurulmuştu ve revizyonları karşılaştıran
+bir okur hangi sayının neden düzeltildiğini görmek zorunda.
+
+### KAYDEDİLMESİ ZORUNLU İKİ HATA — bu slice'ın asıl dersi
+
+**(a) STALE-BY-DEFAULT ihlali, ve onu bir KAPI DEĞİL bir İNSAN yakaladı.** Bu dalın **ilk**
+sürümü *"13 açık"* dedi. Sebep: G4, G9, G12, G13 ve G15 **ölçüldü**, ama **G6 ve G7** bayat
+tablodan **ölçülmeden taşındı**. Yeniden ölçüm: Karar 2 `[x] A1+A2`, **karar veren
+`alimirbagirzade`, 2026-08-14**, ve alt-kararı G7'yi *"yalnız türetilebilir ikisi"* olarak
+imzalı bir sınıf-D sapmayla çözüyor. Karar 1 (G1/G2/G3) ve Karar 3 (G8) aynı yöntemle
+kontrol edildi ve **gerçekten imzasız** çıktı.
+> **DERS: "beş kapıyı ölçtüm" altıncıyı ölçtüğün anlamına GELMEZ.** Kısmi ölçüm, ölçülmemiş
+> satırları *"eski hâliyle doğru"* saymaya izin verir — §Session START md. 1'in tam olarak
+> yasakladığı şey budur. Bir tabloyu tazelerken **her satırı** ölç ya da hangilerini
+> ölçmediğini **yaz**.
+
+**(b) ÇİFT İŞ: aynı bölüm iki dalda bağımsız tazelendi.** #769 09:49:35Z'de, **#772**
+09:59:19Z'de açıldı — **aynı dosya, aynı §, ~60 satır çakışma**. İkisi metinsel olarak
+çelişiyordu, yalnız biri inebilirdi. **Sonradan açılan dal daha doğru ölçmüştü** (11 ↔ 13), o
+yüzden çözüm sıraya göre değil **ölçüme göre** verildi: **#772 taban alındı**, bu dalın iki
+eklemesi üzerine taşındı, **#772 merge edilmeden KAPATILDI** (14:38:04Z). Hiçbir şey düşmedi;
+sayılar #772'den kopyalanmadı, karar belgelerinden **bağımsız olarak yeniden türetildi**.
+> **DERS: bir tabloyu tazelemeye başlamadan ÖNCE `list_pull_requests` ile aynı dosyaya dokunan
+> açık PR var mı diye BAK.** Bu repoda paralel oturumlar normaldir; çakışmayı merge anında
+> keşfetmek bir dalın tamamını çöpe atma riski taşır.
+
+**#774 ETKİSİ — uzun açık kalan bir docs PR'ının İDDİALARI bayatlar.** Bu dalın taşıdığı
+paragraf *"Karar 4 ve Karar 5'in kutuları HÂLÂ BOŞTUR (ölçüldü 2026-08-18)"* diyordu; **#774**
+(`e05a5b1`, 15:16Z) aynı gün kutuları işaretledi → cümle **merge olmadan önce** düzeltildi.
+Sonuç değişmedi (G9/G13 zaten imzalıydı ve öyle sayılıyordu); değişen, kanıtın **kaç yerde**
+durduğu: artık hem ADR §13.2'de hem karar belgesinde. Kural **genelleştirildi**:
+> **Boş bir kutu, kapının imzasız olduğunu GÖSTERMEZ** — imza başka bir belgede verilmiş
+> olabilir (otorite sırası md. 2). Tersi de doğrudur: işaretin kendisi otorite değildir.
+> #774'ün **Karar 5'in alt-sorusunu (A5 kapısının biçimi) bilerek AÇIK bıraktığı** da
+> kaydedildi — çıkarımla işaretlenmedi.
+
+### `F2`'nin dürüst sınırı — hücreler brifin ÖNCESİNDEN, yeniden türetilmediler
+
+`F2` slice bloğunun disposition-başına hücreleri **PR #755'ten önceki üç** seçeneği sayıyor ve
+brifin gerçekte ne taşıdığına göre **yeniden türetilmedi**. Brif **dört** disposition taşıyor;
+dördüncüsü — **(D) gözlemlenebilir clamp** (boyut aynı, sessizlik kalkar) — **hücre almadı** ve
+bu **bilerek**: brifin kendisi *"(D)'nin Result artefaktı üzerindeki şekil etkisi ölçülmedi"*
+diye kaydediyor, dolayısıyla hücrelerini doldurmak **kimsenin ölçmediği mühendislik ayrıntısını
+uydurmak** olurdu.
+
+Brif ayrıca **(B)**'yi **B-i / B-ii** olarak ikiye ayırıyor ve `execution_key`'in kayıp
+kaymadığına karar veren şey **bu ayrım**: **yalnız B-ii'de kayar**. **B-i'de kaymaz**, çünkü
+`overflow_policy` **zaten geçişli olarak pinli** (`mainboard_items` `strategy_revision_id`'yi
+pinler, strateji revizyonları değişmezdir) → onu `execution_content`'te yeniden yayımlamak bir
+**ifşa tercihidir, doğruluk gereği değil**. Brifin §Karşılaştırma tablosundan yeniden türetilen
+**iki** hücre beş şeklin (A · B-i · B-ii · C · D) **hepsinde** tutuyor: `ENGINE_VERSION` **yok**
+ve `migration` **yok**. **Seçenek kümesi için bu tabloyu değil BRİFİ oku.**
+
+Ayrıca düzeltildi: `F2`'nin *Prerequisites* hücresi kalın **"G4 — SIGNED"** ile başlıyor ve
+kendi parantezi iki cümle sonra bunu **yalanlıyordu**; artık **"BRIEFED, NOT SIGNED"** yazıyor —
+kutuların ölçtüğü şey budur. **`Stop condition` DEĞİŞMEDİ: imzasız G4 = PR açma.**
+
+### Süreç ölçümleri (kaydet — bunlar tekrar edecek)
+
+- **`cancelled` ≠ `failure`.** Bir E2E job'ı `playwright install` içinde **~30 dk** asıldı ve
+  öldürüldü — **hiçbir test gövdesi koşmadan**. Çare **rerun**'dır; test düzeltilmez, baseline
+  indirilmez. (ADIM 74 aynı şekli ~60 dk'lık iki koşuda ölçmüştü; **üçüncü kez**.)
+- **auto-merge dalı KENDİ GÜNCELLEMEZ.** `auto=squash` açıkken PR `behind` durumunda **bekledi**;
+  auto-merge yalnız *mergeable* bir dalı alır, geride kalanı ilerletmez. `strict: true` altında
+  main'in her ilerlemesi **yeni bir ~50 dk'lık CI turu** doğurur.
+- **main bir günde ALTI kez ilerledi** bu PR açıkken (#754, #770, #775, #759, #774, #761) ve
+  **dal DÖRT kez güncellendi**. Bu, ADIM 57/59'un ölçtüğü *"koşu bandı"* şeklinin aynısıdır.
+- **Sunucu tarafı "Update branch" bu kez KAYIP YAPMADI** (dosya byte-identical doğrulandı) —
+  **ama kural değişmedi**: docs PR'ında `update_pull_request_branch` **KULLANILMAZ** (ADIM 61
+  emsali: sunucu tarafı merge bir ADIM kaydını sessizce düşürmüştü ve **hiçbir kapı görmedi**).
+  Main'i **yerelde** al ve `git diff … -- docs/ | grep '^-## '` ile doğrula. *Bir kez kayıpsız
+  geçmesi, kapının koştuğunu göstermez.*
+
+**Kapılar.** `generate_repository_facts.py --root .. --check` → *"documentation-truth gate OK"*,
+**exit 0**. `git diff -- docs/ | grep '^-## '` → **boş** (hiçbir `## ` kaydı silinmedi).
+`doc-status` **değişmedi** — plan belgesi `historical` kalır (`ALWAYS_HISTORICAL_GLOBS`).
+**Suite KOŞMADI, bilerek** (ürün kodu değişmedi); koşan her şey için **otorite CI**.
+**Codemap güncellemesi GEREKMEDİ** (atlanmadı — bu slice endpoint / tablo / sayfa / job
+eklemedi).
+
+**Hiçbir kapı imzalanmadı, hiçbir seçenek seçilmedi/elenmedi/önerilmedi, hiçbir issue durumu
+değişmedi.**
+
+**NUMARA:** main'in son kaydı **ADIM 80**; 78/79 **PR #768'in** (batch 08 + 09, hâlâ açık), o
+yüzden bu slice **81**. Paralel bir oturum 81'i merge edilmiş adla alırsa bu kayıt taşınır —
+**merge edilen ad kazanır**. Dal `docs/stage-81-landed` numara taşımaz.
+**TABAN NOTU:** bu kapanış main **`1741b03`**'e karşı yazıldı, PR #769'un tabanı olan
+`f905acc`'ye değil — **#773 arada indi** (prompt paketinin canlı-kickoff satırı; devir promptu
+`f905acc` diyordu ve **açıldığı anda bayattı**).
+`docs/ADIM81_LANDED_KICKOFF.md`.
 
 ## ADIM 82 — kayıtsız inen C2'nin ritüeli (PR #759): ürün kodu SEVK EDİLDİ, kaydı YOKTU
 

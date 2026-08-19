@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from entropia.application.commands import agent_coordinator as coordinator
 from entropia.application.jobs import agent_tools
 from entropia.domain.agent_lab.enums import (
     ALPHA_AGENT_ID,
@@ -472,3 +473,128 @@ async def test_execution_scope_routes_to_agent_high(session) -> None:
     )
     # An EXECUTION-scoped data-bundle resolve gates a run -> the high plane.
     assert job.queue == "agent-high"
+
+
+# --------------------------------------------------------------------------- #
+# AL-18 — a newer dataset revision never slides into a pinned context manifest
+# --------------------------------------------------------------------------- #
+
+
+async def _research_root_and_revision(session, scope: UsageScope):
+    root, revision = await research_repo.create_research_dataset(
+        session,
+        owner_principal_id=_AGENT_PID,
+        created_by_principal_id=_AGENT_PID,
+        payload={"series": [1, 2, 3]},
+        usage_scope=scope,
+    )
+    await session.flush()
+    return root, revision.revision_id
+
+
+async def test_new_dataset_revision_does_not_slide_into_a_pinned_context_manifest(
+    session,
+) -> None:
+    """AL-18.c3 (doc 18 §15: "current task 'latest'e geçmez; yeni revision için
+    yeni task/context manifest gerekir").
+
+    The pinning half (AL-18.c1/c2) is already proven. What no test drives is the
+    DRIFT scenario the row is actually about: seed a NEWER revision on the SAME
+    dataset root AFTER the manifest was pinned, and show the running task is
+    still on the old one. Two independent readers are checked — the durable
+    tool-call row and the Agent's own ``agent.task.query`` — plus a checkpoint
+    written after the drift, because a checkpoint is what a resumed task reads
+    back. The naive implementation this guards against is a ``data_bundle.
+    resolve`` that stamps its fresh manifest onto the calling task: that would
+    move the live task onto v2 while every pinning assertion above stayed green.
+    """
+    runtime = await _seed(session)
+    root, v1 = await _research_root_and_revision(session, UsageScope.RESEARCH_BACKTEST)
+
+    pinned = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="data_bundle.resolve",
+        policy_scope="execution",
+        request={"research_revisions": [{"revision_id": v1}]},
+    )
+    assert pinned["status"] == "succeeded"
+    manifest_v1 = pinned["context_manifest_id"]
+
+    task = await al_repo.create_task(
+        session,
+        agent_id=ALPHA_AGENT_ID,
+        task_type="research",
+        title="Pinned research",
+        source="autonomous",
+        priority=AgentTaskPriority.AUTONOMOUS,
+        status=AgentTaskStatus.RUNNING,
+        context_manifest_id=manifest_v1,
+    )
+    runtime.active_task_id = task.task_id
+    await session.flush()
+
+    # The dataset moves on: revision 2 lands and the ROOT HEAD now points at it.
+    v2 = await research_repo.append_research_dataset_revision(
+        session,
+        root,
+        payload={"series": [1, 2, 3, 4]},
+        created_by_principal_id=_AGENT_PID,
+        usage_scope=UsageScope.RESEARCH_BACKTEST,
+    )
+    await session.flush()
+    assert root.current_revision_id == v2.revision_id != v1
+
+    # 1. The durable pin is by EXACT revision id, not by root head.
+    call = await tg_repo.get_tool_call(session, pinned["tool_call_id"])
+    assert call.input_manifest_id == manifest_v1
+    assert call.response_ref is not None
+    assert call.response_ref["research_revision_ids"] == [v1]
+
+    # 2. The Agent reading its OWN task still sees the manifest it started with.
+    queried = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="agent.task.query",
+        policy_scope="observation",
+        task_id=task.task_id,
+        request={"target_task_id": task.task_id},
+    )
+    assert queried["status"] == "succeeded"
+    assert queried["context_manifest_id"] == manifest_v1
+
+    # 3. A checkpoint written AFTER the drift — what a resumed task reads back —
+    #    still records the pinned manifest.
+    checkpoint = await coordinator.advance_to_safe_checkpoint(session, agent_id=ALPHA_AGENT_ID)
+    assert checkpoint is not None and checkpoint.context_manifest_id == manifest_v1
+
+    # 4. The new revision is reachable only through a NEW manifest carried by a
+    #    NEW task — and taking it does not retro-fit the task that was running.
+    repinned = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="data_bundle.resolve",
+        policy_scope="execution",
+        task_id=task.task_id,
+        request={"research_revisions": [{"revision_id": v2.revision_id}]},
+    )
+    assert repinned["status"] == "succeeded"
+    manifest_v2 = repinned["context_manifest_id"]
+    assert manifest_v2 != manifest_v1
+    assert repinned["research_revision_ids"] == [v2.revision_id]
+
+    followup = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="followup_task.enqueue",
+        policy_scope="research",
+        task_id=task.task_id,
+        request={"title": "Rerun on revision 2", "context_manifest_id": manifest_v2},
+    )
+    successor = await al_repo.get_task(session, followup["task_id"])
+    assert successor is not None and successor.task_id != task.task_id
+    assert successor.context_manifest_id == manifest_v2
+
+    still_pinned = await al_repo.get_task(session, task.task_id)
+    assert still_pinned is not None
+    assert still_pinned.context_manifest_id == manifest_v1

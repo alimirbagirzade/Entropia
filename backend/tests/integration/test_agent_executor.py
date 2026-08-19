@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 
 from entropia.application.commands import agent_control as agent_control_cmd
 from entropia.application.commands.agent_loop import run_coordinator_cycle
+from entropia.application.jobs import agent_executor
 from entropia.application.jobs.agent_executor import run_agent_task
 from entropia.domain.agent_lab.enums import AgentTaskPriority, AgentTaskStatus, RuntimeStatus
 from entropia.infrastructure.postgres.models import (
@@ -31,6 +32,7 @@ from entropia.infrastructure.postgres.models import (
     AgentTask,
     AgentToolCall,
     BacktestResult,
+    BacktestRun,
     HypothesisArtifact,
     Job,
 )
@@ -204,3 +206,79 @@ async def test_executor_defers_a_queued_task_under_a_pending_pause(session) -> N
     await session.commit()
     assert resumed_outcome["status"] == str(AgentTaskStatus.SUCCEEDED)
     assert await _count(session, BacktestResult) == 1
+
+
+async def test_stop_after_admission_cancels_before_the_engine_and_publishes_no_result(
+    session, monkeypatch
+) -> None:
+    """AL-10.c3 + AL-10.c4 (doc 18 §15, §8.4): "controlled cancellation; last
+    checkpoint/partial diagnostics korunur; cancelled run normal Backtest Result
+    publish etmez".
+
+    The existing coverage stops one step short of the criterion. ``test_admin_
+    stop_cancels_run`` drives ``apply_pending_control`` on a task that never
+    admitted anything, and ``test_stop_cancels_active_run_no_result`` is NAMED
+    for the no-Result guarantee but its body never queries ``BacktestResult``;
+    the cancelled-run-yields-no-Result property is proven only for HUMAN runs, in
+    the doc 15 suite, against the different ``backtest_run.cancel`` command.
+
+    So this drives the ONE boundary where the guarantee is load-bearing: the Stop
+    lands after the run has been ADMITTED (a durable ``BacktestRun`` + engine job
+    exist) but before ``run_backtest`` is called. Without the executor's
+    boundary re-check the engine would run to completion and publish a Result
+    from an already-cancelled Agent run. The Admin press is injected by wrapping
+    the executor's own checkpoint helper — the production ``stop_run`` command is
+    what runs, nothing about the control path is faked.
+    """
+    await _seed_runtime_and_principals(session)
+    task_id, job_id = await _queue_directive_and_spawn_job(session)
+
+    real_checkpoint = agent_executor._checkpoint
+
+    async def _checkpoint_then_stop(session_, *, task, runtime, stage, correlation_id):
+        checkpoint = await real_checkpoint(
+            session_, task=task, runtime=runtime, stage=stage, correlation_id=correlation_id
+        )
+        if stage == "backtest_requested":
+            await agent_control_cmd.stop_run(session_, ADMIN, run_id=task.task_id)
+        return checkpoint
+
+    monkeypatch.setattr(agent_executor, "_checkpoint", _checkpoint_then_stop)
+
+    outcome = await run_agent_task(session, job_id, stream_bars=_e2e_bars)
+    await session.commit()
+
+    assert outcome["status"] == str(AgentTaskStatus.CANCELLED)
+    task = await session.get(AgentTask, task_id)
+    assert task is not None and task.status is AgentTaskStatus.CANCELLED
+
+    # AL-10.c4 — the run really was admitted (so the engine was exactly one
+    # boundary away), and yet no immutable Result was published.
+    assert await _count(session, BacktestRun) == 1
+    assert await _count(session, BacktestResult) == 0
+    # Nothing downstream of the engine ran either: no hypothesis was evidenced.
+    assert await _count(session, HypothesisArtifact) == 0
+
+    # AL-10.c3 — the work done before the Stop survives the cancellation: every
+    # pre-stop checkpoint is still readable, the controlled cancellation appended
+    # its own safe checkpoint rather than killing the worker, and the runtime's
+    # last-checkpoint pointer resolves to it.
+    checkpoints = await al_repo.list_checkpoints(session, task_id)
+    stages = [c.stage for c in checkpoints]
+    assert stages == [
+        "task_started",
+        "composition_resolved",
+        "ready_checked",
+        "backtest_requested",
+        "safe_checkpoint",
+    ]
+    runtime = await session.get(AgentRuntime, "alpha-agent")
+    assert runtime is not None
+    assert runtime.last_checkpoint_id == checkpoints[-1].checkpoint_id
+    assert runtime.status is RuntimeStatus.ACTIVE
+    assert runtime.active_task_id is None
+    assert runtime.pending_control is None
+
+    # Partial diagnostics: the governed tool calls made before the Stop are still
+    # durable provenance (ready check + admission), not rolled back with the run.
+    assert await _count(session, AgentToolCall) == 2

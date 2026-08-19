@@ -18,6 +18,7 @@ pagination and soft-delete hiding.
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import func, select
 
 from entropia.application.commands import agent_control as ctrl
 from entropia.application.commands import agent_coordinator as coord
@@ -34,7 +35,14 @@ from entropia.domain.agent_lab.enums import (
 )
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import DeletionState, PrincipalType, Role
-from entropia.infrastructure.postgres.models import AgentRuntime, Principal
+from entropia.infrastructure.postgres.models import (
+    AgentEvent,
+    AgentRuntime,
+    AuditEvent,
+    OutboxEvent,
+    Principal,
+    TaskDirective,
+)
 from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.shared.errors import (
     AccessDeniedError,
@@ -193,11 +201,75 @@ async def test_directive_high_consumed_before_normal(session) -> None:
 # --- AL-06 / AL-07 : validation --------------------------------------------
 
 
+async def test_directive_queue_writes_an_audit_row_for_that_directive(session) -> None:
+    """AL-05.c3 (doc 18 §15: "directive `queued` olur, audit ve queue ref oluşur").
+
+    The queue half is proven by the tests above; this pins the AUDIT half. The
+    assertion is scoped to THIS directive's id — a bare count over
+    ``audit_events`` would pass on any unrelated agent activity — and to the
+    SHIPPED kind ``agent.directive.queued``. The outbox twin is asserted with it
+    because the Logs plane (doc 19) reads that row, not the audit one.
+    """
+    await _seed_principals(session)
+    runtime = await _seed_runtime(session)
+    task = await _activate_task(session, runtime)
+
+    queued = await ctrl.create_directive(
+        session,
+        SUPERVISOR,
+        text="Add a low-volatility regime split.",
+        priority="high",
+        target_agent_id=ALPHA_AGENT_ID,
+        related_task_id=task.task_id,
+    )
+    directive_id = queued["directive_id"]
+
+    audit_rows = (
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.target_entity_id == directive_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [row.event_kind for row in audit_rows] == ["agent.directive.queued"]
+    audited = audit_rows[0]
+    assert audited.new_state == "queued"
+    assert audited.actor_principal_id == SUPERVISOR.principal_id
+    assert audited.event_metadata == {
+        "priority": "high",
+        "target_agent_id": ALPHA_AGENT_ID,
+    }
+
+    outbox_rows = (
+        (await session.execute(select(OutboxEvent).where(OutboxEvent.resource_id == directive_id)))
+        .scalars()
+        .all()
+    )
+    assert [row.event_type for row in outbox_rows] == ["agent.directive.queued"]
+    assert outbox_rows[0].payload["directive_id"] == directive_id
+
+
 async def test_empty_directive_rejected(session) -> None:
+    """AL-06.c1 + AL-06.c2 (doc 18 §15: "422 validation; directive/queue/audit
+    mutation oluşmaz").
+
+    The raise alone was AL-06.c1; c2 needs the rows counted afterwards, because
+    a validation guard placed BELOW the writes raises just the same while leaving
+    a directive, a queue event and an audit row behind. (AL-06.c3 — the typed
+    text surviving in the textarea — is a frontend behaviour and is deliberately
+    NOT claimed by this backend test.)
+    """
     await _seed_principals(session)
     await _seed_runtime(session)
     with pytest.raises(MessageTextRequiredError):
         await ctrl.create_directive(session, ADMIN, text="   ", target_agent_id=ALPHA_AGENT_ID)
+
+    for model in (TaskDirective, AuditEvent, OutboxEvent, AgentEvent):
+        assert (await session.execute(select(func.count()).select_from(model))).scalar_one() == 0, (
+            f"a rejected directive left a {model.__name__} row behind"
+        )
 
 
 async def test_autonomous_and_unknown_priority_rejected(session) -> None:
@@ -254,6 +326,57 @@ async def test_supervisor_lifecycle_denied(session) -> None:
         await ctrl.pause_runtime(session, SUPERVISOR, agent_id=ALPHA_AGENT_ID)
     with pytest.raises(AccessDeniedError):
         await ctrl.stop_run(session, SUPERVISOR, run_id=task.task_id)
+
+
+async def test_supervisor_lifecycle_denial_leaves_the_runtime_untouched(session) -> None:
+    """AL-09.c2 (doc 18 §15: "403 policy denial; runtime state değişmez").
+
+    ``test_supervisor_lifecycle_denied`` above asserts only that both calls
+    raise, which a regression moving ``require_admin`` BELOW the
+    ``pending_control`` write would still satisfy. This re-reads the runtime
+    after each denial: no pending control is armed, the status and
+    ``active_task_id`` are where they were, and ``row_version`` never moved — so
+    a later legitimate control with the pre-denial expected version still
+    reconciles instead of hitting a phantom conflict.
+    """
+    await _seed_principals(session)
+    runtime = await _seed_runtime(session)
+    task = await _activate_task(session, runtime)
+    before_version = runtime.row_version
+
+    for denied in (
+        lambda: ctrl.pause_runtime(session, SUPERVISOR, agent_id=ALPHA_AGENT_ID),
+        lambda: ctrl.stop_run(session, SUPERVISOR, run_id=task.task_id),
+    ):
+        with pytest.raises(AccessDeniedError):
+            await denied()
+        after = await al_repo.get_runtime(session, ALPHA_AGENT_ID)
+        assert after is not None
+        assert after.pending_control is None
+        assert after.control_correlation_id is None
+        assert after.status is RuntimeStatus.ACTIVE
+        assert after.active_task_id == task.task_id
+        assert after.row_version == before_version
+
+    # The denial is not merely un-persisted state: it left no control request on
+    # the observation plane either (doc 18 §9.2 events, §12 audit).
+    control_events = (
+        await session.execute(
+            select(func.count())
+            .select_from(AgentEvent)
+            .where(AgentEvent.type == "agent_run_control_requested")
+        )
+    ).scalar_one()
+    assert control_events == 0
+    assert (await session.execute(select(func.count()).select_from(AuditEvent))).scalar_one() == 0
+
+    # And the pre-denial version is still the live one: an Admin control with it
+    # succeeds, which it could not if a denial had silently bumped row_version.
+    accepted = await ctrl.pause_runtime(
+        session, ADMIN, agent_id=ALPHA_AGENT_ID, expected_row_version=before_version
+    )
+    assert accepted["row_version"] == before_version + 1
+    assert accepted["status"] == "accepted"
 
 
 # --- AL-10 : stop cancels the sub-run, no Result ---------------------------

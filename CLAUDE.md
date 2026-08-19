@@ -237,7 +237,38 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 88 (kabul borcu batch 14, doc 05 frontend): ÜRÜN KODU DA
+> `future_dev`. **Son dalga — ADIM 90 (kayıtsız inen #779'un ritüeli): BU SLICE DEFTER,
+> kaydettiği slice TEK PLAN BELGESİ (+37/−7). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> BLOCKED, açık kapı 11.** #779 main'deydi, kaydı **yoktu** (`grep '#779'` → yalnız ADIM 87'nin
+> zincir notu). Kapattığı şey kusur değil **çelişkiydi**: §2 sayım tablosu `G6`/`G7`'yi çözülmüş
+> sayarken satırların kendisi `UNSIGNED` diyordu → satırlar ölçülerek düzeltildi, eski metin
+> `Was "…"` ile korundu. **ASIL DEĞER YAN ÖLÇÜMLERDE:** (a) tablodaki **altı** `decisions:NNN`
+> referansının **altısı da** bayattı → bölüm adına çevrildi (§Conventions: satır no değil sembol
+> yaz); bugün `grep -c 'decisions:[0-9]'` → **2** döner ama **ikisi de `Was "…"` alıntısının
+> içinde**, canlı işaretçi **0** — alıntıyı temizlemek kanıtı siler. (b) **ÜÇ issue durumu
+> bayattı, ama İKİSİ KAPIYI AÇMAZ** — bu kaydın en önemli cümlesi: #558/#559/#544 üçü de kapalı,
+> ama yalnız **#558**'in kapanış yorumu üç karar sorusunu **yazılı** cevaplıyor (+ imza
+> `§Karar 2`'de bağımsız duruyor) → `G6`/`G7` **çözüldü**; **#559** ve **#544** sıfır yorum,
+> closing PR yok, imza bloğu **boş** → `G8` ve `G14` **AÇIK kalır**. Kapanışı imza saymak
+> **11 açık kapıyı 9'a** indirirdi; **indirilmedi**. **DERS: bir kapıyı düşürmeden önce ÜÇÜNÜ
+> birden ölç** — issue durumu, issue'da yazılı karar, `decisions` imza kutusu; ayrıştıklarında
+> otorite **imza kutusudur**. (c) **`cancelled` ≠ `failure`, ve artık kökü de biliniyor**: A11Y
+> işi `Install Playwright browsers` içinde **38 dk 50 sn** asılıp iptal oldu (axe adımı
+> **skipped** → hiçbir test gövdesi koşmadı), rerun **3 dk 08 sn**'de yeşil; kök **#795**'te
+> ölçüldü (`azure.archive.ubuntu.com` aynası düştü, GitHub **timeout'u `cancelled` raporlar**).
+> **Ayırt edici, kendim ölçtüm:** aynı attempt'te **üç kardeş işin** aynı adımı **yeşildi**
+> (1–3 dk) → genel kesinti **değil**; *"install yavaş, tavanı büyüt"* yanlış düzeltmeydi. Sınıf
+> artık korunuyor → yeni E2E işinde **`npx playwright install` YAZMA**,
+> `scripts/ci-install-playwright-chromium.sh`'tan geçir. **ORTAM DÜZELTMESİ: `actions:write`
+> VAR** (`actions_run_trigger` mevcut) — devir promptunun *"403, rerun edilemez"* notu **bayat**;
+> bu slice onu **kullanmadı** (kırmızı yoktu). **DÜRÜST SINIR:** ürün kodunda sıfır satır →
+> **suite koşulmadı**, doğrulama `repository_facts --check`. **ÇAKIŞMA ÖLÇÜLDÜ: `C4` hattı ÜÇ
+> açık PR tarafından sürülüyor (#799/#800/#801), kabul borcu hattı #797** → hiçbirine
+> dokunulmadı. **NUMARA: #797 → 88 (bu dal sıra beklerken İNDİ, `ee5ab38` — dal onun üstüne
+> REBASE edildi), #799 → 89 (hâlâ açık, dosya yolu iddia ediyor) → bu kayıt 90.** `PROJECT_HISTORY.md` §ADIM 90 · `docs/ADIM90_LANDED_KICKOFF.md`.
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 88 (kabul borcu batch 14, doc 05 frontend): ÜRÜN KODU DA
 > TEST KODU DA DEĞİŞMEDİ — diff yalnız defter + üretilmiş artefakt.** Tek kriter `TL-18`
 > kapandı ve **bedeli SIFIR TEST** oldu: kapsama **zaten sevk edilmişti**.
 > **Blocker sayısı DEĞİŞMEDİ — hâlâ tek blocker var (A-08), verdict BLOCKED.** `frontend/src/test/presentationState.test.tsx` ADIM 60'ta

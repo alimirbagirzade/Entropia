@@ -318,9 +318,9 @@ async def run_backtest(
     if _use_unified_clock(capital_execution):
         # ADR §3 — the shared branch, a SIBLING of the item loop and never a step inside
         # it: on the unified clock there is no per-item replay to sit between. Nothing
-        # reaches this today (``_use_unified_clock``'s first conjunct is ``False`` while
-        # ``SHARED_ALLOCATION_STATUS`` is ``future_dev``), and the admission guard refuses
-        # a shared run long before the worker sees it. `C4` wires; `C9` opens.
+        # reaches this today — ``_use_unified_clock``'s first conjunct is ``False`` while
+        # the build's containment flag holds its future-dev value — and the admission guard
+        # refuses a shared run long before the worker sees it. `C4` wires; `C9` opens.
         try:
             participants, shares, plan = _unified_participants(
                 prepared_items,
@@ -1000,10 +1000,16 @@ def _use_unified_clock(capital_execution: Any) -> bool:
     flag, no ``ENGINE_VERSION`` bump and nothing a user could see. That is why the two
     are spelled here rather than at the call site, where a later edit could keep one.
 
-    Today the first conjunct is ``False`` (``SHARED_ALLOCATION_STATUS`` is
-    ``future_dev``), so this returns ``False`` for every run in this build and the branch
-    behind it is unreachable. That is `C4`'s whole shape: **wire it, do not open it.**
-    `C9` lifts the flag, and only after the ADR §16 Gate 2 approval."""
+    Today the first conjunct is ``False`` — the containment flag in
+    ``domain/allocation/capability.py`` is still the future-dev value — so this returns
+    ``False`` for every run in this build and the branch behind it is unreachable.
+    That is `C4`'s whole shape: **wire it, do not open it.** `C9` lifts the flag, and only
+    after the ADR §16 Gate 2 approval.
+
+    The flag CONSTANT's name is deliberately not spelled anywhere in this module. The
+    two-world gate asserts by text scan that the worker reads the predicate and never the
+    constant — that is what keeps the lift a one-line change in one file — and a scan
+    cannot tell a docstring from a lookup, so writing the name here would blunt it."""
     return shared_allocation_is_executable() and shared_allocation_requested(capital_execution)
 
 

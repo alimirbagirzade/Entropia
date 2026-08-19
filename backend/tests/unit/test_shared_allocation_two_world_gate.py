@@ -258,22 +258,42 @@ def test_lifting_the_flag_alone_still_folds_the_sequential_curve(
     assert combined.diagnostics["composition"]["capital_allocation"] == "shared_pool"
 
 
-def test_the_worker_fold_never_consults_the_capability_flag() -> None:
+def test_the_worker_consults_the_capability_flag_in_exactly_one_place() -> None:
     """Why the test above holds, stated structurally so it cannot drift silently.
 
     A behavioural test alone would keep passing if the worker grew a flag branch that
     happened not to change this fixture's numbers. The source-level assertion is the one
-    that survives that. When ``C4`` lands ``_use_unified_clock``, this test is the file that
-    must be updated — deliberately, as part of wiring the branch.
+    that survives that.
+
+    **`C4` updated this deliberately — the previous version of this test asserted the flag
+    was ABSENT from the worker, and its own docstring named this as the file to change
+    when ``_use_unified_clock`` landed.** The worker now consults the flag, so what has to
+    hold is no longer absence but CONTAINMENT of the consultation:
+
+    * exactly ONE reading of ``shared_allocation_is_executable``, so a second, unguarded
+      branch cannot appear beside the first;
+    * the literal ``SHARED_ALLOCATION_STATUS`` still absent — the worker reads the
+      PREDICATE, never the constant, which is what keeps the lift a one-line change in
+      ``capability.py`` instead of a scattered edit;
+    * ``run_portfolio`` still absent, because the worker must drive ``iter_portfolio``:
+      the eager wrapper exhausts the loop in one synchronous call and there would be no
+      line left to run the tick-strided cancellation check on (ADR §14 A21);
+    * the sequential fold still there, which is the half a wrong guard would silently
+      replace.
     """
     worker = (_SRC / "application" / "jobs" / "backtest_engine.py").read_text(encoding="utf-8")
-    for absent in (
-        "shared_allocation_is_executable",
-        "SHARED_ALLOCATION_STATUS",
-        "_use_unified_clock",
-        "run_portfolio",
-    ):
+
+    # The CALL form, not the bare name: the name also appears in the import and in the
+    # prose explaining why both conjuncts matter, and a scan cannot tell code from a
+    # docstring. Counting the bare name made this assertion fail on its own explanation.
+    assert worker.count("shared_allocation_is_executable()") == 1, (
+        "the capability flag is CALLED more than once in the worker; every call is a "
+        "branch that can drift from _use_unified_clock"
+    )
+    for absent in ("SHARED_ALLOCATION_STATUS", "run_portfolio"):
         assert absent not in worker, f"{absent!r} reached the worker — re-read this docstring"
+    assert "def _use_unified_clock(" in worker
+    assert "combine_item_runs(" in worker
 
 
 # --------------------------------------------------------------------------- #

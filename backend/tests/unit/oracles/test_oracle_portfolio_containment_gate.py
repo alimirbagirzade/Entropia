@@ -74,6 +74,16 @@ _AUTHORISED_PHASE_LOOP_IMPORTERS: tuple[list[str], ...] = (
 #: most likely production entry point unguarded.
 _LOOP_ENTRY_POINTS = ("run_portfolio", "iter_portfolio")
 
+#: The ONE production module `C4` authorises to drive the phase loop and to project its
+#: run. Named by exact path, never a prefix: a second caller — a route, a command, a
+#: second job — is still a red build, which is the whole of what "nothing calls it" used
+#: to buy. This list REPLACES an emptiness assertion with an authorisation one, and the
+#: design says so in as many words (P-C2 §C.6): *the gate is narrowed, never deleted*.
+#: The behavioural half that a text scan cannot give lives in
+#: ``tests/integration/test_backtest_unified_clock_wiring.py``.
+_AUTHORISED_LOOP_CALLERS = ["application/jobs/backtest_engine.py"]
+_AUTHORISED_PROJECTION_CALLERS = ["application/jobs/backtest_engine.py"]
+
 
 def _item_run(item_id: str, closes: list[tuple[str, str]]) -> ItemRun:
     """One finished per-item run — the shape ``jobs/backtest_engine.py`` still folds."""
@@ -174,17 +184,24 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
     production entry point and this package's oracles run on it unchanged. A1 is therefore no
     longer "no such loop"; it is "the loop is there and nothing in production calls it".
 
-    That second half is what still holds the containment closed, and it is the honest gap:
-    wiring the worker needs an ``ItemParticipant`` backed by the real engine — a per-item
-    replay advanceable to a given ``t``. **What is missing is that ADAPTER, not the stepper.**
-    The stepper ADR §12 calls ADIM 16 SHIPPED as PR #602 (see that ADR's own AMENDMENT, which
-    supersedes the SKIPPED paragraph above it): ``engine._build_stepper`` hands back an
-    ``_ItemStepper`` that can be entered one bar at a time, and ``run_engine`` is a short
-    driver over it on every single-item run today. The remaining gap is one of SHAPE — the
-    stepper's phases BOOK, while ``ItemParticipant`` needs them to DESCRIBE so the loop can
-    arbitrate first. So the worker keeps its item loop and ``combine_item_runs``, no request or
-    retry can reach a tick loop, and no shipped Result can change. When the participant lands,
-    this test is the one that must be updated deliberately.
+    **`C4` changed what that second half can assert, and this is the deliberate update.**
+    Until now the worker named nothing: the adapter (`C3`, ``participant.py``) had no caller
+    and the loop had none either, so emptiness was provable by a text scan. `C4` wires ONE
+    caller — ``application/jobs/backtest_engine.py`` — so the invariant becomes *no production
+    REQUEST can reach the loop, because its only caller is guarded by
+    ``shared_allocation_is_executable()``, which is ``future_dev``*. That is a genuinely
+    weaker property and a text scan cannot prove it, so the scan was **narrowed to an
+    authorised-caller allowlist** (never deleted, never loosened to "some callers are fine")
+    and the reachability half moved to behavioural tests in
+    ``tests/integration/test_backtest_unified_clock_wiring.py``. P-C2 §C.6 designs exactly
+    this pair.
+
+    The stepper this is all built on shipped long ago: ADR §12's ADIM 16 landed as PR #602
+    (see that ADR's own AMENDMENT, which supersedes the SKIPPED paragraph above it) — an
+    earlier version of this docstring still said it *"was never written"*, and W0 flagged that
+    as documentation drift. ``engine._build_stepper`` hands back an ``_ItemStepper`` enterable
+    one bar at a time, `C1` split its phases into describe/book halves, and `C3` put those
+    halves behind ``ItemParticipant``.
 
     Every unified-clock module stays reachable ONLY through the phase loop: the per-module
     guards name their importers exactly, and this asserts the containing shape of that — the
@@ -215,11 +232,19 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
         if path != loop
         and any(f"{name}(" in text or f"import {name}" in text for name in _LOOP_ENTRY_POINTS)
     )
-    assert callers == [], f"the phase loop gained a production caller: {callers}"
+    assert callers == _AUTHORISED_LOOP_CALLERS, (
+        f"run_portfolio/iter_portfolio gained an UNAUTHORISED production caller: {callers}"
+    )
 
     worker = sources[_SRC / "application" / "jobs" / "backtest_engine.py"]
+    # UNCHANGED, and they must stay that way. The independent-mode fold and its item loop
+    # have to survive the wiring: deleting either would route every independent composite
+    # run through the shared loop and silently re-price it, with no flag and no bump.
     assert "combine_item_runs(" in worker
     assert "for prepared in prepared_items:" in worker
+    # What replaces "nothing calls it": the one authorised caller is FLAG-GUARDED, so no
+    # production REQUEST can reach the loop while the flag is future_dev.
+    assert "shared_allocation_is_executable" in worker
 
 
 def test_the_result_projection_exists_but_no_production_path_reaches_it_either() -> None:
@@ -253,11 +278,16 @@ def test_the_result_projection_exists_but_no_production_path_reaches_it_either()
         if path != projection
         and ("project_portfolio_run(" in text or "import project_portfolio_run" in text)
     )
-    assert callers == [], f"the Result projection gained a production caller: {callers}"
+    assert callers == _AUTHORISED_PROJECTION_CALLERS, (
+        f"the Result projection gained an UNAUTHORISED production caller: {callers}"
+    )
 
-    # The worker's Result still comes from per-item runs folded sequentially, untouched.
+    # The worker now legitimately NAMES the projection — `C4` wired it. What must hold
+    # instead is that the branch which reaches it is flag-guarded, and that the sequential
+    # fold is still there for every run that is not on the unified clock.
     worker = sources[_SRC / "application" / "jobs" / "backtest_engine.py"]
-    assert "portfolio_projection" not in worker
+    assert "shared_allocation_is_executable" in worker
+    assert "combine_item_runs(" in worker
 
 
 def test_the_containment_flag_and_engine_version_are_both_untouched() -> None:

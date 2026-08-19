@@ -47,9 +47,10 @@ impossible before `C6` exists, instead of merely improbable.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Any
 
 from entropia.domain.backtest.engine import _EntryDecision, _ItemStepper
 from entropia.domain.backtest.execution.arbitration import ArbitrationDecision
@@ -462,6 +463,50 @@ class _EngineParticipant:
         return self._current
 
 
+def build_engine_participant(
+    *,
+    item_id: str,
+    item_kind: str,
+    pin_ordinal: int,
+    bar_batches: Iterable[list[dict[str, Any]]],
+    stepper: _ItemStepper,
+    root_id: str | None = None,
+    revision_id: str | None = None,
+    item_label: str | None = None,
+    instrument_id: str | None = None,
+) -> _EngineParticipant:
+    """Assemble one participant from PLAIN worker values.
+
+    This exists for the containment surface, not for convenience. ``ItemIdentity`` and
+    ``ItemBarStream`` live in ``execution/intents.py`` and ``execution/clock.py``, two of
+    the six unified-clock modules whose production importers are an enumerated allowlist
+    (``test_oracle_portfolio_containment_gate.py``). The signed decision of 2026-08-18
+    widened that allowlist by exactly ONE named module — this one — so a worker that
+    NAMED those types to construct a participant would widen it by a second, and the
+    guard would go from "two reviewed importers" to "wherever the types happen to be
+    convenient". Building them here keeps the worker a CALLER of the phase loop (which
+    `C4`'s authorised-caller allowlist covers) without making it an IMPORTER of the loop's
+    vocabulary.
+
+    ``pin_ordinal`` is the caller's reading of the manifest's pinned order and is used for
+    the identity and the stream alike, so ``portfolio_engine._ordered``'s cross-check
+    ("identity and stream agree about this item") can never fail for a reason the caller
+    introduced by supplying it twice."""
+    return _EngineParticipant(
+        identity=ItemIdentity(
+            item_id=item_id,
+            item_kind=item_kind,
+            pin_ordinal=pin_ordinal,
+            root_id=root_id,
+            selected_revision_id=revision_id,
+            item_label=item_label,
+        ),
+        stream=ItemBarStream(item_id=item_id, pin_ordinal=pin_ordinal, batches=bar_batches),
+        stepper=stepper,
+        instrument_id=instrument_id,
+    )
+
+
 def _protocol_check(participant: _EngineParticipant) -> ItemParticipant:
     """mypy's structural proof that the adapter IS an ``ItemParticipant``.
 
@@ -476,4 +521,5 @@ __all__ = [
     "EngineParticipantError",
     "ParticipantDivergenceError",
     "UnsupportedStrategyShapeError",
+    "build_engine_participant",
 ]

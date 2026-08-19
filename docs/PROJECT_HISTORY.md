@@ -12818,3 +12818,133 @@ promptu bu yüzden **hem numarayı hem parti etiketini** commit'ten hemen önce 
 doğrulatıyor. İki batch'in kriterleri **AYRIK** (#785: doc 18 `AL-06`; bu: doc 05 `TL-18`), o
 yüzden tavan iki freeze'in farkından türetilmedi — dal rebase edilip `--report` ile **merged
 ağaçta yeniden ölçüldü**. `docs/ADIM88_LANDED_KICKOFF.md`.
+
+## ADIM 89 — `C4` / E5: worker'ın paylaşımlı saat dalı, tick-adımlı iptal kontrol noktası, daraltılmış tripwire
+
+> **ÜRÜN KODU DEĞİŞTİ, GÖZLENEBİLİR DAVRANIŞ DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev` (**DEĞİŞMEDİ**) · **50 golden digest BAYT BAYT
+> AYNI**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** `G10` (ADR §16
+> Gate 2) **TALEP EDİLMEDİ**; `G8`/`G11`/`G12`/`G14` açık.
+
+`C1` (#735) describe/book bölmesini, `C2` (#759) `settle`/`finalize`/P10/`iter_portfolio`'yu,
+`C3` (#777) adaptörü indirmişti. **`C4` wiring'i indirdi** — ve **girilemeyen** bir dal wire
+etti: `_use_unified_clock()` kapısının ilk conjunct'ı `shared_allocation_is_executable()` ve o
+`future_dev` iken `False`; admission zaten her paylaşımlı koşuyu worker'ı görmeden reddediyor.
+Bu bir zayıflık değil, **containment'ın kendisidir** ve E5'in neden `ENGINE_VERSION` bump'ı
+olmadan inebildiğinin sebebidir.
+
+**Tek üretim dosyası: `application/jobs/backtest_engine.py`.** `manifest.py`, `engine.py`,
+`portfolio_engine.py`, `capability.py` **el değmedi** (`git diff --stat` boş).
+
+| Sembol | Ne yapar |
+|---|---|
+| `_use_unified_clock(capital_execution)` | Kararın verildiği **tek** yer. Bayrak burada **okunur, import'ta cache'lenmez** — ADR §11 tek-sabit rollback'ini bir kopya sağ bırakırdı. |
+| `_replay_shared_clock(...)` | `iter_portfolio` generator'ını **elle** boşaltır (`for` dönüş değerini atar, oysa `PortfolioRun` tam olarak o değerdir), tick'ler arasında `_cancellation_requested` yoklar, sonra `project_portfolio_run`. |
+| `_TICK_CHECKPOINT_STRIDE = 500` | ADR §14 **A21**. Birleşik eksen checkpoint #3'ün oturduğu item sınırını siler → kontrol döngünün İÇİNE taşınır. Sabit gerekçesini taşır: kontrol bir DB round-trip'idir ve bir yıllık 1m bar ~525k değerleme noktasıdır. **Doğruluk düğmesi DEĞİL** — iptal kaybolmaz, en fazla K tick bekler. |
+| `_shared_participants(...)` | Her prepared Strategy için `_EngineParticipant`. **`portfolio_rules=None` bilerek**: ADR §12 satır 19, arbitrasyon forward-only precedence'ı **emekliye ayırır**; precedence yapı gereği sıralıdır → yalnız paylaşımlı yolda emekli edilir. |
+| `_manifest_pin_ordinals(...)` | `pin_ordinal` **manifest** pin sırasından, `prepared_items` konumundan DEĞİL. |
+| `_pinned_records(...)` | Projeksiyonun `PinnedItem` kayıtları; non-Strategy item'ler dahil (F-07 §4.4). |
+
+**Checkpoint #4 YERİNDE** (`create_result`'tan önce, doc 15 §16) ve **`combine_item_runs(` ile
+`for prepared in prepared_items:` DOKUNULMADI** — ikisi de tripwire'da hâlâ asserted ve yeşil.
+
+**`max_position_notional` bilerek geçilmedi.** §6 per-item cap zaten stepper'ın sizing
+zincirinde uygulanır; loop'ta yeniden bildirmek **tek config alanının ikinci bir okuması**
+olurdu — `max_position_size_cap`'in (GH #550) var olma sebebi tam olarak bu. Loop'un kendi
+tehlikesi (kimseyle eşleşmeyen anahtar **açık** düşer) hiç kurulmayan bir haritayı ısıramaz.
+
+### Tripwire DARALTILDI, silinmedi
+
+`assert callers == []` → `_AUTHORISED_LOOP_CALLERS` / `_AUTHORISED_PROJECTION_CALLERS`
+(her biri **tek** modül; ikinci bir çağıran hâlâ kırmızı). Lift pinleri
+(`SHARED_ALLOCATION_STATUS`, `ENGINE_VERSION` literali, `5000.00`/`3000.00` fixture'ı)
+**düzenlenmedi**.
+
+**FORK — ve bu slice imzalı kararın karşı tarafını seçti.** `_EngineParticipant` `ItemIdentity`
+ve `ItemBarStream` ister; bunlar kapsanmış altı modülden ikisinde yaşar. İki yol vardı:
+(a) `participant.py`'ye bir factory koyup worker'ı **importer** yapmamak — imzalı allowlist
+el değmez, ama worker'ın yeni erişimi guard'a **görünmez** olur; (b) tipleri worker'da import
+edip allowlist'i **tek adlandırılmış modülle** açıkça genişletmek. **(b) seçildi**, çünkü
+`C3`'ün imzalandığı gerekçe budur: adaptörü `execution/` içine koymak *"assertion'ı yapı gereği
+atlatır, guard'ı tatmin etmez KÖR eder"* diye reddedilmişti — inşayı zaten izinli bir modülün
+arkasından geçirmek aynı hamlenin bir üst seviyesidir. **Karşı argüman gerçektir** (imzalı karar
+**tek** modül ölçmüştü; ikinci genişletme #731'e göre bir **insan incelemesidir**) ve bu yüzden
+PR gövdesinde iki taraf da yazılıdır. **Yalnız İKİ guard etkilendi** (`execution.clock`,
+`execution.intents`); ledger ve arbitration guard'ları **ölçüldü ve değişmedi** — worker onları
+import etmez.
+
+### İki davranışsal kanıt + A21
+
+`test_an_independent_multi_item_run_never_reaches_the_unified_loop` her iki unified giriş
+noktasını **tuzakla** değiştirir, sonra gerçek iki-Strategy koşusunun sıralı fold ile
+başarması gerekir. **Marker kontrolü tek başına yetmez** — o yalnız fold'un koştuğunu söyler;
+tuzaklanmış loop öteki dalın koşMAdığını söyler. `test_a_shared_multi_item_run_is_still_refused_at_admission`
+reddi `C4`'ün wire ettiği **çok-item'lı** şekilde pinler (mevcut suite tek-Strategy'yi kapsıyordu).
+`test_the_tick_strided_checkpoint_cancels_before_any_result_exists` iptali **loop'a girildikten
+SONRA** kurar ve `replayed_tick_count`'un durable `RUN_CANCELLED` olayında **var**,
+`replayed_item_count`'un **yok** olduğunu assert eder — yani HANGİ checkpoint'in cevapladığını
+adlandırır.
+
+### İKİ BULGU
+
+**1. Bugün hiçbir varsayılan strateji eş-simüle edilemiyor.** Zorla açılmış bayrakla koşulan
+standart fixture, adaptörün on bir reddinden **üçüne birden** takılır: `entry_timing`/
+`exit_timing` varsayılanı `next_candle_open` ve `same_direction_stacking` varsayılanı
+`allow_stacking`. Koşu `RUN_FAILED_ENGINE_ERROR` ile şekilleri **adıyla sayarak** biter —
+dürüst sonuç budur; item'ın hiç açmadığı bir girişi arbitre etmek yanlış bir **SAYI** olurdu.
+Uçtan uca kanıt bu yüzden bilerek yeniden şekillendirilmiş bir fixture sürer ve bunu söyler.
+Bu `C3`'ün devrettiği kalemin worker seviyesinde doğrulanmasıdır; `C6` bu listeyi admission
+blocker'a çevirdiğinde mevcut stratejilerin çoğu düşer → **ürün kararı**.
+
+**2. Gate'in substring assertion'ları göründüğünden zayıf.** `assert "shared_allocation_requested"
+in worker`, conjunct return ifadesinden **silinse bile yeşil kalır**, çünkü ad
+`_use_unified_clock`'un docstring'inde de geçer. Negatif kontrolle **ölçüldü**, varsayılmadı.
+Terimlerin taşıyıcı pini bu yüzden davranışsaldır
+(`tests/unit/test_backtest_worker_clock_selector.py`, iki silmede de kırmızı); substring'ler
+guard'ın **tümden** kaldırılmasını yakalayan ucuz yapısal yarıdır ve yorumu artık bunu yazar.
+
+### Yedi negatif kontrol, yedisi de adlandırılmış bir assertion'da kırmızı
+
+`shared_allocation_requested` düşünce → `test_the_executable_term_alone_does_not_open_the_branch` ·
+`shared_allocation_is_executable` düşünce → üç selector testi · in-loop checkpoint silinince →
+iptal testi · `_use_unified_clock` `True`'ya sabitlenince → bağımsız koşu tuzağı ateşlendi ·
+`pin_ordinal` strateji alt kümesinden numaralanınca → ordinal testi · allowlist `len(...) <= 3`
+olunca → C3'ün negatif kontrolü · `_AUTHORISED_LOOP_CALLERS`'a ikinci modül eklenince → faz
+döngüsü testi.
+
+### CI'ın yakaladığı tek kırmızı, ve o da bir KAPIYDI
+
+`Backend` ilk koşuda `1 failed, 4287 passed` verdi:
+`test_shared_allocation_two_world_gate.py::test_the_worker_fold_never_consults_the_capability_flag`.
+**Kendi docstring'i bu slice'ı adıyla çağırıyordu** — *"`C4` `_use_unified_clock`'u indirdiğinde
+güncellenmesi gereken dosya budur"*. **Yerelde neden kaçtı, akıl yürütme değil ARAMA hatası:**
+test ağacı `execution.*` import edenler ve worker'ı **çağıranlar** için tarandı; worker'ın
+**kaynak metnini okuyan** testler üçüncü, örtüşmeyen bir kümedir ve taranmadı.
+
+Düzeltme kapıyı **daraltır**: yokluk artık özellik değil, ama yerine "varlık" konmadı —
+**bayrağın tam olarak tek fonksiyondan çağrıldığı**, **parse edilmiş AST üzerinden** assert
+edilir. Bu, yerini aldığı substring biçiminden **kesinlikle daha güçlüdür**. Ve aynı tuzak
+kendi kodumda ikinci kez çıktı: iki docstring'im sabiti harfiyen yazıyordu ve ayakta kalan metin
+taramasını kırmızıya çeviriyordu — **tarama gevşetilmedi, docstring'ler düzeltildi** ve
+`_use_unified_clock` literalin geri gelmemesi gerektiğini yazan bir not taşır.
+
+### DERS — ADIM 86'nın dersi bu slice'ı vurdu
+
+*"Slice'a başlamadan önce AÇIK PR'LARI tara, sadece ağacı değil."* Ağaç ve `PROJECT_HISTORY`
+tarandı, **açık PR listesi taranmadı** → aynı `C4` **üç kez** paralel yazıldı: #798
+(12:36Z, sonradan **kapatıldı**), `329e5ae` (`feat/closure-c4-worker-branch`, 12:43Z, **PR'ı
+hiç açılmadı**) ve bu. Prompt'un verdiği dal adı **zaten alınmıştı**; üzerine force-push
+**edilmedi**, dal `feat/closure-c4-worker-guarded-allowlist` olarak açıldı. **Üçünün ikisi
+importer allowlist'ine dokunmama yolunu seçti** — aynı gerekçeye iki bağımsız varış, ve bu
+forkun neden bir insan kararı olduğunun kanıtı.
+
+**NUMARA: bu slice İKİ KEZ taşındı.** `329e5ae` 88'i iddia ediyordu; PR açılırken 87 (#797'nin)
+ve 88 boş sanıldı, ama **#785 87'yi, #797 88'i** merge edilmiş adla aldı → **89**. Kural
+değişmedi: merge edilmiş ad kazanır, numara commit'ten hemen önce `grep '^## ADIM'` ile
+doğrulanır.
+
+**DÜRÜST SINIR:** tam suite **yerelde koşulmadı** — koşan konteyner %18'de yeniden başlatıldı
+ve yeniden başlatılmadı; geçen sayı ve coverage yüzdesi için **otorite CI'dır** (`Backend`
+`c90751b` üzerinde 22/22 yeşil). Frontend kapıları koşulmadı çünkü **hiçbir frontend dosyası
+değişmedi**. `docs/ADIM89_LANDED_KICKOFF.md`.

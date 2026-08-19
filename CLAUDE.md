@@ -237,6 +237,33 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev` (**DEĞİŞMEDİ**) · **50 golden digest BAYT BAYT AYNI**. **Son dalga — ADIM 89
+> (`C4` / E5, PR #800): ÜRÜN KODU DEĞİŞTİ, gözlenebilir DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı
+> DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Worker artık paylaşımlı saat dalını taşıyor ve o dal
+> **girilemez**: `_use_unified_clock()` = `shared_allocation_is_executable() and
+> shared_allocation_requested(...)`, **iki conjunct da taşıyıcı** ve terimler **ayrı** pinli.
+> `iter_portfolio` elle boşaltılır, `_TICK_CHECKPOINT_STRIDE = 500` ADR §14 **A21**'i kapatır,
+> **checkpoint #4 yerinde**. **Tripwire DARALTILDI, silinmedi**; `combine_item_runs(` ve
+> `for prepared in prepared_items:` **dokunulmadı**. **Importer allowlist'i tek adlandırılmış
+> modülle (worker) genişledi** — bu bir **forkun** seçilen tarafı (öteki: factory'yi
+> `participant.py`'ye koyup guard'ı KÖR bırakmak), gerekçe `C3`'ün imzalandığı gerekçe.
+> **İKİ BULGU:** bugün **hiçbir varsayılan strateji eş-simüle edilemiyor** (standart fixture
+> adaptörün on bir reddinden ÜÇÜNE takılıp fail-closed biter; `same_direction_stacking` şema
+> varsayılanı → `C6`'nın **ürün kararı**) · gate'in **substring** assertion'ları conjunct
+> silinse bile YEŞİL kalır (ad docstring'de) → taşıyıcı pin davranışsal teste taşındı, ve
+> `test_shared_allocation_two_world_gate.py` artık bayrağın **tek fonksiyondan** okunduğunu
+> **AST** ile kanıtlar. **DERS: ADIM 86'nın dersi bu slice'ı vurdu** — açık PR listesi
+> taranmadı, aynı `C4` **ÜÇ KEZ** paralel yazıldı (#798 kapatıldı, `329e5ae` PR'sız kaldı).
+> **DERS 2: kaynak METNİNİ okuyan testler üçüncü bir kümedir** — import/çağrı taraması onları
+> bulmaz; CI'ın yakaladığı tek kırmızı oydu. **NUMARA: bu slice iki kez taşındı** (#785 87'yi,
+> #797 88'i aldı). **DÜRÜST SINIR:** tam suite yerelde koşulmadı (konteyner %18'de yeniden
+> başladı) → otorite **CI**. **Next: `C6` (G11+G12 İMZASIZ → bloklu) ve `C7`.**
+> `PROJECT_HISTORY.md` §ADIM 89 · `docs/ADIM89_LANDED_KICKOFF.md`.
+>
+>
+
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Son dalga — ADIM 88 (kabul borcu batch 14, doc 05 frontend): ÜRÜN KODU DA
 > TEST KODU DA DEĞİŞMEDİ — diff yalnız defter + üretilmiş artefakt.** Tek kriter `TL-18`
 > kapandı ve **bedeli SIFIR TEST** oldu: kapsama **zaten sevk edilmişti**.

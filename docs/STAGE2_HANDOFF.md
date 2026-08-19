@@ -7408,6 +7408,45 @@ etiketini commit'ten hemen önce yeniden doğrulatır.
 `PROJECT_HISTORY.md` §ADIM 88 · `docs/ADIM88_LANDED_KICKOFF.md`.
 
 
+## ADIM 89 — `C4` / E5: worker'ın paylaşımlı saat dalı + tick-adımlı iptal checkpoint'i landed (PR #800)
+
+**Ürün kodu DEĞİŞTİ, gözlenebilir davranış DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi ·
+`ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` · **50 golden digest
+bayt bayt aynı**. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+
+Tek üretim dosyası `application/jobs/backtest_engine.py`. `_use_unified_clock()` kararın
+verildiği tek yer (`shared_allocation_is_executable() and shared_allocation_requested(...)`,
+**iki conjunct da taşıyıcı**, terimler ayrı pinli); paylaşımlı dal item döngüsünün **kardeşi**
+ve `iter_portfolio` generator'ını **elle** boşaltır; `_TICK_CHECKPOINT_STRIDE = 500` ADR §14
+**A21**'i kapatır. **Checkpoint #4 yerinde**, `combine_item_runs(` ve
+`for prepared in prepared_items:` **dokunulmadı**.
+
+**Tripwire daraltıldı, silinmedi** — `assert callers == []` → tek modüllük yetkili-çağıran
+allowlist'i; lift pinleri düzenlenmedi. **Importer allowlist'i tek adlandırılmış modülle
+(worker) genişletildi** — bu bir **forkun** seçilen tarafıdır (öteki: factory'yi
+`participant.py`'ye koyup guard'ı görmez kılmak) ve gerekçesi `C3`'ün imzalandığı gerekçedir;
+yalnız iki guard etkilendi (`execution.clock`, `execution.intents`).
+
+**İki bulgu:** (1) bugün **hiçbir varsayılan strateji eş-simüle edilemiyor** — standart fixture
+adaptörün on bir reddinden üçüne birden takılıp **fail-closed** biter (`same_direction_stacking`
+şema varsayılanı dahil) → `C6`'nın ürün kararı; (2) gate'in **substring** assertion'ları conjunct
+silinse bile yeşil kalır (ad docstring'de) → terimlerin taşıyıcı pini davranışsal teste taşındı.
+**Yedi negatif kontrol, yedisi de adlandırılmış bir assertion'da kırmızı.**
+
+**CI'ın yakaladığı tek kırmızı bir KAPIYDI:** `test_shared_allocation_two_world_gate.py`'ın
+"bayrak worker'da YOK" assertion'ı — kendi docstring'i `C4`'ü adıyla çağırıyordu. Yokluk yerine
+**"bayrak tam olarak tek fonksiyondan çağrılıyor"** (parse edilmiş **AST** üzerinden) kondu;
+substring biçiminden daha güçlü.
+
+**DERS: ADIM 86'nın dersi bu slice'ı vurdu** — açık PR listesi taranmadı, aynı `C4` **üç kez**
+paralel yazıldı (#798 kapatıldı; `329e5ae` PR'sız kaldı; #800 indi). Prompt'un verdiği dal adı
+alınmıştı, **force-push edilmedi**.
+
+**DÜRÜST SINIR:** tam suite yerelde koşulmadı (konteyner %18'de yeniden başladı) → geçen sayı
+ve coverage için otorite **CI** (`Backend` 22/22 yeşil). `PROJECT_HISTORY.md` §ADIM 89 ·
+`docs/ADIM89_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 85 GÜNCELLEMESİ (2026-08-19) — BAŞLIK BİLEREK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -7693,3 +7732,24 @@ gerçekleşti** ve ADIM 29'un kaydettiği ayrışma **ADIM 48'de kapandı**; kan
 seçilmedi). **A-08 için
 hiçbir belgeye `Complete`/`PASS`/`Done` yazma** — ama artık "açık issue #514'te
 izleniyor" **yazılabilir**, çünkü doğrudur.
+
+
+> **ADIM 89 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, ve başlığın İKİNCİ yarısı
+> da artık İNDİ.** (Gerekçe ADIM 81/85 güncellemelerinde: bir `## ` başlığını yeniden yazmak
+> `docs-history-guard`'a kayıt silme gibi görünür — ADIM 61 emsali, ADIM 85 fiilen ölçtü.)
+>
+> Başlık iki iş adlandırıyordu: **adaptör** = `C3` = #777 = §ADIM 85, ve **call site** = `C4` =
+> **#800** = **§ADIM 89**. İkisi de indi, yani **bu `## Next:` bloğu artık tamamen tarihseldir**
+> ve `jobs/backtest_engine.py:299`'un adlandırdığı item döngüsü **yerinde durmaya devam eder** —
+> `C4` onu bir `else:` dalına aldı, silmedi; tripwire'ın iki dokunulmaz assertion'ı bunu kilitler.
+>
+> **Sıradaki mühendislik kalemi `C6` ve `C7`** (plan §PACKAGE C: ikisi de `C4` merged ister,
+> aralarında ayrık). **`C6` BLOKLU: `G11` + `G12` brifingli ama İMZASIZ**, ve `C4` bunun
+> maliyetini **ölçtü** — adaptörün on bir reddi bugünkü şema **varsayılanlarıyla** çakışıyor
+> (`same_direction_stacking = allow_stacking`), yani `C6` admission blocker'ları yazdığında
+> mevcut stratejilerin çoğu paylaşımlı koşudan düşer. Bu bir test kararı değil **ürün
+> kararıdır**. `C7` (A16 manifest split) ayrıca `C5` ister; `C5` **zaten sevk edilmiş**
+> (ADIM 72'nin ölçümü), ADR kaydı imzasız.
+>
+> **`C9`/lift hâlâ uzakta:** `SHARED_ALLOCATION_STATUS` `future_dev`, **`G10` (ADR §16 Gate 2)
+> TALEP EDİLMEDİ**, `G8`/`G14` açık, A-08 açık → blocker 1, **BLOCKED**.

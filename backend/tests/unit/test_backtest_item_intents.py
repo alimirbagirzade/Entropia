@@ -921,6 +921,12 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
     guard would have gone blind rather than satisfied. The widening is a named entry, never a
     wildcard, so a THIRD importer is still a red build. Signed 2026-08-18, Option A:
     ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``.
+    **Widened a second time at `C4` (E5), by ONE MORE NAMED module.** The worker
+    (``application/jobs/backtest_engine.py``) is the authorised caller `C4` wires: it builds
+    each participant's identity and bar stream, so it names this module and cannot drive the
+    phase loop without appearing here. The entry is NAMED, so one more importer is still a
+    red build; and the wiring it authorises is guarded by ``shared_allocation_is_executable``,
+    which is ``future_dev`` — the containment gate's own tests assert both halves.
 
     It has been updated deliberately twice, in the same shape the clock's own containment
     test was, and each entry is NAMED rather than the assertion being loosened to "some
@@ -957,6 +963,7 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
         if path.name != "intents.py" and _imports_intents(path.read_text(encoding="utf-8"))
     )
     assert importers == [
+        "application/jobs/backtest_engine.py",
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/portfolio_ledger.py",
         "domain/backtest/execution/portfolio_projection.py",

@@ -550,6 +550,12 @@ def test_the_clock_is_reachable_only_through_the_phase_loop() -> None:
     guard would have gone blind rather than satisfied. The widening is a named entry, never a
     wildcard, so a THIRD importer is still a red build. Signed 2026-08-18, Option A:
     ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``.
+    **Widened a second time at `C4` (E5), by ONE MORE NAMED module.** The worker
+    (``application/jobs/backtest_engine.py``) is the authorised caller `C4` wires: it builds
+    each participant's identity and bar stream, so it names this module and cannot drive the
+    phase loop without appearing here. The entry is NAMED, so one more importer is still a
+    red build; and the wiring it authorises is guarded by ``shared_allocation_is_executable``,
+    which is ``future_dev`` — the containment gate's own tests assert both halves.
 
     It has been updated deliberately once: the shared-snapshot intent layer
     (``execution/intents.py``) reads the clock's ``ItemTickView``, so it is named here as the
@@ -572,6 +578,7 @@ def test_the_clock_is_reachable_only_through_the_phase_loop() -> None:
         if path.name != "clock.py" and "execution.clock" in path.read_text(encoding="utf-8")
     )
     assert importers == [
+        "application/jobs/backtest_engine.py",
         "domain/backtest/execution/intents.py",
         "domain/backtest/execution/provenance.py",
         "domain/backtest/participant.py",

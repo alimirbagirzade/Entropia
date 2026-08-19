@@ -15,6 +15,16 @@ longer asserts that no driver exists — it asserts the two facts that are still
 what actually keeps the containment closed: the loop has no production CALLER (the worker
 still folds finished per-item runs), and every unified-clock module is reachable only through
 it. A phase loop nothing calls cannot change a shipped Result.
+
+**Updated again at `C4` (E5).** The worker now DOES call the loop, so the first of those two
+facts is gone and the gate is narrowed rather than deleted (P-C2 §C.6): the caller scan
+becomes an authorised-caller allowlist of exactly one module, and the property that replaces
+"nothing calls it" is that the caller is FLAG-GUARDED. That is a genuinely weaker invariant —
+a text scan cannot prove reachability — so it is paired with a behavioural proof that a real
+multi-item run takes the sequential fold as shipped, and with the admission refusal that keeps
+the shared branch unreachable from any request. The lift pins in this module
+(``SHARED_ALLOCATION_STATUS``, the ``ENGINE_VERSION`` literal, the 5000/3000 fixture) are the
+ADIM 20 gate, NOT the wiring gate, and `C4` does not touch them.
 """
 
 from __future__ import annotations
@@ -62,10 +72,23 @@ _PHASE_LOOP_MODULES = (
 #: inside, the scan below would have exempted it and this guard would have gone BLIND rather
 #: than satisfied. Signed 2026-08-18, Option A — ONE NAMED module, never a wildcard:
 #: ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``.
+#:
+#: **Widened a second time at `C4` (E5), by ONE MORE NAMED module.** The worker is the
+#: authorised caller this slice wires: it builds ``ItemIdentity`` / ``ItemBarStream`` for
+#: each participant, so it names the intent and clock modules in its imports and cannot
+#: drive the loop without appearing here. That is the guard working, not the guard being
+#: worked around — routing the construction through ``participant.py`` to keep this list
+#: at three entries would have hidden the worker's new reach behind a module that is
+#: already permitted, which is the ``execution/``-placement mistake `C3` refused.
 _AUTHORISED_PHASE_LOOP_IMPORTERS: tuple[list[str], ...] = (
     [],
     ["domain/backtest/portfolio_engine.py"],
     ["domain/backtest/participant.py", "domain/backtest/portfolio_engine.py"],
+    [
+        "application/jobs/backtest_engine.py",
+        "domain/backtest/participant.py",
+        "domain/backtest/portfolio_engine.py",
+    ],
 )
 
 #: Every public way INTO the phase loop. The caller scan below is a text search, so it
@@ -73,6 +96,19 @@ _AUTHORISED_PHASE_LOOP_IMPORTERS: tuple[list[str], ...] = (
 #: and is the one a worker would reach for first, so omitting it would leave the loop's
 #: most likely production entry point unguarded.
 _LOOP_ENTRY_POINTS = ("run_portfolio", "iter_portfolio")
+
+#: The ONE production module `C4` authorises to drive the phase loop, and the one it
+#: authorises to project a finished run into a Result, by exact path.
+#:
+#: This replaces "nothing calls it" with "only this caller, and it is flag-guarded" — a
+#: genuinely WEAKER invariant, which is why it is not the whole gate. A text scan cannot
+#: prove reachability; the behavioural half below
+#: (:func:`test_an_independent_multi_item_run_never_reaches_the_unified_loop` plus the
+#: admission refusal in ``tests/*/test_shared_allocation_containment.py``) is what buys
+#: back what "no caller" used to give for free. A SECOND caller — a route, a command, a
+#: second job — is still a red build (P-C2 §C.6).
+_AUTHORISED_LOOP_CALLERS = ["application/jobs/backtest_engine.py"]
+_AUTHORISED_PROJECTION_CALLERS = ["application/jobs/backtest_engine.py"]
 
 
 def _item_run(item_id: str, closes: list[tuple[str, str]]) -> ItemRun:
@@ -174,17 +210,24 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
     production entry point and this package's oracles run on it unchanged. A1 is therefore no
     longer "no such loop"; it is "the loop is there and nothing in production calls it".
 
-    That second half is what still holds the containment closed, and it is the honest gap:
-    wiring the worker needs an ``ItemParticipant`` backed by the real engine — a per-item
-    replay advanceable to a given ``t``. **What is missing is that ADAPTER, not the stepper.**
-    The stepper ADR §12 calls ADIM 16 SHIPPED as PR #602 (see that ADR's own AMENDMENT, which
-    supersedes the SKIPPED paragraph above it): ``engine._build_stepper`` hands back an
-    ``_ItemStepper`` that can be entered one bar at a time, and ``run_engine`` is a short
-    driver over it on every single-item run today. The remaining gap is one of SHAPE — the
-    stepper's phases BOOK, while ``ItemParticipant`` needs them to DESCRIBE so the loop can
-    arbitrate first. So the worker keeps its item loop and ``combine_item_runs``, no request or
-    retry can reach a tick loop, and no shipped Result can change. When the participant lands,
-    this test is the one that must be updated deliberately.
+    **Updated deliberately at `C4` (E5), which is the update the paragraph below used to
+    ask for.** The adapter landed at `C3` and the worker now drives the loop, so "nothing
+    calls it" is no longer true and is no longer what is asserted. What is asserted instead
+    is narrower and weaker, and saying so plainly is the point: the loop has exactly ONE
+    production caller, that caller is named here by exact path, and the branch it sits on is
+    guarded by ``shared_allocation_is_executable()`` — which is ``future_dev``. A text scan
+    cannot prove reachability, so the behavioural half of the gate
+    (:func:`test_an_independent_multi_item_run_never_reaches_the_unified_loop`, plus the
+    admission refusal in ``tests/*/test_shared_allocation_containment.py``) is what buys back
+    what "no caller" used to give for free. Both halves are required; neither alone is the
+    gate.
+
+    The history the paragraph recorded still stands: ADR §12 calls the ADIM 16 stepper
+    SHIPPED as PR #602 (its own AMENDMENT supersedes the SKIPPED paragraph above it), the
+    SHAPE gap — the stepper's phases BOOK while ``ItemParticipant`` needs them to DESCRIBE —
+    was closed by `C1`'s describe/book split and `C3`'s adapter, and what remained after that
+    was wiring. **When the flag is LIFTED, this test is again the one that must be updated
+    deliberately** — and that lift is ADIM 20 / `C9`, behind the ADR §16 human gate.
 
     Every unified-clock module stays reachable ONLY through the phase loop: the per-module
     guards name their importers exactly, and this asserts the containing shape of that — the
@@ -215,11 +258,30 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
         if path != loop
         and any(f"{name}(" in text or f"import {name}" in text for name in _LOOP_ENTRY_POINTS)
     )
-    assert callers == [], f"the phase loop gained a production caller: {callers}"
+    assert callers == _AUTHORISED_LOOP_CALLERS, (
+        f"the phase loop gained an UNAUTHORISED production caller: {callers}"
+    )
 
     worker = sources[_SRC / "application" / "jobs" / "backtest_engine.py"]
+    # UNCHANGED at `C4`, and they must stay green: the independent fold and its item loop
+    # survive the wiring untouched. Deleting either is the silent re-price of every
+    # independent composite Result — no flag, no ENGINE_VERSION bump, a different number.
     assert "combine_item_runs(" in worker
     assert "for prepared in prepared_items:" in worker
+
+    # What replaces "nothing calls it": the one caller is GUARDED, by a named function that
+    # names both capability terms.
+    #
+    # **What these three lines do NOT prove, measured rather than assumed.** They are text
+    # scans, and both symbols are also named in ``_use_unified_clock``'s own docstring — so
+    # deleting either conjunct from the RETURN expression leaves all three green. That was
+    # run as a negative control at `C4` and it is why the load-bearing pin for the two terms
+    # is behavioural and lives in ``tests/unit/test_backtest_worker_clock_selector.py``,
+    # which did go red on both deletions. These assertions are the cheap structural half:
+    # they catch the guard being removed or renamed wholesale, not thinned.
+    assert "shared_allocation_is_executable" in worker
+    assert "shared_allocation_requested" in worker
+    assert "def _use_unified_clock" in worker
 
 
 def test_the_result_projection_exists_but_no_production_path_reaches_it_either() -> None:
@@ -253,11 +315,18 @@ def test_the_result_projection_exists_but_no_production_path_reaches_it_either()
         if path != projection
         and ("project_portfolio_run(" in text or "import project_portfolio_run" in text)
     )
-    assert callers == [], f"the Result projection gained a production caller: {callers}"
+    assert callers == _AUTHORISED_PROJECTION_CALLERS, (
+        f"the Result projection gained an UNAUTHORISED production caller: {callers}"
+    )
 
-    # The worker's Result still comes from per-item runs folded sequentially, untouched.
+    # The worker now legitimately names the projection, so "it is absent" is no longer the
+    # property to assert. What holds instead: the projection is reached only from the
+    # shared branch, and that branch is behind the flag guard. The sequential fold is still
+    # there for every request that exists.
     worker = sources[_SRC / "application" / "jobs" / "backtest_engine.py"]
-    assert "portfolio_projection" not in worker
+    assert "project_portfolio_run(" in worker
+    assert "shared_allocation_is_executable" in worker
+    assert "combine_item_runs(" in worker
 
 
 def test_the_containment_flag_and_engine_version_are_both_untouched() -> None:
@@ -347,24 +416,37 @@ def test_widening_the_importer_allowlist_did_not_disable_it() -> None:
     # so this test fails if the adapter is ever moved into ``execution/`` and the widening
     # is left behind as dead permission.
     assert live in _AUTHORISED_PHASE_LOOP_IMPORTERS
-    assert live == ["domain/backtest/participant.py", "domain/backtest/portfolio_engine.py"]
+    assert live == [
+        "application/jobs/backtest_engine.py",
+        "domain/backtest/participant.py",
+        "domain/backtest/portfolio_engine.py",
+    ]
 
     probe_src = "from entropia.domain.backtest.execution.clock import ItemTickView\n"
-    third = _SRC / "domain" / "backtest" / "_probe_third_importer.py"
-    second = _SRC / "domain" / "backtest" / "_probe_other_adapter.py"
-    assert third not in sources and second not in sources
+    extra = _SRC / "domain" / "backtest" / "_probe_third_importer.py"
+    substitute = _SRC / "domain" / "backtest" / "_probe_other_adapter.py"
+    assert extra not in sources and substitute not in sources
 
-    with_third = _importers_outside_execution(module, {**sources, third: probe_src})
-    assert len(with_third) == 3
-    assert with_third not in _AUTHORISED_PHASE_LOOP_IMPORTERS, (
-        "a third production importer of the phase loop passed the widened allowlist; the "
-        "widening disabled the tripwire instead of extending it by one named module"
+    # Axis 1 — ONE MORE than the tree carries is refused. At `C3` this read "a third";
+    # after `C4`'s second widening it is a fourth, and the count in the name would have
+    # rotted while the property did not, so the property is what is stated.
+    with_extra = _importers_outside_execution(module, {**sources, extra: probe_src})
+    assert len(with_extra) == len(live) + 1
+    assert with_extra not in _AUTHORISED_PHASE_LOOP_IMPORTERS, (
+        "one more production importer of the phase loop passed the widened allowlist; the "
+        "widening disabled the tripwire instead of extending it by named modules"
     )
 
+    # Axis 2 — a DIFFERENTLY-NAMED module standing in for a permitted one is refused, at
+    # the SAME cardinality. This is the half a ``len()`` check or a wildcard would pass,
+    # and it is what makes the list a list of names rather than a budget.
     without_adapter = {p: t for p, t in sources.items() if p.name != "participant.py"}
-    with_other = _importers_outside_execution(module, {**without_adapter, second: probe_src})
-    assert len(with_other) == 2
-    assert with_other not in _AUTHORISED_PHASE_LOOP_IMPORTERS, (
-        "a DIFFERENTLY-NAMED second importer passed the allowlist; it is a named list, not "
-        "a count, and Option B/C were rejected precisely because they stop naming anything"
+    with_substitute = _importers_outside_execution(
+        module, {**without_adapter, substitute: probe_src}
+    )
+    assert len(with_substitute) == len(live)
+    assert with_substitute not in _AUTHORISED_PHASE_LOOP_IMPORTERS, (
+        "a DIFFERENTLY-NAMED importer passed the allowlist at the same count; it is a named "
+        "list, not a count, and Option B/C were rejected precisely because they stop naming "
+        "anything"
     )

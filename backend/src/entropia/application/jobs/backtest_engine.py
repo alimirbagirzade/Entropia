@@ -79,11 +79,16 @@ from entropia.application.queries.market_ticks import (
     iter_tick_batches,
     resolve_tick_source,
 )
+from entropia.domain.allocation.capability import (
+    shared_allocation_is_executable,
+    shared_allocation_requested,
+)
 from entropia.domain.backtest.engine import (
     EngineOutput,
     ItemRun,
     PortfolioRules,
     PriorItemInterval,
+    _build_stepper,
     build_prior_intervals,
     resolve_allocation_execution,
     resolve_portfolio_rules,
@@ -95,11 +100,19 @@ from entropia.domain.backtest.enums import (
     RunEventType,
     RunFailureCode,
 )
+from entropia.domain.backtest.execution.clock import ItemBarStream
 from entropia.domain.backtest.execution.fills import (
     tick_data_required,
 )
+from entropia.domain.backtest.execution.intents import ItemIdentity
 from entropia.domain.backtest.execution.portfolio import combine_item_runs
+from entropia.domain.backtest.execution.portfolio_projection import (
+    PinnedItem,
+    project_portfolio_run,
+)
 from entropia.domain.backtest.metrics import derive_metric_values
+from entropia.domain.backtest.participant import _EngineParticipant
+from entropia.domain.backtest.portfolio_engine import PortfolioEngineError, iter_portfolio
 from entropia.domain.lifecycle.enums import ActorKind, DeletionState, JobStatus
 from entropia.domain.mainboard.enums import MainboardItemKind
 from entropia.domain.strategy.config import StrategyConfig
@@ -116,6 +129,22 @@ from entropia.shared.errors import FundingSourceInvalid, NotFoundError
 
 _RUN_TARGET = "backtest_run"
 _RESULT_TARGET = "backtest_result"
+
+# How many COMMITTED ticks the shared-clock replay walks between cancellation checks
+# (ADR-0002 §11: "a time-based checkpoint (every K ticks, at a phase boundary)").
+#
+# Why a stride at all: the independent path checks once per ITEM (checkpoint #3), and a
+# merged clock deletes that boundary — every item advances inside one loop, so without a
+# check placed IN the loop a long shared run would be uncancellable. Why not every tick:
+# ``_cancellation_requested`` awaits ``session.refresh``, i.e. one database round trip, and
+# a year of 1m bars is ~525k valuation points — a per-tick check would put half a million
+# round trips on a replay that otherwise touches the database twice.
+#
+# It is a latency/round-trip trade, NOT a correctness knob. A cancel is never LOST: at
+# worst it waits K ticks, and checkpoint #4 still sits between the replay and
+# ``create_result``, so doc 15 §16 ("a CANCELLED run produces no BacktestResult") holds
+# whatever K is. Raising or lowering it moves only how soon a watching user is answered.
+_TICK_CHECKPOINT_STRIDE = 500
 
 # The spec's run event token (doc 15 §12) -> the shipped dotted audit/outbox kind.
 # Both names are kept on purpose: the token identifies the durable stream row a
@@ -281,95 +310,139 @@ async def run_backtest(
     run.state = BacktestRunState.RUNNING
     await session.commit()
 
-    # RUNNING = bar-replay each prepared Strategy. Portfolio-level rules (cross-item,
-    # doc 13 §8.4): resolved ONCE from the manifest snapshot; None (no rule set) keeps
-    # every item's replay byte-identical to the pre-rules engine. Enforcement is
-    # sequential in the manifest's deterministic pin order — each completed item's
-    # closed-position windows become the NEXT items' constraints (an earlier item is
-    # never re-simulated because of a later one; the engine surfaces this precedence as
-    # an L4 warning). An engine error on ANY item fails the whole run.
-    base_rules = resolve_portfolio_rules(capital_execution)
     # F-07 §4.4: the PINNED display labels, read once from the immutable manifest. They
     # are not part of ``execution_key``, so they cannot influence the replay — they only
     # travel with each item so the finished Result can name its rows without the reader
     # ever joining the live composition.
     item_labels = _manifest_item_labels(manifest.manifest)
-    prior_intervals: list[PriorItemInterval] = []
+
+    # Declared before the branch because both paths produce one: the composite the shared
+    # clock projects, and the fold (or the lone item's output) the item loop produces.
+    output: EngineOutput
+    # Stays empty on the shared path — there are no PER-ITEM runs there, which is the whole
+    # difference: one book, one clock. Fabricating rows to fill it would be a made-up
+    # sequential reading of a co-simulated run.
     item_runs: list[ItemRun] = []
-    for prepared in prepared_items:
-        # O-06 safe checkpoint #3 — between two items' bar-replays, and (on the
-        # first pass) immediately after the RUNNING commit. This is the checkpoint
-        # a user watching a long simulation actually hits.
-        if await _cancellation_requested(session, run):
-            return await _cancel_run(
-                session,
-                job,
-                run,
-                stage=BacktestRunState.RUNNING,
-                progress={
-                    "replayed_item_count": len(item_runs),
-                    "strategy_item_count": len(prepared_items),
-                },
-            )
-        item_rules = (
-            replace(
-                base_rules,
-                own_symbol=prepared.config.data.instrument_id,
-                prior_intervals=tuple(prior_intervals),
-            )
-            if base_rules is not None
-            else None
-        )
-        replayed = _replay_strategy(
-            prepared,
-            execution_key=manifest.execution_key,
+
+    # E5 / P-C2 §C.5: the shared-clock branch is a SIBLING of the item loop, sitting above
+    # it, never a replacement for it. ``_use_unified_clock`` is the one place the choice is
+    # made; while the containment flag is ``future_dev`` it is ``False`` for every request
+    # that can exist, so everything below the ``else`` is what production runs today and is
+    # left exactly as it was — the fold, the item loop and the forward-only precedence.
+    if _use_unified_clock(capital_execution):
+        co_simulated = await _replay_shared_clock(
+            session,
+            job,
+            run,
+            prepared_items=prepared_items,
+            manifest=manifest,
+            capital_execution=capital_execution,
             item_count=item_count,
-            portfolio_rules=item_rules,
-            item_label=item_labels.get(prepared.item_id),
+            item_labels=item_labels,
         )
-        if isinstance(replayed, _PrepFailure):
-            return await _fail_run(session, job, run, code=replayed.code, message=replayed.message)
-        if base_rules is not None and replayed.output is not None:
-            prior_intervals.extend(
-                build_prior_intervals(
-                    item_id=replayed.item_id,
-                    symbol=prepared.config.data.instrument_id,
-                    position_intervals=replayed.output.position_intervals,
-                )
+        if isinstance(co_simulated, _PrepFailure):
+            return await _fail_run(
+                session, job, run, code=co_simulated.code, message=co_simulated.message
             )
-        item_runs.append(replayed)
-
-    # Enabled non-Strategy items (Trading Signal / Trade Log) are pinned + recorded for
-    # traceability but run no standalone V1 bar-replay (F-04 honest boundary): their
-    # execution effect is defined only as a Strategy data input. Disabled items were
-    # already excluded from the snapshot (doc 01 §5.2) and never reach here.
-    non_executing = _enabled_non_strategy_items(manifest.manifest)
-
-    if len(item_runs) == 1 and not non_executing:
-        # Byte-identical single-Strategy path: a lone enabled Strategy with nothing else
-        # in the composition produces exactly the pre-F-04 engine output (no compose).
-        output: EngineOutput = item_runs[0].output  # type: ignore[assignment]
+        if isinstance(co_simulated, _SharedCancelled):
+            # Already CANCELLED inside the tick loop, with no Result written. Returned
+            # verbatim so the cancel is not re-decided on the way out (doc 15 §16).
+            return co_simulated.ref
+        output = co_simulated
+        replayed_item_count = len(prepared_items)
     else:
-        # Portfolio starting capital: the shared pool P0 under shared allocation (taken
-        # ONCE — each sleeve reports the same pool), else the sum of the strategies' own
-        # initial capitals (independent mode). Realized PnL is additive either way.
-        alloc_probe = resolve_allocation_execution(capital_execution, item_id=item_runs[0].item_id)
-        if alloc_probe is not None:
-            portfolio_initial = alloc_probe.initial_capital
-        else:
-            portfolio_initial = sum(
-                (Decimal(str(r.output.summary["initial_capital"])) for r in item_runs if r.output),
-                Decimal("0"),
+        # RUNNING = bar-replay each prepared Strategy. Portfolio-level rules (cross-item,
+        # doc 13 §8.4): resolved ONCE from the manifest snapshot; None (no rule set) keeps
+        # every item's replay byte-identical to the pre-rules engine. Enforcement is
+        # sequential in the manifest's deterministic pin order — each completed item's
+        # closed-position windows become the NEXT items' constraints (an earlier item is
+        # never re-simulated because of a later one; the engine surfaces this precedence as
+        # an L4 warning). An engine error on ANY item fails the whole run.
+        base_rules = resolve_portfolio_rules(capital_execution)
+        prior_intervals: list[PriorItemInterval] = []
+        for prepared in prepared_items:
+            # O-06 safe checkpoint #3 — between two items' bar-replays, and (on the
+            # first pass) immediately after the RUNNING commit. This is the checkpoint
+            # a user watching a long simulation actually hits.
+            if await _cancellation_requested(session, run):
+                return await _cancel_run(
+                    session,
+                    job,
+                    run,
+                    stage=BacktestRunState.RUNNING,
+                    progress={
+                        "replayed_item_count": len(item_runs),
+                        "strategy_item_count": len(prepared_items),
+                    },
+                )
+            item_rules = (
+                replace(
+                    base_rules,
+                    own_symbol=prepared.config.data.instrument_id,
+                    prior_intervals=tuple(prior_intervals),
+                )
+                if base_rules is not None
+                else None
             )
-        output = combine_item_runs(
-            [*item_runs, *non_executing],
-            portfolio_initial_capital=portfolio_initial,
-            execution_key=manifest.execution_key,
-            item_count=item_count,
-            # Contribution's without-item fold follows the SAME capital rule as this
-            # run: shared pool keeps P0, independent subtracts the item's own capital.
-            shared_pool=alloc_probe is not None,
-        )
+            replayed = _replay_strategy(
+                prepared,
+                execution_key=manifest.execution_key,
+                item_count=item_count,
+                portfolio_rules=item_rules,
+                item_label=item_labels.get(prepared.item_id),
+            )
+            if isinstance(replayed, _PrepFailure):
+                return await _fail_run(
+                    session, job, run, code=replayed.code, message=replayed.message
+                )
+            if base_rules is not None and replayed.output is not None:
+                prior_intervals.extend(
+                    build_prior_intervals(
+                        item_id=replayed.item_id,
+                        symbol=prepared.config.data.instrument_id,
+                        position_intervals=replayed.output.position_intervals,
+                    )
+                )
+            item_runs.append(replayed)
+
+        # Enabled non-Strategy items (Trading Signal / Trade Log) are pinned + recorded for
+        # traceability but run no standalone V1 bar-replay (F-04 honest boundary): their
+        # execution effect is defined only as a Strategy data input. Disabled items were
+        # already excluded from the snapshot (doc 01 §5.2) and never reach here.
+        non_executing = _enabled_non_strategy_items(manifest.manifest)
+
+        if len(item_runs) == 1 and not non_executing:
+            # Byte-identical single-Strategy path: a lone enabled Strategy with nothing else
+            # in the composition produces exactly the pre-F-04 engine output (no compose).
+            output = item_runs[0].output  # type: ignore[assignment]
+        else:
+            # Portfolio starting capital: the shared pool P0 under shared allocation (taken
+            # ONCE — each sleeve reports the same pool), else the sum of the strategies' own
+            # initial capitals (independent mode). Realized PnL is additive either way.
+            alloc_probe = resolve_allocation_execution(
+                capital_execution, item_id=item_runs[0].item_id
+            )
+            if alloc_probe is not None:
+                portfolio_initial = alloc_probe.initial_capital
+            else:
+                portfolio_initial = sum(
+                    (
+                        Decimal(str(r.output.summary["initial_capital"]))
+                        for r in item_runs
+                        if r.output
+                    ),
+                    Decimal("0"),
+                )
+            output = combine_item_runs(
+                [*item_runs, *non_executing],
+                portfolio_initial_capital=portfolio_initial,
+                execution_key=manifest.execution_key,
+                item_count=item_count,
+                # Contribution's without-item fold follows the SAME capital rule as this
+                # run: shared pool keeps P0, independent subtracts the item's own capital.
+                shared_pool=alloc_probe is not None,
+            )
+        replayed_item_count = len(item_runs)
     metric_values = derive_metric_values(output.summary)
 
     # O-06 safe checkpoint #4 — the LAST point at which no Result exists yet. This
@@ -385,7 +458,10 @@ async def run_backtest(
             run,
             stage=BacktestRunState.RUNNING,
             progress={
-                "replayed_item_count": len(item_runs),
+                # ``len(item_runs)`` on the independent path, by construction — the count
+                # is read from the branch that produced it so the shared path, which has
+                # no per-item runs, reports the items it CO-simulated rather than 0.
+                "replayed_item_count": replayed_item_count,
                 "strategy_item_count": len(prepared_items),
                 "engine_replay_complete": True,
             },
@@ -881,6 +957,309 @@ def _replay_strategy(
         output=output,
         item_label=item_label,
     )
+
+
+def _use_unified_clock(capital_execution: dict[str, Any] | None) -> bool:
+    """The ONE place that decides shared-clock co-simulation vs the independent replay.
+
+    Named, and called exactly once, so no call site re-derives the answer and so the
+    containment gate can assert on the symbol appearing in this module (P-C2 §C.5).
+
+    **Both conjuncts are load-bearing, and the reason is financial rather than stylistic.**
+    ``shared_allocation_requested`` alone would route an INDEPENDENT multi-item run into the
+    co-simulation the moment someone mis-read the capital snapshot;
+    ``shared_allocation_is_executable`` alone would route EVERY multi-item run into it.
+    Either mistake silently re-prices every independent composite Result — a different
+    number, with no flag, no ``ENGINE_VERSION`` bump and nothing visible to the user. The
+    pair is what makes that structurally impossible, which is why the two terms are pinned
+    separately by the tests rather than only through this function's combined answer.
+
+    ``shared_allocation_is_executable()`` is READ here, never cached at import: the flag is
+    a one-constant rollback (ADR §11) and a cached copy would survive it.
+
+    While ``SHARED_ALLOCATION_STATUS`` is ``future_dev`` the first conjunct is ``False``, so
+    this returns ``False`` for every request that exists — and admission
+    (``commands/backtest_run.py``) has already refused any shared run long before the worker
+    runs. The shared branch is therefore wired and unreachable, which IS the containment."""
+    return shared_allocation_is_executable() and shared_allocation_requested(capital_execution)
+
+
+@dataclass(frozen=True, slots=True)
+class _SharedCancelled:
+    """The shared replay's tick-strided checkpoint fired: the run is already CANCELLED.
+
+    Carries the terminal ref ``_cancel_run`` produced, because the cancel has to be
+    reported from inside the tick loop and the caller must return it verbatim rather than
+    continue on to a Result that doc 15 §16 forbids."""
+
+    ref: dict[str, Any]
+
+
+def _manifest_pin_ordinals(manifest: dict[str, Any]) -> dict[str, int]:
+    """``item_id`` -> its index in the manifest's DETERMINISTIC pin order.
+
+    ``mainboard_items`` is ``manifest._pinned_items``' output, sorted by
+    ``(root_id, selected_revision_id)`` at manifest-build time — so the ordinal is read
+    off the immutable snapshot rather than off any list this worker happens to build.
+    That distinction is the whole point: ``prepared_items`` holds only the STRATEGY items
+    and only the ones that resolved, so its positions would number a different set and
+    would shift the ``(pin_ordinal, item_id)`` tie-break of ADR §4.4 — the merge order of
+    the shared clock — whenever a non-Strategy item joined the composition. Presentation
+    ``position`` (doc 01 §5.2) is likewise never engine event priority."""
+    return {
+        str(item["item_id"]): ordinal
+        for ordinal, item in enumerate(manifest.get("mainboard_items", []))
+        if isinstance(item, dict) and item.get("item_id") is not None
+    }
+
+
+def _pinned_records(
+    manifest: dict[str, Any],
+    *,
+    prepared_items: list[_PreparedStrategy],
+    item_labels: dict[str, str],
+) -> list[PinnedItem]:
+    """Every pinned item's Result-facing metadata, for the composite projection.
+
+    Covers the non-Strategy items too: they never simulate, but a pinned Trading Signal /
+    Trade Log still has to be nameable in the finished Result, exactly as
+    ``_enabled_non_strategy_items`` keeps it traceable on the independent path. ``symbol``
+    and ``timeframe`` come from the RESOLVED strategy inputs, so they describe what was
+    replayed rather than what the registry says today (F-07 §4.4)."""
+    replayed = {prepared.item_id: prepared for prepared in prepared_items}
+    records: list[PinnedItem] = []
+    for item in manifest.get("mainboard_items", []):
+        if not isinstance(item, dict) or item.get("enabled") is False:
+            continue
+        item_id = str(item["item_id"])
+        prepared = replayed.get(item_id)
+        records.append(
+            PinnedItem(
+                item_id=item_id,
+                item_kind=str(item.get("item_kind")),
+                root_id=item.get("root_id"),
+                revision_id=(
+                    prepared.revision_id
+                    if prepared is not None
+                    else (
+                        str(item["selected_revision_id"])
+                        if item.get("selected_revision_id") is not None
+                        else None
+                    )
+                ),
+                item_label=item_labels.get(item_id),
+                symbol=prepared.config.data.instrument_id if prepared is not None else None,
+                timeframe=prepared.timeframe if prepared is not None else None,
+            )
+        )
+    return records
+
+
+def _shared_participants(
+    prepared_items: list[_PreparedStrategy],
+    *,
+    manifest: dict[str, Any],
+    execution_key: str,
+    item_count: int,
+    item_labels: dict[str, str],
+) -> list[_EngineParticipant] | _PrepFailure:
+    """One ``_EngineParticipant`` per prepared Strategy, over the SAME resolved pins.
+
+    The stepper is built from exactly what ``_replay_strategy`` hands ``run_engine`` —
+    same config, same indicator plan, same funding schedule, same tick stream, same
+    sleeve — so the shared path replays the run the independent path would have replayed,
+    differing only in WHO decides. Re-resolving anything here would be a second answer to
+    a question admission already pinned (doc 15 §15).
+
+    ``portfolio_rules=None`` is deliberate and is ADR §12 row 19: forward-only
+    ``PriorItemInterval`` precedence and ``execution/arbitration.py`` are two policies for
+    the same cross-item conflict, and arbitration RETIRES precedence. Precedence is
+    sequential by construction (an earlier-pinned item's closed windows constrain a later
+    one), which a single merged clock has no ordering to express — so it is retired on the
+    shared path only. ``resolve_portfolio_rules`` keeps serving independent mode unchanged;
+    the cross-item cap and the conflict policy reach the shared run through the loop's own
+    ``conflict_policy`` / ``max_total_exposure_notional`` arguments instead.
+
+    A shape the adapter refuses (``_unsupported_shapes``, eleven fail-closed cases) fails
+    the WHOLE run rather than dropping the item — the F-04 rule that a selected Strategy is
+    never silently skipped does not weaken because the clock changed."""
+    ordinals = _manifest_pin_ordinals(manifest)
+    participants: list[_EngineParticipant] = []
+    for prepared in prepared_items:
+        ordinal = ordinals.get(prepared.item_id)
+        if ordinal is None:
+            return _PrepFailure(
+                RunFailureCode.MANIFEST_RESOLUTION,
+                f"Strategy item '{prepared.item_id}' replays in this run but carries no "
+                "pinned position in the manifest's item order; the shared clock has no "
+                "deterministic place to merge it.",
+            )
+        try:
+            stepper = _build_stepper(
+                strategy_config=prepared.config,
+                execution_key=execution_key,
+                item_count=item_count,
+                indicator_plan=prepared.indicator_plan,
+                timeframe=prepared.timeframe,
+                allocation=prepared.allocation,
+                funding=prepared.funding_schedule,
+                tick_batches=prepared.tick_batches,
+                portfolio_rules=None,
+            )
+            participants.append(
+                _EngineParticipant(
+                    identity=ItemIdentity(
+                        item_id=prepared.item_id,
+                        item_kind=prepared.item_kind,
+                        pin_ordinal=ordinal,
+                        root_id=(str(prepared.root_id) if prepared.root_id is not None else None),
+                        selected_revision_id=prepared.revision_id,
+                        item_label=item_labels.get(prepared.item_id),
+                    ),
+                    stream=ItemBarStream(
+                        item_id=prepared.item_id,
+                        pin_ordinal=ordinal,
+                        batches=prepared.bar_batches,
+                    ),
+                    stepper=stepper,
+                    instrument_id=prepared.config.data.instrument_id,
+                )
+            )
+        except Exception as exc:
+            return _PrepFailure(
+                RunFailureCode.ENGINE_ERROR,
+                f"Strategy item '{prepared.item_id}': cannot participate in a shared-clock "
+                f"run: {exc}",
+            )
+    return participants
+
+
+async def _replay_shared_clock(
+    session: AsyncSession,
+    job: Job,
+    run: Any,
+    *,
+    prepared_items: list[_PreparedStrategy],
+    manifest: Any,
+    capital_execution: dict[str, Any] | None,
+    item_count: int,
+    item_labels: dict[str, str],
+) -> EngineOutput | _PrepFailure | _SharedCancelled:
+    """Co-simulate every prepared Strategy on ONE merged clock over ONE shared pool.
+
+    The sibling of the item loop, not its replacement: it is entered only through
+    :func:`_use_unified_clock`, and while ``SHARED_ALLOCATION_STATUS`` is ``future_dev``
+    that gate is closed for every request that can exist. Everything below therefore runs
+    only under a test that forces the flag — which is exactly the containment ADR §11
+    describes, and why this slice bumps no ``ENGINE_VERSION``.
+
+    The generator is drained BY HAND rather than with ``for``: a plain loop discards a
+    generator's return value, and the assembled ``PortfolioRun`` is precisely that value.
+    Draining it here (rather than calling ``run_portfolio``) is what buys the tick-strided
+    cancellation checkpoint — the check is ``async`` and cannot run inside the loop's own
+    synchronous body (ADR §14 A21)."""
+    pool = next((p.allocation for p in prepared_items if p.allocation is not None), None)
+    if pool is None:
+        return _PrepFailure(
+            RunFailureCode.MANIFEST_RESOLUTION,
+            "This run asks for shared capital, but the manifest's capital snapshot resolves "
+            "to no portfolio pool; there is nothing to allocate a sleeve from.",
+        )
+    # wi is the PLAN's authority, not the item's, so each share is read back through the
+    # same projection the engine sizes from — never re-derived from the raw entries here.
+    shares = {
+        prepared.item_id: (
+            prepared.allocation.item_share_percent
+            if prepared.allocation is not None
+            else Decimal("0")
+        )
+        for prepared in prepared_items
+    }
+
+    participants = _shared_participants(
+        prepared_items,
+        manifest=manifest.manifest,
+        execution_key=manifest.execution_key,
+        item_count=item_count,
+        item_labels=item_labels,
+    )
+    if isinstance(participants, _PrepFailure):
+        return participants
+
+    rules = resolve_portfolio_rules(capital_execution)
+    exposure_cap: Decimal | None = None
+    if rules is not None:
+        if rules.exposure_percent_invalid:
+            # Same fail-closed reading the item engine applies: a SET-but-unreadable cap
+            # admits nothing rather than silently running uncapped.
+            exposure_cap = Decimal("0.00")
+        elif rules.max_total_exposure_percent is not None:
+            exposure_cap = (
+                pool.initial_capital * rules.max_total_exposure_percent / Decimal("100")
+            ).quantize(Decimal("0.01"))
+
+    ticks = iter_portfolio(
+        participants,
+        pool_initial=pool.initial_capital,
+        shares=shares,
+        reserve_percent=pool.reserve_percent,
+        compound=pool.compound,
+        conflict_policy=rules.conflict_policy if rules is not None else None,
+        # Deliberately not passed. The §6 per-item ``max_position_size`` cap is already
+        # applied INSIDE the stepper's sizing chain, so the size a participant describes
+        # honours it before arbitration ever sees the intent; declaring it again here
+        # would be a second reading of one config field, which is the defect
+        # ``max_position_size_cap`` (GH #550) exists to prevent. The loop's own warning —
+        # that a key matching nobody is silently dropped — cannot bite a map that is
+        # never built.
+        max_position_notional=None,
+        max_total_exposure_notional=exposure_cap,
+    )
+    index = 0
+    while True:
+        try:
+            next(ticks)
+        except StopIteration as exhausted:
+            portfolio_run = exhausted.value
+            break
+        except PortfolioEngineError as exc:
+            return _PrepFailure(
+                RunFailureCode.ENGINE_ERROR,
+                f"Shared-clock replay stopped at tick {index}: {exc}",
+            )
+        # O-06 safe checkpoint #3, in its shared-clock form. The merged axis deleted the
+        # per-item boundary the independent path checks on, so the check moves INTO the
+        # loop on a stride. The tick just yielded is already committed, so a cancel here
+        # abandons a consistent book — and the run has produced no Result either way.
+        index += 1
+        if index % _TICK_CHECKPOINT_STRIDE == 0 and await _cancellation_requested(session, run):
+            return _SharedCancelled(
+                await _cancel_run(
+                    session,
+                    job,
+                    run,
+                    stage=BacktestRunState.RUNNING,
+                    progress={
+                        "replayed_tick_count": index,
+                        "strategy_item_count": len(prepared_items),
+                    },
+                )
+            )
+
+    try:
+        return project_portfolio_run(
+            portfolio_run,
+            items=_pinned_records(
+                manifest.manifest, prepared_items=prepared_items, item_labels=item_labels
+            ),
+            execution_key=manifest.execution_key,
+            item_count=item_count,
+        )
+    except PortfolioEngineError as exc:
+        return _PrepFailure(
+            RunFailureCode.ENGINE_ERROR,
+            f"Shared-clock run finished but could not be projected into a Result: {exc}",
+        )
 
 
 async def _record_stage(

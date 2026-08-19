@@ -104,7 +104,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 |---|---|---|
 | `agent_executor.py` | `agent-executor` | Alpha Agent task executor; `jobs` satırı transport + retry backstop |
 | `agent_tools.py` | `agent` / `agent-high` | Tool Gateway — ajan, insanla **aynı** policy'li servis hattından iş yapar |
-| `backtest_engine.py` | `backtest` | Engine worker gövdesi; `jobs` + `backtest_run` tek gerçek kaynağı |
+| `backtest_engine.py` | `backtest` | Engine worker gövdesi; `jobs` + `backtest_run` tek gerçek kaynağı. **`C4`'ten beri İKİ replay dalı taşır:** `_use_unified_clock()` (tek karar noktası) altında paylaşımlı `_replay_shared_clock` (tick-strided iptal checkpoint'i, `_TICK_CHECKPOINT_STRIDE`) ve değişmemiş bağımsız item döngüsü + `combine_item_runs` |
 | `create_package.py` | `default` | CP kind-dispatch worker: `precheck` · `candidate_generation` · `validation` · `baseline_parse` (F-01a/F-01b/F-01c); durable kanıt + state ilerlemesi + audit/outbox |
 | `data_queue.py` | (yardımcı) | `data` kuyruğu job-kind taksonomisi + operator redelivery listesi |
 | `delivery.py` | (ortak kapı) | **At-least-once teslim kapısı (ADIM 21, INF-03/INF-09):** `claim_job_for_delivery` durable `jobs` satırını `FOR UPDATE` ile kilitler → terminal ise `(job, replay)` döner ve gövde **hiçbir şey yazmaz**, değilse ikinci teslimat birincinin arkasında **bekler**. Domain satırının kendi kilidi + terminal durumu olan gövdeler (`backtest_engine`, `agent_executor`, `create_package`) bu yardımcıyı çağırmaz. `run_idempotent`'tan **ayrı eksen**: o admission'ı, bu gövdenin ikinci koşusunu durdurur |
@@ -168,11 +168,11 @@ sembolü "yok" saymak da (#582 gövdesi), bağlı olmayan bir sembolü "çalış
 
 | Sembol | Tanım | Üretim çağıranı | Test çağıranı | Doğru tek cümle |
 |---|---|---|---|---|
-| `run_portfolio` | `portfolio_engine.py:717` | **SIFIR** | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** PR #759'dan beri `iter_portfolio`'nun sarmalayıcısı — imza ve semantik değişmedi. |
-| `iter_portfolio` | `portfolio_engine.py:628` (generator) | **SIFIR** | aynı harness (`run_portfolio` üzerinden) | **PR #759'da sevk edildi.** Faz döngüsünün tick-drivable biçimi; `PortfolioRun` `StopIteration.value`'dan gelir. **Containment taramasında ADLANDIRILMIŞTIR** (`_LOOP_ENTRY_POINTS`) — o ekleme olmadan üretim tüm fazları buradan sürerken assertion yeşil kalırdı. |
-| `ItemParticipant` | `portfolio_engine.py:274` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var, adapter VAR (`C3`), wiring YOK (`C4`)** — implementor `participant.py::_EngineParticipant`, ama `backend/src`'te onu **inşa eden** satır yok. **Artık write-only DEĞİL:** `settle` (`:319`) ve `finalize` (`:334`) PR #759'da **zorunlu** üye olarak sevk edildi — `hasattr` ile yoklanmıyor, çünkü yoklama fail-open'dır. |
-| `_EngineParticipant` | `participant.py` (`C3`) | **SIFIR** — `backend/src`'te hiçbir modül onu inşa etmez | `tests/unit/oracles/test_oracle_engine_participant.py` | **Gerçeklenmiş ve bağlanmamış.** `_ItemStepper`'ın describe/book yarılarını `ItemParticipant`'a çevirir; sürücüsü olan tek yer testlerdir. Bilerek `execution/` DIŞINDA — içeride containment gate'in importer taraması **kör** olurdu.
-| `project_portfolio_run` | `execution/portfolio_projection.py:513` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_projection.py` | **Gerçeklenmiş ve bağlanmamış.** |
+| `run_portfolio` | `portfolio_engine.py:717` | **SIFIR** (worker `iter_portfolio`'yu sürer) | `tests/unit/oracles/portfolio_harness.py` (`simulate` üzerinden) | **Sembol olarak sevk edilmiş; üretimden erişilemez.** PR #759'dan beri `iter_portfolio`'nun sarmalayıcısı — imza ve semantik değişmedi. |
+| `iter_portfolio` | `portfolio_engine.py:628` (generator) | **`jobs/backtest_engine.py::_replay_shared_clock` — `C4`'te bağlandı, flag'in ARKASINDA** | aynı harness + `test_backtest_worker_shared_clock_branch.py` | **PR #759'da sevk edildi, `C4`'te BAĞLANDI.** Artık bir üretim çağıranı var ve tam da bu yüzden containment gate'in `assert callers == []`'i **yetkili-çağıran allowlist'ine daraltıldı** (silinmedi). Çağıran `_use_unified_clock()` kapısının arkasında; flag `future_dev` olduğu sürece hiçbir istek oraya ulaşamaz. Faz döngüsünün tick-drivable biçimi; `PortfolioRun` `StopIteration.value`'dan gelir. **Containment taramasında ADLANDIRILMIŞTIR** (`_LOOP_ENTRY_POINTS`) — o ekleme olmadan üretim tüm fazları buradan sürerken assertion yeşil kalırdı. |
+| `ItemParticipant` | `portfolio_engine.py:274` (`Protocol`) | **implementor YOK** (`backend/src` içinde) | `_ScriptedParticipant` (`portfolio_harness.py`) | **Sözleşme var, adapter var (`C3`), wiring VAR (`C4`) — ama flag'in arkasında.** Implementor `participant.py::_EngineParticipant`; onu inşa eden tek satır `jobs/backtest_engine.py::_shared_participants`, ve o da yalnız `_use_unified_clock()` doğruyken koşar. **Artık write-only DEĞİL:** `settle` (`:319`) ve `finalize` (`:334`) PR #759'da **zorunlu** üye olarak sevk edildi — `hasattr` ile yoklanmıyor, çünkü yoklama fail-open'dır. |
+| `_EngineParticipant` | `participant.py` (`C3`) | **`jobs/backtest_engine.py::_shared_participants` (`C4`)** — flag'in arkasında | `test_oracle_engine_participant.py` + `test_backtest_worker_shared_clock_branch.py` | **Gerçeklenmiş ve BAĞLANMIŞ, ama erişilemez.** `_ItemStepper`'ın describe/book yarılarını `ItemParticipant`'a çevirir; sürücüsü olan tek yer testlerdir. Bilerek `execution/` DIŞINDA — içeride containment gate'in importer taraması **kör** olurdu.
+| `project_portfolio_run` | `execution/portfolio_projection.py:513` | **`jobs/backtest_engine.py::_replay_shared_clock` (`C4`)** — flag'in arkasında | `test_backtest_portfolio_projection.py` + `test_backtest_worker_shared_clock_branch.py` | **Gerçeklenmiş ve BAĞLANMIŞ, ama erişilemez.** Projeksiyonun kendi containment testi de aynı allowlist'e daraltıldı. |
 | `build_portfolio_manifest` | `execution/provenance.py:473` | **SIFIR** — modülün `backend/src`'te **hiç importer'ı yok** | `test_backtest_portfolio_provenance.py` | **Gerçeklenmiş ve bağlanmamış.** |
 | `_ItemStepper` | `engine.py:818` | **`run_engine` (`:3533`) → worker `jobs/backtest_engine.py:859`** | stepper + phase suite'leri | **Gerçeklenmiş ve ÜRETİMDE AKTİF** (PR #602'den beri). **ADIM 69'den beri altı describe/book alanı da taşır.** |
 | `_build_stepper` | `engine.py:879` | `run_engine` | aynı | **Üretimde aktif** — `run_engine`'in bar döngüsüne kadarki gövdesi. |
@@ -235,12 +235,35 @@ P10 yok (`portfolio_engine.py:129`, sekiz faz), `iter_portfolio` yok. `settle` o
 edilebilecek tek yer `entry()`'nin içidir → **arbitrasyondan ÖNCE**, arkasında
 `PortfolioSnapshot` olmayan sermaye taahhüdü.
 
-**Kalan engel artık ŞEKİL değil WIRING'dir.** `backend/src` içinde hiçbir satır bir
-`_EngineParticipant` inşa etmez ve hiçbir satır `run_portfolio`/`iter_portfolio` çağırmaz —
-worker hâlâ `for prepared in prepared_items:` döngüsünü koşar ve `combine_item_runs` ile
-katlar. Onu değiştirmek **`C4`**'tür (bayrak korumalı dal + tick-adımlı iptal kontrol noktası
-+ daraltılmış tripwire) ve **containment'ı AÇMAZ**: `SHARED_ALLOCATION_STATUS` `future_dev`
-kalır, lift **`C9`** ve ADR §16 **Gate 2** ayrı bir insan kapısıdır (**talep edilmedi**).
+**[TARİHSEL — `C4` öncesi] Kalan engel artık ŞEKİL değil WIRING'dir.** `backend/src` içinde
+hiçbir satır bir `_EngineParticipant` inşa etmez ve hiçbir satır `run_portfolio`/`iter_portfolio`
+çağırmaz — worker hâlâ `for prepared in prepared_items:` döngüsünü koşar ve `combine_item_runs`
+ile katlar.
+
+**WIRING İNDİ (`C4` / E5).** `jobs/backtest_engine.py` artık iki kardeş dal taşır ve seçim
+**tek** yerde yapılır:
+
+| Sembol | Ne yapar |
+|---|---|
+| `_use_unified_clock(capital_execution)` | `shared_allocation_is_executable() and shared_allocation_requested(...)`. **İki conjunct da taşıyıcı**; biri düşerse her bağımsız kompozit Result sessizce yeniden fiyatlanır. Terimler ayrı pinli (`tests/unit/test_backtest_worker_clock_selector.py`) — gate'in substring assertion'ı bunu **yakalamaz** (docstring adı canlı tutar, ölçüldü). |
+| `_replay_shared_clock(...)` | `iter_portfolio` generator'ını **elle** boşaltır (`for` dönüş değerini atar), tick'ler arasında `_cancellation_requested` çağırır, sonra `project_portfolio_run`. |
+| `_TICK_CHECKPOINT_STRIDE = 500` | O-06 checkpoint #3'ün paylaşımlı biçimi. Birleşik eksen item sınırını sildiği için kontrol döngünün İÇİNE taşındı (ADR §14 **A21**). Doğruluk düğmesi değil, gecikme/round-trip takası — iptal **kaybolmaz**, en fazla K tick bekler. |
+| `_shared_participants(...)` | Her prepared Strategy için `_EngineParticipant`; `portfolio_rules=None` (ADR §12 satır 19: arbitrasyon forward-only precedence'ı **emekliye ayırır**, ve bu yalnız paylaşımlı yolda olur). |
+| `_manifest_pin_ordinals(...)` | `pin_ordinal` **manifest pin sırasından**, `prepared_items` konumundan DEĞİL — aradaki fark araya bir non-Strategy item girdiğinde ADR §4.4 tie-break'ini kaydırırdı. |
+| `_pinned_records(...)` | Projeksiyonun `PinnedItem` kayıtları; non-Strategy item'ler dahil (F-07 §4.4 adlandırılabilirlik). |
+
+**Checkpoint #4 YERİNDE** (`create_result`'tan önce, doc 15 §16) ve **`combine_item_runs` +
+`for prepared in prepared_items:` dokunulmadı.** `C4` **containment'ı AÇMAZ**:
+`SHARED_ALLOCATION_STATUS` `future_dev` kalır, admission her paylaşımlı koşuyu hâlâ reddeder,
+lift **`C9`** ve ADR §16 **Gate 2** ayrı bir insan kapısıdır (**talep edilmedi**).
+
+**ÖLÇÜLDÜ (`C4`): bugün hiçbir varsayılan strateji eş-simüle edilemez.** Zorla açılmış bir
+flag ile koşulan standart fixture, adapter'ın on bir reddinden **üçüne** birden takılır —
+`entry_timing`/`exit_timing` varsayılanı `next_candle_open` ve `same_direction_stacking`
+varsayılanı `allow_stacking`. Koşu **fail-closed** biter (`RUN_FAILED_ENGINE_ERROR`, şekilleri
+adıyla sayar), yanlış bir sayı üretmez. Uçtan uca eş-simülasyon kanıtı bu yüzden bilerek
+yeniden şekillendirilmiş bir fixture ile sürülür
+(`test_backtest_worker_shared_clock_branch.py::_co_simulable_strategies`).
 
 **Adapter'ın REDDETTİKLERİ codemap'e aittir** (`participant.py::_unsupported_shapes`): ertelenen
 ya da dinlenen entry/exit fill'i, limit/stop emir tipi, kısmi kapanış, scaling, `allow_stacking`
@@ -256,6 +279,13 @@ karar, 2026-08-18, Seçenek A): containment gate + `execution.clock` / `executio
 `execution.portfolio_ledger` / `execution.arbitration` guard'ları. Üçüncü bir importer hâlâ
 kırmızı verir ve bu negatif kontrol testtedir
 (`test_widening_the_importer_allowlist_did_not_disable_it`).
+
+**`C4` bir kez daha genişletti — yine TEK ADLANDIRILMIŞ modül: worker.** Yalnız iki guard
+etkilendi (`execution.clock`, `execution.intents`); ledger ve arbitration guard'ları
+**değişmedi** (worker onları import etmez, ölçüldü). Genişletme **guard'ın çalışması**dır,
+etrafından dolaşılması değil: inşayı `participant.py` üzerinden geçirip listeyi üç girdide
+tutmak, worker'ın yeni erişimini **zaten izinli** bir modülün arkasına saklardı — `C3`'ün
+`execution/` yerleşimi için reddettiği hatanın aynısı.
 
 **Ayrıca `_phase_tail`'in scaling bölümü AYRILAMAZ** (ADIM 69 ölçtü): guard'ı `position`
 ve `len(led.trades) == trades_before_bar` okur, stacking bölümü ikisini de yazar

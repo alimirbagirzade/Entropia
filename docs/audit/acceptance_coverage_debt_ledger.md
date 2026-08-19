@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 53 |
+| B | 52 |
 | C | 6 |
 | D | 32 |
-| **open total** | **92** |
+| **open total** | **91** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (53)
+## Class B (52)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -102,7 +102,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `AM-05` | 17 | partial | Clearing all nine checkboxes and applying is blocked with METRIC_SELECTION_EMPTY; the previous canonical revision survives. | `test_min_selection_blocked` empties the selection against the SYSTEM DEFAULT sentinel, i.e. on a profile that has no revision yet, so the "previous canonical revision korunur" clause is structurally out of scope for it: no test creates a revision, then submits an empty selection, then re-reads the head to prove it did not move. |
 | `AM-06` | 17 | partial | Lock Metrics creates a new locked revision; checkboxes/Apply go disabled, Unlock enabled; result values are unchanged. | Lock/unlock mechanics and the disabled UI are both proven. Nothing reads the result metric projection before and after a lock to assert the values are identical — the lock/unlock test never touches a BacktestResult, so the "result values değişmez" clause has no asserting test. |
 | `AM-07` | 17 | partial | Lock is a preference, not a grant — an unauthorized user calling unlock gets a server policy denial. | The one ownership guard the suite exercises is an unlocked profile with a CHANGED selection (`test_foreign_profile_role_guard`, which is really AM-14's scenario). The unlock path — a locked profile, `is_locked=false`, an unauthorized caller — is never driven, so "lock is not authorization" is inferred from shared code rather than asserted. Cited here because the same `ensure_can_edit` gate runs… |
-| `AL-06` | 18 | partial | An empty/whitespace directive is rejected with no directive, queue or audit mutation, and the typed text survives in the UI. | ADIM 83 (acceptance batch 11, doc 18 backend) closed the BACKEND half. The rejection test now counts TaskDirective, AuditEvent, OutboxEvent and AgentEvent rows after the raise, so c2 no longer rests on reading the command body: a validation guard placed BELOW the writes raises identically while leaving rows behind. Negative control: moving the empty-text check under add_audit_event in commands/… |
 | `TR-07` | 20 | partial | Deleting a Rationale Family with an active assignment is blocked with no dangling assignment and no Trash Entry. | The blocker and the no-dangling-state half are directly asserted (entry count unchanged plus the family absent from the listing). The "repair plan required" half is not: nothing inspects the raised RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and no test walks the sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for restore and for assi… |
 | `TR-08` | 20 | partial | An Admin restore reactivates the same entity and revision with the owner unchanged and no new revision appended. | Three of four clauses are strongly asserted, including the subtle "no new revision" one (root.current_revision_id is captured before the delete and compared after the restore). The outbox half is the gap: commands/deletion.py does call add_outbox_event alongside the "trash.restored" audit row, but the test reads back only AuditEvent.event_kind. No test in the Trash suite queries OutboxEvent on … |
 | `UM-08` | 21 | partial | Soft-deleting an appended document removes it from reader/sidebar/search and writes a Trash snapshot plus a soft-delete audit event. | The event IS emitted — commands/manual.py writes a ManualPublicationEvent event_type="manual_document_soft_deleted" (manual.py:626) and an audit/outbox pair with event_kind="manual.document_soft_deleted" (manual.py:635-638) — but NO test asserts either. The suite asserts the analogous event only for purge (test_manual_purge_writes_event_and_removes_every_revision reads _publication_event(..., "… |

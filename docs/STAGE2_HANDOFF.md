@@ -7307,6 +7307,60 @@ slice de paralel yazıldı ve iş çöpe gitti (#764 kapatıldı, P2'nin rakip m
 `PROJECT_HISTORY.md` §ADIM 86 · `docs/ADIM86_LANDED_KICKOFF.md`.
 
 
+## Stage 87 — kabul borcu batch 13 (doc 18 frontend): `AL-06` kapandı, doc 18 tamamen kapandı landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi** (`backend/src` ve
+`frontend/src/pages` altında sıfır satır), migration **yok**, OpenAPI **değişmedi**,
+`ENGINE_VERSION` **değişmedi**. Belge + yüzey: **doc 18 (Analysis Lab), frontend** — ADIM 83'ün
+(batch 11) tümleyeni.
+
+**Kapanan.** `AL-06.c3` — reddedilen directive submit'inden sonra compose kutusu boşalmıyor.
+`AL-06` **covered** oldu ve **`debt_class` KALDIRILDI** (kriterin son açık clause'uydu).
+
+**ASIL NOKTA — 422 önce ÖLÇÜLDÜ.** Doc 18 §15 `AL-06` satırı bir **422**'yi adlandırıyor, ama
+sevk edilen istemcide whitespace-only bir directive sunucuya **hiç ulaşmaz** (düğme `disabled`,
+`sendDirective` erken döner). Boş metin + stub'lanmış 422 biçimindeki bir test **üretimin
+üretemeyeceği bir dünyayı** ölçerdi. Ölçülen çıkış yolu: iki boş-metin kapısı aynı fikirde
+değil — compose kapısı JS `String.trim()` (**`U+001C`–`U+001F`'i KORUR**), komut kapısı Python
+`str.strip()` (**siler** → `MESSAGE_TEXT_REQUIRED`, 422). Test bu yüzden **`U+001C`** gönderir.
+Bu ayrım **kusur değildir** (fail-closed) ve bulgu olarak kaydedilmedi; §15 satırının sevk
+edilen yüzeyde gözlenebilir olmasının **tek sebebidir**.
+
+**İki negatif kontrol, iki AYRI eksen.** (1) compose temizliğini `onSuccess` → `onSettled`
+yapmak **yalnız** yeni testi ve **yalnız** textarea-değer assertion'ını düşürür; dosyadaki diğer
+on dört test yeşil kalır — clause'un neden açık olduğunun kanıtı. (2) `sendDirective`'i hiç
+dispatch etmez yapmak yeni testi **`role="alert"` assertion'ında** düşürür → red **gözleniyor**,
+varsayılmıyor; o kusur altında "metin hâlâ orada" **tek başına vacuous geçerdi**. (2) mevcut
+directive-queue testini de düşürür, **beklenendir**: o kontrol clause'u değil tüm submit yolunu
+kırar, o yüzden bir *vacuity* kontrolüdür, "yalnız yeni test" kontrolü değil.
+
+**Sayılar.** Tavanlar İNDİ: `partial` **86 → 85**, `debt_class.B` **55 → 54**; açık borç
+**94 → 93** (A=1 · B=54 · C=6 · D=32). Clause: `covered` **1028 → 1029**, `uncovered`
+**99 → 98**. `total_criteria` **383** (TABAN) ve `uncovered` kriter sayısı **8** değişmedi.
+**DOC 18 ARTIK TAMAMEN KAPALI (18 covered / 0 partial / 0 uncovered)** — doc 03 ve doc 07'ye
+katıldı. **Yeni bulgu YOK**, hiçbir kriter yeniden sınıflandırılmadı.
+
+**Yan iş.** `docs/audit/acceptance_semantic_traceability.md` ADIM 42 dönemi sayılarını taşıyordu
+(`234/126`) → yeniden üretildi (`275/85`). O dosya `--check` kapısının **kapsamında değil**, o
+yüzden sessizce bayatlamıştı; aynı işi **PR #783** de yapıyor → hangisi önce inerse diğeri
+rebase edip yeniden üretmeli. `repository_facts.*` + `README.md` bloğu da tazelendi (frontend
+unit test call site **724 → 725**).
+
+**Dürüst sınır.** Backend kapıları **koşulmadı** (bu slice backend'de tek satır değiştirmedi,
+Postgres bu container'da ayakta değil) → otorite CI. e2e / `@a11y` suite'lerine **hiçbir
+assertion yazılmadı** (Docker Hub 403). Koşulanlar: `npm run lint` 0 · `npm run typecheck` 0 ·
+`npm run coverage` 0 (**72 dosya / 735 test passed**) · acceptance `--ratchet` 0 ·
+`generate_repository_facts.py --check` 0.
+
+**Zincir notu.** Freeze **main `7f331c7`**'ye karşı ölçüldü — batch 08/09/10/11 zaten içinde.
+Paralel bir batch önce inerse bu dal rebase edilip **yeniden dondurulmalı**.
+
+**Çakışma ölçümü.** `C3` (`execution/participant.py` adaptörü) **İKİ açık PR** tarafından zaten
+sürülüyor (**#777**, **#782**) → bu oturum ona **hiç dokunmadı**.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 87 ·
+`docs/ADIM87_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 85 GÜNCELLEMESİ (2026-08-19) — BAŞLIK BİLEREK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -7361,6 +7415,17 @@ slice de paralel yazıldı ve iş çöpe gitti (#764 kapatıldı, P2'nin rakip m
 > G9 `APPROVED as stated`, G13 `FOLD`). Bu kapanışın devir promptu bunları *"imzasız"*
 > sanıyordu; **belgeler zaten doğruydu**, bayat olan bağlamdı. **Hâlâ imzasız:** Karar 1
 > (#552), Karar 3 (#559), `G12`, `G15`; `G10` **hiç talep edilmedi**.
+
+> **ADIM 85 GÜNCELLEMESİ (2026-08-19, main `7f331c7`) — `C3` ARTIK BEKLEMİYOR, İKİ DALDA
+> BİRDEN SÜRÜLÜYOR.** Başlık yine **bilerek değiştirilmedi** (ADIM 81/61 emsali: bir `## `
+> başlığını yeniden yazmak docs kayıt-silme kapısına kayıt silme gibi görünür) — düzeltme
+> gövdeye yazılır. Ölçüldü (`list_pull_requests(state=open)`, 2026-08-19T06:0xZ): **PR #777**
+> (*the engine-backed ItemParticipant adapter (E4c) + its two invariants*) ve **PR #782**
+> (*ship the _EngineParticipant adapter (E4c)*) **ikisi de** `domain/backtest/participant.py`
+> + `domain/backtest/engine.py` + containment gate testine dokunuyor. Yani bu satır bir
+> **sıradaki iş** değil, **açık bir çakışma**dır: yeni bir oturum `C3`'e başlamadan ÖNCE bu
+> iki PR'ın hangisinin kazandığına bakmalı. ADIM 85 bu yüzden `HAT B`'ye hiç dokunmadı ve
+> `HAT A`'yı (kabul borcu batch 12) sürdü.
 
 > **ADIM 81 GÜNCELLEMESİ (2026-08-18, main `1741b03`) — BU BAŞLIK ARTIK `C3`'Ü ADLANDIRIYOR,
 > ve gövdesinin `C2` yarısı BAYATTIR.** Başlık **bilerek değiştirilmedi** (docs kayıt-silme

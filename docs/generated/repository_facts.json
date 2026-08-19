@@ -2,17 +2,17 @@
   "acceptance": {
     "clause_count": 1175,
     "clauses_by_status": {
-      "covered": 1032,
+      "covered": 1033,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "partial": 7,
-      "uncovered": 97
+      "uncovered": 96
     },
     "criteria_by_status": {
-      "covered": 276,
+      "covered": 277,
       "deliberate_future_dev": 8,
       "not_applicable": 7,
-      "partial": 84,
+      "partial": 83,
       "uncovered": 8
     },
     "criteria_count": 383
@@ -981,7 +981,7 @@
     "collection_method": "static ast/regex walk of the test tree — no suite is executed, so these are COLLECTED counts and never pass counts. They are also LOWER than a runner's count, because one parametrized site expands into many cases at run time: `npx vitest list` reports 721 cases over the same 70 files this walk sees as 711 call sites, and pytest expands `@pytest.mark.parametrize` the same way. Compare file counts across the two, never case counts.",
     "e2e_spec_files": 22,
     "e2e_test_call_sites": 84,
-    "frontend_unit_test_call_sites": 724,
+    "frontend_unit_test_call_sites": 725,
     "frontend_unit_test_files": 72
   },
   "visual_baselines": {

@@ -19,11 +19,13 @@ Acceptance (doc 05 §16) by test:
 - TL-05 required column        -> the REQUIRED_COLUMN_MISSING import blocker case
 - TL-12 revision immutability  -> revision N+1 appends; N's content hash + source
   asset ref are unchanged (the "does NOT auto-repin" case)
-- TL-13 explicit pin           -> explicit pin changes the composition hash
+- TL-13 explicit pin           -> explicit pin changes the composition hash; the report
+  that pin invalidates is REPORTED stale on re-read (batch 11)
 - TL-14 import durability      -> the full pipeline: upload returns a durable job and
   the WORKER (not the request) produces the record batch
 - TL-15 idempotency            -> idempotent Save replay + content-dedup upload
-- TL-16 concurrency            -> stale expected_head -> WORK_OBJECT_REVISION_CONFLICT
+- TL-16 concurrency            -> stale expected_head -> WORK_OBJECT_REVISION_CONFLICT; two
+  writers off ONE observed head append exactly one revision (batch 11)
 - TL-17 authorization          -> foreign-owner edit 403
 - TL-20 soft-delete integrity  -> soft-delete drops the item from the active projection
 
@@ -45,12 +47,15 @@ import pytest
 from sqlalchemy import func, select
 
 from entropia.application.commands import mainboard as mb_cmd
+from entropia.application.commands import readiness_check as rc_cmd
 from entropia.application.commands import trade_log as tl_cmd
 from entropia.application.jobs.trade_log import run_import
 from entropia.application.queries import mainboard as mb_query
+from entropia.application.queries import readiness_check as rc_query
 from entropia.application.queries import trade_log as tl_query
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.readiness.enums import ReadinessState
 from entropia.domain.trash.page import TrashEntryStatus
 from entropia.infrastructure.postgres.models import (
     AuditEvent,
@@ -781,3 +786,161 @@ async def test_trade_log_pipeline_creates_no_backtest_result(session, fake_objec
     # The run table is empty too: nothing on this page even ADMITS a run, so the
     # zero above cannot be read as "a run happened and wrote no Result".
     assert await _count_rows(session, BacktestRun) == 0
+
+
+# --------------------------------------------------------------------------- #
+# TL-13.c3 — the report a pin invalidates is REPORTED stale, not just is_stale() #
+# --------------------------------------------------------------------------- #
+
+
+async def test_explicit_pin_reports_the_prior_readiness_report_stale(
+    session, fake_object_store
+) -> None:
+    """doc 05 §16 TL-13.c3 — "the prior readiness report goes stale as a result of
+    that hash change".
+
+    The predicate ``is_stale("a", "b")`` was already unit-asserted, and
+    ``test_explicit_pin_changes_composition_hash`` already proves the pin moves the
+    hash. Neither carries an EXISTING report across the pin, so nothing joined the
+    two halves: currentness is never stored (``queries/readiness_check`` recomputes
+    it per read), so the only thing that can prove the join is reading the same
+    immutable report back after the pin and seeing its EFFECTIVE state change while
+    its STORED state does not.
+    """
+    await _seed_principals(session)
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+    workspace_id = saved["save"]["workspace_id"]
+
+    other_csv = "\n".join(
+        [_HEADER, "Short,2024-03-01 10:00,50000,2024-03-01 12:00,49000,BTCUSDT"]
+    ).encode("utf-8")
+    pipeline2 = await _run_import_pipeline(session, USER1, other_csv)
+    rev2 = await tl_cmd.create_trade_log_revision(
+        session,
+        USER1,
+        root_id=root_id,
+        payload=_payload(
+            pipeline2["source_asset_id"],
+            pipeline2["report"]["record_batch_revision_id"],
+            identity={"display_name": "v2"},
+        ),
+    )
+    await session.commit()
+
+    check = await rc_cmd.run_readiness_check(session, USER1, composition_id=workspace_id)
+    await session.commit()
+    report_id = check["report_id"]
+
+    before = await rc_query.get_readiness_report(session, USER1, report_id=report_id)
+    stored_state = before["stored_state"]
+    # The report is CURRENT while the composition still pins revision 1 — without
+    # this the "stale" assertion below could pass on a report that was never current.
+    assert before["is_current"] is True
+    assert before["state"] == stored_state
+    assert before["composition_fingerprint"] == before["current_fingerprint"]
+
+    projection = await mb_query.get_default_mainboard(session, USER1)
+    item = next(i for i in projection["items"] if i["work_object_root_id"] == root_id)
+    pin = await mb_cmd.patch_mainboard_item(
+        session,
+        USER1,
+        item_id=item["item_id"],
+        intent="pin_revision",
+        expected_row_version=item["row_version"],
+        revision_id=rev2["revision_id"],
+    )
+    await session.commit()
+    assert pin["composition_hash"] != projection["composition_hash"]
+
+    after = await rc_query.get_readiness_report(session, USER1, report_id=report_id)
+    assert after["state"] == str(ReadinessState.STALE)
+    assert after["is_current"] is False
+    assert after["composition_fingerprint"] != after["current_fingerprint"]
+    # The report ROW is immutable: only the recomputed view moved. A staleness flag
+    # written onto the report would satisfy the assertions above and violate §12.2.
+    assert after["stored_state"] == stored_state
+    assert after["composition_fingerprint"] == before["composition_fingerprint"]
+
+
+# --------------------------------------------------------------------------- #
+# TL-16.c3 — two writers on one head: exactly one revision survives             #
+# --------------------------------------------------------------------------- #
+
+
+async def test_two_writers_on_one_head_append_exactly_one_revision(
+    session, fake_object_store
+) -> None:
+    """doc 05 §16 TL-16.c3 — "exactly one of two concurrent writers succeeds and the
+    loser's update is not lost".
+
+    ``test_stale_expected_head_conflicts`` raises on a FABRICATED token and stops, so
+    it proves the guard rejects a token that never existed. It cannot distinguish that
+    from last-write-wins between two real writers who both read the same real head:
+    the loser's payload silently replacing the winner's would leave that test green.
+    This drives both writers off the SAME observed head and then counts what the root
+    actually holds.
+    """
+    await _seed_principals(session)
+    saved = await _saved_trade_log(session, USER1, fake_object_store)
+    root_id = saved["save"]["root_id"]
+    head = saved["save"]["revision_id"]
+
+    winner_csv = "\n".join(
+        [_HEADER, "Long,2024-04-01 10:00,50000,2024-04-01 12:00,51000,BTCUSDT"]
+    ).encode("utf-8")
+    loser_csv = "\n".join(
+        [_HEADER, "Short,2024-04-02 10:00,52000,2024-04-02 12:00,51000,BTCUSDT"]
+    ).encode("utf-8")
+    winner_pipeline = await _run_import_pipeline(session, USER1, winner_csv)
+    loser_pipeline = await _run_import_pipeline(session, USER1, loser_csv)
+
+    winner = await tl_cmd.create_trade_log_revision(
+        session,
+        USER1,
+        root_id=root_id,
+        payload=_payload(
+            winner_pipeline["source_asset_id"],
+            winner_pipeline["report"]["record_batch_revision_id"],
+            identity={"display_name": "winner"},
+        ),
+        expected_head_revision_id=head,
+    )
+    await session.commit()
+
+    # The second writer read the SAME head before the first one committed.
+    with pytest.raises(WorkObjectRevisionConflictError):
+        await tl_cmd.create_trade_log_revision(
+            session,
+            USER1,
+            root_id=root_id,
+            payload=_payload(
+                loser_pipeline["source_asset_id"],
+                loser_pipeline["report"]["record_batch_revision_id"],
+                identity={"display_name": "loser"},
+            ),
+            expected_head_revision_id=head,
+        )
+    await session.rollback()
+
+    revisions = (
+        (
+            await session.execute(
+                select(WorkObjectRevision)
+                .where(WorkObjectRevision.entity_id == root_id)
+                .order_by(WorkObjectRevision.revision_no)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [r.revision_no for r in revisions] == [1, 2]
+    assert revisions[-1].revision_id == winner["revision_id"]
+    names = [r.payload["identity"]["display_name"] for r in revisions]
+    assert "winner" in names
+    # The loser is REFUSED, not merged and not silently applied on top.
+    assert "loser" not in names
+
+    projection = await mb_query.get_default_mainboard(session, USER1)
+    item = next(i for i in projection["items"] if i["work_object_root_id"] == root_id)
+    assert item["pinned_revision_id"] == head

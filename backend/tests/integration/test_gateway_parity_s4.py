@@ -19,7 +19,11 @@ Covered:
 - trade_log create -> revision via gateway: both SUCCEEDED, revision_no increments,
   the Mainboard item is never auto-repinned, config_hash == the domain compute;
 - trade_log ownership denial: an Agent revision on a foreign-owner root is REJECTED
-  with the SAME code the human command raises, and appends no revision.
+  with the SAME code the human command raises, and appends no revision;
+- trade_log SUCCESS-path provenance: the durable AgentToolCall row is re-read and carries
+  the terminal status, no failure code, and the owner / task / checkpoint it ran under;
+- trade_log board isolation: the Agent's attach=True work lands on the Agent's OWN default
+  board and leaves a human board's items, composition_hash and row_version untouched.
 """
 
 from __future__ import annotations
@@ -38,9 +42,16 @@ from entropia.application.jobs.trade_log import run_import
 from entropia.application.queries import allocation_plan as alloc_query
 from entropia.application.queries import mainboard as mb_query
 from entropia.application.queries import trade_log as tl_query
-from entropia.domain.agent_lab.enums import ALPHA_AGENT_ID, RuntimeMode, RuntimeStatus
+from entropia.domain.agent_lab.enums import (
+    ALPHA_AGENT_ID,
+    AgentTaskPriority,
+    AgentTaskStatus,
+    RuntimeMode,
+    RuntimeStatus,
+)
+from entropia.domain.agent_lab.tool_gateway import PolicyScope, ToolCallStatus, ToolName
 from entropia.domain.identity import Actor
-from entropia.domain.lifecycle.enums import PrincipalType, Role
+from entropia.domain.lifecycle.enums import ActorKind, PrincipalType, Role
 from entropia.domain.trade_log.compiler import compute_config_hash, validate_trade_log_config
 from entropia.infrastructure.postgres.models import (
     AgentRuntime,
@@ -50,6 +61,7 @@ from entropia.infrastructure.postgres.models import (
     Principal,
     WorkObjectRevision,
 )
+from entropia.infrastructure.postgres.repositories import agent_lab as lab_repo
 from entropia.infrastructure.s3 import datasets
 from entropia.shared.errors import AccessDeniedError, AllocationHasBlockersError
 
@@ -588,3 +600,114 @@ async def test_a_replayed_trade_log_import_never_re_dispatches(session, fake_obj
     assert replay["replayed"] is True
     assert replay["job_id"] == first["job_id"]
     assert agent_tools.pending_data_job_dispatch(replay) is None
+
+
+# --------------------------------------------------------------------------- #
+# TL-22.c3 / c4 — the SUCCESS path's durable provenance, and whose board moves  #
+# --------------------------------------------------------------------------- #
+
+
+async def test_successful_trade_log_tool_call_records_its_own_provenance(
+    session, fake_object_store
+) -> None:
+    """doc 05 §16 TL-22.c3 — "provenance is recorded on a durable AgentToolCall row
+    carrying the outcome/failure code".
+
+    Only the DENIAL path re-read the row (``…_denial_parity`` asserts failure_code).
+    The success path asserted the returned dict, which the dispatcher builds in
+    memory — a handler that never wrote a terminal row, or wrote one under the wrong
+    agent/task, would return the same dict. This re-reads the row itself and pins the
+    provenance the Agent Lab surfaces are governed by: who ran it, under which task
+    and checkpoint, at which scope, and with a terminal SUCCEEDED status carrying no
+    failure code.
+    """
+    await _seed(session)
+    source_asset_id, batch_id = await _imported_batch(session, AGENT)
+    task = await lab_repo.create_task(
+        session,
+        agent_id=ALPHA_AGENT_ID,
+        task_type="trade_log_ingest",
+        title="TL-22 provenance",
+        source="directive",
+        priority=AgentTaskPriority.NORMAL,
+        status=AgentTaskStatus.RUNNING,
+    )
+    await session.flush()
+
+    created = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="trade_log.create",
+        policy_scope="proposal",
+        request={"payload": _tl_payload(source_asset_id, batch_id), "attach": True},
+        task_id=task.task_id,
+        checkpoint_id="agtckpt_tl22",
+    )
+    await session.commit()
+    assert created["status"] == "succeeded"
+
+    call = await session.get(AgentToolCall, created["tool_call_id"])
+    assert call is not None
+    assert call.status == ToolCallStatus.SUCCEEDED
+    # A terminal SUCCESS never carries a failure code — the same column the denial
+    # path pins, asserted from the other side so "recorded outcome" means both.
+    assert call.failure_code is None
+    assert call.failure_message is None
+    assert call.tool_name == ToolName.TRADE_LOG_CREATE
+    assert call.agent_id == ALPHA_AGENT_ID
+    assert call.actor_principal_id == _AGENT_PID
+    assert call.actor_kind == ActorKind.AGENT
+    assert call.policy_scope == PolicyScope.PROPOSAL
+    assert call.task_id == task.task_id
+    assert call.checkpoint_id == "agtckpt_tl22"
+    assert call.correlation_id == AGENT.correlation_id
+    # The row also carries the outcome itself, so the Agent's history resolves the
+    # object it created without replaying the tool.
+    assert call.response_ref is not None
+    assert call.response_ref["root_id"] == created["root_id"]
+    assert call.artifact_output_ref == created["revision_id"]
+
+
+async def test_agent_trade_log_work_leaves_the_human_mainboard_untouched(
+    session, fake_object_store
+) -> None:
+    """doc 05 §16 TL-22.c4 — "the human Mainboard is not auto-mutated by the Agent's
+    work".
+
+    ``auto_repinned is False`` is a DIFFERENT guarantee (a pin does not move); it says
+    nothing about whose board receives the new item. ``trade_log.create`` defaults to
+    ``attach=True`` with no workspace_id, so the attach target is whatever
+    ``_resolve_attach_workspace`` resolves — a default board resolved without the
+    actor would silently land the Agent's row on a human's composition. This seeds a
+    human board first and asserts it is byte-for-byte where it was afterwards.
+    """
+    await _seed(session)
+    human_workspace_id, human_item_ids = await _composition_with_items(session, OWNER, count=2)
+    before = await mb_query.get_default_mainboard(session, OWNER)
+
+    source_asset_id, batch_id = await _imported_batch(session, AGENT)
+    created = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="trade_log.create",
+        policy_scope="proposal",
+        request={"payload": _tl_payload(source_asset_id, batch_id), "attach": True},
+    )
+    await session.commit()
+
+    assert created["status"] == "succeeded"
+    assert created["attached"] is True
+    # The Agent attached to its OWN board, which must not be the human's.
+    assert created["workspace_id"] != human_workspace_id
+
+    after = await mb_query.get_default_mainboard(session, OWNER)
+    assert after["workspace_id"] == human_workspace_id
+    assert [item["item_id"] for item in after["items"]] == human_item_ids
+    # composition_hash and row_version are what a Ready report and an ETag are
+    # compared against: an untouched board must move neither.
+    assert after["composition_hash"] == before["composition_hash"]
+    assert after["row_version"] == before["row_version"]
+    # And the Agent's row really exists — on its own board, not nowhere.
+    agent_board = await mb_query.get_default_mainboard(session, AGENT)
+    assert agent_board["workspace_id"] == created["workspace_id"]
+    assert [item["work_object_root_id"] for item in agent_board["items"]] == [created["root_id"]]

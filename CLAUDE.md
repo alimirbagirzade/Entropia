@@ -237,7 +237,31 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 83 (kabul borcu batch 11, doc 18 backend): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 84 (kabul borcu batch 12, doc 05 backend): ÜRÜN KODU
+> DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> İki kriter kapandı: **`TL-13`** (var olan bir readiness raporu bir Trade Log pin'inin
+> **üzerinden** taşındı — iki yarı da kanıtlıydı, **dikişi** hiç geçilmemişti; güncellik hiç
+> saklanmadığı için tek gözlenebilir şey aynı değişmez raporun **etkin** durumunun oynaması ve
+> **saklanan** durumunun oynamaması) ve **`TL-22`** (başarı yolunda `AgentToolCall` satırı ilk
+> kez geri okundu + Agent'ın `attach=True` işi insan panosunu kıpırdatmıyor).
+> **Tavanlar İNDİ** (`partial` ve `debt_class.B` ikişer; sayısal otorite
+> `docs/audit/acceptance_coverage_baseline.json` — bu dal #781'in üstüne rebase edildikten
+> SONRA yeniden ölçüldü, iki freeze'in farkından türetilmedi). **`TL-16.c3` kapandı ama HİÇBİR TAVAN OYNAMADI** — `TL-16.c4` **sevk edilmemiş**
+> (üç raise yeri de çıplak `WorkObjectRevisionConflictError()`, `AppError` `details=[]` yazar →
+> 409 zarfı kökün güncel head'i hakkında hiçbir şey taşımaz): sınıf D görünüyor, **taşınmadı**,
+> defterde artık **on** böyle bulgu var. **DERS: kırmızının HANGİ assertion'da olduğunu oku** —
+> `TL-22.c4`'ün ilk negatif kontrolü kırmızı verdi ama `status == succeeded` üzerinde; özellik
+> **iki bağımsız kapıyla** korunuyor (aktör kapsamlı çözüm **ve** `_require_owned_workspace`),
+> yani tek kapıyı kırmak mutasyon değil **REJECTED** üretir. **Doc 05'in BACKEND yarısı bitti**;
+> `TL-18` (tek clause, tamamen `uncovered`) **frontend** ve kapanırsa `uncovered` **kriter**
+> tavanını 8 → 7 indirir. **NUMARA: bu slice `ADIM 83`/`batch 11` yazıldı, PR açıkken #781
+> ikisini birden aldı (doc 18) → merge edilmiş ad kazanır, bu kayıt `ADIM 84`/`batch 12`.**
+> `PROJECT_HISTORY.md` §ADIM 84 · `docs/ADIM84_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 83 (kabul borcu batch 11, doc 18 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Dört kriter kapandı — **`AL-05`** (queued directive'in audit + outbox satırı, directive **id'sine**
 > kapsanmış) · **`AL-09`** (Supervisor reddinden sonra runtime satırı **geri okunuyor**) ·

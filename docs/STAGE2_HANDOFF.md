@@ -7137,6 +7137,63 @@ bekler) · main bu PR açıkken **altı kez** ilerledi, dal **dört kez** günce
 codemap güncellemesi **gerekmedi**. `PROJECT_HISTORY.md` §ADIM 81 ·
 `docs/ADIM81_LANDED_KICKOFF.md`.
 
+## Stage 84 — kabul borcu batch 12 (doc 05 Trade Log, backend): TL-13 + TL-22 kapandı, onuncu bulgu landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi** (`backend/src` altında sıfır
+dosya), migration **yok**, OpenAPI **değişmedi**, `ENGINE_VERSION` **değişmedi**. Parti = bir
+sayfa belgesi (**doc 05**) + bir yüzey (**backend**).
+
+**Kapandı — `TL-13.c3`:** iki yarısı da kanıtlıydı ama **dikişi hiç geçilmemişti**. Yeni test
+var olan bir readiness raporunu bir Trade Log pin'inin **üzerinden taşır**: pin'den önce
+`is_current is True`, sonra `state == ReadinessState.STALE` + `is_current False` +
+`composition_fingerprint != current_fingerprint`, **ve** `stored_state` ile pinlenen fingerprint
+değişmemiştir (rapora **yazılmış** bir bayrak ilk üçünü karşılar, doc 14 §12.2'yi çiğnerdi).
+
+**Kapandı — `TL-22.c3` + `.c4`:** dayanıklı `AgentToolCall` satırı yalnız RED yolunda
+okunuyordu; başarı yolu dispatcher'ın **bellekte** kurduğu sözlüğü assert ediyordu. Yeni test
+gerçek `task_id` + `checkpoint_id` geçirip satırı geri okur (SUCCEEDED, `failure_code` None,
+owner/scope/correlation, `response_ref`/`artifact_output_ref`). `.c4`: **`auto_repinned is False`
+BAŞKA bir garantidir** — yeni test bir insan panosu kurar ve Agent'ın `attach=True` işinden sonra
+o panonun item id'leri / `composition_hash` / `row_version`'ının kıpırdamadığını kanıtlar.
+
+**Clause kapandı, tavan oynamadı — `TL-16.c3`:** iki yazar **aynı** gözlenen head'den sürülür,
+kök `revision_no == [1, 2]` tutar ve kaybedenin adı hiçbir payload'da yoktur.
+
+**BULGU (onuncu) — `TL-16.c4` SEVK EDİLMEMİŞ.** `WorkObjectRevisionConflictError`'un üç raise
+yeri de **çıplak**; `AppError.__init__` `details = []` yazar ve `scope_id`/`field_path`'i None
+bırakır → 409 zarfı kökün güncel head'i hakkında **hiçbir şey** taşımaz. Sınıf D şekli,
+**taşınmadı** (B → D tavan yükseltir). Bu yüzden `TL-16` **partial/B kalır** — clause ≠ kriter.
+
+**DERS — kırmızının HANGİ assertion'da olduğunu oku.** `TL-22.c4`'ün ilk negatif kontrolü
+kırmızı verdi ama `status == succeeded` üzerinde: özellik **iki bağımsız kapıyla** korunuyor
+(aktör kapsamlı çözüm **ve** `_require_owned_workspace`), yani tek kapıyı kırmak mutasyon değil
+**REJECTED** üretir. Sayılan kontroller: ikisi birden kapalı (workspace-kimliği kırmızı) +
+yabancı panoya `row_version` sızıntısı (pano-durumu kırmızı). Defterde
+`TL_22_c4_is_defended_by_two_gates_not_one` olarak kayıtlı.
+
+**Altı negatif kontrol koştu, altısı da hedef assertion'ı izole etti** (`stale=False`,
+`stale=True`, OCC guard silme, `task_id/checkpoint_id=None`, terminal olmayan status, yabancı
+pano bump'ı).
+
+**Tavanlar:** `partial` **86 → 84**, `debt_class.B` **55 → 53**, açık borç **94 → 92**
+(A=1 · B=53 · C=6 · D=32). Clause: `covered` 1028 → **1032**, `uncovered` 101 → **97**.
+`total_criteria` **383** ve `uncovered` **kriter** **8** değişmedi.
+
+**Zincir notu:** dal `aecd72c`'de 88/57 dondurdu; PR açıkken **#781** aynı tabandan
+**86/55** dondurup indi. Kriter kümeleri **AYRIK** olduğu için fark alınabilirdi — alınmadı:
+rebase edilip `--report` **merged ağaçta** yeniden koşuldu → **84/53**.
+
+**Açık kalan doc 05 satırları:** `TL-01.c4` · `TL-02.c2` · `TL-11.c3` (sınıf C bulgusu) ·
+`TL-14.c4` · `TL-16.c4` (bu slice'ın bulgusu) · `TL-18` (**frontend** — tümleyen parti).
+
+**NUMARA:** bu slice **83** yazıldı; PR açıkken **#781** merge edilip hem ADIM 83'ü hem
+`batch 11` etiketini aldı (doc 18 backend) → **merge edilmiş ad kazanır**, bu kayıt **84 /
+batch 12**. Dal ve commit `adim-83` yazar.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi **gerekmedi**
+(yeni endpoint / tablo / sayfa / job yok). `PROJECT_HISTORY.md` §ADIM 84 ·
+`docs/ADIM84_LANDED_KICKOFF.md`.
+
 
 ## Stage 83 — kabul borcu batch 11 (doc 18 backend): dört kriter kapandı, doc 18'in backend borcu bitti landed
 

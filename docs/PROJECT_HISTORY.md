@@ -12147,3 +12147,118 @@ inerse bu dal rebase edilip **yeniden dondurulmalıdır**.
 
 **NUMARA:** main'in son kaydı **ADIM 82** (#778) → bu kayıt **83**. Numara merge sırasına bağlıdır
 ve merge'den hemen önce yeniden doğrulanır; **merge edilmiş ad kazanır**.
+
+## ADIM 84 — kabul borcu batch 12 (doc 05 Trade Log, backend): TL-13 + TL-22 kapandı, onuncu bulgu
+
+> **ÜRÜN KODU DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi ·
+> alembic head `0043_i08_registry_strategy_fks` · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Diff'te `backend/src`
+> altında **sıfır** dosya; değişen kod yalnız iki entegrasyon test dosyası
+> (`test_trade_log_persistence.py`, `test_gateway_parity_s4.py`) + defter + üretilmiş olgular.
+
+**Parti: bir sayfa belgesi (doc 05) + bir yüzey (backend).** Sekiz açık sınıf-B TL satırından
+**dördü ölçülerek elendi** — parti seçmeden önce ölçme kuralı (ADIM 54) yine kazandı:
+
+| Satır | Ölçüm | Karar |
+|---|---|---|
+| `TL-11.c3` | allocation-enabled run admission'da fail-closed | zaten kayıtlı **sınıf C** bulgusu, dokunulmadı |
+| `TL-16.c4` | 409 zarfında sunucu head'i **yok** (aşağı bak) | **YENİ bulgu**, sınıf D görünüyor, taşınmadı |
+| `TL-02.c2` | draft hiç Mainboard item'ı olmuyor → "yapı gereği doğru" | yanlışlanabilirliği şüpheli, **alınmadı** |
+| `TL-18` | tamamı frontend (jsdom, expand/collapse) | **yüzey dışı**, tümleyen bir partiye |
+
+**KAPANAN 1 — `TL-13.c3` (readiness raporu pin'den sonra STALE **bildirilir**).** İki yarısı da
+zaten kanıtlıydı ve **hiçbiri diğerine değmiyordu**: `test_is_stale_detects_fingerprint_change`
+predicate'i `is_stale("a","b")` düzeyinde assert ediyor, `test_explicit_pin_changes_composition_hash`
+pin'in hash'i oynattığını gösteriyor. Aradaki dikişi hiçbir test geçmiyordu — **var olan bir
+raporu** pin'in üzerinden taşıyan yoktu. Dikiş önemli çünkü **güncellik hiç saklanmaz**
+(`queries/readiness_check.py` her okumada yeniden hesaplar), yani tek gözlenebilir şey **aynı
+değişmez raporu geri okuyup** etkin durumunun oynadığını, **saklanan** durumunun oynamadığını
+görmektir. Test pin'den **önce** `is_current is True` assert eder (yoksa "stale" iddiası hiç
+güncel olmamış bir raporda da geçerdi), sonra `state == ReadinessState.STALE`, `is_current False`
+ve `composition_fingerprint != current_fingerprint`; ayrıca `stored_state` ve pinlenen fingerprint
+**değişmemiştir** — rapora **yazılmış** bir staleness bayrağı ilk üçünü karşılar ve doc 14 §12.2'yi
+çiğnerdi.
+
+**KAPANAN 2 — `TL-22.c3` + `.c4` (Agent hattının kendi kanıtı).** `.c3`: dayanıklı
+`AgentToolCall` satırı **yalnız RED yolunda** okunuyordu; başarı yolu dispatcher'ın **bellekte**
+kurduğu sözlüğü assert ediyordu — terminal satırı hiç yazmayan ya da yanlış agent/task altına
+yazan bir handler **aynı sözlüğü döndürür**. Yeni test gerçek bir `AgentTask` id'si + checkpoint
+id'si geçirip satırı geri okur: `SUCCEEDED`, `failure_code`/`failure_message` **None** (red
+yolunun pinlediği kolonun öbür yüzü), `tool_name` / `agent_id` / `actor_principal_id` /
+`actor_kind` / `policy_scope` / `task_id` / `checkpoint_id` / `correlation_id`, ve
+`response_ref` + `artifact_output_ref` yaratılan nesneyi çözer.
+`.c4`: **`auto_repinned is False` BAŞKA bir garantidir** (pin oynamaz ≠ başka aktörün panosu
+etkilenmez). `trade_log.create` varsayılan olarak `attach=True` ve `workspace_id` yok, yani hedefi
+`_resolve_attach_workspace` belirler. Test önce bir insan panosunu iki item'la kurar, sonra Agent'ı
+koşturur ve insanın item id'leri / `composition_hash` / `row_version`'ının **kıpırdamadığını**,
+Agent'ın satırının **kendi** panosuna indiğini assert eder.
+
+**KAPANAN 3 (clause, tavan oynatmaz) — `TL-16.c3`.** `test_stale_expected_head_conflicts`
+**uydurulmuş** bir token'la raise edip durur; bu, hiç var olmamış bir token'ın reddedildiğini
+kanıtlar — **aynı gerçek head'i okumuş iki yazar arasındaki last-write-wins'ten ayırt edemez**,
+çünkü kaybedenin kazananı sessizce ezmesi o testi **yeşil bırakır**. Yeni test iki yazarı da
+**AYNI** gözlenen head'den sürer ve kökün ne tuttuğunu sayar: `revision_no == [1, 2]`, head
+kazananın id'si, kaybedenin `display_name`'i **hiçbir** revizyon payload'ında yok.
+
+**BULGU (onuncu, doc 05'te üçüncü) — `TL-16.c4` SEVK EDİLMEMİŞ.** Kriter *"409 zarfı sunucunun
+kanonik güncel durumunu taşır"* diyor. Ölçüldü: `WorkObjectRevisionConflictError`'un **üç raise
+yeri de çıplak** (`commands/trade_log.py`, `commands/trading_signal.py`, `commands/mainboard.py`
+— hiçbirinde argüman yok); `shared/errors.py::AppError.__init__` sonra `details = details or []`
+yazar ve `scope_id`/`field_path`/`remediation`'ı sınıf varsayılanında bırakır, sınıf da hiçbirini
+bildirmez. Yani yayımlanan 409 `code`, `message`, `category`, `retryable`, `suggested_action`
+taşır ve kökün **güncel head'i hakkında hiçbir şey** taşımaz. Bir testin okuyabileceği alan
+**yok** → sınıf D şekli. **`TL-11.c3`'ten farkı:** o **kurulamaz** (sınıf C şekli), bu
+**kurulabilir ve sadece uygulanmamış**. **YENİDEN SINIFLANDIRILMADI** — B → D **D tavanını
+yükseltir**, bu bir adjudication'dır. Bu yüzden `TL-16` c3 kapansa da **partial/B kalır**:
+**clause ≠ kriter** (ADIM 66 emsali).
+
+**DERS — negatif kontrolün NEDEN kırmızıya döndüğünü oku (ADIM 79'un dersi, ikinci kez).**
+`TL-22.c4` için ilk negatif kontrol `_resolve_attach_workspace`'i aktörden bağımsız hâle getirdi
+ve test **kırmızı verdi — ama yanlış assertion'da**: `status == succeeded`. Sebep ölçüldü:
+**özellik İKİ bağımsız kapıyla korunuyor** — çözüm aktör kapsamlı (`get_default_mainboard`
+`actor.principal_id` filtreler) *ve* `mainboard.py::_require_owned_workspace` sahibi olmayan
+panoyu ayrıca reddeder. Yani tek kapıyı kırmak mutasyon değil **REJECTED** üretir; o kırmızı
+ownership kapısını kanıtlar, test edilen assertion'ı değil. **Sayılan kontroller:** ikisini birden
+kapatınca workspace-kimliği assertion'ı kırmızı, `_recompute_composition_hash` içinden yabancı bir
+panonun `row_version`'ını bir artırınca pano-durumu assertion'ı kırmızı. Bu ölçüm defterde
+`TL_22_c4_is_defended_by_two_gates_not_one` olarak kayıtlı, çünkü ileride bu satırı yeniden
+ölçecek bir parti ilk kırmızıyı kanıt sanabilir.
+
+**Negatif kontroller (altısı da koştu):**
+
+| Üründen kaldırılan/bozulan | Gözlenen kırmızı |
+|---|---|
+| `queries/readiness_check.py` `stale = False` | `assert 'ready' == 'stale'` (pin sonrası) |
+| aynı yerde `stale = True` | `assert False is True` (pin **öncesi** `is_current`) |
+| `commands/trade_log.py` OCC guard'ı silindi | `DID NOT RAISE WorkObjectRevisionConflictError` |
+| `create_tool_call(task_id=None, checkpoint_id=None)` | `assert None == 'agttask_…'` |
+| `call.status = RUNNING` (terminal değil) | `running != succeeded` |
+| `_recompute_composition_hash` yabancı panoyu bump ediyor | `assert 4 == 3` (`row_version`) |
+
+**Tavanlar İNDİ.** `partial` **86 → 84**, `debt_class.B` **55 → 53**; açık kabul borcu
+**94 → 92** (A=1 · B=53 · C=6 · D=32). Clause düzleminde `covered` 1028 → **1032**,
+`uncovered` 101 → **97**. **Bu sayılar #781'in ÜSTÜNDE, merged ağaçta ölçüldü** — dal
+`aecd72c` tabanında 90 → 88 / 59 → 57 ölçmüştü ve o taban artık geçerli değil. `total_criteria` **383** (taban) ve `uncovered`
+**kriter** sayısı **8** değişmedi. `TL-13` ve `TL-22`'nin tüm clause'ları `covered` olduğu için
+ikisinin de **`debt_class`'ı KALDIRILDI** (settled satır sınıf taşıyamaz).
+
+**ZİNCİR NOTU — taban `7f331c7`, İKİ KEZ ölçüldü.** Dal `aecd72c` tabanında donduruldu
+(88/57); PR açıkken **#781** (doc 18, dört kriter) aynı tabandan çatallanıp **86/55**
+dondurarak indi. **Hiçbiri merge sonrası doğru değildi** ve iki kriter kümesi **AYRIK**
+olduğu için fark alınabilirdi — alınmadı: dal rebase edilip `--report` merged ağaçta
+**yeniden koşuldu** (`84/53`, tarayıcı da öyle diyor). Bu, batch 10'un koyduğu ve o
+zamandan beri her batch'in taşıdığı yükümlülüktür: **ikinci inen taraf rebase edip yeniden
+dondurur**.
+
+**AÇIK KALDI:** `TL-01.c4` (yol sapması) · `TL-02.c2` · `TL-11.c3` (sınıf C bulgusu) ·
+`TL-14.c4` · `TL-16.c4` (bu slice'ın bulgusu) · `TL-18` (frontend) · `TL-22` kapandı.
+**A-08 DEĞİŞMEDİ** — 2/184 hücre, 0/10 akış, SR-1 hiç başlamadı, **0/4**, #514 açık.
+Hiçbir issue durumu değişmedi, hiçbir ürün sorusu karara bağlanmadı.
+
+**NUMARA — bu slice TAŞINDI ve adı da öyle.** Kapanış yazılırken main'in son kaydı **ADIM 82**
+(`aecd72c`) idi ve bu slice **83** yazıldı. PR açıkken **#781 merge edildi** ve o kayıt hem
+**ADIM 83**'ü hem de **`batch 11`** etiketini aldı (doc 18 backend, dört kriter). **Merge edilmiş
+ad kazanır** → bu kayıt **ADIM 84**, partisi **batch 12**. Dal ve commit mesajı `adim-83` /
+`batch 11` yazar; numaralar yeniden atanmaz. **İki batch'in kriterleri AYRIK** (#781: doc 18;
+bu: doc 05), o yüzden tavan iki freeze'in farkından türetilmedi — dal rebase edilip `--report`
+ile **merged ağaçta yeniden ölçüldü**. `docs/ADIM84_LANDED_KICKOFF.md`.

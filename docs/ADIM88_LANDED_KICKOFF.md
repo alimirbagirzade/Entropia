@@ -1,8 +1,8 @@
-<!-- doc-status: current -->
-> **CANLI KICKOFF.** Bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
-> `historical`a demote edilir ve yerine yenisi geçer (`check_classification` CI'da doğrular:
-> daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varken canlı işaret eski belgede duramaz).
-
+<!-- doc-status: historical -->
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM89_LANDED_KICKOFF.md`'dir.**
+> Bu belge yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat
+> olabilir. Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
+> `docs/generated/repository_facts.md` (üretilmiş).
 # ADIM 88 LANDED — kabul borcu batch 14 (doc 05 frontend): TL-18 sıfır testle kapandı · sıradaki slice için kickoff
 
 > Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 88. Bu belge **devam noktasıdır**, kayıt değil.

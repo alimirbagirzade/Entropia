@@ -237,7 +237,29 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 88 (kabul borcu batch 14, doc 05 frontend): ÜRÜN KODU DA
+> `future_dev` (**DEĞİŞMEDİ**). **Son dalga — ADIM 89 (`C4`/E5, worker'ın paylaşımlı saat dalı):
+> ÜRÜN KODU DEĞİŞTİ (tek dosya), gözlenebilir ÜRETİM DAVRANIŞI DEĞİŞMEDİ; 50 golden digest BAYT
+> BAYT AYNI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `_use_unified_clock` **tek**
+> yerde (iki conjunct da taşıyıcı), dal item döngüsünün **kardeşi** + ADR §3.2'nin
+> `len(prepared_items) > 1` koşulu, `iter_portfolio` elle sürülür, **checkpoint #3b** (A21).
+> Tripwire **DARALTILDI, silinmedi** — iki dokunulmaz assertion yeşil. **İMPORTER ALLOWLIST'İ
+> DEĞİŞMEDİ:** worker'da `ItemIdentity`/`ItemBarStream` kurmak **üç dosyada beş assertion**
+> kırmızıya çeviriyordu (sayıldı) ve imzalı listeyi **ikinci, imzasız** bir modülle büyütürdü →
+> genişletmek yerine **tasarım değişti**, `participant.py::build_engine_participant` (no-touch
+> listesinde DEĞİL). Kaçınma vacuous değil: import'lar geri konunca üç guard kırmızı.
+> **DERS: negatif kontrol GERÇEK bir kusur buldu** — checkpoint #4'ün
+> ilerleme sözlüğü yalnız bağımsız kolun bağladığı `item_runs`'ı okuyordu → paylaşımlı iptalde
+> `UnboundLocalError`; **yedi test de yeşildi** çünkü hepsi daha erken #3b'de iptal oluyordu.
+> **DERS 2: alt küme yeşili tam suite yeşili DEĞİL** — on negatif kontrole rağmen iki-dünya
+> kapısı kırık kaldı (ADIM 76'nın **kendi ısmarladığı** güncelleme), yakalayan tam suite oldu;
+> coverage **%93.80**. **Sıradaki kalem KOD DEĞİL, İKİ İMZA** (`G11`+`G12` → `C6`); `C5` zaten
+> sevk edilmiş.
+> `PROJECT_HISTORY.md` §ADIM 89 · `docs/ADIM89_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 88 (kabul borcu batch 14, doc 05 frontend): ÜRÜN KODU DA
 > TEST KODU DA DEĞİŞMEDİ — diff yalnız defter + üretilmiş artefakt.** Tek kriter `TL-18`
 > kapandı ve **bedeli SIFIR TEST** oldu: kapsama **zaten sevk edilmişti**.
 > **Blocker sayısı DEĞİŞMEDİ — hâlâ tek blocker var (A-08), verdict BLOCKED.** `frontend/src/test/presentationState.test.tsx` ADIM 60'ta

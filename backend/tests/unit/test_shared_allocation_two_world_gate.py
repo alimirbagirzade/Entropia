@@ -28,6 +28,7 @@ Infra-free: every function under test is pure, matching
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Iterator
 from contextlib import contextmanager
 from decimal import Decimal
@@ -258,22 +259,70 @@ def test_lifting_the_flag_alone_still_folds_the_sequential_curve(
     assert combined.diagnostics["composition"]["capital_allocation"] == "shared_pool"
 
 
+def _functions_calling(source: str, callee: str) -> set[str]:
+    """Every top-level function in ``source`` whose body CALLS ``callee``.
+
+    An AST walk rather than a substring scan, because after `C4` the worker legitimately
+    discusses the capability flag in prose and a text search cannot tell a docstring from a
+    call — which is the brittleness class the containment gate already records about itself.
+    """
+    tree = ast.parse(source)
+    found: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == callee
+            ):
+                found.add(node.name)
+    return found
+
+
 def test_the_worker_fold_never_consults_the_capability_flag() -> None:
     """Why the test above holds, stated structurally so it cannot drift silently.
 
     A behavioural test alone would keep passing if the worker grew a flag branch that
     happened not to change this fixture's numbers. The source-level assertion is the one
-    that survives that. When ``C4`` lands ``_use_unified_clock``, this test is the file that
-    must be updated — deliberately, as part of wiring the branch.
+    that survives that.
+
+    **Updated at `C4` (E5), which is the slice the previous version of this docstring named
+    as the one that must update it.** The worker now DOES read the capability flag: wiring
+    the shared branch is exactly what `C4` does, and the containment gate's own replacement
+    assertion is that the worker names ``shared_allocation_is_executable``. So the blanket
+    "this string is absent" list would now be asserting the opposite of what shipped.
+
+    What survives, and is what this test actually defended all along, is the FOLD's
+    independence: ``combine_item_runs`` must never be reached through a flag-guarded path,
+    because a lifted flag alone would then be mistaken for a unified clock and the
+    sequential 5000 would be published as if it were the true 3000. That is now stated as a
+    disjointness, which is stronger than the old absence: the flag is called from EXACTLY
+    ONE function — the fork — and the function that folds does not call it.
     """
     worker = (_SRC / "application" / "jobs" / "backtest_engine.py").read_text(encoding="utf-8")
-    for absent in (
-        "shared_allocation_is_executable",
-        "SHARED_ALLOCATION_STATUS",
-        "_use_unified_clock",
-        "run_portfolio",
-    ):
+
+    # Still absent, and for two different reasons. The worker reads the PREDICATE and never
+    # the constant, so a second reader cannot drift from the first; and it drives the loop
+    # through ``iter_portfolio``, so the exhausting wrapper the oracles use never becomes a
+    # production caller.
+    for absent in ("SHARED_ALLOCATION_STATUS", "run_portfolio"):
         assert absent not in worker, f"{absent!r} reached the worker — re-read this docstring"
+
+    flag_callers = _functions_calling(worker, "shared_allocation_is_executable")
+    assert flag_callers == {"_use_unified_clock"}, (
+        f"the capability flag is consulted from {sorted(flag_callers)}; it must be read at "
+        "the fork and nowhere else, or two call sites can answer 'is this shared?' "
+        "differently"
+    )
+
+    fold_callers = _functions_calling(worker, "combine_item_runs")
+    assert fold_callers, "combine_item_runs lost its caller — the independent fold is gone"
+    assert not (fold_callers & flag_callers), (
+        f"{sorted(fold_callers & flag_callers)} both folds sequentially and reads the "
+        "capability flag; a lifted flag must never be able to re-route the fold"
+    )
 
 
 # --------------------------------------------------------------------------- #

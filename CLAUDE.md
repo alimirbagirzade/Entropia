@@ -237,7 +237,34 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 87 (kabul borcu batch 13, doc 18 FRONTEND): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 88 (kabul borcu batch 14, doc 05 frontend): ÜRÜN KODU DA
+> TEST KODU DA DEĞİŞMEDİ — diff yalnız defter + üretilmiş artefakt.** Tek kriter `TL-18`
+> kapandı ve **bedeli SIFIR TEST** oldu: kapsama **zaten sevk edilmişti**.
+> **Blocker sayısı DEĞİŞMEDİ — hâlâ tek blocker var (A-08), verdict BLOCKED.** `frontend/src/test/presentationState.test.tsx` ADIM 60'ta
+> (`d012a63`, PR #719) inmiş ve describe adı birebir *"Mainboard row presentation state
+> (TS-16 / **TL-18** / AOS-16)"*; kardeş `TS-16`/`AOS-16` o iki düğümü o günden beri cite
+> ediyordu, `TL-18` ise *"Nothing in the suite asserts this"* notuyla borç görünüyordu —
+> **defterde gözden kaçma, eksik kapsama değil** (ADIM 68 `RD-09.c4` emsali). Clause'un dört
+> yarısı da düğümlerde: yazma isteği yok (`writeRequests` `[]` + `/mainboard` kapsamlı non-GET
+> filtresi), `hash_abc` sabit, `Backtest Ready: Ready` sabit; artı bir **vacuity muhafızı**
+> (editor gerçekten açılıyor). **`uncovered` KRİTER tavanı İLK KEZ indi: 8 → 7** — altı
+> dalgadır (73/75/78/79/80/84) yalnız `partial`/`B` iniyordu; `debt_class.B` 52 → 51, açık
+> borç **90** (A=1 · B=51 · C=6 · D=32). **DERS 1: parti seçmeden önce KRİTER ID'SİNİ TEST
+> AĞACINDA GREP'LE** — bir kriter, kendi id'sini taşıyan bir testle beş dalga borç görünebilir.
+> **DERS 2: yeşil bir negatif kontrol çoğu zaman HİÇ UYGULANMAMIŞ bir kontroldür** — ilk yama
+> tek eşleşme varsaydı, handler dizesi üçtü, dosya değişmedi ve koşu yeşil kaldı; yakalayan şey
+> `assert count == 3` idi. **DERS 3: "yapı gereği doğru" her clause yanlışlanamaz değildir** —
+> ayırt edici ölçü kırmanın KAÇ NOKTALI olduğudur (`TL-18` tek noktalı → kapatıldı;
+> `TL-02.c2` üç noktalı → işaretlendi). **Doc 05'te bir test slice'ının kapatabileceği satır
+> KALMADI.** **NUMARA: bu slice `ADIM 87`/`batch 13` yazıldı, PR açıkken #785 ikisini birden aldı
+> (doc 18 frontend) → merge edilmiş ad kazanır, bu kayıt `ADIM 88`/`batch 14`. ADIM 84'te #781
+> ile BİREBİR AYNISI olmuştu — çakışma yapısal, kapanışta numarayı VE parti etiketini birlikte
+> doğrula.** `PROJECT_HISTORY.md` §ADIM 88 · `docs/ADIM88_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 87 (kabul borcu batch 13, doc 18 FRONTEND): ÜRÜN KODU
 > DEĞİŞMEDİ, tek vitest case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > Tek clause: **`AL-06.c3`** (reddedilen directive submit'inden sonra compose kutusu boşalmıyor)
 > → `AL-06` **covered**, **`debt_class` KALDIRILDI**. **DERS (ADIM 83'ün ikizi): "metin korundu"

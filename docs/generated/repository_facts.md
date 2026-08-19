@@ -38,8 +38,8 @@ static walk. Only a full CI run reports passes.
 
 | Level | covered | deliberate_future_dev | not_applicable | partial | uncovered |
 |---|---|---|---|---|---|
-| Criteria | 277 | 8 | 7 | 83 | 8 |
-| Clauses | 1033 | 27 | 12 | 7 | 96 |
+| Criteria | 278 | 8 | 7 | 83 | 7 |
+| Clauses | 1034 | 27 | 12 | 7 | 95 |
 
 ## HTTP operations by method
 

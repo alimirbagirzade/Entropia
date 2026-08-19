@@ -7361,6 +7361,53 @@ sürülüyor (**#777**, **#782**) → bu oturum ona **hiç dokunmadı**.
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 87 ·
 `docs/ADIM87_LANDED_KICKOFF.md`.
 
+## Stage 88 — kabul borcu batch 14 (doc 05 frontend): TL-18 yeni test yazılmadan kapandı landed
+
+**Ne indi.** Yalnız **defter + üretilmiş artefakt**. Ürün kodu **ve test kodu** değişmedi
+(`backend/` ve `frontend/` altında sıfır satır), migration yok, OpenAPI değişmedi.
+
+**`TL-18` SIFIR TESTLE kapandı — kapsama zaten sevk edilmişti.**
+`frontend/src/test/presentationState.test.tsx` **ADIM 60'ta (`d012a63`, PR #719)** inmiş ve
+describe adı birebir *"Mainboard row presentation state (TS-16 / TL-18 / AOS-16)"*. Kardeş
+`TS-16` ve `AOS-16` o iki düğümü o günden beri cite ediyordu; `TL-18` `uncovered` kalmış ve
+notunda *"Nothing in the suite asserts this"* yazıyordu. **Defterde gözden kaçma, eksik kapsama
+değil** — ADIM 68'in `RD-09.c4`'ü ile aynı şekil.
+
+**Clause'un dört yarısı da o düğümlerde:** yazma isteği yok (`writeRequests` `[]`, üç satır
+tipinin expand+collapse'ı boyunca, artı `/mainboard` kapsamlı non-GET filtresi) · `hash_abc`
+değişmemiş · `Backtest Ready: Ready` değişmemiş. Birinci test **vacuity muhafızı** taşıyor
+(editor bölümü gerçekten açılıyor), yani boş liste "hiç açılmayan toggle"dan gelemez.
+
+**Negatif kontrol koşuldu ve doğru sebeple kırmızı:** üç `onClick` handler'ına `PATCH` eklemek
+her iki düğümü de düşürdü. **`TL-02.c2`'nin yanlışlanamaz şekli DEĞİL** — orası üç noktalı,
+burası tek noktalı.
+
+**DERS:** ilk negatif kontrol denemesi dosyayı **hiç değiştirmedi** (handler dizesi üç yerde
+geçiyor, yama tek eşleşme varsaydı) ve koşu **yeşil** kaldı — sahte bir "kontrol geçti" olarak
+kaydedilebilirdi. Yakalayan şey yamaya konmuş `assert count == 3`'tü. **Negatif kontrolün ürünü
+gerçekten değiştirdiğini ayrıca doğrula.**
+
+**Tavanlar:** `uncovered` **kriter** **8 → 7** — bu sayaç **altı dalgadır** ilk kez oynuyor
+(73/75/78/79/80/84 hep `partial`/`B` indirmişti). `debt_class.B` **52 → 51**, açık borç
+**91 → 90** (A=1 · B=51 · C=6 · D=32). Clause: `covered` 1033 → **1034**, `uncovered` 96 → **95**.
+`total_criteria` **383** ve `partial` **83** değişmedi.
+
+**Zincir notu:** taban `cfce51e`. Dal `ccdd4fd`'de dondurmuştu; PR açıkken **#785** (batch 13,
+doc 18 frontend) indi ve kabul borcuna DOKUNDU → dalın freeze'i geçersizdi. Kriterler AYRIK
+olduğu için fark alınabilirdi, alınmadı: rebase edilip `--report` **merged ağaçta** koşuldu.
+
+**Doc 05 bitti** (test slice'ının kapatabileceği anlamda). Kalanlar bulgu ya da sınıf C/D:
+`TL-01.c4` · `TL-02.c2` · `TL-11.c3` · `TL-14.c4` · `TL-16.c4`.
+
+**NUMARA:** bu slice **87 / batch 13** yazıldı; PR açıkken **#785** merge edilip **ikisini
+birden** aldı (doc 18 frontend) → merge edilmiş ad kazanır, bu kayıt **88 / batch 14**. ADIM
+84'te #781 ile aynısı olmuştu; çakışma yapısal, bu yüzden devir promptu numarayı **ve** parti
+etiketini commit'ten hemen önce yeniden doğrulatır.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi **gerekmedi**.
+`PROJECT_HISTORY.md` §ADIM 88 · `docs/ADIM88_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 85 GÜNCELLEMESİ (2026-08-19) — BAŞLIK BİLEREK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

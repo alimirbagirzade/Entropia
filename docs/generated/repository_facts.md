@@ -28,6 +28,7 @@ static walk. Only a full CI run reports passes.
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
 | Backend tests **collected** (static, not a pass count) | 3706 in 352 files |
+| Backend tests **collected** (static, not a pass count) | 3697 in 350 files |
 | Backend `xfail` markers | 0 (0 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 725 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |
@@ -38,8 +39,8 @@ static walk. Only a full CI run reports passes.
 
 | Level | covered | deliberate_future_dev | not_applicable | partial | uncovered |
 |---|---|---|---|---|---|
-| Criteria | 278 | 8 | 7 | 83 | 7 |
-| Clauses | 1034 | 27 | 12 | 7 | 95 |
+| Criteria | 282 | 8 | 7 | 79 | 7 |
+| Clauses | 1039 | 27 | 12 | 6 | 91 |
 
 ## HTTP operations by method
 

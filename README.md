@@ -81,6 +81,7 @@ This repository is built **stage by stage** from a canonical specification (see
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
 | Backend tests **collected** (static, not a pass count) | 3706 in 352 files |
+| Backend tests **collected** (static, not a pass count) | 3697 in 350 files |
 | Backend `xfail` markers | 0 (0 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 725 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |

@@ -3,6 +3,10 @@
 > Bu belge yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat
 > olabilir. Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
 > `docs/generated/repository_facts.md` (üretilmiş).
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** ADIM 91 ile `historical`a demote
+> edildi; canlı kickoff `docs/ADIM91_LANDED_KICKOFF.md`. Aşağıdaki SHA'lar, tavanlar ve "next"
+> maddeleri yazıldıkları anı dondurur.
+
 # ADIM 88 LANDED — kabul borcu batch 14 (doc 05 frontend): TL-18 sıfır testle kapandı · sıradaki slice için kickoff
 
 > Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 88. Bu belge **devam noktasıdır**, kayıt değil.

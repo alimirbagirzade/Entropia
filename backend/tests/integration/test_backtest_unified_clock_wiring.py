@@ -126,7 +126,7 @@ async def test_an_independent_multi_item_run_never_reaches_the_unified_loop(sess
 # --------------------------------------------------------------------------- #
 
 
-def test_the_guard_needs_both_conjuncts_and_the_shipped_build_answers_no() -> None:
+def test_the_guard_needs_both_conjuncts_and_the_shipped_build_answers_no(monkeypatch) -> None:
     """``_use_unified_clock`` is an ``and`` — so the TERMS are pinned, not the result.
 
     Asserting only the shipped ``False`` would pass just as well against a guard that had
@@ -153,22 +153,23 @@ def test_the_guard_needs_both_conjuncts_and_the_shipped_build_answers_no() -> No
 
     # The second conjunct, isolated: with the flag forced ON, an independent snapshot
     # still must NOT route. This is the assertion the silent re-price would trip.
-    original = capability_mod.shared_allocation_is_executable
-    try:
-        capability_mod.shared_allocation_is_executable = lambda: True  # type: ignore[assignment]
-        import entropia.application.jobs.backtest_engine as worker_mod
+    #
+    # The patch target is the WORKER's own binding, not ``capability``'s. The worker
+    # imported the predicate by value (``from ... import shared_allocation_is_executable``),
+    # so rebinding it in the capability module would leave ``_use_unified_clock`` calling
+    # the original and this test would prove nothing — it would pass while asserting
+    # against an unpatched build.
+    monkeypatch.setattr(
+        "entropia.application.jobs.backtest_engine.shared_allocation_is_executable",
+        lambda: True,
+    )
+    assert _use_unified_clock(independent) is False
+    assert _use_unified_clock(None) is False
+    assert _use_unified_clock(shared) is True
 
-        worker_mod.shared_allocation_is_executable = lambda: True  # type: ignore[assignment]
-        assert _use_unified_clock(independent) is False
-        assert _use_unified_clock(None) is False
-        assert _use_unified_clock(shared) is True
-    finally:
-        capability_mod.shared_allocation_is_executable = original  # type: ignore[assignment]
-        import entropia.application.jobs.backtest_engine as worker_mod
-
-        worker_mod.shared_allocation_is_executable = original  # type: ignore[assignment]
-
-    # Restored — the build is contained again, and the next test would see it if not.
+    # ``monkeypatch`` undoes this at teardown, so the build is contained again for every
+    # later test — including the ones in this module that drive a real run.
+    monkeypatch.undo()
     assert _use_unified_clock(shared) is False
 
 

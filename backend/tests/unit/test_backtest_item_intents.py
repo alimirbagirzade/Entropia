@@ -941,7 +941,17 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
     (``test_oracle_portfolio_containment_gate.py`` asserts nothing calls it), and it is the
     ONLY unified-clock module it imports at all: the three policy-version constants it might
     have published were dropped rather than widen three more of these lists for a field no
-    consumer reads. So the property this test defends is unchanged."""
+    consumer reads. So the property this test defends is unchanged.
+
+    **Sixth deliberate update: ``domain/backtest/participant.py`` (`C3`).** The
+    ``_EngineParticipant`` adapter names ``ItemIdentity``/``PortfolioSnapshot``/``ItemIntent``
+    and calls ``form_intent`` at P4 — it FORMS intents, which is what makes it the first
+    importer outside ``execution/`` other than the loop itself. It sits outside on purpose:
+    inside, the oracle gate's importer scan would have exempted it by ``parent.name`` and
+    stayed green while the surface grew. One NAMED module under a signed decision
+    (``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``, Option A); the
+    list stays an EXACT equality, and nothing in ``backend/src`` constructs the adapter, so no
+    production path reaches this layer."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -953,6 +963,7 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
         "domain/backtest/execution/portfolio_ledger.py",
         "domain/backtest/execution/portfolio_projection.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/participant.py",
         "domain/backtest/portfolio_engine.py",
     ]
 

@@ -2786,13 +2786,26 @@ def _build_stepper(
             want=want, strength=strength, effects=tuple(effects), entry_detail=entry_detail
         )
 
-    def _apply_entry(bar: _Bar, decision: _EntryDecision, *, equity: Decimal | None = None) -> None:
+    def _apply_entry(
+        bar: _Bar,
+        decision: _EntryDecision,
+        *,
+        equity: Decimal | None = None,
+        size_override: Decimal | None = None,
+    ) -> None:
         """P4 BOOKED — place what :func:`_evaluate_entry` described. Decides nothing.
 
         ``equity`` is scoped to THIS call: set on the way in, cleared on the way out, so a
         later phase can never size against a snapshot that has since been superseded.
         ``None`` — what ``_step`` passes — leaves the sizing chain reading this item's own
-        ledger, unchanged."""
+        ledger, unchanged.
+
+        ``size_override`` is the size an OUTER authority granted, and reaches ``_open``'s
+        existing parameter unchanged — ``_open`` takes ``min(planned, override)``, so the
+        override can only ever narrow. It exists for ADR-0002 §6 clause 6: arbitration caps,
+        and an item that booked ``intent.desired_size`` instead of the granted figure would
+        have re-decided what the pool already decided. ``None`` — what ``_step`` and every
+        non-immediate branch pass — is byte-identical to the pre-parameter behaviour."""
         nonlocal pending, position, sizing_equity, working_limit, working_stop
 
         sizing_equity = equity
@@ -2925,6 +2938,7 @@ def _build_stepper(
                     bar_seq=led.bars_seen,
                     deferred=False,
                     strength=strength,
+                    size_override=size_override,
                 )
             else:
                 _emit(

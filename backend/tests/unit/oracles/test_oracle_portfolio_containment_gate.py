@@ -60,6 +60,35 @@ _PHASE_LOOP_MODULES = (
 #: most likely production entry point unguarded.
 _LOOP_ENTRY_POINTS = ("run_portfolio", "iter_portfolio")
 
+#: The production modules outside ``execution/`` that may name a unified-clock module.
+#: Widened from two entries to three at `C3`, under the signed decision
+#: ``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`` (Option A,
+#: 2026-08-18): the adapter is deliberately placed at ``domain/backtest/participant.py``
+#: rather than inside ``execution/``, where the scan's ``parent.name`` exemption would have
+#: kept this gate green while the surface grew. The list is NAMED, never a glob or a prefix
+#: — a wildcard would open the gate at class width and the widening would stop showing up in
+#: a diff. An unexpected THIRD importer still turns this red, which is the whole point;
+#: ``test_a_third_importer_still_turns_the_gate_red`` is the negative control the decision
+#: required, so this widening is provably an extension and not a disabling.
+_ALLOWED_IMPORTERS: tuple[list[str], ...] = (
+    [],
+    ["domain/backtest/portfolio_engine.py"],
+    ["domain/backtest/participant.py", "domain/backtest/portfolio_engine.py"],
+)
+
+
+def _importers_outside_execution(sources: dict[pathlib.Path, str], module: str) -> list[str]:
+    """Production modules OUTSIDE ``execution/`` that name ``module``'s import literal.
+
+    Extracted so the gate below and its negative control run the SAME scan over different
+    source maps. A negative control that re-implemented the scan would only prove that the
+    copy is red."""
+    return sorted(
+        str(path.relative_to(_SRC))
+        for path, text in sources.items()
+        if f"execution.{module.split('.')[-1]} import" in text and path.parent.name != "execution"
+    )
+
 
 def _item_run(item_id: str, closes: list[tuple[str, str]]) -> ItemRun:
     """One finished per-item run — the shape ``jobs/backtest_engine.py`` still folds."""
@@ -172,13 +201,8 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
     ]
 
     for module in _PHASE_LOOP_MODULES:
-        importers = sorted(
-            str(path.relative_to(_SRC))
-            for path, text in sources.items()
-            if f"execution.{module.split('.')[-1]} import" in text
-            and path.parent.name != "execution"
-        )
-        assert importers in ([], ["domain/backtest/portfolio_engine.py"]), (
+        importers = _importers_outside_execution(sources, module)
+        assert importers in _ALLOWED_IMPORTERS, (
             f"{module} gained a production importer outside the phase loop: {importers}"
         )
 
@@ -296,3 +320,63 @@ def test_every_public_loop_driver_is_named_in_the_caller_scan() -> None:
         "a new public way into the phase loop appeared; add it to _LOOP_ENTRY_POINTS or the "
         f"containment caller scan will not see it. Found: {drivers}"
     )
+
+
+def test_the_widened_allowlist_names_a_module_that_actually_imports_the_loop_surface() -> None:
+    """The third entry is load-bearing, not decoration.
+
+    ``domain/backtest/participant.py`` has to NAME the gated types — ``ItemTickView``,
+    ``ItemIdentity``, ``PortfolioSnapshot``, ``OpenPosition``, ``ArbitrationDecision`` — and
+    ``portfolio_engine.__all__`` re-exports none of them, so the adapter can only reach them
+    from ``execution.*``. That is why the gate turned red and why the allowlist had to be
+    widened by a human decision rather than by a re-export that would have kept it green
+    while measuring nothing (the signed decision's Option C, refused).
+
+    Asserted so the entry cannot silently become dead text: if the adapter ever stops
+    importing the surface, the extra name has to come back OUT of the allowlist."""
+    sources = {p: p.read_text() for p in _SRC.rglob("*.py")}
+    adapter = "domain/backtest/participant.py"
+
+    reached = [
+        m for m in _PHASE_LOOP_MODULES if adapter in _importers_outside_execution(sources, m)
+    ]
+    assert reached, (
+        "no unified-clock module is imported by the adapter, so the widened allowlist entry "
+        "is measuring nothing and must be removed"
+    )
+    # And the narrower, pre-C3 allowlist would have REFUSED it — the widening was a real
+    # decision, not a formality.
+    for module in reached:
+        assert _importers_outside_execution(sources, module) not in (
+            [],
+            ["domain/backtest/portfolio_engine.py"],
+        )
+
+
+def test_a_third_importer_still_turns_the_gate_red() -> None:
+    """The negative control the signed decision made mandatory.
+
+    ``closure_participant_importer_allowlist_2026-08-18.md`` §"Karar ne verilirse verilsin"
+    item 4: *"a fake second/third importer must still turn the gate red — otherwise what was
+    done is a disabling, not a widening."* The probe is injected into the SCANNED SOURCE MAP
+    rather than written to disk, so a failing run cannot leave a stray module in
+    ``backend/src`` (the decision's own measurement used two temporary files and deleted them
+    by hand).
+
+    Every gated module is probed, not just one: an allowlist that happened to be widened per
+    module would pass a single-module control."""
+    sources = {p: p.read_text() for p in _SRC.rglob("*.py")}
+    probe = _SRC / "domain" / "backtest" / "_probe_third_importer.py"
+    assert probe not in sources  # the probe is synthetic; it must not exist on disk
+
+    for module in _PHASE_LOOP_MODULES:
+        leaf = module.split(".")[-1]
+        widened = dict(sources)
+        widened[probe] = f"from entropia.domain.backtest.execution.{leaf} import something\n"
+        importers = _importers_outside_execution(widened, module)
+
+        assert "domain/backtest/_probe_third_importer.py" in importers
+        assert importers not in _ALLOWED_IMPORTERS, (
+            f"a third importer of {module} passed the allowlist: the gate has been disabled, "
+            "not widened"
+        )

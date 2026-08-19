@@ -1055,7 +1055,14 @@ def test_the_arbitration_layer_is_reachable_only_through_the_phase_loop() -> Non
 
     ``sorted()``: ``rglob`` yields in filesystem order, which differs between macOS and the
     Linux runner. With one importer that was invisible; with two it makes the assertion
-    platform-dependent, exactly as the clock's own guard already records."""
+    platform-dependent, exactly as the clock's own guard already records.
+
+    Updated deliberately a second time (`C3`): ``domain/backtest/participant.py`` names
+    ``ArbitrationDecision`` because ``ItemParticipant.settle`` receives the GRANT — an item
+    that booked ``intent.desired_size`` instead would have re-decided what the pool decided
+    (ADR §6 clause 6). One NAMED module under a signed decision
+    (``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``, Option A); the
+    list stays an EXACT equality, and the adapter has no production caller."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -1064,6 +1071,7 @@ def test_the_arbitration_layer_is_reachable_only_through_the_phase_loop() -> Non
     )
     assert importers == [
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/participant.py",
         "domain/backtest/portfolio_engine.py",
     ]
 

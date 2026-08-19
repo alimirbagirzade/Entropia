@@ -553,7 +553,17 @@ def test_the_clock_is_reachable_only_through_the_phase_loop() -> None:
     Updated deliberately a second time (ADIM 19): ``execution/provenance.py`` pins
     ``CLOCK_POLICY_VERSION`` and the merged axis's ``timeline_identity`` into the portfolio
     manifest section. It is contained too — ``test_backtest_portfolio_provenance.py`` asserts
-    nothing imports IT — so the defended property still holds."""
+    nothing imports IT — so the defended property still holds.
+
+    Updated deliberately a THIRD time (`C3`): ``domain/backtest/participant.py`` — the
+    ``_EngineParticipant`` adapter — names ``ItemTickView`` and ``ItemBarStream`` in the hook
+    signatures the phase loop calls it through. It sits OUTSIDE ``execution/`` on purpose:
+    inside, the sibling oracle gate's importer scan would have exempted it by ``parent.name``
+    and stayed green while the surface grew. One NAMED module under a signed decision
+    (``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``, Option A), and
+    this stays an EXACT equality so a further importer still turns it red. The adapter has no
+    production caller — nothing in ``backend/src`` constructs it — so the defended property is
+    unchanged."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     # sorted(): ``rglob`` yields in filesystem order, which differs between macOS and the
     # Linux runner. With one permitted importer that was invisible; with two it made the
@@ -566,6 +576,7 @@ def test_the_clock_is_reachable_only_through_the_phase_loop() -> None:
     assert importers == [
         "domain/backtest/execution/intents.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/participant.py",
         "domain/backtest/portfolio_engine.py",
     ]
 

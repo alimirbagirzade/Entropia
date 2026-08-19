@@ -1251,7 +1251,16 @@ def test_the_shared_ledger_is_reachable_only_through_the_phase_loop() -> None:
     and one ``commit_tick``. That single-writer property is what the freeze discipline
     enforces at runtime; this list is what stops a second writer appearing at all. The ADIM 17
     rollback is unchanged in substance: revert the loop and the single-item path — which never
-    reaches this module — is untouched."""
+    reaches this module — is untouched.
+
+    **`C3` adds ``domain/backtest/participant.py``, which is NOT a writer.** The
+    ``_EngineParticipant`` adapter names ``OpenPosition`` only — the pool's own record of the
+    position it holds, which the loop hands to ``mandatory_exit``/``entry`` and the adapter
+    compares against the item's own book. It mutates no ledger field: the single-writer
+    property this list defends is exactly unchanged. It sits outside ``execution/`` on purpose
+    (the oracle gate exempts anything inside), it is one NAMED module under a signed decision
+    (``docs/decisions/closure_participant_importer_allowlist_2026-08-18.md``, Option A), the
+    list stays an EXACT equality, and nothing in ``backend/src`` constructs it."""
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
     importers = sorted(
         path.relative_to(src).as_posix()
@@ -1263,6 +1272,7 @@ def test_the_shared_ledger_is_reachable_only_through_the_phase_loop() -> None:
         "domain/backtest/execution/arbitration.py",
         "domain/backtest/execution/attribution.py",
         "domain/backtest/execution/provenance.py",
+        "domain/backtest/participant.py",
         "domain/backtest/portfolio_engine.py",
     ]
 

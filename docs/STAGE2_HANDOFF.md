@@ -7269,6 +7269,44 @@ reddediyor → §C.3.7/§C.3.8 forkunun kayıtsız **üçüncü** kardeşi, `C6`
 `PROJECT_HISTORY.md` §ADIM 85 · `docs/ADIM85_LANDED_KICKOFF.md`.
 
 
+## Stage 86 — kayıtsız inen iki slice'ın ritüeli (P1-proof #765 + P2 #766): D.1'in leg 2'si kapandı landed
+
+**Geriye dönük kayıt.** İki PR de main'e indi, ikisinin de `PROJECT_HISTORY` kaydı / handoff
+satırı / kickoff'u **yoktu** (ölçüm anında main `aecd72c`: `grep -c '#765'` → 0,
+`grep -c '#766'` → 0). #728/#729 = ADIM 69/70 ve #759 = ADIM 82 emsali.
+
+- **#765** (`650a66a`, test-only) — `tests/integration/test_tick_revision_batch_parity.py`
+  (+118): P1'in batch tick okuyucusunun sevk edilmiş per-item probe ile **aynı satırları**
+  döndürdüğünün vaka vaka kanıtı. Aynı dalın P1'i **yeniden uygulayan** yarısı düşürüldü
+  (`PR #764` kapatıldı, unmerged) — o hâliyle merge etmek sevk edilmiş bir fonksiyonu
+  davranışça özdeş bir kopyayla değiştirir **ve** inmiş 250 satır testi silerdi.
+- **#766** (`c2c966e`, 19 satır ürün kodu) — `_build_item_inputs` artık mirror pinlerini
+  `_mirror_ref` ile toplayıp **döngüden ÖNCE** tek `get_strategy_revisions` batch'iyle deref
+  ediyor. **#754 (P4) dikişi atmıştı ama bağlamamıştı**: `mirrors` parametresi vardı, çağıran
+  onu geçmiyordu. Yeni bütçe satırı `readiness_check.strategy_mirror_leg` → `per_item: 0` (2/2).
+
+**Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi · alembic head
+`0043_i08_registry_strategy_fks` · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+**P-C2 §D.1 tablosu artık 3'te 2:** leg 1 flat (`tick_data_leg` 1/1, P1 = #751), leg 2 flat
+(`strategy_mirror_leg` 2/2, bu slice), **leg 3 açık ve bilerek** — `run_readiness_check`
+`per_item: 1` (8 → 18), anahtarı UNIQUE değil → batch'lemek **hangi satırın kazandığı**
+sorusudur = **G15 ürün kararı**, imzasız.
+
+**Bu oturumda fiilen ölçülenler** (Postgres 16 kaldırıldı, `18 passed` / **sıfır skip**):
+güçlü negatif kontrol (batch kaldır + per-item geri koy) → `assert 12 <= 2` **kırmızı** ·
+zayıf negatif kontrol (batch yerinde, yalnız `mirrors` düşür) → **yeşil kalır**, ki bu satırın
+**kayıtlı sınırıdır** (ısınmış identity map yüzünden `session.get` hiç SQL üretmez) ·
+parity mutasyonu (kazanan sıralaması ters) → **tam olarak bir** test kırmızı.
+**Satır KALDIRILMIŞ batch'i yakalar, gereksiz okumayı değil.**
+
+**Ders:** slice'a başlamadan önce **açık PR'ları tara**, sadece ağacı değil — bu dalgada iki
+slice de paralel yazıldı ve iş çöpe gitti (#764 kapatıldı, P2'nin rakip mekanizması düşürüldü).
+
+`PROJECT_HISTORY.md` §ADIM 86 · `docs/ADIM86_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 85 GÜNCELLEMESİ (2026-08-19) — BAŞLIK BİLEREK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -7295,6 +7333,34 @@ reddediyor → §C.3.7/§C.3.8 forkunun kayıtsız **üçüncü** kardeşi, `C6`
 > listesiyle **aynı** olmalıdır ve `allow_stacking` şema varsayılanı olduğu için bu bir **ürün
 > kararı** doğurur.
 
+
+> **ADIM 86 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ.**
+> (Gerekçe yukarıdaki ADIM 81 güncellemesinde: `docs-history-guard` `^-## ` desenine bakar,
+> bir `## ` başlığını yeniden yazmak ona kayıt silme gibi görünür — ADIM 61 emsali. **ADIM 85
+> bunu bir kez denedi, kapı FİİLEN kırmızı verdi ve başlık geri kondu**; kural artık ölçülmüş.)
+> Başlık **iki iş** adlandırıyor ve **ADAPTÖR yarısı İNDİ** — `C3` = **#777** = **§ADIM 85**
+> (`2cda24f`; `participant.py::_EngineParticipant`, üretimde çağıranı **YOK**, 50 golden digest
+> bayt bayt aynı). Bu paragrafın ilk yazımındaki *"`C3` hâlâ sıradaki mühendislik kalemi"*
+> iddiası **artık geçersizdir**: sıradaki kalem başlığın **call site** yarısı, yani **`C4`**'tür
+> ve **yeni bir `C3` dalı AÇILMAMALIDIR**. Ayrıntı ADIM 85'in aynı başlık altındaki bloğunda.
+>
+> **Bu kapanışın kaydettikleri #765 + #766'dır** (P1'in parity kanıtı + P2'nin wiring'i) —
+> ikisi de kayıtsız inmişti, kaydı `PROJECT_HISTORY.md` **§ADIM 86**. Bunlar `C`-hattını
+> ilerletmez; **performans (`P`) hattıdır** ve o hat bu slice ile P-C2 §D.1'in
+> **üç bacağından ikisini** kapatmış olur. **Kalan leg 3 bir performans işi DEĞİL, bir ürün
+> kararıdır (`G15`, imzasız)** — `run_readiness_check` satırının `per_item: 1`'i o yüzden
+> durur ve **indirilmemelidir**.
+>
+> **Yukarıdaki ADIM 81 güncellemesinin *"kayıt görünmeyen PR'lar"* satırı bir kez daha
+> çürüdü ve yine doğru yönde:** orada **#765** *"kayıtsız"* diye listelenmişti; bu kapanış
+> onu (ve o liste yazıldıktan sonra inen **#766**'yı) yazdı. **Kalan satırları present-tense
+> okuma — ölç:** #752 · #755 · #747 · #761 · #770 · #774 · #773 · #762 hâlâ kayıtsız görünüyor,
+> hepsi karar/brif belgesi. **Kaydı sahibinin yazması gerekir.**
+>
+> **G9/G13 hakkında:** ikisi de **İMZALI** (ADR-0002 §13.2, `9fc5580`, PR #753, 2026-08-17 —
+> G9 `APPROVED as stated`, G13 `FOLD`). Bu kapanışın devir promptu bunları *"imzasız"*
+> sanıyordu; **belgeler zaten doğruydu**, bayat olan bağlamdı. **Hâlâ imzasız:** Karar 1
+> (#552), Karar 3 (#559), `G12`, `G15`; `G10` **hiç talep edilmedi**.
 
 > **ADIM 81 GÜNCELLEMESİ (2026-08-18, main `1741b03`) — BU BAŞLIK ARTIK `C3`'Ü ADLANDIRIYOR,
 > ve gövdesinin `C2` yarısı BAYATTIR.** Başlık **bilerek değiştirilmedi** (docs kayıt-silme

@@ -12445,3 +12445,155 @@ say"*dan daha keskindir: **çakışan şey başlık değil DOSYA YOLUDUR.** Bir 
 önce açık PR'ların **ekleyeceği kickoff dosya yollarını** listele — `check_classification`
 bunu asla yakalayamaz, çünkü çakışan dalların **hepsi** kendi içinde tutarlıdır ve tek
 `current` taşır; kapı ancak ikinci merge'de bir git conflict'i olarak konuşur.
+
+## ADIM 86 — kayıtsız inen İKİ slice'ın ritüeli (P1-proof #765 + P2 #766): D.1'in leg 2'si KAPANDI
+
+> **BU KAYIT GERİYE DÖNÜKTÜR.** İki PR de main'e indi ve `PROJECT_HISTORY.md`'de **hiç
+> anılmadı**: ölçüm anında (main `aecd72c`) `grep -c '#765'` → **0**, `grep -c '#766'` → **0**
+> (kıyas: `#759` → 3, `#769` → 4). Handoff satırı ve kickoff'ları yoktu; kapanış ritüelinin
+> 1–6. maddeleri ikisi için de **hiç koşmadı**. Desen tanınmıştır: **#728/#729 = ADIM 69/70**,
+> **#759 = ADIM 82**. **ANLATI UYDURULMADI** — aşağıdaki her iddia bu oturumda ağaca karşı
+> yeniden ölçüldü, PR gövdesinden kopyalanmadı; iki negatif kontrol ve bir parity mutasyonu
+> **fiilen koşuldu** (aşağıda).
+
+> **#765 test-only · #766 19 satır ürün kodu, gözlenebilir DAVRANIŞ DEĞİŞMEDİ.** Migration
+> **yok** · OpenAPI **değişmedi** · `ENGINE_VERSION` **değişmedi**
+> (`backtest-engine-v18-percent-sizing-per-fill-commission`) · alembic head
+> **`0043_i08_registry_strategy_fks`** · `SHARED_ALLOCATION_STATUS` = **`future_dev`** ·
+> golden digest'lere dokunulmadı. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+| PR | Merge | Ne getirdi |
+|---|---|---|
+| **#765** | `650a66a` | `tests/integration/test_tick_revision_batch_parity.py` (+118) — P1'in batch okuyucusunun **aynı satırları** döndürdüğünün vaka vaka kanıtı |
+| **#766** | `c2c966e` | `_build_item_inputs` mirror deref'ini batch'e **bağladı** (+19 satır ürün kodu) + `readiness_check.strategy_mirror_leg` bütçe satırı |
+
+### Asıl sonuç: tasarımın D.1 tablosu artık 3'te 2
+
+P-C2 §D.1 Ready Check'te **üç** N+1 bacağı adlandırıyordu ve *"none of them measured"* diyordu.
+Bugün ölçülen (`docs/performance/query_budgets.json`):
+
+| Leg | Site | Durum |
+|---|---|---|
+| **1** — tick-data availability | `_resolve_tick_data_issues` | **FLAT** — `readiness_check.tick_data_leg` `per_item: 0` (1/1). P1 = **#751** (ADIM 77); **#765 onun KANITI** |
+| **2** — Strategy mirror deref | `_build_item_inputs` → `_resolve_strategy_payload` | **FLAT** — `readiness_check.strategy_mirror_leg` `per_item: 0` (2/2). **Bu slice (#766)** |
+| **3** — external import state | `_resolve_external` | **AÇIK, bilerek** — `readiness_check.run_readiness_check` `per_item: 1` (8 → 18). Anahtar UNIQUE değil → batch'lemek **hangi satırın kazandığı** sorusudur = **G15 ürün kararı** |
+
+**Leg 3'ün `per_item: 1`'i bir borç değil, bir SINIRDIR** ve öyle kaydedilmiştir: onu batch'lemek
+sessizce readiness cevaplarını değiştirirdi. Tavan **indirilmedi**, satır kaldırılmadı.
+
+### #754 dikişi attı ama bağlamadı — bu slice yalnız o bağlantı
+
+`_mirror_ref`, `strategy.py::get_strategy_revisions` ve `_resolve_strategy_payload`'ın
+opsiyonel `mirrors` parametresi **P4 (#754, ADIM 77)** ile inmişti; docstring'i açıkça
+*"bir çağıran bütün composition'ı tek seferde deref edebilsin diye"* diyordu. Ama
+`_build_item_inputs` hâlâ `_resolve_strategy_payload(session, payload)` diye **map'siz**
+çağırıyordu → leg 2 per-item kaldı. **Sevk edilmiş bir seam'in çağıranı yoksa seam iş yapmaz**;
+#766'nın tamamı o çağrının bağlanmasıdır. `get_strategy_revisions` ağaçta **tek tanımdır**
+(`strategy.py:196`, ölçüldü) — ikinci bir idiom doğmadı.
+
+### ÖLÇÜLDÜ, KOPYALANMADI — bu oturumda fiilen koşulan doğrulamalar
+
+Postgres 16 ayağa kaldırıldı (`entropia`/`entropia`, :5432), `uv sync --all-extras` koştu:
+
+- **`18 passed`, sıfır skip** — `test_tick_revision_batch_parity.py` (4) +
+  `test_query_budgets.py` (14). **Nokta mı `s` mi diye BAKILDI**: hepsi nokta. Postgres'siz
+  `exit 0` + skip tuzağı (ADIM 74'ün dersi) bu koşuda **yok**.
+- **Güçlü negatif kontrol — batch KALDIRILDI + per-item deref geri kondu** →
+  `assert 12 <= 2` ile **KIRMIZI**. Satır var olduğu regresyonu gerçekten yakalıyor.
+- **Zayıf negatif kontrol — batch YERİNDE bırakıldı, yalnız `mirrors` argümanı düşürüldü** →
+  **YEŞİL KALDI.** Bu bir kusur değil, satırın **kayıtlı SINIRIDIR** ve bağımsız olarak
+  doğrulanmıştır: batch identity map'i ısıttığı için aynı PK'ye giden `session.get`
+  **hiç SQL üretmez** (bütçe sayacının `query_budgets.json` `_comment`'inde beş şekliyle yazılı
+  kör noktası). **Satır KALDIRILMIŞ batch'i yakalar, gereksiz okumayı değil** — bu yüzden not
+  bunu açıkça yazar ve slope 0 iddiası fazlasını iddia etmez.
+- **Parity mutasyonu — kazanan sıralaması ters çevrildi (`DESC` → `ASC`)** → **tam olarak BİR**
+  test kırmızı (`test_batch_picks_the_same_winner_when_an_instrument_has_many`). Yalnız kendi
+  testini kırmızıya çevirmesi, o assertion'ın diğerlerine **binmediğinin** kanıtıdır.
+- Her mutasyondan sonra dosya **mutlak yolla** geri yüklendi ve **md5 ile** doğrulandı
+  (`8c6e7876…`), ardından `git diff --quiet` → **temiz**.
+
+**DERS: bir ratchet satırının SINIRINI ölçmek, slope'unu ölçmek kadar önemlidir.** Slope 0
+raporlayan bir satır *"bu yüzey artık hızlı"* demez; yalnız *"ölçtüğüm mutasyon geri gelirse
+kırmızı veririm"* der. Hangi mutasyon olduğu **yazılmazsa** satır bir güvenlik yanılsamasıdır.
+
+### Süreç: iki slice iki kez paralel yazıldı, iş çöpe gitti
+
+- **P1 sıfırdan yazıldı, #751 zaten uçuyordu.** Sonuç: `PR #764` **kapatıldı** (unmerged,
+  `2026-08-18T07:48:44Z`) — bugünkü main'e karşı diff'i sevk edilmiş
+  `find_approved_tick_revisions_for_instruments`'ı **davranışça özdeş bir kopyayla** değiştiriyor
+  **ve** zaten inmiş `test_readiness_tick_data_batch.py`'nin **250 satırını siliyordu**. Net
+  kayıp olurdu. **Additive yarısına indirgendi → #765.**
+- **P2 rakip bir mekanizmayla yazıldı** (`_apply_strategy_mirror` + kendi `get_strategy_revisions`
+  kopyası); #754 farklı tasarımla **önce indi** → dal main'den **yeniden kuruldu**, kendi
+  mekanizması **düşürüldü** (uzlaştırılmadı). Mirror semantiğinin **tek tanımı** kaldı.
+- **DERS (bu dalganın asıl bedeli): slice'a başlamadan önce AÇIK PR'LARI tara, sadece ağacı
+  değil.** `list_pull_requests` üç saatlik işi baştan gereksiz kılardı. Bu, ADIM 81'in (b)
+  dersinin **ikinci** örneğidir — orada çift iş bir §'yı tazelemekti, burada iki slice'ın tamamı.
+- **Bayt bayt aynı yazmak işe yaradı:** `get_strategy_revisions` #754'ünkiyle özdeş yazıldığı
+  için rebase onu **çoğaltmadan** birleştirdi.
+- **`strict: true` altında beş kez rebase**, her seferinde yeşil bayatladı. Çözüm **auto-merge**
+  oldu; elle merge edilen her turda diğeri bir tur daha yiyordu (ADIM 74'ün *"kapı green değil
+  GÜNCELLİKTİR"* dersinin tekrarı).
+
+### Bu oturumda düzeltilen BAYAT İDDİA
+
+Devir promptu *"G9 ve G13 imzasız"* diyordu (önceki oturumun kendi düzeltmesiyle birlikte).
+**Ölçüldü: ikisi de İMZALI** — `docs/adr/0002-unified-clock-portfolio-simulation.md` **§13.2**
+(`9fc5580`, PR #753, 2026-08-17): **G9 = `APPROVED as stated`**, **G13 = `FOLD`**;
+`docs/decisions/closure_product_decisions_2026-08-13.md` satır 18–19 ikisini de **İMZALI**
+gösteriyor. **Belgeler zaten doğruydu, düzeltilmesi gereken bir şey yoktu** — bayat olan
+sohbet bağlamıydı. İmza `closure_product_decisions` içinde **aranıp bulunamadığı** için
+imzasız sanılmıştı; kaydı ADR'de. **Hâlâ imzasız:** Karar 1 (komisyon #552), Karar 3 (DST #559),
+`G12`; `G10` (Gate 2) **hiç talep edilmedi**.
+
+### Bu slice'ın KAPATMADIKLARI
+
+**Leg 3 / `G15`** (imzasız, ön koşulu bir sayı ve alınmadı) · `run_readiness_check` satırı
+`per_item: 1`'de **kalır** · **A-08 DEĞİŞMEDİ** (2/184 hücre, 0/10 akış, SR-1 hiç başlamadı,
+**0/4**, #514 açık) · ratchet/baseline/coverage eşiklerine **dokunulmadı** · kabul borcu
+tavanları **oynamadı** (bu slice hiçbir kabul kriteri kapatmaz). **Codemap tazelenmedi ve
+gerekmiyor** — yeni endpoint / tablo / sayfa / job yok; `readiness_check.py`, `strategy.py` ve
+`market_data.py` `BACKEND_LAYERS.md`'de **zaten kayıtlı** ve dokundukları tablolar değişmedi.
+**Sıradaki mühendislik kalemi `C3`** — açık PR **#777**.
+
+**NUMARA: bu slice 83 YAZILDI, önce 84'e sonra 86'ya TAŞINDI — çakışma İKİ KEZ CANLI yakalandı.** Kayıt geriye
+dönük olduğu için sıradaki boş numarayı alır (ADIM 69/70/82 emsali). PR açılırken (2026-08-19
+04:50Z) main'in en yükseği **82** idi ve açık PR taraması rakip bir kapanış **göstermiyordu**
+(tek açık PR #777 = `C3`) → **83** yazıldı. Bir saat sonraki kontrolde **PR #781**
+(`test(stage-83)`, 05:04Z'de açılmış) ölçüldü: aynı `## ADIM 83` başlığını, aynı `## Stage 83`
+satırını **ve aynı `docs/ADIM83_LANDED_KICKOFF.md` dosya yolunu** yazıyordu — üç eksende de
+birebir çakışma. Bu kayıt **84**'e taşındı, çünkü #781 maddeten öndeydi (CI'ı koşuyordu, bu
+dalın `ci.yml` koşusu **70+ dakikadır kuyrukta** bekliyordu) ve #781 ratchet indiren bir
+**ürün-borcu** slice'ı, bu ise defter. **Numaralar yeniden atanmaz, merge edilmiş ad kazanır**
+— taşınan hep merge edilmemiş taraftır.
+**DERS (bu haftanın altıncı çakışma dizisi): açılışta ölçmek YETMEZ.** ADIM 81'in *"önce
+`list_pull_requests`"* dersi doğruydu ama eksikti — bu slice tam olarak onu yaptı ve yine
+çakıştı, çünkü rakip PR **açılıştan 14 dakika SONRA** açıldı. Numara açılışta değil, **merge'den
+hemen önce** ve **her check-in'de** yeniden doğrulanmalıdır; kapı (`check_classification`)
+bunu yakalayamaz çünkü iki dal da tek `current` taşır ve çakışma ancak ikincisi merge
+edilirken **conflict** olarak görünür.
+**SONUÇ ÖLÇÜLDÜ: #781 MERGE EDİLDİ** (`7f331c7`, 2026-08-19) ve **ADIM 83**'ü aldı → taşıma
+kararı olaylarla doğrulandı, **83 boşluk DEĞİL**. Bu dal `a5bc27f` üzerine rebase edildi;
+dört dosyanın dördünde de conflict çıktı (`CLAUDE.md`, `PROJECT_HISTORY.md`, `STAGE2_HANDOFF.md`,
+`ADIM81…KICKOFF.md`) ve **hepsi İKİ KAYDI DA koruyacak şekilde** elle çözüldü — `-X ours/theirs`
+kullanılmadı (ADIM 56'nın dersi: strateji-çözümü sessizce satır düşürür). Ayrıca #781'in
+`docs/ADIM83_LANDED_KICKOFF.md`'si `historical`'a demote edildi, çünkü `check_classification`
+canlı kickoff'un **en yüksek numaralı** olmasını ister.
+
+**VE SONRA 84 DE ELİNDEN ALINDI — bu kayıt 86 oldu.** Altı açık PR birlikte sıralanınca
+ölçüldü: **`ADIM 84`'ü ÜÇ dal birden yazıyordu** — bu PR, **#777** (`C3` adaptörü) ve **#784**
+(kabul borcu batch 12). Üçü de **aynı `docs/ADIM84_LANDED_KICKOFF.md` dosyasını EKLİYORDU**,
+yani ikinci ve üçüncü merge bir **add/add conflict** verirdi. Sıra merge edilebilirliğe göre
+kuruldu ve olaylarla doğrulandı: **#784 = 84** (`ea55aa7`), **#777 = 85** (`2cda24f`),
+**bu kayıt = 86**. Demote zinciri de onunla taşındı — bu kayıt artık **`ADIM85`**'i demote
+eder ve canlı kickoff `docs/ADIM86_LANDED_KICKOFF.md`'dir.
+
+**DERSİN GERÇEK ŞEKLİ (üç dal ölçüldükten sonra):** *"merge'den hemen önce say"* YETMEZ,
+çünkü **çakışan şey başlık değil DOSYA YOLUDUR**. Bir kapanış PR'ı açmadan önce açık PR'ların
+**ekleyeceği kickoff dosya yollarını** listele. `check_classification` bunu **asla**
+yakalayamaz: çakışan dalların **hepsi** kendi içinde tutarlıdır ve tek `current` taşır; kapı
+ancak ikinci merge'de bir git conflict'i olarak konuşur. Bu dalganın bedeli **beş** taşımaydı
+(bu kayıt iki, #777 dört).
+
+**HÂLÂ KAYITSIZ (işaret edildi, anlatısı YAZILMADI):** #752 · #755 · #747 · #761 · #770 ·
+#774 · #773 · #762. Bunlar karar/brif belgeleridir; kaydı **sahibinin** yazması gerekir.

@@ -17558,14 +17558,20 @@ criteria:
     - backend/tests/integration/test_analysis_lab.py::test_empty_directive_rejected
   - id: AL-06.c3
     text: The textarea content is preserved for the user after the rejection.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - frontend/src/test/analysisLab.test.tsx > Analysis Lab page > keeps the typed directive text
+      in the compose box after the 422 rejection
   production_paths:
   - backend/src/entropia/application/commands/agent_control.py
   - frontend/src/pages/AnalysisLab.tsx
   test_evidence:
   - backend/tests/integration/test_analysis_lab.py::test_empty_directive_rejected
+  - frontend/src/test/analysisLab.test.tsx > Analysis Lab page > keeps the typed directive text in
+    the compose box after the 422 rejection
   evidence_type:
   - backend_integration
+  - frontend_component
   positive: []
   negative:
   - backend/tests/integration/test_analysis_lab.py::test_empty_directive_rejected
@@ -17575,17 +17581,8 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'ADIM 83 (acceptance batch 11, doc 18 backend) closed the BACKEND half. The rejection test now
-    counts TaskDirective, AuditEvent, OutboxEvent and AgentEvent rows after the raise, so c2 no longer
-    rests on reading the command body: a validation guard placed BELOW the writes raises identically
-    while leaving rows behind. Negative control: moving the empty-text check under add_audit_event in
-    commands/agent_control.py::create_directive turns this test red on the TaskDirective count while
-    its pytest.raises half still passes — the new assertion is what does the work. The criterion stays
-    PARTIAL on c3, which is out of this batch''s surface: the text-preservation clause is a frontend
-    behaviour with no corresponding vitest case (analysisLab.test.tsx has no directive-validation test
-    at all, so nothing pins that a rejected submit leaves the textarea populated).'
+  status: covered
+  notes: 'ADIM 83 (acceptance batch 11, doc 18 backend) closed the BACKEND half; acceptance batch 12 (doc 18 FRONTEND) closes c3, so the criterion is covered and debt_class is removed. The clause was open because analysisLab.test.tsx carried no directive-validation case at all. MEASURED BEFORE WRITING ONE: the 422 the criterion names is reachable from the SHIPPED client only because the two blank gates disagree - the compose gate is JS String.trim(), which KEEPS U+001C..U+001F, while commands/agent_control.py::create_directive strips with Python str.strip(), which removes them. A U+001C directive therefore passes the button''s enable check, leaves the client as the directive text, and comes back 422 MESSAGE_TEXT_REQUIRED. Asserting the clause with ordinary prose plus a stubbed 422 would have measured a world production cannot produce, so the test submits U+001C. That divergence is not a defect: it is fail-closed (the server refuses, the alert renders, the text survives) and it is what makes AL-06''s section 15 row observable on the shipped surface at all. NEGATIVE CONTROL 1: turning the compose clear from onSuccess into onSettled in pages/AnalysisLab.tsx::LabConversationPanel reddens ONLY this new test, and on the textarea-value assertion specifically (analysisLab.test.tsx:337); the other fourteen tests in the file stay green, which is why the clause was open. NEGATIVE CONTROL 2 (vacuity): making sendDirective never dispatch reddens the new test on its role="alert" assertion, proving the rejection is OBSERVED rather than assumed - under that defect the surviving-text assertion alone would have passed vacuously. Its second casualty is the pre-existing directive-queue test, which is expected: that control breaks the whole submit path, not the clause.'
 - id: AL-07
   document: docs/spec/18_Entropia_V18_Analysis_Lab_Page_Documentation_v1_1.md
   section: '15'

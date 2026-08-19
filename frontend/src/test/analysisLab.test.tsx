@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
 import { AnalysisLab } from "@/pages/AnalysisLab";
-import { stubApi } from "./helpers/apiStub";
+import { apiErrorRoute, stubApi } from "./helpers/apiStub";
 
 const TASK = {
   task_id: "atask_1",
@@ -291,6 +291,53 @@ describe("Analysis Lab page", () => {
     });
   });
 
+  // AL-06.c3 (doc 18 §15): "Boş/whitespace directive gönderilir -> 422 validation;
+  // directive/queue/audit mutation oluşmaz; textarea texti kullanıcıda korunur."
+  // The 422 half is reachable from the SHIPPED client because the two blank
+  // gates disagree on a small set of separators: the compose gate is JS
+  // `String.trim()`, which KEEPS U+001C..U+001F, while the command's gate is
+  // Python `str.strip()` (commands/agent_control.py::create_directive), which
+  // strips them. U+001C therefore passes the button's enable check, leaves the
+  // client as the directive text, and comes back MESSAGE_TEXT_REQUIRED — the
+  // stimulus the criterion actually names, not a fabricated rejection of
+  // ordinary prose that the server would never refuse.
+  it("keeps the typed directive text in the compose box after the 422 rejection", async () => {
+    const TYPED = "\u001c";
+    const fetchMock = stubApi({
+      "GET /agent-workspace/overview": OVERVIEW,
+      "GET /hypotheses": HYPOTHESES,
+      "GET /lab/messages": LAB_MESSAGES,
+      "GET /agent-tasks": TASK_HISTORY,
+      "POST /agent-directives": apiErrorRoute(
+        422,
+        "MESSAGE_TEXT_REQUIRED",
+        "Enter a message before sending.",
+      ),
+    });
+    renderPage();
+    await screen.findByText("alpha");
+
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: TYPED } });
+    fireEvent.click(screen.getByRole("button", { name: "Send as Directive" }));
+
+    // The rejection is OBSERVED, not assumed. Without these two the surviving
+    // text would also hold on a page that never dispatched the submit at all,
+    // which is the vacuous version of this clause.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "MESSAGE_TEXT_REQUIRED: Enter a message before sending.",
+    );
+    const directiveCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes("/agent-directives"),
+    );
+    expect(JSON.parse(String((directiveCall?.[1] as RequestInit).body)).text).toBe(TYPED);
+
+    // The clause itself: a rejected submit does not empty the compose box, so
+    // the caller does not have to retype it. Only `onSuccess` clears the box
+    // (pages/AnalysisLab.tsx::LabConversationPanel) and this is what pins that.
+    expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe(TYPED);
+    // ... and the rejected submit advertises no success alongside the error.
+    expect(screen.queryByText(/Directive queued/)).not.toBeInTheDocument();
+  });
   it("arms the §6.1 pause confirmation without dispatching, and Cancel closes it", async () => {
     const fetchMock = stubApi({
       "GET /agent-workspace/overview": OVERVIEW,

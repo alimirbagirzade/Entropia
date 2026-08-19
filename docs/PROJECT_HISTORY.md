@@ -12597,3 +12597,127 @@ ancak ikinci merge'de bir git conflict'i olarak konuşur. Bu dalganın bedeli **
 
 **HÂLÂ KAYITSIZ (işaret edildi, anlatısı YAZILMADI):** #752 · #755 · #747 · #761 · #770 ·
 #774 · #773 · #762. Bunlar karar/brif belgeleridir; kaydı **sahibinin** yazması gerekir.
+
+## ADIM 87 — kabul borcu batch 13 (doc 18 frontend): `AL-06` kapandı, doc 18'in TÜM kabul borcu bitti
+
+> **ÜRÜN KODU DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Diff'te `backend/src` ve `frontend/src/pages` altında **sıfır** satır;
+> değişen kod **tek** test dosyası (`frontend/src/test/analysisLab.test.tsx`, +1 vitest case)
+> + üretilmiş/defter belgeleri.
+
+**Belge + yüzey:** doc 18 (Analysis Lab), **frontend** — ADIM 83'ün (batch 11) tümleyeni.
+Batch 11 doc 18'in backend borcunu bitirmiş, `AL-06`'yı **bilerek** `partial` bırakmıştı: tek
+açık clause `c3` bir frontend davranışıydı ve batch 11 tek-belge-tek-yüzey kuralıyla backend'e
+kapsanmıştı. Bu parti o tek satırı kapatıyor.
+
+| Kriter | Kapanan clause | Yeni assertion neyi ölçüyor |
+|---|---|---|
+| `AL-06` | `.c3` | Reddedilen directive submit'inden **sonra** compose kutusu boşalmıyor — kullanıcı yazdığını yeniden yazmak zorunda kalmıyor |
+
+`AL-06` böylece **covered** olur ve **`debt_class` KALDIRILIR** (kriterin son açık clause'u).
+
+### ASIL NOKTA — 422'yi ÖNCE ÖLÇTÜM, sonra test yazdım
+
+Doc 18 §15'in `AL-06` satırı şunu ister: *"Boş/whitespace directive gönderilir → **422
+validation**; directive/queue/audit mutation oluşmaz; textarea texti kullanıcıda korunur."*
+Sevk edilen istemcide **whitespace-only bir directive sunucuya HİÇ ULAŞMAZ**: `Send as
+Directive` düğmesi `composeText.trim().length === 0` iken `disabled`, ve `sendDirective` de
+aynı koşulda erken döner. Yani "boş metin yaz, 422 stub'la" biçiminde yazılmış bir test
+**üretimin üretemeyeceği bir dünyayı** ölçerdi.
+
+**Ölçülen çıkış yolu — iki boş-metin kapısı AYNI FİKİRDE DEĞİL:**
+
+| Kapı | Uygulama | `U+001C` (file separator) |
+|---|---|---|
+| İstemci compose kapısı | JS `String.trim()` | **KORUR** → düğme enabled, istek gider |
+| Komut kapısı | Python `str.strip()` (`commands/agent_control.py::create_directive`) | **SİLER** → `MessageTextRequiredError` → **422 `MESSAGE_TEXT_REQUIRED`** |
+
+`U+001C`–`U+001F` bu ayrımın tam ortasındadır (ölçüldü: Python `'\x1c'.strip() == ''`, JS
+`'\u001c'.trim() === '\u001c'`). Test bu yüzden **`U+001C` gönderir**: kriterin adlandırdığı
+uyaranın ta kendisi, ve sunucunun gerçekten reddedeceği bir gövde.
+
+**Bu bir kusur DEĞİLDİR ve bulgu olarak kaydedilmedi** — fail-closed'dur: sunucu reddeder,
+`role="alert"` zarfı render edilir, yazılan metin korunur; yani `AL-06`'nın sözleşmesinin
+kendisi. Ayrıca **§15 satırının sevk edilen yüzeyde gözlenebilir olmasının tek sebebidir**;
+bu ayrım olmasaydı clause ölçülemez (sınıf C şeklinde) olurdu.
+
+### İKİ NEGATİF KONTROL, İKİSİ DE FARKLI EKSENDE
+
+**NK-1 (clause'un kendisi).** `pages/AnalysisLab.tsx::LabConversationPanel` içindeki compose
+temizliği `onSuccess` yerine `onSettled`'a taşındı. Sonuç: **YALNIZ yeni test kırmızı**, ve
+tam da textarea-değer assertion'ında (`analysisLab.test.tsx:337`,
+`AssertionError: expected '' to be '\u001c'`). Dosyadaki **diğer on dört test yeşil kaldı** —
+clause'un neden açık olduğunun kanıtı budur.
+
+**NK-2 (vacuity).** `sendDirective` hiç dispatch etmeyecek hâle getirildi. Sonuç: yeni test
+**`role="alert"` assertion'ında** kırmızı — yani reddin *gerçekleştiği* **gözleniyor**, varsayılmıyor.
+Bu kusur altında "metin hâlâ orada" assertion'ı **tek başına vacuous geçerdi**. NK-2 ikinci bir
+kurban da aldı (mevcut directive-queue testi) ve bu **beklenendir**: o kontrol clause'u değil
+**tüm submit yolunu** kırar — o yüzden NK-2 bir "yalnız yeni test" kontrolü olarak değil, bir
+**vacuity** kontrolü olarak okunur.
+
+**DERS (ADIM 83'ün dersinin ikizi).** ADIM 83 *"Result yok" iddiasını hiç backtest admit
+edilmemişken ölçmek TOTOLOJİDİR* demişti. Burada aynı şeklin frontend hâli çıktı: *"metin
+korundu"* iddiasını **hiç submit edilmemiş** bir formda ölçmek de totolojidir. Çare aynı:
+iddianın **karşıtının üretilebileceği** bir dünyaya geç, ve reddin gerçekleştiğini **ayrı bir
+assertion ile gözle**.
+
+### Sayılar (ölçüldü, `--ratchet` çıktısından)
+
+**Tavanlar İNDİ: `partial` 86 → 85, `debt_class.B` 55 → 54.** Açık borç **94 → 93**
+(A=1 · B=54 · C=6 · D=32). Clause düzlemi: `covered` **1028 → 1029**, `uncovered` **99 → 98**.
+`total_criteria` **383** (TABAN) ve `uncovered` **kriter** sayısı **8** değişmedi.
+
+**DOC 18 ARTIK TAMAMEN KAPALI: 18 covered / 0 partial / 0 uncovered.** Doc 03 ve doc 07 daha
+önce bitmişti; doc 18 bu partiyle onlara katıldı.
+
+### Yan iş — bayat traceability raporu tazelendi
+
+`docs/audit/acceptance_semantic_traceability.md` **ADIM 42 dönemindeki** sayıları taşıyordu
+(`234 covered / 126 partial`), yani on batch'lik ilerlemeyi hiç görmemişti; `--write-report`
+ile yeniden üretildi (**275 / 85**). **Bu dosya `--check` kapısının kapsamında DEĞİL** — o
+yüzden aylarca sessizce bayatladı. Aynı işi **PR #783** de yapıyordu (bu dal açılırken
+açıktı); ikisinden hangisi önce inerse diğeri rebase edip yeniden üretmelidir.
+`docs/generated/repository_facts.*` + `README.md` bloğu da tazelendi (frontend unit test call
+site **724 → 725**) — **test ekleyen slice olguları TAZELEMELİ**, kapı bunu yakalar.
+
+### Dürüst sınırlar
+
+- **Backend kapıları KOŞULMADI.** Bu slice `backend/src` ve `backend/tests` altında tek satır
+  değiştirmedi; Postgres bu container'da ayakta değil. Backend suite'inin otoritesi **CI**'dır.
+- **e2e / `@a11y` suite'lerine hiçbir assertion yazılmadı** (Docker Hub blob CDN **403**;
+  koşamadığın suite'e assertion yazılmaz).
+- Koşulan kapılar: `npm run lint` **0**, `npm run typecheck` **0**, `npm run coverage`
+  **0** (**72 dosya / 735 test passed**, eşikler `frontend/vite.config.ts`), acceptance
+  `--ratchet` **0**, `generate_repository_facts.py --check` **0**.
+- **Yeni bulgu YOK.** Defterdeki dokuz yanlışlanamaz bulgu ve dört adjudication kalemi
+  **değişmedi**; hiçbir kriter yeniden sınıflandırılmadı.
+
+**ZİNCİR NOTU.** Taban **`7f331c7`** — batch 08, 09, 10 **ve 11** zaten içinde. Bu freeze o
+ağaca karşı `--ratchet` ile **yeniden ölçüldü**, iki dondurulmuş değer üzerinde aritmetik
+yapılmadı. Kabul defteri **seri bir kaynaktır**: paralel bir batch önce inerse bu dal rebase
+edilip **yeniden dondurulmalıdır**.
+
+**NUMARA: bu kayıt 85 YAZILDI, 87'ye TAŞINDI — parti etiketi de 12'den 13'e.** Yazıldığında
+main'in son kaydı **ADIM 83** (#781) ve tek rakip **#780** (`ADIM 84`) görünüyordu → **85**
+yazıldı. Merge sırası kurulunca ölçüldü: aradan **#784 = ADIM 84** (`ea55aa7`, kabul borcu
+**batch 12**, doc 05 backend — bu yüzden bu parti **13**), **#777 = ADIM 85** (`2cda24f`) ve
+**#780 = ADIM 86** (`ccdd4fd`) geçti → bu kayıt **87** oldu, demote hedefi **`ADIM86`**'ya
+taşındı. Dal ve commit mesajı `stage-85` yazar; **merge edilmiş ad kazanır**, numaralar
+yeniden atanmaz.
+
+**DERS — "merge'den hemen önce say" YETMEZ, çünkü çakışan şey başlık değil DOSYA YOLUDUR.**
+Bu dalgada dört dal aynı anda bir `docs/ADIM8x_LANDED_KICKOFF.md` ekliyordu; ikinci merge
+add/add conflict verirdi. `check_classification` bunu **asla** yakalayamaz — çakışan dalların
+hepsi kendi içinde tutarlıdır ve tek `current` taşır. Bir kapanış PR'ı açmadan önce açık
+PR'ların **ekleyeceği kickoff dosya yollarını** listele, başlıklarını değil.
+
+**ÇAKIŞMA ÖLÇÜMÜ (parti seçilmeden ÖNCE yapıldı) — VE SONUCU.** `HAT B` (`C3` adaptörü) o an
+**İKİ** ayrı açık PR tarafından sürülüyordu — **#777** ve **#782**, ikisi de
+`domain/backtest/participant.py` + containment gate testine dokunuyordu. Bu yüzden bu oturum
+`HAT B`'ye **hiç dokunmadı**; seçim ölçümle yapıldı, tercihle değil. **Çakışma sonradan
+çözüldü:** `#782` **kapatıldı** (unmerged), `#777` **§ADIM 85** olarak indi (`2cda24f`). Bir
+düzeltme: modül `execution/participant.py` **DEĞİL** `domain/backtest/participant.py` olarak
+sevk edildi — bilerek `execution/` **dışında**, çünkü içeride containment gate'in importer
+taraması **kör** olurdu.

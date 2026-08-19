@@ -1,6 +1,8 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
-> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+<!-- doc-status: historical -->
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM87_LANDED_KICKOFF.md`'dir.**
+> Bu belge yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat
+> olabilir. Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
+> `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 86 LANDED — kayıtsız inen P1-proof (#765) + P2 (#766) kaydedildi · sıradaki slice için kickoff
 

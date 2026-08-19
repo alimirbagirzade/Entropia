@@ -237,7 +237,33 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 86 (kayıtsız inen İKİ slice'ın ritüeli: P1-proof #765 +
+> `future_dev`. **Son dalga — ADIM 87 (kabul borcu batch 13, doc 18 FRONTEND): ÜRÜN KODU
+> DEĞİŞMEDİ, tek vitest case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Tek clause: **`AL-06.c3`** (reddedilen directive submit'inden sonra compose kutusu boşalmıyor)
+> → `AL-06` **covered**, **`debt_class` KALDIRILDI**. **DERS (ADIM 83'ün ikizi): "metin korundu"
+> iddiasını hiç submit edilmemiş bir formda ölçmek TOTOLOJİDİR.** Doc 18 §15 bir **422** ister,
+> ama sevk edilen istemcide whitespace-only directive sunucuya **hiç ulaşmaz** (düğme `disabled`
+> + `sendDirective` erken döner) → boş metin + stub'lanmış 422 **üretimin üretemeyeceği bir
+> dünyayı** ölçerdi. Ölçülen çıkış: **iki boş-metin kapısı aynı fikirde değil** — compose kapısı
+> JS `String.trim()` (**`U+001C`–`U+001F`'i KORUR**), komut kapısı Python `str.strip()`
+> (**siler** → 422 `MESSAGE_TEXT_REQUIRED`); test bu yüzden **`U+001C`** gönderir. Bu ayrım
+> **kusur DEĞİL** (fail-closed) ve bulgu olarak kaydedilmedi. **İki negatif kontrol, İKİ AYRI
+> EKSEN:** `onSuccess` → `onSettled` **yalnız** yeni testi ve **yalnız** textarea assertion'ını
+> düşürür (diğer on dört test yeşil) · `sendDirective`'i dispatch etmez yapmak testi
+> **`role="alert"` assertion'ında** düşürür → red **gözleniyor**, varsayılmıyor. **Tavanlar İNDİ:
+> `partial` 86 → 85, `debt_class.B` 55 → 54**; açık borç **93** (A=1 · B=54 · C=6 · D=32),
+> clause `covered` 1028 → 1029. **DOC 18 TAMAMEN KAPANDI (18/0/0)** — doc 03 ve doc 07'ye
+> katıldı. **YAN İŞ: `acceptance_semantic_traceability.md` ADIM 42 sayılarını (234/126)
+> taşıyordu** — o dosya `--check` kapısının **kapsamında değil**, sessizce bayatlamıştı;
+> yeniden üretildi (275/85). **ÇAKIŞMA ÖLÇÜLDÜ: `HAT B`/`C3` İKİ açık PR tarafından birden
+> sürülüyor (#777, #782)** → bu oturum ona **hiç dokunmadı**. **DÜRÜST SINIR:** backend kapıları
+> koşulmadı (backend'de sıfır satır, Postgres yok) → otorite CI; e2e/`@a11y` **403**.
+> `PROJECT_HISTORY.md` §ADIM 85 · `docs/ADIM85_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 86 (kayıtsız inen İKİ slice'ın ritüeli: P1-proof #765 +
 > P2 #766): BU SLICE DEFTER; kaydettiği #766 19 satır ürün kodudur, #765 test-only. Blocker
 > sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** İkisi de main'deydi, ikisinin de kaydı
 > **yoktu** (`grep -c` → 0/0). **Sonuç: P-C2 §D.1'in üç N+1 bacağından İKİSİ artık flat** —

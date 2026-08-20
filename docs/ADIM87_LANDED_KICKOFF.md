@@ -1,5 +1,5 @@
 <!-- doc-status: historical -->
-> **HISTORICAL KICKOFF — canlı olan `docs/ADIM88_LANDED_KICKOFF.md`'dir.**
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM89_LANDED_KICKOFF.md`'dir.**
 > Bu belge yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat
 > olabilir. Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
 > `docs/generated/repository_facts.md` (üretilmiş).

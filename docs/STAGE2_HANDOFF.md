@@ -7360,6 +7360,52 @@ sürülüyor (**#777**, **#782**) → bu oturum ona **hiç dokunmadı**.
 
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 87 ·
 `docs/ADIM87_LANDED_KICKOFF.md`.
+## Stage 89 — C4 / E5: worker'ın paylaşımlı saat dalı + iptal kontrol noktası + daraltılmış tripwire landed
+
+**Ürün kodu değişti (TEK dosya), gözlenebilir ÜRETİM davranışı değişmedi.** `ENGINE_VERSION`
+değişmedi · migration yok · OpenAPI değişmedi · alembic head `0043_i08_registry_strategy_fks`
+(tek head) · `SHARED_ALLOCATION_STATUS` = `future_dev` (**DEĞİŞMEDİ**) · **50 golden digest bayt
+bayt aynı**. Planın no-touch listesi ölçüldü ve tutuldu: `manifest.py`, `engine.py`,
+`portfolio_engine.py`, `capability.py` **el değmedi**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+`C1`/`C2`/`C3`'ün kurduğu zincirin **üretim çağıranı** yazıldı — ve **kimsenin giremeyeceği**
+bir dal olarak: `_use_unified_clock(capital_execution)` **tek** yerde
+(`shared_allocation_is_executable() and shared_allocation_requested(...)`), dal item döngüsünün
+**kardeşi**, artı ADR §3.2'nin `len(prepared_items) > 1` koşulu (tek yürüyen item'da A14
+`run_engine`'i şart koşar). Yol: `_shared_clock_inputs` (saf) → `_replay_shared_clock`
+(`iter_portfolio` generator'ını elle sürer, tick-strided iptal kontrolü = **checkpoint #3b**,
+ADR §14 **A21**) → `project_portfolio_run`. Refüzler terminal `RUN_FAILED_ENGINE_ERROR` olur.
+
+**Tripwire DARALTILDI, silinmedi** — `assert callers == []` → yetkili-çağıran allowlist'i, artı
+`assert "shared_allocation_is_executable" in worker`. **Dokunulmaz iki assertion yeşil kaldı.**
+**İmporter allowlist'i DEĞİŞMEDİ.** Worker'da `ItemIdentity`/`ItemBarStream` kurmak sayıldı ve
+**üç dosyada beş assertion** kırmızıya çeviriyordu; o genişletme imzalı bir listeyi **ikinci,
+imzasız** bir modülle büyütürdü (GH #731'in borcu) → genişletmek yerine **tasarım değişti**:
+`participant.py::build_engine_participant` (`C4`'ün no-touch listesinde **değil**). Kaçınma
+vacuous değil — import'lar geri konunca üç guard kırmızı verir, ve kalıcı bir assertion arka
+kapıyı kapatır.
+
+**NEGATİF KONTROLÜN BULDUĞU GERÇEK KUSUR:** checkpoint #4'ün ilerleme sözlüğü `item_runs`
+okuyordu (yalnız bağımsız kol bağlar) → paylaşımlı bir run'da #4'te gözlenen iptal
+`UnboundLocalError` fırlatıyordu. **Yedi test de yeşildi**, çünkü hepsi daha erken #3b'de iptal
+oluyordu. Onarıldı (`replay_progress` dal öncesinde bağlanır) ve kalıcı bir testle pinlendi.
+**On üç negatif kontrol koştu, on üçü de doğru assertion'da kırmızı.**
+
+**İki-dünya kapısı güncellendi (ADIM 76'nın kendi ısmarladığı güncelleme).**
+`test_the_worker_fold_never_consults_the_capability_flag` worker'da bayrağın **bulunmamasını**
+şart koşuyordu; C4 onu sevk ediyor. Blanket liste geri konmadı — savunulan özellik daha güçlü
+biçimde, bir **ayrıklık** olarak yazıldı (`ast`: bayrak TEK fonksiyondan çağrılır, fold eden
+fonksiyon onu çağırmaz). **Bunu alt küme koşuları değil TAM SUITE yakaladı** — ders bu.
+
+**Ölçülüp kapatılmayan:** `same_direction_stacking` şema varsayılanı (`allow_stacking`) adaptör
+tarafından reddediliyor — standart fixture **üç** maddeden düşüyor, yani bugünkü varsayılanla
+kayıtlı stratejilerin çoğu paylaşımlı saatte koşamaz. Bunu admission blocker'a çevirmek `C6`'dır
+ve bir **ürün kararıdır** (`G11`/`G12`, imzasız). Giriş fill'i komisyonu hâlâ havuza
+aynalanmıyor.
+
+`PROJECT_HISTORY.md` §ADIM 89 · `docs/ADIM89_LANDED_KICKOFF.md`.
+
 
 ## Stage 88 — kabul borcu batch 14 (doc 05 frontend): TL-18 yeni test yazılmadan kapandı landed
 
@@ -7479,6 +7525,33 @@ açık. **Çakışma başlıkta değil DOSYA YOLUNDADIR.** Parti numarası taş�
 `docs/ADIM91_LANDED_KICKOFF.md`.
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+
+> **ADIM 89 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe ADIM 81/85/86 güncellemelerinde: `docs-history-guard` `^-## ` desenine bakar, bir
+> `## ` başlığını yeniden yazmak ona **kayıt silme** gibi görünür — ADIM 61 emsali, ADIM 85'te
+> kapı **fiilen** kırmızı verdi.)
+>
+> **BU BAŞLIĞIN İKİ İŞİ DE ARTIK İNDİ.** Adaptör yarısı = `C3` = **#777** = §ADIM 85. **Call
+> site yarısı = `C4` = BU SLICE = §ADIM 89**: `_use_unified_clock` tek yerde, paylaşımlı dal
+> item döngüsünün kardeşi, `iter_portfolio` üzerinden **checkpoint #3b**, ve containment
+> tripwire'ı **yetkili-çağıran allowlist'ine DARALTILDI** (silinmedi, gevşetilmedi; iki
+> dokunulmaz assertion yeşil). Bu başlık altında **yeni bir dal AÇILMAMALIDIR.**
+>
+> **Containment AÇILMADI ve bu slice onu açmaya YAKLAŞMADI:** `SHARED_ALLOCATION_STATUS`
+> `future_dev`, `ENGINE_VERSION` sabit, 50 golden digest bayt bayt aynı, `5000.00`/`3000.00`
+> fixture'ı el değmemiş. Dal **çalışıyor** — test-sahipli bir lift fixture'ıyla iki-Strategy'li
+> paylaşımlı bir run gerçekten `project_portfolio_run` Result'ı üretiyor — ama üretimde
+> admission her paylaşımlı run'ı reddediyor.
+>
+> **SIRADAKİ KALEM `C6` DEĞİL, ÖNCE İKİ İMZA.** `C6`'nın ön koşulları `G11` (P2) ve `G12` (P8)
+> ve **ikisi de imzasız** (brifingli ≠ imzalı). `C5` **zaten sevk edilmiş** (ADIM 72'de
+> ölçüldü). `C7` `C4` + `C5` ister ve `manifest.py`'ye dokunur — `execution_key` namespace'ini
+> kaydırır, yani **A15**'tir. **İmzasız bir kapının arkasındaki slice'a BAŞLAMA.**
+>
+> **`C4`'ün ölçtüğü ve `C6`'ya devrettiği:** adaptörün on bir reddi ile `C6`'nın admission
+> blocker listesi **aynı** olmalıdır, ve standart strateji fixture'ı o listeden **üç** maddeden
+> düşüyor (`entry_timing`, `exit_timing`, `same_direction_stacking`). Şema varsayılanı
+> `allow_stacking` olduğu için bu **kayıtlı stratejilerin çoğunu** ilgilendirir → ürün kararı.
 
 > **ADIM 85 GÜNCELLEMESİ (2026-08-19) — BAŞLIK BİLEREK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > Bu slice'ın bir yazımı başlığı *"`C4` (E5) …"* olarak yeniden adlandırmıştı; geri alındı,

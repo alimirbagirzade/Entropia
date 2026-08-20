@@ -974,6 +974,8 @@
   },
   "schema_version": 1,
   "tests": {
+    "backend_collected_test_functions": 3706,
+    "backend_test_files": 352,
     "backend_collected_test_functions": 3697,
     "backend_test_files": 350,
     "backend_xfail_markers": 0,

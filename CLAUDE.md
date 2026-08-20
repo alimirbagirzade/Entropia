@@ -237,6 +237,31 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. **Son dalga — ADIM 89 (kabul borcu batch 15, doc 02 BACKEND): ÜRÜN KODU
+> DEĞİŞMEDİ, beş yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> BLOCKED.** Dört kriter kapandı — **`AT-01.c2`** (kompozisyona giren tek kapı
+> `attach_mainboard_item`'dır; kaydedilmemiş draft'ın kökünde **hiç `work_object_revision`
+> yok** → iki sahte-id dalı da reddedilir, Save + kendi mirror'ı **pozitif kontrol**) ·
+> **`AT-11.c2/c3`** (kapalı stop hem saklanan `strategy_revision.payload`'dan hem pinlenmiş
+> `protection_stop_indicator` **kenarından** düşer; re-enable draft'ın **kendi saklanmış**
+> değerini revalidate eder → 422) · **`AT-22.c3`** (Supervisor red / Admin grant, **aynı**
+> yabancı draft, sahip değişmez) · **`AT-23.c3`** (zaten revizyonu olan kök Clear'lanır;
+> revizyon + kenarlar + head pointer sağ, `trash_entries` **doğrudan** sorgulanır).
+> **YEDİ negatif kontrol, hepsi doğru assertion'da kırmızı** ve her biri koşmadan önce
+> **yamasının uygulandığını** assert etti. **DERS: aynı mekanizmadan beslenen iki
+> assertion'ın ilki ikincisini GÖLGELER** — kenar assertion'ı ancak testin payload satırı
+> geçici olarak düşürülünce ölçülebildi. **DERS 2: bir reddi exception SINIFIYLA pinleme**
+> (AOS-12 kind kontrolü aynı sınıfı fırlatıp testi yeşil tutardı) → zarfın ekolanan alanını
+> assert et. **Tavanlar İNDİ: `partial` 83 → 79, `debt_class.B` 51 → 47**; açık borç **86**
+> (A=1 · B=47 · C=6 · D=32). **DOC 02'NİN BACKEND BORCU BİTTİ** — kalan tek test kalemi
+> `AT-07` ve o **frontend**. **ORTAM DEĞİŞTİ: bu container'da Postgres 16 kurulu**, yerel
+> cluster kaldırıldı ve integration suite **gerçekten koştu** → son beş dalganın *"Postgres
+> yok, otorite CI"* sınırı **artık zorunlu değil** (komutlar kickoff §çapalar). **DÜRÜST
+> SINIR:** frontend kapıları koşulmadı (`node_modules` yok, frontend'de sıfır satır); tam
+> suite'in **geçen** sayısı ve coverage CI'ın otoritesinde. **NUMARA: #802 `stage-90`, #803
+> `stage-91` + *"batch 15"* AÇIKKEN yazıldı — kriterler ayrık, etiket çakışık; ikinci inen
+> rebase edip yeniden dondurmalı.** `PROJECT_HISTORY.md` §ADIM 89 ·
+> `docs/ADIM89_LANDED_KICKOFF.md`.
 > `future_dev`. **Son dalga — ADIM 91 (kabul borcu batch 15, doc 17 BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, dört yeni pytest case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > BLOCKED.** Dört kriter kapandı — **`AM-03`** (`.c2`+`.c3`) · **`AM-05`** (`.c2`) ·

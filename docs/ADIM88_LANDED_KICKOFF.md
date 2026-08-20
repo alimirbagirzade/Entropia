@@ -1,4 +1,7 @@
 <!-- doc-status: historical -->
+> **CANLI KICKOFF.** Bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
+> `historical`a demote edilir ve yerine yenisi geçer (`check_classification` CI'da doğrular:
+> daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varken canlı işaret eski belgede duramaz).
 > **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** ADIM 91 ile `historical`a demote
 > edildi; canlı kickoff `docs/ADIM91_LANDED_KICKOFF.md`. Aşağıdaki SHA'lar, tavanlar ve "next"
 > maddeleri yazıldıkları anı dondurur.

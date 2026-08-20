@@ -35,6 +35,8 @@ from entropia.infrastructure.postgres.models import (
     RationaleFamilyRoot,
     StrategyRevision,
     StrategyRoot,
+    TrashEntry,
+    WorkObjectRevision,
     WorkObjectRoot,
 )
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
@@ -43,8 +45,10 @@ from entropia.shared.errors import (
     RationaleFamilyNotActive,
     SizingMethodNotExclusiveError,
     StrategyDraftConflictError,
+    StrategyValidationFailedError,
     TriggerSourceConditionRequiredError,
     UnauthenticatedError,
+    ValidationError,
 )
 
 pytestmark = pytest.mark.integration
@@ -578,3 +582,314 @@ async def test_list_strategy_drafts_rejects_guest(session) -> None:
     await _new_draft(session, USER1)
     with pytest.raises(UnauthenticatedError):
         await strat_query.list_strategy_drafts(session, Actor.anonymous())
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 15 — doc 02 backend surface                                #
+#                                                                             #
+# AT-01.c2 unsaved draft cannot enter the Ready Check / RUN input             #
+# AT-11.c2 a disabled stop leaves the saved revision AND its dependency edges #
+# AT-11.c3 re-enabling a disabled stop revalidates its stored value           #
+# AT-22.c3 Admin CAN mutate another owner's Strategy Root (Supervisor cannot) #
+# AT-23.c3 a prior immutable revision survives a Clear untouched              #
+# --------------------------------------------------------------------------- #
+
+
+SUPERVISOR = Actor(
+    principal_id="supervisor_1", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR
+)
+ADMIN = Actor(principal_id="admin_1", principal_type=PrincipalType.HUMAN, role=Role.ADMIN)
+
+
+async def _seed_extra_principals(session) -> None:
+    for pid in ("supervisor_1", "admin_1"):
+        if await session.get(Principal, pid) is None:
+            session.add(Principal(principal_id=pid, principal_type=PrincipalType.HUMAN))
+    await session.flush()
+
+
+def _stop_logic_block(block_id: str, *, enabled: bool, package_root_id: str) -> dict[str, Any]:
+    """A Logic-Based Stop Block (§5.5) pinning its own indicator package.
+
+    Shaped like the entry block in ``_valid_payload`` — a native trigger, so no
+    Condition block is required by AT-05's rule.
+    """
+    return {
+        "block_id": block_id,
+        "display_order": 0,
+        "enabled": enabled,
+        "package_ref": {
+            "package_root_id": package_root_id,
+            "package_revision_id": f"{package_root_id}_rev",
+            "package_content_hash": _PKG_HASH,
+        },
+        "trigger_source": "indicator_native_trigger",
+        "direction": "long",
+        "timeframe": "same_as_base_tf",
+        "validity": "3_candles",
+        "requirement": "required",
+        "condition_block_rule": None,
+        "min_supporting_condition_count": None,
+        "condition_blocks": None,
+        "parameter_overrides": None,
+    }
+
+
+async def test_unsaved_draft_cannot_be_pinned_into_a_mainboard_composition(session) -> None:
+    """AT-01.c2 — the ONLY door into the Ready Check / RUN input is a pinned
+    revision, and an unsaved draft has none.
+
+    The refusal is measured on the seam that guards it (``attach_mainboard_item``
+    resolves the exact ``(root_id, revision_id)`` pair, L5 — never a name or a
+    "latest"), on BOTH the forged-id branches a client could take. The Save at the
+    end is the positive control: same root, same actor, same workspace, and the
+    attach then succeeds — so the refusal is attributable to the missing revision
+    rather than to a broken harness.
+    """
+    await _seed_principals(session)
+    unsaved = await _new_draft(session)
+    other = await _new_draft(session)
+    other_saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=other["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+
+    workspace_id = (await mb_query.get_default_mainboard(session, USER1))["workspace_id"]
+
+    # The load-bearing fact: an unsaved draft's root carries no revision at all,
+    # so no argument exists that would let it into a composition.
+    mirrors = (
+        (
+            await session.execute(
+                select(WorkObjectRevision).where(
+                    WorkObjectRevision.entity_id == unsaved["strategy_root_id"]
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert mirrors == []
+
+    # Branch 1: a revision id that does not exist.
+    with pytest.raises(ValidationError) as missing:
+        await mb_cmd.attach_mainboard_item(
+            session,
+            USER1,
+            workspace_id=workspace_id,
+            root_id=unsaved["strategy_root_id"],
+            revision_id="wrev_not_a_revision",
+        )
+    assert [issue["field"] for issue in missing.value.details] == ["revision_id"]
+
+    # Branch 2: a REAL, same-kind strategy revision borrowed from another root —
+    # the shape a client would forge to get an unsaved draft into the run input.
+    with pytest.raises(ValidationError) as borrowed:
+        await mb_cmd.attach_mainboard_item(
+            session,
+            USER1,
+            workspace_id=workspace_id,
+            root_id=unsaved["strategy_root_id"],
+            revision_id=other_saved["mirror_revision_id"],
+        )
+    # Pinned by field rather than by exception class: a same-kind revision of the
+    # wrong root must fail the belongs-to-root check, not the AOS-12 kind check.
+    assert [issue["actual"] for issue in borrowed.value.details] == [
+        other_saved["mirror_revision_id"]
+    ]
+
+    board = await mb_query.get_default_mainboard(session, USER1)
+    assert unsaved["strategy_root_id"] not in {
+        item["work_object_root_id"] for item in board["items"]
+    }
+
+    # Positive control: Save is the only thing that changes, and the attach lands.
+    now_saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=unsaved["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+    await mb_cmd.attach_mainboard_item(
+        session,
+        USER1,
+        workspace_id=workspace_id,
+        root_id=unsaved["strategy_root_id"],
+        revision_id=now_saved["mirror_revision_id"],
+    )
+    await session.flush()
+    board_after = await mb_query.get_default_mainboard(session, USER1)
+    assert unsaved["strategy_root_id"] in {
+        item["work_object_root_id"] for item in board_after["items"]
+    }
+
+
+async def test_disabled_stops_leave_the_saved_revision_and_its_dependency_edges(session) -> None:
+    """AT-11.c2 — a disabled Percentage/Logic stop is absent from the stored
+    canonical config AND from the pinned dependency edges.
+
+    Both halves are asserted against enabled siblings in the SAME save, so the
+    test cannot pass by dropping the section wholesale: the trailing stop and the
+    enabled Logic block must survive exactly where the disabled ones vanish.
+    """
+    await _seed_principals(session)
+    payload = _valid_payload()
+    payload["protection_stop_logic"] = {
+        "percentage_stop": {"enabled": False, "loss_percentage": "1.0"},
+        "trailing_stop": {"enabled": True, "trail_percentage": "2.0", "lock_in_percentage": "0.8"},
+        "absolute_stop": None,
+        "logic_blocks": [
+            _stop_logic_block("stopblk_on", enabled=True, package_root_id="pkg_stop_on"),
+            _stop_logic_block("stopblk_off", enabled=False, package_root_id="pkg_stop_off"),
+        ],
+    }
+    draft = await _new_draft(session, payload=payload)
+    saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=draft["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+
+    revision = await session.get(StrategyRevision, saved["strategy_revision_id"])
+    assert revision is not None
+    stops = revision.payload["protection_stop_logic"]
+    assert stops.get("percentage_stop") is None  # disabled -> not in the evaluator config
+    assert stops["trailing_stop"]["trail_percentage"] == "2.0"  # enabled sibling survives
+    assert [block["block_id"] for block in stops["logic_blocks"]] == ["stopblk_on"]
+
+    refs = list(await strat_repo.list_references(session, saved["strategy_revision_id"]))
+    stop_refs = [r for r in refs if str(r.dependency_role) == "protection_stop_indicator"]
+    assert [r.referenced_root_id for r in stop_refs] == ["pkg_stop_on"]
+    assert "pkg_stop_off" not in {r.referenced_root_id for r in refs}
+
+
+async def test_re_enabling_a_disabled_stop_revalidates_its_stored_value(session) -> None:
+    """AT-11.c3 — the disabled stop's value is not validated while it is off, and
+    not discarded either: re-enabling it revalidates the STORED value.
+
+    The re-enable patch carries the draft's own persisted stop section with only
+    ``enabled`` flipped, so the 422 can only come from the value that was already
+    there — the client resupplies nothing.
+    """
+    await _seed_principals(session)
+    payload = _valid_payload()
+    payload["protection_stop_logic"] = {
+        # gt 0 on PercentageStop.loss_percentage: invalid, but disabled sections
+        # are filtered out BEFORE parsing (Binding Decision #2), so Save accepts it.
+        "percentage_stop": {"enabled": False, "loss_percentage": "-5.0"},
+        "trailing_stop": {"enabled": True, "trail_percentage": "2.0", "lock_in_percentage": "0.8"},
+        "absolute_stop": None,
+    }
+    draft = await _new_draft(session, payload=payload)
+    saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=draft["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+    revision = await session.get(StrategyRevision, saved["strategy_revision_id"])
+    assert revision is not None
+    assert revision.payload["protection_stop_logic"].get("percentage_stop") is None
+
+    stored = await strat_repo.get_strategy_draft(session, draft["draft_id"])
+    assert stored is not None
+    stops = dict(stored.payload["protection_stop_logic"])
+    assert stops["percentage_stop"]["loss_percentage"] == "-5.0"  # the old value is kept
+    stops["percentage_stop"] = {**stops["percentage_stop"], "enabled": True}
+    patched = await strat_cmd.patch_strategy_draft(
+        session,
+        USER1,
+        draft_id=draft["draft_id"],
+        expected_draft_row_version=stored.row_version,
+        patch={"protection_stop_logic": stops},
+    )
+    await session.flush()
+
+    with pytest.raises(StrategyValidationFailedError) as exc:
+        await strat_cmd.save_strategy_revision(
+            session,
+            USER1,
+            draft_id=draft["draft_id"],
+            expected_draft_row_version=patched["row_version"],
+        )
+    fields = {issue["field"] for issue in exc.value.details}
+    assert "protection_stop_logic.percentage_stop.loss_percentage" in fields
+
+
+async def test_admin_may_save_another_owners_strategy_but_supervisor_may_not(session) -> None:
+    """AT-22.c3 — the GRANT half of the authorization row.
+
+    ``ensure_can_edit`` admits Admin and nobody else across an ownership boundary,
+    so both actors are driven against the SAME foreign draft in one test: the
+    Supervisor (whom the criterion names alongside User) is refused, the Admin
+    writes a real revision, and the root's ownership does not move under it.
+    """
+    await _seed_principals(session)
+    await _seed_extra_principals(session)
+    draft = await _new_draft(session, USER1)
+
+    with pytest.raises(AccessDeniedError):
+        await strat_cmd.save_strategy_revision(
+            session, SUPERVISOR, draft_id=draft["draft_id"], expected_draft_row_version=0
+        )
+
+    saved = await strat_cmd.save_strategy_revision(
+        session, ADMIN, draft_id=draft["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+
+    revision = await session.get(StrategyRevision, saved["strategy_revision_id"])
+    assert revision is not None
+    assert revision.created_by_principal == "admin_1"
+    root = await session.get(EntityRegistry, draft["strategy_root_id"])
+    assert root is not None and root.owner_principal_id == "user_1"  # edit, not takeover
+
+
+async def test_clear_leaves_a_prior_immutable_revision_untouched(session) -> None:
+    """AT-23.c3 — Clear wipes the editor draft over a root that ALREADY has a
+    saved revision, and the revision, its head pointer and its dependency edges
+    all survive; no Trash row is written.
+
+    The shipped Clear test clears a draft that was never saved, so the immutable
+    half of the row was never exercised.
+    """
+    await _seed_principals(session)
+    draft = await _new_draft(session)
+    saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=draft["draft_id"], expected_draft_row_version=0
+    )
+    await session.flush()
+    before = await session.get(StrategyRevision, saved["strategy_revision_id"])
+    assert before is not None
+    payload_before = dict(before.payload)
+    ref_count_before = len(list(await strat_repo.list_references(session, before.revision_id)))
+
+    stored = await strat_repo.get_strategy_draft(session, draft["draft_id"])
+    assert stored is not None
+    await strat_cmd.clear_strategy_draft(
+        session,
+        USER1,
+        draft_id=draft["draft_id"],
+        expected_draft_row_version=stored.row_version,
+    )
+    await session.flush()
+    session.expire_all()
+
+    after = await session.get(StrategyRevision, saved["strategy_revision_id"])
+    assert after is not None
+    assert after.revision_number == before.revision_number
+    assert after.config_hash == saved["config_hash"]
+    assert after.payload == payload_before
+    assert len(list(await strat_repo.list_references(session, after.revision_id))) == (
+        ref_count_before
+    )
+
+    detail = await session.get(StrategyRoot, saved["strategy_root_id"])
+    assert detail is not None and detail.current_revision_id == saved["strategy_revision_id"]
+
+    # Clear is not a delete, so it writes no Trash record for the root (doc 02 §7).
+    trashed = (
+        (
+            await session.execute(
+                select(TrashEntry).where(TrashEntry.entity_id == draft["strategy_root_id"])
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert trashed == []

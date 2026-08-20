@@ -1,4 +1,8 @@
 <!-- doc-status: historical -->
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM90_LANDED_KICKOFF.md`'dir.**
+> Bu belge yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat
+> olabilir. Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
+> `docs/generated/repository_facts.md` (üretilmiş).
 > **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** ADIM 91 ile `historical`a demote
 > edildi; canlı kickoff `docs/ADIM91_LANDED_KICKOFF.md`. Aşağıdaki SHA'lar, tavanlar ve "next"
 > maddeleri yazıldıkları anı dondurur.

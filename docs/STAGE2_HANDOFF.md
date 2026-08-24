@@ -8119,6 +8119,24 @@ dal rebase edildi, `ADIM102` kickoff'u `historical`a demote edildi, canlı işar
 güncellemesi gerekmedi. `PROJECT_HISTORY.md` §ADIM 103 · `docs/ADIM103_LANDED_KICKOFF.md`.
 
 
+
+## Stage 104 — kabul borcu batch 25 (doc 09 Embedded System Packages, backend): ESP-20 + ESP-03 kapandı landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** — iki yeni integration case (`test_esp_persistence.py`) + defter +
+üretilmiş artefaktlar. **`ESP-20` (c2+c3):** rol farkındalıklı filtre üretimde iki okuma yolunda da
+bağlıydı ama **hiç yabancı aktörle sürülmemişti** — tek listing testi iki kaydı da AYNI sahiple
+yaratıyor, yani post-filter satırı silinse yeşil kalırdı (NC-1'de ölçüldü). **`ESP-03.c4`:** yedi
+kanonik TA fixture'ı `SEED_ESP_TA=1` arkasındaki seeder'da vardı, **hiçbir test onu çağırmıyordu**;
+yeni case gerçek seeder'ı koşar, yedi `(ad, anahtar)` çifti **literal** yazılır, ad `change_note`
+üzerinden bağlanır. **BEŞ negatif kontrol, beşinde de 24 testten yalnız yeni case kırmızı**; NC-4
+(ad değişti, anahtar korundu) gölgeyi kaldırdı, **NC-5 REDDEDİLDİ** (unique kısıt assertion'ın
+yerine geçti) ve yeniden kuruldu. **ON İKİNCİ BULGU — `ESP-05.c3` KURULAMAZ:** ESP kökü
+rationale-assignable değil (`RATIONALE_ASSIGNABLE_PACKAGE_KINDS = {INDICATOR, CONDITION}`,
+`_apply_assignment_change` → `LifecycleBlocked`; probe ile ölçüldü) → sınıf C şekli, **taşınmadı**.
+**Tavanlar İNDİ: `partial` 61 → 59, `debt_class.B` 29 → 27** (açık borç 66). Doc 09 = 17/3.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
+`PROJECT_HISTORY.md` §ADIM 104 · `docs/ADIM104_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

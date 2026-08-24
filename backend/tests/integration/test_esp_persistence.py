@@ -22,9 +22,11 @@ from sqlalchemy import func, select
 from entropia.application.commands import esp as esp_cmd
 from entropia.application.commands.deletion import soft_delete_entity
 from entropia.application.queries.esp import (
+    get_esp_detail,
     list_embedded_system_packages,
     resolve_embedded_dependency,
 )
+from entropia.apps.seed import _seed_esp_ta_resolvers
 from entropia.domain.esp.enums import ResolverTrustState, RuntimeAdapter
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
@@ -577,3 +579,130 @@ async def test_seed_style_ta_resolvers_resolve(session) -> None:
         .all()
     )
     assert len(rows) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 25 — ESP-20 (role-aware visibility, doc 09 §2) and          #
+# ESP-03.c4 (the REAL seven-fixture seeder, doc 09 §3.2 / DC7)                 #
+# --------------------------------------------------------------------------- #
+
+FOREIGN = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
+
+# The seven canonical TA fixtures doc 09 §3.2 names, written as LITERALS on
+# purpose: deriving them from ``seed._ESP_TA_RESOLVERS`` would compare the seeder
+# to itself and a dropped or misspelled key would still pass.
+_EXPECTED_TA_FIXTURES: tuple[tuple[str, str], ...] = (
+    ("ESP_TA_SMA", "ta.sma"),
+    ("ESP_TA_EMA", "ta.ema"),
+    ("ESP_TA_RMA", "ta.rma"),
+    ("ESP_TA_ATR", "ta.atr"),
+    ("ESP_TA_RSI", "ta.rsi"),
+    ("ESP_TA_WMA", "ta.wma"),
+    ("ESP_TA_VWAP", "ta.vwap"),
+)
+
+
+class _NullLog:
+    """The seed helpers emit structured events; this suite asserts on rows, not logs."""
+
+    def info(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+async def _scoped_rows(session, actor: Actor) -> dict[str, dict]:
+    """The scoped resolver list, keyed by canonical key."""
+    page = await list_embedded_system_packages(session, actor, PageParams(cursor=None, limit=50))
+    return {row["canonical_key"]: row for row in page["data"]}
+
+
+async def test_foreign_actor_sees_no_private_proposal_in_list_or_by_id(session) -> None:
+    """ESP-20.c2 + c3: the role-aware filter, driven by a FOREIGN actor at last.
+
+    ``queries/esp.py`` wires the predicate in both places — ``_can_view`` post-filters
+    the listing and ``ensure_can_view`` guards the direct id read — and the predicate
+    itself is unit-tested. What was never exercised is either QUERY with an actor who
+    is not the owner: the one listing test seeds its System and Private rows under the
+    SAME owner, so the filter had nothing to remove and would have passed with the
+    call deleted.
+
+    Both halves carry a positive control on the same row, so the refusal is
+    attributable to WHO asked rather than to the row being invisible to everyone.
+    """
+    await _seed_principals(session)
+    if await session.get(Principal, FOREIGN.principal_id) is None:
+        session.add(
+            Principal(principal_id=FOREIGN.principal_id, principal_type=PrincipalType.HUMAN)
+        )
+        await session.flush()
+    await _create_esp(session, key="ta.sma", visibility_scope=VisibilityScope.SYSTEM)
+    private_esp = await _create_esp(session, key="ta.rsi", visibility_scope=VisibilityScope.PRIVATE)
+    await session.commit()
+
+    # c2 — the listing omits the other owner's private proposal. The System row in the
+    # same page is the vacuity guard: an empty page would satisfy "ta.rsi is absent".
+    foreign_rows = await _scoped_rows(session, FOREIGN)
+    assert "ta.sma" in foreign_rows
+    assert "ta.rsi" not in foreign_rows
+
+    # Positive control: the owner's byte-identical listing carries BOTH rows, so the
+    # omission above is the filter working, not the row failing to exist.
+    owner_rows = await _scoped_rows(session, OWNER)
+    assert {"ta.sma", "ta.rsi"} <= set(owner_rows)
+
+    # c3 — the direct id query is refused for the same foreign actor...
+    with pytest.raises(AccessDeniedError):
+        await get_esp_detail(session, FOREIGN, entity_id=private_esp["entity_id"])
+
+    # ...and succeeds for the owner, on the same entity id.
+    detail = await get_esp_detail(session, OWNER, entity_id=private_esp["entity_id"])
+    assert detail["entity_id"] == private_esp["entity_id"]
+    assert detail["owner_principal_id"] == OWNER.principal_id
+    assert detail["visibility_scope"] == str(VisibilityScope.PRIVATE)
+
+
+async def test_real_seeder_publishes_all_seven_ta_fixtures_to_the_scoped_list(session) -> None:
+    """ESP-03.c4: the seven named TA fixtures really reach the scoped list.
+
+    Production declares them in ``apps/seed.py::_ESP_TA_RESOLVERS`` and materializes
+    each as a System-owned ESP package + resolver contract + TRUSTED_ACTIVE registry
+    row — but the whole block sits behind ``SEED_ESP_TA=1`` and NO test ever called
+    it: the suite only asserts hand-built single resolvers (``ta.vwap``, ``ta.sma``),
+    so dropping, misspelling or mis-scoping the other five would keep CI green.
+
+    This case runs the REAL seeder and reads the shipped scoped list back. The
+    display name is bound too — it is not a queryable column, so it is asserted
+    through the seeded revision's ``change_note``, which is where production writes
+    it; a rename in ``_ESP_TA_RESOLVERS`` therefore fails here.
+    """
+    await _seed_principals(session)
+    # Attribution guard: none of the seven exists before the seeder runs, so every
+    # row asserted below can only have come from this call.
+    assert await _scoped_rows(session, ADMIN) == {}
+
+    await _seed_esp_ta_resolvers(session, _NullLog())
+    await session.commit()
+
+    rows = await _scoped_rows(session, ADMIN)
+    missing = [key for _name, key in _EXPECTED_TA_FIXTURES if key not in rows]
+    assert missing == [], f"the seeder did not publish {missing}"
+
+    for display_name, canonical_key in _EXPECTED_TA_FIXTURES:
+        row = rows[canonical_key]
+        # Trusted-active + System-scoped is what makes a seeded resolver usable by
+        # Pre-Check for every actor; a CANDIDATE or PRIVATE row would be invisible
+        # or unresolvable while still "existing".
+        assert row["trust_state"] == str(ResolverTrustState.TRUSTED_ACTIVE)
+        assert row["visibility_scope"] == str(VisibilityScope.SYSTEM)
+        assert row["runtime_adapter"] == str(RuntimeAdapter.PYTHON)
+        assert row["trusted_active_revision_id"] is not None
+        revision = await pkg_repo.get_revision(session, row["trusted_active_revision_id"])
+        assert revision is not None
+        assert revision.change_note == f"Seed canonical resolver {display_name}."
+
+    # The seeder is idempotent per key (it skips a key already in the registry), so a
+    # second provision run must not fork a second package for any fixture.
+    before = {key: rows[key]["package_entity_id"] for _name, key in _EXPECTED_TA_FIXTURES}
+    await _seed_esp_ta_resolvers(session, _NullLog())
+    await session.commit()
+    again = await _scoped_rows(session, ADMIN)
+    assert {key: again[key]["package_entity_id"] for key in before} == before

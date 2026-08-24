@@ -14540,3 +14540,108 @@ artık yok; onların kaydı yalnız bu anlatıdadır.
 
 Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
 `docs/ADIM103_LANDED_KICKOFF.md`.
+
+## ADIM 104 — kabul borcu batch 25 (doc 09 Embedded System Packages, backend): `ESP-20` + `ESP-03` kapandı, `ESP-05.c3` KURULAMAZ çıktı
+
+**Tarih:** 2026-08-24 · **Dal:** `claude/entropia-v18-kabul-borcu-96llrh` · **Taban:** main `b80388a`
+(ADIM 103 / batch 24 = #816). **ÜRÜN KODU DEĞİŞMEDİ** (`backend/src` altında sıfır satır); diff =
+iki yeni integration case + kabul defteri + üretilmiş artefaktlar + kapanış belgeleri. Migration
+yok, OpenAPI değişmedi, `ENGINE_VERSION` değişmedi, alembic head
+`0043_i08_registry_strategy_fks`, `SHARED_ALLOCATION_STATUS` = `future_dev`.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Kapanan 1: `ESP-20` (c2 + c3) — rol farkındalıklı filtre İLK KEZ yabancı aktörle sürüldü
+
+Predicate **vardı ve unit-test'liydi**; `queries/esp.py` onu **iki okuma yolunda da** bağlıyordu
+(`list_embedded_system_packages` satırları `_can_view` ile post-filtreler, `get_esp_detail`
+projeksiyondan önce `ensure_can_view` çağırır). Eksik olan tek şey **çağıran**dı: tek listing
+testi (`test_list_filters_by_visibility_scope`) System ve Private kaydı **AYNI sahiple** yaratıyor,
+yani filtrenin kaldıracağı bir şey yok — post-filter satırı **tamamen silinse o test yeşil kalırdı**
+(iddia değil, NC-1'de ölçüldü).
+
+Yeni case `user_1`'in SYSTEM resolver'ı + `user_1`'in PRIVATE proposal'ını tohumlar ve **iki yüzeyi
+de `user_2` olarak** sürer. Her yarıda **aynı satır üzerinde pozitif kontrol** var, böylece red
+*"kim sordu"*ya atfedilir, satırın yokluğuna değil: yabancı listing System satırını **hâlâ**
+içerir (boş bir sayfa *"ta.rsi yok"*u bedavaya doğrular), sahibin listingi **ikisini de** taşır,
+ve sahibin **birebir aynı** `get_esp_detail` çağrısı, yabancıya reddedilen **tam o id** üzerinde
+başarılı olur.
+
+### Kapanan 2: `ESP-03.c4` — yedi TA fixture'ı, GERÇEK seeder üzerinden
+
+Yedi kanonik fixture `apps/seed.py::_ESP_TA_RESOLVERS` içinde **gerçekten var** ve her biri
+System-sahipli bir ESP paketi + resolver contract + `TRUSTED_ACTIVE` registry satırı olarak
+materyalize ediliyor — ama blok **`SEED_ESP_TA=1` bayrağının arkasında** ve **hiçbir test seeder'ı
+çağırmıyordu**: suite yalnız elle kurulmuş tekil resolver'ları (`ta.vwap`, `ta.sma`) assert
+ediyordu, yani diğer **beşinin** düşmesi/yanlış yazılması/yanlış kapsamlanması **CI'ı yeşil
+bırakırdı**.
+
+Yeni case **gerçek** `_seed_esp_ta_resolvers`'ı koşar ve sevk edilen scoped listeyi geri okur.
+Üç taşıyıcı: (1) yedi `(ad, anahtar)` çifti **LİTERAL** yazılır — üretim tuple'ından türetmek
+seeder'ı **kendisiyle** karşılaştırırdı ve düşen bir anahtar yine geçerdi; (2) **atıf muhafızı**:
+çağrıdan önce scoped liste **boş** assert edilir, yani her satır ancak bu çağrıdan gelmiş olabilir;
+(3) **ad** ekseni, üretimin adı yazdığı tek yerden — seeder revizyonunun `change_note`'undan —
+bağlanır (ad sorgulanabilir bir kolon **değil**). Ayrıca ikinci bir seeder koşusunun paketi
+**çatallamadığı** pinlenir.
+
+### BEŞ negatif kontrol, beşinde de 24 testten yalnız yeni case kırmızı
+
+| Kontrol | Enjekte edilen kusur | Kırmızının düştüğü assertion |
+|---|---|---|
+| NC-1 | Listing artık çağırana göre filtrelemiyor | `"ta.rsi" not in foreign_rows` — ve **`test_list_filters_by_visibility_scope` YEŞİL kaldı** |
+| NC-2 | `get_esp_detail`'den `ensure_can_view` silindi | c2 assertion'ları **GEÇTİ**, kırmızı `pytest.raises`'a taşındı → c3, c2 tarafından gölgelenmiyor |
+| NC-3 | `ESP_TA_WMA` üretimden düşürüldü | *"the seeder did not publish ['ta.wma']"* |
+| NC-4 | `ESP_TA_RSI` **yeniden adlandırıldı, anahtarı korundu** | anahtar + trust/scope eksenleri **GEÇTİ**, yalnız `change_note` karşılaştırması düştü |
+| NC-5 | (yeniden kuruldu, aşağıda) re-seed registry kaydını **değiştiriyor** | paket kimliği karşılaştırması, önceki tüm assertion'lar yeşil |
+
+**NC-4 bu partinin gölge dersidir:** ad ekseni, anahtar ekseninin **arkasında** duruyordu; anahtarı
+koruyup adı değiştiren bir kusur kurunca (ADIM 101'in *"gölgeyi KALDIR"* kuralı) ad ekseni kendi
+başına ölçülebildi.
+
+**NC-5 REDDEDİLDİ ve YENİDEN KURULDU — batch 24'ün dersi birebir tekrarladı.** Seeder'ın anahtar
+başına early-out'unu kaldıran ilk sürüm, koşuyu **seeder'ın İÇİNDE**
+`uq_embedded_resolver_registry_key` ihlaliyle öldürdü: kırmızı vardı ama **DB kısıdına** aitti,
+sınanan assertion'a değil (`esp_repo::upsert_registry_entry` adına rağmen **INSERT-only**).
+Yeniden kurulan kontrol, re-seed'den önce registry satırını **siler** — assertion'ın koruduğu
+gerçek *"re-seed işaretçiyi değiştirir"* kusur şekli — ve kırmızı doğru yere düştü.
+**BİR UNIQUE KISIT, ASSERTION'IN YERİNE GEÇEBİLİR.**
+
+### ON İKİNCİ BULGU — `ESP-05.c3`: senaryo KURULAMAZ (sınıf C şekli), taşınMADI
+
+Defter notu bir sonraki slice'a *"(a) `batch_assign_rationale`'ı TRUSTED_ACTIVE bir ESP üzerinde
+koştur"* diyordu. **Cevap ölçüldü ve senaryonun kendisi yok:** bir ESP kökü **hiç**
+rationale-assignable değil. `commands/rationale.py::RATIONALE_ASSIGNABLE_PACKAGE_KINDS` =
+`frozenset({INDICATOR, CONDITION})` ve `_apply_assignment_change` head'e **dokunmadan önce** türü
+kontrol edip `LifecycleBlocked("This package type is not rationale-assignable.")` fırlatıyor —
+**gerçek veritabanına karşı sürülen tek kullanımlık bir probe** bunu birebir bastı, sonra probe
+silindi. ESP↔Family bağı **yalnızca paket oluşturulurken**, `rationale_family_snapshot` ile kurulur
+(ESP-05.c1'in kanıtı da tam olarak böyle inşa ediyor), yani clause'un gözleyebileceği **sevk
+edilmiş bir yeniden atama yok**. **c2 için sonucu da not edildi:** c2 `covered` kalır ama kanıtı
+bir **INDICATOR** kökü üzerinde koşar — c3'ün adlandırdığından **farklı bir paket türü** — yani
+c2'nin kapsanmış olması c3'ün kurulabilir olduğu anlamına gelmez.
+**Yeniden sınıflandırılmadı: B → C, C tavanını YÜKSELTİR** ve tavanlar adjudication dışında yalnız
+iner. `ESP-05` `partial` / sınıf B kalır.
+
+### Tavanlar ve sayılar
+
+**Tavanlar İNDİ: `partial` 61 → 59, `debt_class.B` 29 → 27**; açık borç **68 → 66**
+(A=1 · B=27 · C=6 · D=32). Kriter `covered` 300 → 302, clause `covered` 1058 → 1061 /
+`uncovered` 74 → 71. Korpus 383 kriter / 1175 clause (taban, düşmedi).
+**Doc 09 = 17 covered / 3 partial** (15 → 17, 5 → 3); kalan üç satırın biri bu bulgu (`ESP-05`),
+ikisi sınıf C/D. `test_esp_persistence.py` 17 → 19 passed.
+
+### Ortam ve dürüst sınır
+
+Container bu oturumda **iki kez yeniden başladı** ve her seferinde Postgres düştü — `pg_isready`
+ile yakalanıp yeniden kaldırıldı. **`ss` (skipped) + exit 0 bir yeşil DEĞİLDİR** (ADIM 94): bu
+oturumda bir koşu 49 SKIP verip `exit 0` döndü ve ancak dot satırı okunduğu için fark edildi.
+Alt kümeler izole `entropia_esp` DB'sinde koştu; `ruff` / `ruff format` / `mypy src` temiz;
+`--report --check-generated --ratchet` ve `generate_repository_facts.py --check` yeşil.
+**DÜRÜST SINIR:** frontend'de sıfır satır → hiçbir frontend kapısı koşulmadı; tam backend suite
+uçtan uca koşulmadı → geçen sayı ve coverage **CI'ın otoritesinde**.
+
+**NUMARA:** dal `b80388a`'dan kesildi ve o an açık PR listesi **boştu** — ADIM 103'ün öğrettiği gibi
+bu bir **anlık görüntüdür**, garanti değil; kapanışta yeniden ölçüldü (hâlâ boş, son kayıt 103) →
+**ADIM 104 / batch 25**.
+
+Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
+`docs/ADIM104_LANDED_KICKOFF.md`.

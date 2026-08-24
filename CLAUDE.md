@@ -237,7 +237,30 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 103 (kabul borcu batch 24, doc 20 Trash BACKEND): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 104 (kabul borcu batch 25, doc 09 ESP BACKEND): ÜRÜN KODU
+> DEĞİŞMEDİ, iki integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> İki kriter kapandı — **`ESP-20`** (c2+c3: rol farkındalıklı filtre İLK KEZ yabancı aktörle
+> sürüldü; predicate vardı, iki sorguya da bağlıydı, ama tek listing testi iki kaydı da AYNI
+> sahiple yaratıyor → post-filter satırı silinse yeşil kalırdı, NC-1'de ölçüldü) · **`ESP-03.c4`**
+> (yedi kanonik TA fixture'ı `SEED_ESP_TA=1` arkasındaki seeder'da vardı, **hiçbir test onu
+> çağırmıyordu** → beşinin düşmesi CI'ı yeşil bırakırdı). **Tavanlar İNDİ: `partial` 61 → 59,
+> `debt_class.B` 29 → 27**; açık borç **66** (A=1 · B=27 · C=6 · D=32). Doc 09 = 17/3.
+> **ASIL DERS (ikinci kez): BİR UNIQUE KISIT ASSERTION'IN YERİNE GEÇEBİLİR** — NC-5 seeder'ın
+> early-out'unu kaldırınca `uq_embedded_resolver_registry_key` ihlaliyle öldü, yani kırmızı DB
+> kısıdına aitti; kontrol REDDEDİLDİ ve kısıdı tetiklemeyen bir kusurla yeniden kuruldu (batch
+> 24'te aynısı `uq_metric_value_result_key` ile olmuştu → **desen**). **İKİNCİ DERS: gölgeyi
+> KALDIRMANIN ŞEKLİ** — NC-4 fixture'ı yeniden adlandırıp **anahtarını korudu**, böylece anahtar
+> ekseni GEÇTİ ve ad ekseni kendi başına ölçüldü. **ON İKİNCİ BULGU — `ESP-05.c3` KURULAMAZ:** ESP
+> kökü hiç rationale-assignable değil (`RATIONALE_ASSIGNABLE_PACKAGE_KINDS = {INDICATOR,
+> CONDITION}`; `_apply_assignment_change` → `LifecycleBlocked`, probe ile ölçülüp probe silindi) →
+> gözlenecek yeniden atama yok; **c2'nin `covered` olması aldatıcı, o bir INDICATOR kökünde
+> koşuyor**. Sınıf C şekli, **taşınMADI** (B→C tavan yükseltir).
+> `PROJECT_HISTORY.md` §ADIM 104 · `docs/ADIM104_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 103 (kabul borcu batch 24, doc 20 Trash BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, tek integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > `TR-08.c4` kapandı (restore'un `entity.restored` outbox satırı İLK KEZ okundu — UM-08.c5'in
 > ikizi; emisyon kaldırılınca 30 testte yalnız yeni test kırmızı, pipeline'ın kendi restore'u

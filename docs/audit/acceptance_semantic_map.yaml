@@ -10509,8 +10509,9 @@ criteria:
   - id: ESP-03.c4
     text: The scoped list actually includes the seven named fixtures ESP_TA_SMA, EMA, RMA, ATR, RSI,
       WMA and VWAP.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_esp_persistence.py::test_real_seeder_publishes_all_seven_ta_fixtures_to_the_scoped_list
   production_paths:
   - backend/src/entropia/apps/seed.py
   - backend/src/entropia/application/queries/esp.py
@@ -10522,6 +10523,7 @@ criteria:
     with trust badges
   - frontend/src/test/embedded.test.tsx > Embedded System Packages page > opens the detail with contract,
     registry snapshot and N/A performance (L4)
+  - backend/tests/integration/test_esp_persistence.py::test_real_seeder_publishes_all_seven_ta_fixtures_to_the_scoped_list
   evidence_type:
   - backend_integration
   - frontend_component
@@ -10532,6 +10534,7 @@ criteria:
     with trust badges
   - frontend/src/test/embedded.test.tsx > Embedded System Packages page > opens the detail with contract,
     registry snapshot and N/A performance (L4)
+  - backend/tests/integration/test_esp_persistence.py::test_real_seeder_publishes_all_seven_ta_fixtures_to_the_scoped_list
   negative: []
   auth: []
   occ: []
@@ -10539,9 +10542,8 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'MISSING: no test exercises the real seeder. All seven fixtures DO exist in production code
+  status: covered
+  notes: 'c4 closed by ADIM 104 (batch 25). WAS MISSING: no test exercised the real seeder. All seven fixtures DO exist in production code
     — backend/src/entropia/apps/seed.py::_ESP_TA_RESOLVERS declares ESP_TA_SMA/EMA/RMA/ATR/RSI/WMA/VWAP
     and _seed_esp_ta_resolvers creates a System-owned ESP package, a resolver contract and a TRUSTED_ACTIVE
     registry row for each — but the whole block is behind the SEED_ESP_TA=1 env flag and no test calls
@@ -10550,7 +10552,24 @@ criteria:
     one of the other five keys would pass CI. A follow-up slice should add one integration test that
     runs _seed_esp_ta_resolvers and asserts all seven canonical keys land TRUSTED_ACTIVE and resolve
     with their declared signatures. Separately, the ESP registry row projection carries no performance
-    field at all, so the N/A clause is proven on the page surface only.'
+    field at all, so the N/A clause is proven on the page surface only. HOW IT CLOSED: the new
+    integration case calls the REAL _seed_esp_ta_resolvers and reads the shipped scoped list back.
+    The seven (display name, canonical key) pairs are written as LITERALS rather than derived from
+    _ESP_TA_RESOLVERS — deriving them would compare the seeder to itself and a dropped key would
+    still pass. Each row is asserted TRUSTED_ACTIVE + SYSTEM + PYTHON with a trusted revision, the
+    display name is bound through that revision''s change_note (production writes it there; it is
+    not a queryable column), an attribution guard asserts the scoped list is EMPTY before the call,
+    and a second seeder run must not fork a package. THREE negative controls, each read for WHICH
+    assertion reddened, and in every one only this case reddened out of 24. NC-3 dropped ESP_TA_WMA
+    from production: red at "the seeder did not publish [ta.wma]". NC-4 renamed ESP_TA_RSI to
+    ESP_TA_RSI_V2 while KEEPING its key: the key axis and the trust/scope assertions PASSED and the
+    red moved to the change_note comparison — that is the shadow lifted, the name axis measured on
+    its own. NC-5 was REJECTED and rebuilt, the batch-24 lesson repeating: removing the per-key
+    early-out made the run die on uq_embedded_resolver_registry_key inside the seeder — red for the
+    DB constraint, not for the assertion under test (upsert_registry_entry is INSERT-only despite
+    its name). The rebuilt control deletes the existing registry row before re-seeding, which is the
+    real "re-seed replaces the pointer" defect shape, and the red landed on the package-identity
+    comparison with every earlier assertion green.'
 - id: ESP-04
   document: docs/spec/09_Entropia_V18_Embedded_System_Packages_Page_Documentation_v1_1.md
   section: '15'
@@ -10670,7 +10689,20 @@ criteria:
     reassigning an ESP''s Family moves its current_revision_id out from under embedded_resolver_registry.trusted_active_revision_id.
     A follow-up slice should (a) run batch_assign_rationale on a TRUSTED_ACTIVE ESP and assert embedded_resolver_contract
     signature/runtime_adapter, the revision''s validation_state and the registry trust pointer + registry_version
-    are all unchanged, and (b) adjudicate the head-move against doc 09 line 644.'
+    are all unchanged, and (b) adjudicate the head-move against doc 09 line 644. ADIM 104 (batch 25)
+    ANSWERED (a) BY MEASUREMENT, and the answer is that the scenario CANNOT BE BUILT: an ESP root is
+    not rationale-assignable at all. commands/rationale.py::RATIONALE_ASSIGNABLE_PACKAGE_KINDS is
+    frozenset({INDICATOR, CONDITION}) and _apply_assignment_change refuses anything else BEFORE
+    touching the head — confirmed with a throwaway probe driven against a real database, then
+    deleted: batch_assign_rationale on a freshly created ESP raises
+    LifecycleBlocked("This package type is not rationale-assignable."). The ESP<->Family link is set
+    ONCE, at package creation, through rationale_family_snapshot (which is exactly how the ESP-05.c1
+    evidence builds it), so there is no shipped reassignment whose side effects c3 could observe.
+    That is the class C shape (a scenario Production cannot construct), not test debt — and note the
+    consequence for c2, which stays covered on an INDICATOR root: the shared-editing exception c2
+    proves is a DIFFERENT package kind from the one c3 names. It was NOT reclassified: B -> C would
+    RAISE the C ceiling, and ceilings only fall except by adjudication. ESP-05 therefore stays
+    partial / class B with its other clauses proven. This is the twelfth finding of this shape.'
 - id: ESP-06
   document: docs/spec/09_Entropia_V18_Embedded_System_Packages_Page_Documentation_v1_1.md
   section: '15'
@@ -11563,32 +11595,39 @@ criteria:
     - backend/tests/unit/test_esp_policy.py::test_any_authenticated_actor_can_view_system_resolver
   - id: ESP-20.c2
     text: The LISTING omits another owner's private proposal draft when queried by a non-owner.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_esp_persistence.py::test_foreign_actor_sees_no_private_proposal_in_list_or_by_id
   - id: ESP-20.c3
     text: A direct ID query for another owner's private proposal is refused for that non-owner.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_esp_persistence.py::test_foreign_actor_sees_no_private_proposal_in_list_or_by_id
   production_paths:
   - backend/src/entropia/domain/esp/policy.py
   - backend/src/entropia/application/queries/esp.py
   test_evidence:
   - backend/tests/unit/test_esp_policy.py::test_any_authenticated_actor_can_view_system_resolver
+  - backend/tests/integration/test_esp_persistence.py::test_foreign_actor_sees_no_private_proposal_in_list_or_by_id
   evidence_type:
   - backend_unit
+  - backend_integration
   positive:
   - backend/tests/unit/test_esp_policy.py::test_any_authenticated_actor_can_view_system_resolver
-  negative: []
+  - backend/tests/integration/test_esp_persistence.py::test_foreign_actor_sees_no_private_proposal_in_list_or_by_id
+  negative:
+  - backend/tests/integration/test_esp_persistence.py::test_foreign_actor_sees_no_private_proposal_in_list_or_by_id
   auth:
   - backend/tests/unit/test_esp_policy.py::test_any_authenticated_actor_can_view_system_resolver
+  - backend/tests/integration/test_esp_persistence.py::test_foreign_actor_sees_no_private_proposal_in_list_or_by_id
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'MISSING: the role-aware filtering is never exercised with a FOREIGN actor. The predicate
+  status: covered
+  notes: 'c2 + c3 closed by ADIM 104 (batch 25). WAS MISSING: the role-aware filtering was never
+    exercised with a FOREIGN actor. The predicate
     exists and is unit-tested — domain/esp/policy.py::ensure_can_view raises AccessDeniedError for
     a private resolver owned by someone else (unit/test_esp_policy.py::test_private_proposal_hidden_from_non_owner)
     — and queries/esp.py wires it in both places (list_embedded_system_packages post-filters rows
@@ -11600,7 +11639,19 @@ criteria:
     with the owner). A follow-up slice should seed user_2''s PRIVATE proposal plus a SYSTEM resolver,
     then assert that user_1''s list contains only the system row and that get_esp_detail on user_2''s
     root raises AccessDeniedError. test_private_proposal_hidden_from_non_owner is deliberately NOT
-    cited as evidence here: it proves the predicate, not that either query applies it.'
+    cited as evidence here: it proves the predicate, not that either query applies it. HOW IT CLOSED:
+    the new integration case seeds a SYSTEM resolver and a PRIVATE proposal under user_1 and drives
+    BOTH queries as user_2. Each half carries a positive control on the same row, so the refusal is
+    attributable to WHO asked rather than to the row being absent: the foreign listing still contains
+    the System row (an empty page would satisfy "ta.rsi is absent" for free), the owner listing
+    carries both, and the owner''s byte-identical get_esp_detail succeeds on the very id the foreign
+    call was refused. TWO negative controls, each read for WHICH assertion reddened. NC-1 replaced the
+    listing''s _can_view post-filter with the unfiltered rows: across 24 tests ONLY the new case went
+    red, at exactly the "ta.rsi not in foreign_rows" assertion, and test_list_filters_by_visibility_scope
+    stayed GREEN — the measured proof that the pre-existing listing test (which seeds both rows under
+    ONE owner) cannot see this defect. NC-2 deleted the ensure_can_view call from get_esp_detail: the
+    c2 assertions PASSED and the red moved to the pytest.raises, so the two clauses are separate axes
+    and c3 is not shadowed by c2.'
 - id: RF-01
   document: docs/spec/10_Entropia_V18_Rationale_Families_Page_Documentation_v1_1.md
   section: '14'

@@ -2,17 +2,17 @@
   "acceptance": {
     "clause_count": 1175,
     "clauses_by_status": {
-      "covered": 1058,
+      "covered": 1061,
       "deliberate_future_dev": 27,
       "not_applicable": 12,
       "partial": 4,
-      "uncovered": 74
+      "uncovered": 71
     },
     "criteria_by_status": {
-      "covered": 300,
+      "covered": 302,
       "deliberate_future_dev": 8,
       "not_applicable": 7,
-      "partial": 61,
+      "partial": 59,
       "uncovered": 7
     },
     "criteria_count": 383
@@ -974,7 +974,7 @@
   },
   "schema_version": 1,
   "tests": {
-    "backend_collected_test_functions": 3738,
+    "backend_collected_test_functions": 3740,
     "backend_test_files": 354,
     "backend_xfail_markers": 0,
     "backend_xfail_strict_markers": 0,

@@ -7946,6 +7946,77 @@ tarafı da koruyarak** çözüldü, `## ADIM` sayısı 92 → **93**.
 
 
 
+## Stage 101 — kabul borcu batch 22 (doc 21 User Manual, backend): UM-08 + UM-13 kapandı landed
+
+**Ne indi.** İki yeni integration case (`backend/tests/integration/test_user_manual.py`) + kabul
+defteri + üretilmiş artefaktlar. **`backend/src` altında sıfır satır**, migration yok, OpenAPI
+değişmedi.
+
+**Kapananlar: `UM-08` (c5) · `UM-13` (c3)** — ikisi de kendi kriterinin **son açık clause'uydu**,
+ikisinin de `debt_class`'ı KALDIRILDI. Doc 21 artık **15 covered / 3 partial** (13 → 15, 5 → 3).
+
+- **`UM-08.c5` — olay ZATEN yazılıyordu, hiç kimse OKUMUYORDU.** `commands/manual.py:625-646`
+  soft delete'te üç düzlemi birden yazar: `ManualPublicationEvent`
+  (`event_type="manual_document_soft_deleted"`), `AuditEvent` + `OutboxEvent`
+  (`event_kind="manual.document_soft_deleted"`). Suite bu şekli **yalnız purge için** pinlemişti
+  (`test_manual_purge_writes_event_and_removes_every_revision`) → **tüm iz komuttan silinebilir ve
+  27 mevcut testin 27'si de yeşil kalırdı** (ölçüldü: NC-1). Yeni case üç düzlemi de assert eder
+  **artı üçünün göremediği dördüncü bir eksen**: iz **EKLENİYOR**, yeniden yazılmıyor.
+  Belge silinmeden önce **revize edilir**, yoksa `revision_id` *"delete anındaki head"* ile
+  *"ilk revizyon"*u ayırt edemez.
+- **`UM-13.c3` — mekanizma vardı, ÇEKİŞME ALTINDA hiç sürülmemişti.**
+  `repositories/manual.py::lock_stream` (`pg_advisory_xact_lock`, `MANUAL_STREAM_LOCK_KEY`) +
+  `uq_manual_stream_position` + `uq_manual_event_stream_version`; ama dosyadaki her test **tek
+  session'ı sırayla** sürüyor, yani ne kilit ne de unique kısıt bir yarışa hiç hakemlik etmemişti.
+  Yeni case **iki bağımsız engine ve bağlantı** üzerinde iki `create_manual_document` koşar,
+  ikisini bir **`asyncio.Barrier`** ile birlikte salar. **Bariyer komuttan ÖNCE salınır** —
+  komutun İÇİNDE salmak **kilitlenir**, çünkü birinci görev diğerinin beklediği advisory kilidi
+  tutuyor olur.
+
+**Beş negatif kontrol, beşi de hedef assertion'ında kırmızı** (her biri yamanın uygulandığını
+eşleşme sayısıyla assert etti, ağacı `finally`'de geri yazdı, ve her turdan sonra `git status`
+okundu): NC-1 delete hiç publication event yazmaz → **assertion 1** · NC-2 audit satırı **publish
+kind'ıyla** yazılır → **assertion 2** · NC-3 outbox payload'ı `trash_entry_id`'yi düşürür →
+**assertion 3** · NC-4 delete, kendi olayını eklemeden önce o belgenin **önceki olaylarını siler**
+→ **YALNIZ assertion 4** · NC-5 `_publish_new_document`'tan `lock_stream` kaldırılır → eşzamanlılık
+case'i, kaybedende `uq_manual_stream_position` ihlaliyle. **Beşinde de tam olarak bir test düştü ve
+önceden var olan 27 case YEŞİL kaldı.**
+
+- **NC-4 bu partinin asıl dersi: GÖLGE KALDIRILDI, kaydedilmedi.** İlk üç assertion dördüncüyü
+  gölgeliyordu (çoğu kusur zaten (1)'de kırmızı verir). NC-4 altında **ilk üçü geçer** ve yalnız
+  sıralı iz karşılaştırması düşer → dördüncü eksen **kendi başına ölçüldü**.
+- **NC-5 aynı zamanda UM-13'ün VACUITY KANITIDIR:** iki **sıralı** append kilit kaldırılınca
+  çakışmazdı; çakışmanın kendisi iki çağıranın **gerçekten örtüştüğünün** delilidir. Determinizm
+  **iki yönde de** ölçüldü — kilitle **8/8 yeşil**, kilitsiz **5/5 kırmızı**.
+
+**Tavanlar İNDİ: `partial` 66 → 64, `debt_class.B` 34 → 32**; açık borç **73 → 71**
+(A=1 · B=32 · C=6 · D=32); clause `covered` 1053 → 1055. Taban `7f4d927`.
+
+**Doc 21'de kalan üç `partial` satırın hiçbiri backend test borcu değil:** `UM-04` (c4, sınıf D —
+publish sonrası reader'ın yeni anchor'a kaydırması) · `UM-12` (c3, sınıf D) · **`UM-15` (c3,
+sınıf B ama FRONTEND** — 409 `MANUAL_STREAM_CONFLICT` sonrası istemcinin stream'i yeniden
+hidratlaması; `cd frontend && npm ci` gerektirir). **Doc 21'in BACKEND borcu bitti.**
+
+**Ortam (birinci elden):** container **çıplak** başladı — `backend/.venv` yok, Postgres cluster
+yok; ikisi de bu slice içinde kuruldu ve iki case ile beş kontrol **gerçekten koştu**
+(`test_user_manual.py` **27 → 29 passed**, skip yok). `alembic upgrade head`
+**`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koşuldu (`en_US.UTF-8` bu imajda `UnicodeDecodeError`).
+`ruff check` · `ruff format --check` · `mypy src` (400 dosya) **temiz**.
+
+**Dürüst sınır:** frontend'de sıfır satır → **hiçbir frontend kapısı koşulmadı**; tam backend
+suite'i **uçtan uca koşulmadı** → geçen sayı ve coverage yüzdesi **CI'ın otoritesinde**.
+
+**NUMARA/ETİKET:** dal `7f4d927`'den kesildi ve o an `list_pull_requests(state=open)` **boş**
+döndü — son üç partinin de kaydettiği gibi bu bir **garanti değil, anlık görüntüdür**. PR açıkken
+main ilerlerse dal **rebase** edilir (*"Update branch"* düğmesi DEĞİL) ve tavan **merged ağaçta
+taze bir `--report` ile YENİDEN ÖLÇÜLÜR**; taşınan bayat bir freeze `--ratchet`'i sonsuza dek
+yeşil bırakır (ölçülen < tavan asla kırmızı vermez).
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi
+(yeni endpoint / tablo / sayfa / job yok).
+`PROJECT_HISTORY.md` §ADIM 101 · `docs/ADIM101_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

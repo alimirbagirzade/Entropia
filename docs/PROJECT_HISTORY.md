@@ -14175,3 +14175,130 @@ dal PR'ını açtıktan sonra da main ilerler. Ve ADIM 97'nin uyarısı burada *
 edildi, üretilmiş dosyalar main'den alınıp **yeniden üretildi**, ve tavan merged ağaçta
 **yeniden ölçüldü**. `acceptance_semantic_map.yaml` **kendiliğinden birleşti** — iki dal ayrık
 kriterlere dokunuyordu. `## ADIM` kayıt sayısı **92 → 93**, silinen kayıt **yok**.
+
+---
+
+## ADIM 101 — kabul borcu batch 22 (doc 21 User Manual, backend): `UM-08` + `UM-13` kapandı, gölge KALDIRILDI
+
+> **ÜRÜN KODU DEĞİŞMEDİ — yalnız test + defter.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Taban `7f4d927` (`ADIM 100` / batch 21).
+
+**Diff:** `backend/tests/integration/test_user_manual.py` (+2 case, +1 yardımcı, +1 harness
+fonksiyonu) · `docs/audit/acceptance_semantic_map.yaml` · üç üretilmiş artefakt
+(`acceptance_semantic_traceability.md`, `acceptance_coverage_debt_ledger.md`,
+`repository_facts.{json,md}` + README'nin gömülü bloğu) · `acceptance_coverage_baseline.json` ·
+kapanış belgeleri. **`backend/src` altında sıfır satır.**
+
+### Kapanan iki kriter
+
+**`UM-08.c5` — "manual_document_soft_deleted publication/audit event is written for the delete."**
+
+Olay **her zaman yazılıyordu**: `commands/manual.py:625-646` soft delete'te üç düzlemi birden
+yazar — `ManualPublicationEvent` (`event_type="manual_document_soft_deleted"`), `AuditEvent` ve
+`OutboxEvent` (`event_kind="manual.document_soft_deleted"`). Boşluk **okuma tarafındaydı**: suite
+bu şekli **yalnız purge için** pinlemişti (`test_manual_purge_writes_event_and_removes_every_revision`
+→ `_publication_event(..., "manual_document_purged")`). Yani **tüm iz komuttan silinebilir ve
+dosyadaki 27 testin 27'si de yeşil kalırdı** — bu bir iddia değil, NC-1'de **ölçüldü**.
+
+`test_soft_delete_writes_its_publication_and_audit_trail` dört ayrı eksen sürer:
+
+1. **publication event** — `_publication_event(...)` `.one()` kullandığı için *"tam olarak bir
+   tane"* de pinlenir; `revision_id` **delete anındaki head**, `stream_entry_id`,
+   `actor_principal_id`, `correlation_id`, `prior_stream_version` ve
+   `resulting_stream_version == prior + 1 == result["stream_version"]`.
+2. **audit satırı** — `event_kind`, `target_entity_type`, `target_revision_id`,
+   `previous_state` (`active`) / `new_state` (`soft_deleted`), `reason`.
+3. **outbox satırı** — `event_type`, `resource_type` ve **saklanan payload'ın tamamı**
+   (`document_id` + `trash_entry_id` + `stream_version`), key lookup ile değil **tam sözlük
+   eşitliğiyle**.
+4. **iz EKLENİYOR, yeniden yazılmıyor** — belgenin tüm publication trail'i `resulting_stream_version`
+   sırasında **demet listesi** olarak okunur ve `[önceki iki satır] + [delete satırı]` ile
+   karşılaştırılır.
+
+**Belge silinmeden ÖNCE revize edilir.** Tek revizyonlu bir dünyada `revision_id` *"delete
+anındaki head"* ile *"var olan ilk revizyon"*u **ayırt edemez** ve kriter delete hakkındadır,
+create hakkında değil. Ayrıca `trail_before`'un gerçekten iki satır taşıdığı **çağrıdan önce**
+assert edilir (vacuity muhafızı: boş bir ize karşı yapılan karşılaştırma hiçbir şey kanıtlamaz).
+
+**`UM-13.c3` — "Two CONCURRENT appends serialize on the stream lock and both land on distinct
+positions rather than colliding or duplicating."**
+
+Mekanizma **vardı**: `repositories/manual.py::lock_stream` bir transaction-scoped
+`pg_advisory_xact_lock(MANUAL_STREAM_LOCK_KEY)` alır ve şema
+`uq_manual_stream_position` + `uq_manual_event_stream_version` taşır. Ama dosyadaki **her test tek
+session'ı sırayla** sürüyor → ne kilit ne unique kısıt bir yarışa **hiç hakemlik etmemişti**;
+kriterin kendi konusu (*"İki Admin eşzamanlı append başlatır"*) sürülmemişti.
+
+`test_concurrent_appends_serialize_on_the_stream_lock` iki `create_manual_document` çağrısını
+**iki bağımsız engine ve bağlantı** üzerinde koşar (`test_provision_concurrency.py::_own_engine`
+emsali) ve ikisini bir **`asyncio.Barrier`** ile birlikte salar. **Bariyer komuttan ÖNCE
+salınır** — komutun İÇİNDE salmak **kilitlenirdi**, çünkü birinci görev ikincisinin beklediği
+advisory kilidi tutuyor olurdu. Assertion'lar: **ikisi de BAŞARILI** (kaybedende `IntegrityError`
+= çakışma, kriterin yasakladığı şey), pozisyonlar `[2, 3]`, stream version'lar `[2, 3]`, tabloda
+`[1, 2, 3]`, iki racer için **tam iki** publish olayı, üç `ManualDocument`, ve okunan stream'in
+başlıkları. Geri okumadan önce **`session.expire_all()`** — fixture `expire_on_commit=False`
+kurar.
+
+### Beş negatif kontrol — ve NC-4 bu partinin asıl dersi
+
+Her kontrol yamanın uygulandığını **eşleşme sayısıyla** assert etti, ağacı `finally`'de geri
+yazdı, ve her turdan sonra `git status` okundu (ADIM 100'ün SIGTERM dersi).
+
+| # | Yama | Kırmızıya dönen |
+|---|---|---|
+| NC-1 | delete hiç `add_publication_event` çağırmaz | **assertion 1** (`NoResultFound`) |
+| NC-2 | delete'in audit satırı `manual.document_published` kind'ıyla yazılır | **assertion 2** |
+| NC-3 | outbox payload'ı `trash_entry_id`'yi düşürür | **assertion 3** |
+| NC-4 | delete, kendi olayını eklemeden önce o belgenin **önceki olaylarını siler** | **YALNIZ assertion 4** |
+| NC-5 | `_publish_new_document`'tan `lock_stream` kaldırılır | eşzamanlılık case'i (`uq_manual_stream_position`) |
+
+**Beşinde de tam olarak bir test düştü ve önceden var olan 27 case YEŞİL kaldı.**
+
+**NC-4 = GÖLGE KALDIRILDI, kaydedilmedi.** İlk üç assertion dördüncüyü gölgeliyordu: iz hakkındaki
+çoğu kusur zaten (1)'de kırmızı verir, yani (4)'ün kendi ekseni ölçülemez. NC-4 bunu bilerek
+kaçınır — belgenin **eski** olaylarını siler ama delete olayını **doğru alanlarla** yazar → (1),
+(2) ve (3) **geçer**, yalnız sıralı iz karşılaştırması düşer. ADIM 100 gölgelenen bir assertion'ı
+**deftere yazmakla** yetinmişti; burada gölge **kaldırılabildi** ve kaldırıldı.
+
+**NC-5 aynı zamanda `UM-13`'ün VACUITY KANITIDIR.** İki **sıralı** append kilit kaldırılınca
+çakışmazdı (`max(stream_position)+1` her seferinde taze okunur) → **çakışmanın kendisi**, iki
+çağıranın gerçekten örtüştüğünün delilidir. Yani bariyerli harness'ın "yarış kuruyorum" iddiası
+varsayım değil, **ölçüm**. Determinizm **iki yönde de** ölçüldü: kilitle **8/8 yeşil**, kilitsiz
+**5/5 kırmızı**.
+
+### Sayılar
+
+**Tavanlar İNDİ: `partial` 66 → 64, `debt_class.B` 34 → 32**; açık borç **73 → 71**
+(A=1 · B=32 · C=6 · D=32); clause `covered` 1053 → 1055, `uncovered` 79 → 77.
+Doc 21: **13 → 15 covered**, **5 → 3 partial**.
+
+**Doc 21'de kalan üç `partial` satırın hiçbiri backend test borcu değil:** `UM-04` (c4, sınıf D) ·
+`UM-12` (c3, sınıf D) · **`UM-15` (c3, sınıf B ama FRONTEND** — 409 `MANUAL_STREAM_CONFLICT`
+sonrası istemcinin stream'i yeniden hidratlaması). **Doc 21'in BACKEND borcu bitti.**
+
+### Ortam ve dürüst sınır
+
+Container **çıplak** başladı — `backend/.venv` **yok**, Postgres cluster **yok**; ikisi de bu
+slice içinde kuruldu (`uv sync --all-extras`, `initdb` + `pg_ctl`, `entropia` rolü ve DB'si) ve
+`alembic upgrade head` **`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koşuldu — `en_US.UTF-8` bu imajda
+`UnicodeDecodeError` verir. Alt küme koşuları izole DB ile:
+`TEST_DATABASE_URL="postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_um"`.
+`test_user_manual.py` **27 → 29 passed**, skip yok. `ruff check` · `ruff format --check` ·
+`mypy src` (400 dosya) **temiz**.
+
+**Dürüst sınır:** frontend'de **sıfır satır** → hiçbir frontend kapısı koşulmadı; tam backend
+suite'i **uçtan uca koşulmadı** → **geçen sayı ve coverage yüzdesi CI'ın otoritesinde**.
+
+### Numara ve etiket
+
+Dal `7f4d927`'den kesildi ve o an `list_pull_requests(state=open)` **boş** döndü. ADIM 100'ün
+kaydettiği gibi bu bir **garanti değil, anlık görüntüdür**: PR açıldıktan sonra da main ilerler.
+Main ilerlerse dal **rebase** edilir (*"Update branch"* düğmesi DEĞİL, ADIM 93/94'ün iki ölçülmüş
+zararı), çakışmalar **iki tarafı da koruyarak** çözülür, ve **tavan merged ağaçta taze bir
+`--report` ile YENİDEN ÖLÇÜLÜR** — taşınan bayat bir freeze `--ratchet`'i sonsuza dek yeşil
+bırakır, çünkü ölçülen < tavan asla kırmızı vermez.
+
+Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
+`docs/ADIM101_LANDED_KICKOFF.md`.

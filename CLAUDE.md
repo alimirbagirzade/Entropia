@@ -237,7 +237,44 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 100 (kabul borcu batch 21, doc 22 Future Dev BACKEND): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 101 (kabul borcu batch 22, doc 21 User Manual BACKEND): ÜRÜN
+> KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.**
+> İki kriter kapandı — **`UM-08.c5`** (soft delete'in izi) · **`UM-13.c3`** (eşzamanlı append);
+> ikisi de son açık clause'du → ikisinin de `debt_class`'ı **KALDIRILDI**.
+> **`UM-08.c5`: olay ZATEN yazılıyordu, hiç kimse OKUMUYORDU** — `commands/manual.py:625-646`
+> üç düzlemi birden yazar (`ManualPublicationEvent` + audit + outbox) ama suite bu şekli **yalnız
+> purge için** pinlemişti → **tüm iz komuttan silinse dosyadaki 27 testin 27'si de yeşil kalırdı**
+> (iddia değil, NC-1'de ölçüldü). Yeni case üç düzlemi de sürer **artı dördüncü bir eksen: iz
+> EKLENİYOR, yeniden yazılmıyor**; belge silinmeden önce **revize edilir**, yoksa `revision_id`
+> *"delete anındaki head"* ile *"ilk revizyon"*u ayırt edemez. **`UM-13.c3`: mekanizma vardı,
+> ÇEKİŞME ALTINDA hiç sürülmemişti** — dosyadaki her test tek session'ı sırayla sürüyor, yani ne
+> `pg_advisory_xact_lock` ne de iki unique kısıt bir yarışa **hiç hakemlik etmemişti**; yeni case
+> iki **bağımsız engine/bağlantı** üzerinde iki append koşar ve ikisini **`asyncio.Barrier`** ile
+> salar — **bariyer komuttan ÖNCE**, içeride salmak kilitlenir. **BEŞ negatif kontrol, beşi de
+> HEDEF assertion'ında kırmızı ve beşinde de önceden var olan 27 test YEŞİL kaldı.**
+> **ASIL DERS: GÖLGE KALDIRILABİLİR, sadece kaydedilmek zorunda değil** — ilk üç assertion
+> dördüncüyü gölgeliyordu; NC-4 belgenin **eski** olaylarını siler ama delete olayını **doğru
+> alanlarla** yazar → (1)(2)(3) **geçer**, yalnız sıralı iz karşılaştırması düşer (ADIM 100
+> gölgeyi deftere yazmakla yetinmişti; önce **kaldırmayı** dene). **İKİNCİ DERS: bir yarış
+> testinin VACUITY KANITI kendi negatif kontrolüdür** — kilit kaldırılınca **çakışma oluyorsa**
+> örtüşme ölçülmüştür (sıralı iki append çakışmazdı); determinizm **iki yönde** ölçüldü: kilitle
+> **8/8 yeşil**, kilitsiz **5/5 kırmızı**. **Tavanlar İNDİ: `partial` 66 → 64, `debt_class.B`
+> 34 → 32**; açık borç **71** (A=1 · B=32 · C=6 · D=32). **DOC 21'İN BACKEND BORCU BİTTİ** —
+> kalan üç `partial` satırın ikisi sınıf D (`UM-04.c4`, `UM-12.c3`), biri sınıf B ama **frontend**
+> (`UM-15.c3`). **ORTAM: container ÇIPLAK başladı** — `.venv` ve Postgres cluster'ı yoktu, ikisi
+> de kuruldu; `alembic upgrade head` **`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koşuldu.
+> **DÜRÜST SINIR:** frontend'de sıfır satır → hiçbir frontend kapısı koşulmadı; tam suite uçtan
+> uca koşulmadı → geçen sayı ve coverage **CI'ın otoritesinde**. `test_user_manual.py` 27 → 29.
+> **NUMARA: dal `7f4d927`'den kesildi ve o an açık PR listesi BOŞTU** — ADIM 100'ün kaydettiği
+> gibi bu bir garanti değil, **anlık görüntüdür**; main ilerlerse dal **rebase** edilir ve tavan
+> **merged ağaçta yeniden ölçülür**, taşınmaz.
+> `PROJECT_HISTORY.md` §ADIM 101 · `docs/ADIM101_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 100 (kabul borcu batch 21, doc 22 Future Dev BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.**
 > İki kriter kapandı — **`FD-04.c4`** · **`FD-05.c4`**; ikisi de son açık clause'du → ikisinin de

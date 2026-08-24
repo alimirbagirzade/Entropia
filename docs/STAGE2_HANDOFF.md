@@ -7582,6 +7582,80 @@ yeniden ölçüldü.**
 `PROJECT_HISTORY.md` §ADIM 93 · `docs/ADIM93_LANDED_KICKOFF.md`.
 
 
+## Stage 90 — kayıtsız inen #779'un ritüeli: G6/G7 kapı satırları tazelendi landed
+
+**Ne indi.** Yalnız **defter**. Ürün kodu, migration, test ağacı, OpenAPI, imza kutusu ve issue
+durumu: **sıfır değişiklik**. alembic head `0043_i08_registry_strategy_fks` · `ENGINE_VERSION`
+değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+
+**Bu bir GERİYE DÖNÜK kayıttır.** PR **#779** (`a5bc27f`) 2026-08-19'da main'e indi ve
+`PROJECT_HISTORY.md`'de yalnız ADIM 87'nin zincir notunda anıldı (`grep '#779'` → 1 satır, o da
+yalnız *"kesildiği yer"* olarak). Kendi kaydı, handoff satırı ve kickoff'u **yoktu** → kapanış
+ritüelinin 1–5. maddeleri o slice için **hiç koşmadı**. Desen tanınmıştır: #728/#729 = ADIM
+69/70, #759 = ADIM 82, #765/#766 = ADIM 86.
+
+**Kaydedilen slice ne yaptı.** Tek plan belgesi, **+37 / −7**. `final_closure_ordered_plan`
+§2'nin kapı sicili **kendi içinde çelişiyordu**: sayım tablosu `G6`/`G7`'yi *"resolved (Karar 2,
+signed 2026-08-14)"* sayarken yirmi satır yukarıdaki `G6` satırı hâlâ *"UNSIGNED, all boxes
+`[ ]`, GH #558 OPEN"* diyordu. **Çelişen taraf sicilin kendisiydi — yani o belgenin tek
+işlevi.** Satırlar `§Karar 2 ▸ İMZA SATIRI` ölçülerek düzeltildi (`[x] A1+A2`, `[x] evet`,
+`[x] yalnız türetilebilir ikisi`, alimirbagirzade / 2026-08-14); eski metin `Was "…"` deseniyle
+**yerinde korundu** (G4/G12/G15 satırlarının zaten kullandığı biçim).
+
+**ASIL DEĞER YAN ÖLÇÜMLERDE — ikisi de kaydın kendisinden daha çok iş gördü.**
+
+**(a) Altı `decisions:NNN` referansının altısı da bayattı** — hiçbiri iddia ettiği yeri
+göstermiyordu (ör. `decisions:467-477` artık öneri paragrafının ortası, imza bloğu değil). Hepsi
+**bölüm adına** çevrildi (`CLAUDE.md` §Conventions: *satır no değil sembol yaz*).
+**Tuzak, ileride grep'leyecek olan için:** bugün `grep -c 'decisions:[0-9]'` → **2** döner ve bu
+**eksik süpürme DEĞİLDİR** — iki eşleşme de `Was "…"` **alıntısının içinde**, canlı işaretçi
+**0**. Alıntıyı "artık" sanıp temizlemek düzeltmenin kanıtını siler.
+
+**(b) Üç issue durumu bayattı, ama İKİSİ KAPIYI AÇMAZ.** Tablo #558/#559/#544'ü `OPEN`
+yazıyordu; **üçü de kapalı**. Ama kapanış tek başına hiçbir şey kanıtlamaz — tablonun **kendi
+G1 kuralı** *issue CLOSED ≠ çözüldü* der ve burada **üç kez farklı** sonuç verdi:
+
+| issue | kapanış | kayıtlı karar | kapı |
+|---|---|---|---|
+| **#558** (G6/G7) | 2026-08-17 `completed` | **EVET** — kapanış yorumu üç karar sorusunu da yazılı cevaplıyor, imza ayrıca `§Karar 2`'de **bağımsız** duruyor | **çözüldü** |
+| **#559** (G8) | 2026-08-18 `completed` | **HAYIR** — sıfır yorum, `closed_by_pull_requests` boş, `§Karar 3` imza bloğu **tamamen boş** | **AÇIK kalır** |
+| **#544** (G14) | 2026-08-18 `completed` | **HAYIR** — sıfır yorum, closing PR yok, karar bölümü cevapsız | **AÇIK kalır** |
+
+`G14` bu ayrımın en kolay yanlış okunacağı yeridir, çünkü *"Evidence written where"* sütunu
+**issue'nun kendisini** gösterir: **G5** gerçekten gövdesinde karara bağlanmıştı, **G14** ise
+kapatıldı ve **boş bırakıldı**. Kapalı bir issue'yu imza saymak **on bir açık kapıyı dokuza**
+indirirdi; **indirilmedi.**
+
+**DERS: bir kapıyı düşürmeden önce ÜÇÜNÜ birden ölç** — issue durumu, issue'da **yazılı** karar,
+`decisions` **imza kutusu**. Ayrıştıklarında otorite **imza kutusudur**.
+
+**DERS 2 — `cancelled` ≠ `failure`, ve kökü artık biliniyor.** #779'un dalında A11Y işi
+`Install Playwright browsers` içinde **38 dk 50 sn** asılıp `cancelled` oldu (axe adımı
+**skipped** → hiçbir test gövdesi koşmadı); rerun **3 dk 08 sn**'de yeşil. Kök **#795**'te
+ölçüldü: `azure.archive.ubuntu.com` aynası düştü ve **GitHub bir timeout'u `cancelled`
+raporlar**. **Ayırt edici:** aynı attempt'te **üç kardeş işin** aynı adımı **yeşildi** (1–3 dk)
+→ genel kesinti **değil**, yani *"install yavaş, tavanı büyüt"* yanlış düzeltmeydi. Sınıf artık
+`scripts/ci-install-playwright-chromium.sh` ile korunuyor → **yeni E2E işinde
+`npx playwright install` YAZMA.**
+
+**PR gövdesi bir noktada düzeltildi.** #779'un gövdesi #544 için *"the body still ends on 'What
+must be decided'"* diyor; gövde o bölümü **içerir** ama onunla **bitmez**. Sonuç değişmez (iki
+karar sorusu cevapsız, kapı açık), iddia *"karar bölümü cevapsız"* biçiminde tutuldu.
+
+**NUMARA — ve kuralın İKİ YARISI.** Kayıt `90`'da kaldı: #797 → 88, #803 → **91**, #799 → **92**
+(kendisi de 89'dan taşındı) indi ve **hiçbiri `ADIM90` dosya yolunu eklemedi** → çakışma yok,
+**yeniden atanmadı**. Kayıt sırası **87 → 88 → 91 → 92 → 90**; ADIM 69/70 *"numaralar merge
+sırasının tersi"* emsalini zaten kaydetmişti. **`89` kalıcı bir BOŞLUKTUR.** Bedeli kickoff'ta:
+`_check_live_kickoff_is_newest` canlı işareti **ağaçtaki en yüksek numaralı** `ADIM<n>`
+**dosyasında** ister → bu slice'ın kickoff'u **`historical` DOĞDU** (ADIM 82 emsali).
+***"Numaralar yeniden atanmaz"* KAYDIN numarasını korur; kickoff'un canlılığı AYRI bir sorudur.**
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED, açık kapı 11.** Codemap güncellemesi
+gerekmedi. Ürün kodunda sıfır satır olduğu için **suite koşulmadı**; doğrulama
+`generate_repository_facts.py --check`. `PROJECT_HISTORY.md` §ADIM 90 ·
+`docs/ADIM90_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

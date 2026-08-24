@@ -14645,3 +14645,107 @@ bu bir **anlık görüntüdür**, garanti değil; kapanışta yeniden ölçüld�
 
 Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
 `docs/ADIM104_LANDED_KICKOFF.md`.
+
+## ADIM 105 — kabul borcu batch 26 (doc 06 Create Package, backend): `CP-09` + `CP-13` kapandı, ve BİR NEGATİF KONTROL AYIRT EDİCİ OLMADIĞI İÇİN REDDEDİLDİ
+
+**Tarih:** 2026-08-24 · **Dal:** `claude/entropia-v18-kabul-borcu-96llrh` · **Taban:** main `4c32bec`
+(ADIM 104 / batch 25 = #817). **ÜRÜN KODU DEĞİŞMEDİ** (`backend/src` altında sıfır satır); diff =
+iki yeni integration case + kabul defteri + üretilmiş artefaktlar + kapanış belgeleri. Migration
+yok, OpenAPI değişmedi, `ENGINE_VERSION` değişmedi, alembic head
+`0043_i08_registry_strategy_fks`, `SHARED_ALLOCATION_STATUS` = `future_dev`.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Kapanan 1: `CP-09.c2` — Send'in idempotency replay'i, iki ayrı eksende
+
+`submit_candidate_generation` gövdesini **her zaman** `run_idempotent` ile sarıyordu, ama
+**hiçbir test ona iki kez anahtar geçirmemişti**: create-package integration testlerinde
+`idempotency_key` araması yalnız C.D.P çağrısını buluyor (o da `c1`). Yani Send-replay yarısı
+kanıtlanmış değil, **hiç koşulmamış bir kod yoluydu**.
+
+Yeni case aynı isteği tek anahtarla iki kez admit eder ve **iki bağımsız eksen** assert eder:
+**kimlik** — yanıtın **tamamı** sözlük olarak karşılaştırılır (farklı bir `job_id`, `state` ya da
+`request_version` burada kırmızı verir) — ve **yan etki sayısı** — iki çağrı boyunca **tek**
+durable `Job` satırı. Bir de **vacuity muhafızı**: ilk çağrının gerçekten admit ettiği ayrıca
+assert edilir, yoksa *"ikinci çağrı birinciyle eşleşiyor"* hiçbir şey yapmayan iki çağrı için de
+doğru olurdu.
+
+### Kapanan 2: `CP-13.c4` — onay sınırının İZİN yarısı, iki principal için
+
+Yasak yarısı iki yüzeyde ve iki principal için kanıtlıydı; **izin** yarısı — *"Supervisor veya
+Agent valid candidate için approval request oluşturabilir"* — hiç sürülmemişti, çünkü her
+request-approval testi `OWNER`'ı (düz bir USER) kullanıyor. Sevk edilmiş komut
+`commands/package_lifecycle.py::request_package_approval`'dır (`DRAFT → APPROVAL_REQUESTED`,
+`package.approval_requested` audit'i) ve kriterin `production_paths`'ine **eklendi**.
+
+Yeni parametrik case komutu **Supervisor** ve **Agent** için, her biri **kendi sahip olduğu**
+paket üzerinde koşar: geçiş satırdan geri okunur, audit **o aktöre** atfedilir, ve **aktörün az
+önce ilerlettiği aynı kök üzerinde** `approve_and_publish_package` hâlâ `ApprovalRequiresAdmin`
+verir — kriterin cümlesinin iki yarısı **tek nesnede**. Vacuity muhafızları çağrıdan önce
+adayın gerçekten geçerli ve **henüz talep edilmemiş** olduğunu pinler (validation `PASSED`,
+`approval_state` `DRAFT`, Admin kapısı hâlâ kapalı).
+
+### ASIL DERS: bir negatif kontrol KIRMIZI VERDİĞİ HÂLDE reddedilebilir
+
+`CP-13.c4` için ilk kontrol `ensure_can_edit`'e `owner_principal_id=None` geçiyordu. Kırmızı
+verdi — ama **10 testi birden**, aralarında **önceden var olanlar** da vardı. Yani kontrol
+**ayırt edici değildi**: eski testlerin zaten kapsadığı düz-USER sahip yolunu kırıyordu, bu da
+assertion'ın yanlışlanabilir olduğunu gösterir ama **yeni case'in bir eksen eklediğini
+göstermez** (kural a). **REDDEDİLDİ** ve gerçekçi kusur sınıfıyla yeniden kuruldu: USER
+sahiplerini ve Admin'i geçir, **yalnız Supervisor/Agent'ı reddet** (*"onay talebini yalnız bir
+User açabilir"* sıkılaştırması). Sonuç: **30 testte tam olarak iki yeni parametrik case kırmızı,
+28 mevcut test YEŞİL** — izin yarısının kapsanmadığının ölçümü.
+
+Batch 24 ve 25'te kontroller **yanlış sebeple** kırmızı verdiği için reddedilmişti (bir unique
+kısıt assertion'ın yerine geçmişti). Bu parti üçüncü bir şekil ekliyor: **doğru sebeple kırmızı
+ama ayırt edici değil.** Bir kontrolün iki işi vardır — assertion'ın canlı olduğunu göstermek ve
+**boşluğun gerçek olduğunu** göstermek; ikincisi ancak mevcut suite o kusur altında **yeşil
+kalırsa** kanıtlanır.
+
+`CP-09.c2` için **NC-1** `run_idempotent`'ı tamamen atladı: 30 testte yalnız yeni case kırmızı
+verdi ve **replay'in `IllegalCreatePackageTransition` fırlatmasıyla** — clause'un en güçlü
+biçimde kırılması (replay aynı kimliği döndürmüyor, çünkü **hiçbir şey** döndürmüyor).
+
+### İKİ ÖLÇÜLMÜŞ SINIR, kapatılmadı — deftere yazıldı
+
+1. **`CP-09.c2`'nin iki ekseni tek satırlık hiçbir kusurda AYRIŞMIYOR.** Gövdeyi cache'leyip
+   yine de ikinci bir job kuyruklayan bir kusur, enqueue'yu idempotent gövdenin dışına taşımayı
+   gerektirir; o da **birinci** çağrının döndürdüğünü değiştirir ve kırmızı, eksen 2'ye
+   ulaşmadan **vacuity muhafızına** düşer. Eksen 2 assert ediliyor ama **bağımsız negatif
+   kontrolü yok** — zorlamak yerine kaydedildi (ADIM 100 emsali).
+2. **`request_package_approval` Owner-or-Admin'dir** (`domain/identity/policy.py::can_edit`).
+   Yani `c4` bir Supervisor/Agent'ın **kendi** adayı için geçerlidir — doc 06 satır 1090 ve
+   1364'ün tarif ettiği okuma. **Başkasının** adayı için approval request reddedilir; o okuma
+   kriterin iddiası değildir ve assert edilmedi.
+
+### Tavanlar ve sayılar
+
+**Tavanlar İNDİ: `partial` 59 → 57, `debt_class.B` 27 → 25**; açık borç **66 → 64**
+(A=1 · B=25 · C=6 · D=32). Kriter `covered` 302 → 304, clause `covered` 1061 → 1063 /
+`uncovered` 71 → 69. Korpus 383 kriter / 1175 clause (taban, düşmedi).
+**Doc 06 = 12 covered / 3 partial / 1 uncovered** (10 → 12, 5 → 3); kalan satırlar
+`CP-03` (c4 **frontend**), `PC-02` emsalindeki sınıf C `CP-06`, ve bulgu satırları.
+
+### SÜREÇ: batch 26 açık bir PR'ın dalında YAZILDI, ama o dala İTİLMEDİ
+
+Bu parti, #817 (batch 25) hâlâ CI'da koşarken yazıldı — ortam hazırdı ve beklemek israftı. Ama
+aynı dala push etmek **üç zarar** verirdi: iki parti tek PR'da karışır, ~48 dakikalık CI baştan
+başlar, ve yeni testler collection sayısını oynattığı için `generate_repository_facts --check`
+kapısı #817'yi **kırmızıya çevirirdi**. Bu yüzden iş **patch olarak** dışarı alındı, dal origin
+ile birebir aynıya sıfırlandı, #817 merge edildikten sonra taze main'e uygulandı ve suite'ler
+**merged ağaçta yeniden koşuldu**. **Ders: bir dal açık bir PR'ı temsil ediyorsa, o dal bir
+sonraki partinin çalışma alanı DEĞİLDİR** — iş yerelde ilerleyebilir, ama commit'i o dala
+bağlamak PR'ın sözleşmesini bozar.
+
+### Ortam ve dürüst sınır
+
+Container bu oturumda **üç kez** yeniden başladı ve Postgres her seferinde düştü; her alt küme
+koşusundan önce `pg_isready` ile yakalanıp yeniden kaldırıldı. `ruff` / `ruff format` iki değişen
+dosyada temiz; `--report --check-generated --ratchet` ve `generate_repository_facts --check`
+yeşil. **DÜRÜST SINIR:** frontend'de sıfır satır → hiçbir frontend kapısı koşulmadı; tam backend
+suite uçtan uca koşulmadı → geçen sayı ve coverage **CI'ın otoritesinde**.
+
+**NUMARA:** kapanışta açık PR listesi **boş** ölçüldü ve son kayıt `ADIM 104`'tü → bu kayıt
+**ADIM 105 / batch 26**.
+
+Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
+`docs/ADIM105_LANDED_KICKOFF.md`.

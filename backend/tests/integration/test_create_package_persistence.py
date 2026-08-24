@@ -38,6 +38,7 @@ from entropia.infrastructure.postgres.models import (
     ApprovalDecision,
     AuditEvent,
     DependencyScan,
+    Job,
     PackageRevision,
     PackageRoot,
     Principal,
@@ -705,3 +706,61 @@ async def _create_indicator_request_with_link(session, *, family_id, linked) -> 
         linked_indicator=linked,
         equivalence_claim=False,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 26 — CP-09.c2 (doc 06 §5): a replayed Send is ONE admission #
+# --------------------------------------------------------------------------- #
+
+
+async def test_send_replay_under_the_same_key_returns_one_request_and_one_job(session) -> None:
+    """CP-09.c2: the same Send Idempotency-Key returns the same request/job identity.
+
+    ``submit_candidate_generation`` has always wrapped its body in ``run_idempotent``,
+    but no test ever handed it a key twice: a grep for ``idempotency_key`` across this
+    module hits only the C.D.P call (that is CP-09.c1), so the Send-replay half was an
+    untested code path rather than a proven one.
+
+    Two independently breakable axes, because they fail apart: the RESPONSE identity
+    (compared as whole dicts — a differing job_id, state or request_version shows up
+    here) and the SIDE-EFFECT count (a replay that returns the cached body while still
+    enqueueing a second durable job is invisible to the first axis).
+    """
+    await _seed_principals(session)
+    await _seed_python_resolver(session)
+    family_id = await _seed_family(session)
+    await session.commit()
+
+    created = await _create_indicator_request(session, family_id=family_id, deps=[_RSI_DEP])
+    await _run_precheck(session, OWNER, created["request_id"])
+    await session.commit()
+
+    jobs_before = await _count(session, Job)
+    first = await cp_cmd.submit_candidate_generation(
+        session, OWNER, request_id=created["request_id"], idempotency_key="send-replay-1"
+    )
+    await session.commit()
+    # Vacuity guard: the FIRST call really admitted. Without this, "the second call
+    # matches the first" would also hold for two calls that both did nothing.
+    assert first["state"] == str(CreatePackageState.CANDIDATE_GENERATING)
+    assert first["job_id"]
+    assert await _count(session, Job) == jobs_before + 1
+
+    second = await cp_cmd.submit_candidate_generation(
+        session, OWNER, request_id=created["request_id"], idempotency_key="send-replay-1"
+    )
+    await session.commit()
+
+    # Axis 1 — identity: the WHOLE body is replayed, not just the job id. Note the
+    # replay is served from the idempotency record: re-running the body would raise on
+    # the candidate_generating -> candidate_generating edge instead of returning this.
+    assert second == first
+    # Axis 2 — side effects: exactly one durable job across both calls.
+    assert await _count(session, Job) == jobs_before + 1
+    # The request itself advanced exactly once (the admission bumps request_version;
+    # a re-run would bump it again and the equality above would not catch a second
+    # job enqueued outside the idempotent body).
+    session.expire_all()
+    reread = await cp_repo.get_request_detail(session, created["request_id"])
+    assert reread is not None
+    assert str(reread.state) == str(CreatePackageState.CANDIDATE_GENERATING)

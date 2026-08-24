@@ -16,6 +16,8 @@ proof for the new create_* helpers.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -869,3 +871,193 @@ async def test_l1_fk_insert_order_proof_for_manual_creates(session) -> None:
 
     entries = (await session.execute(select(ManualStreamEntry))).scalars().all()
     assert {entry.stream_position for entry in entries} == {1}  # baseline only, nothing leaked
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 22 — UM-08.c5 (delete trail) + UM-13.c3 (concurrent append) #
+# --------------------------------------------------------------------------- #
+
+
+async def _event_trail(session, document_id: str) -> list[tuple]:
+    """The document's FULL publication trail, in stream order.
+
+    A tuple per row, not a count: ``count(*)`` cannot tell an OVERWRITTEN row
+    from an APPENDED one, and the two are separate defect classes. Comparing
+    the ordered LIST catches an insertion; comparing the tuples inside it
+    catches a rewrite of an earlier row.
+    """
+    stmt = (
+        select(
+            ManualPublicationEvent.event_type,
+            ManualPublicationEvent.revision_id,
+            ManualPublicationEvent.prior_stream_version,
+            ManualPublicationEvent.resulting_stream_version,
+            ManualPublicationEvent.actor_principal_id,
+        )
+        .where(ManualPublicationEvent.document_id == document_id)
+        .order_by(ManualPublicationEvent.resulting_stream_version)
+    )
+    return [tuple(row) for row in (await session.execute(stmt)).all()]
+
+
+async def test_soft_delete_writes_its_publication_and_audit_trail(session) -> None:
+    """UM-08.c5 / doc 21 §11: the soft delete leaves a
+    ``manual_document_soft_deleted`` trail — publication event, audit row and
+    outbox row — and it APPENDS to the trail instead of rewriting it.
+
+    The suite pinned this shape only for PURGE
+    (``test_manual_purge_writes_event_and_removes_every_revision``); the delete
+    path wrote all three rows (``commands/manual.py`` lines 625-646) and NO test
+    read any of them, so the whole trail could be deleted from the command and
+    every existing manual test would still pass.
+
+    The document is REVISED before the delete on purpose: with a single revision
+    ``revision_id`` cannot distinguish "the head at delete time" from "the first
+    revision ever", and the criterion is about the delete, not the create.
+    """
+    await _seed(session)
+    doc = await _add_doc(session, "Retired", "Body that gets retired.")
+    revised = await replace_manual_revision(
+        session, ADMIN, document_id=doc["document_id"], content="Second body, still retired."
+    )
+    await session.commit()
+    entry_before = await manual_repo.get_stream_entry(session, doc["document_id"])
+    stream_entry_id = entry_before.stream_entry_id
+    version_before = await manual_repo.current_stream_version(session)
+    trail_before = await _event_trail(session, doc["document_id"])
+    assert [row[0] for row in trail_before] == [
+        "manual_document_published",
+        "manual_document_revised",
+    ]  # vacuity guard: comparing against an EMPTY prior trail proves nothing
+
+    result = await soft_delete_manual_document(
+        session, ADMIN, document_id=doc["document_id"], reason="cleanup"
+    )
+    await session.commit()
+    # The integration session is built with expire_on_commit=False, so a commit
+    # does NOT drop the identity map: without this the reads below would answer
+    # from this process's objects rather than from PostgreSQL.
+    session.expire_all()
+
+    # (1) publication event — .one() also pins that the delete writes EXACTLY one
+    event = await _publication_event(session, doc["document_id"], "manual_document_soft_deleted")
+    assert event.revision_id == revised["revision_id"]  # head at delete time, not v1
+    assert event.stream_entry_id == stream_entry_id
+    assert event.actor_principal_id == ADMIN.principal_id
+    assert event.correlation_id == ADMIN.correlation_id
+    assert event.prior_stream_version == version_before
+    assert event.resulting_stream_version == version_before + 1 == result["stream_version"]
+
+    # (2) audit row
+    audit = await _latest_audit(session, doc["document_id"])
+    assert audit.event_kind == "manual.document_soft_deleted"
+    assert audit.target_entity_type == MANUAL_ENTITY_TYPE
+    assert audit.target_revision_id == revised["revision_id"]
+    assert audit.previous_state == DeletionState.ACTIVE.value
+    assert audit.new_state == DeletionState.SOFT_DELETED.value
+    assert audit.reason == "cleanup"
+
+    # (3) outbox row — read the stored payload, not a key lookup on a live object
+    outbox = await _latest_outbox(session, doc["document_id"])
+    assert outbox.event_type == "manual.document_soft_deleted"
+    assert outbox.resource_type == MANUAL_ENTITY_TYPE
+    assert outbox.payload == {
+        "document_id": doc["document_id"],
+        "trash_entry_id": result["trash_entry_id"],
+        "stream_version": result["stream_version"],
+    }
+
+    # (4) APPEND, not overwrite: the two earlier rows survive tuple-for-tuple and
+    # the delete row is the only addition, at the end.
+    assert await _event_trail(session, doc["document_id"]) == [
+        *trail_before,
+        (
+            "manual_document_soft_deleted",
+            revised["revision_id"],
+            version_before,
+            version_before + 1,
+            ADMIN.principal_id,
+        ),
+    ]
+
+
+async def _append_in_own_transaction(barrier, *, title: str, content: str) -> dict:
+    """One Add/Paste append on its OWN engine, connection and transaction.
+
+    The barrier makes the two callers enter the command together: without it the
+    first task would be committed long before the second one started, and the
+    test would measure two SEQUENTIAL appends while claiming to measure a race.
+    It is released BEFORE the command — releasing it inside the command would
+    deadlock, because the first task holds the advisory lock the other waits on.
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from .conftest import DATABASE_URL
+
+    engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
+    try:
+        factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+        async with factory() as s:
+            await barrier.wait()
+            result = await create_manual_document(s, ADMIN, title=title, content=content)
+            await s.commit()
+            return result
+    finally:
+        await engine.dispose()
+
+
+async def test_concurrent_appends_serialize_on_the_stream_lock(session) -> None:
+    """UM-13.c3 / doc 21 §7: two Admins appending at the same time get two
+    deterministic positions and no duplicate side effect.
+
+    Every other manual test drives ONE session sequentially, so neither
+    ``manual_repo.lock_stream`` (the ``pg_advisory_xact_lock``) nor the
+    ``uq_manual_stream_position`` / ``uq_manual_event_stream_version``
+    constraints are ever placed under contention: the mechanism could be
+    deleted and the suite would stay green.
+
+    Both appends must SUCCEED — an ``IntegrityError`` on the loser is a
+    collision, which is exactly what the criterion forbids.
+    """
+    await _seed(session)
+    barrier = asyncio.Barrier(2)
+    outcomes = await asyncio.gather(
+        _append_in_own_transaction(barrier, title="Racer A", content="Body from the first admin."),
+        _append_in_own_transaction(barrier, title="Racer B", content="Body from the second admin."),
+        return_exceptions=True,
+    )
+    failures = [o for o in outcomes if isinstance(o, BaseException)]
+    assert not failures, f"a concurrent append failed instead of serializing: {failures!r}"
+
+    session.expire_all()  # expire_on_commit=False: read PostgreSQL, not this process
+    positions = sorted(o["stream_position"] for o in outcomes)
+    assert positions == [2, 3]  # baseline holds 1; distinct, consecutive, no reuse
+    versions = sorted(o["stream_version"] for o in outcomes)
+    assert versions == [2, 3]
+
+    # No duplicate side effect: two documents, two stream entries, two publish
+    # events — and the persisted rows agree with what the two callers were told.
+    entries = (await session.execute(select(ManualStreamEntry.stream_position))).scalars().all()
+    assert sorted(entries) == [1, 2, 3]
+    racer_ids = [o["document_id"] for o in outcomes]
+    published = (
+        (
+            await session.execute(
+                select(ManualPublicationEvent.resulting_stream_version).where(
+                    ManualPublicationEvent.event_type == "manual_document_published",
+                    ManualPublicationEvent.document_id.in_(racer_ids),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert sorted(published) == [2, 3]  # one event each; the baseline's own is 1
+    assert await _count(session, ManualDocument) == 3  # baseline + two racers
+    stream = await get_manual_stream(session, USER)
+    assert [row["stream_position"] for row in stream["data"]] == [1, 2, 3]
+    assert sorted(row["title"] for row in stream["data"] if row["stream_position"] != 1) == [
+        "Racer A",
+        "Racer B",
+    ]

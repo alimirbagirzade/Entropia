@@ -70,17 +70,17 @@ for this map.
 | 18 | 18 | 0 | 0 | 0 | 0 | 0 | 18 |
 | 19 | 4 | 2 | 0 | 1 | 1 | 0 | 8 |
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
-| 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
+| 21 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 6 | 3 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **295** | **66** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **297** | **64** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1053 |
+| covered | 1055 |
 | partial | 4 |
-| uncovered | 79 |
+| uncovered | 77 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 34 |
+| B | 32 |
 | C | 6 |
 | D | 32 |
-| **open total** | **73** |
+| **open total** | **71** |
 
-## Partial criteria (66)
+## Partial criteria (64)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -169,9 +169,7 @@ for this map.
 | `TR-08` | B | An Admin restore reactivates the same entity and revision with the owner unchanged and no new revision appended. | Three of four clauses are strongly asserted, including the subtle "no new revision" one (root.current_revision_id is captured before the delete and compared after the restore). The outbox half is the gap: commands/deletion.py does call add_outbox_event alongside the "trash.restored" audit row, but the test reads back only AuditEvent.event_kind. No test in the Trash suite queries OutboxEvent on the restore path — the only outbox count assertions are on soft-delete surfaces — so emission is unproven for restore. |
 | `TR-12` | C | A retention-blocked purge is rejected by the worker, leaving the root soft_deleted and the entry purge_failed with its reason. | Split deliberately. The worker-rejection MECHANISM this row describes is fully proven, and clause 2 matters most: it exercises a genuine production blocker (a live Agent source task, doc 20 §10) rather than a monkeypatched preflight, so the failure path is not an artifact of the test harness. Clause 4 is the retention window itself, which CLAUDE.md and doc 20 §16 record as deliberately closed for Production V1 ("retention auto-purge — Production V1'de kapalı"). No retention policy is evaluated anywhere in jobs/purge.py, so no test can assert one without inventing product; the criterion rolls up to partial on that clause alone. Clause 1's monkeypatched error message ("Retention policy blocks this cleanup.") is illustrative test text, not a real retention implementation, and is not treated as evidence of one. |
 | `UM-04` | D | A valid pasted-text append creates root, Published revision, stream entry and audit atomically and the UI scrolls to the new anchor. | The atomic publish and the client dispatch are proven, but the "UI scrolls to the new anchor" half is NOT IMPLEMENTED, not merely untested. frontend/src/pages/UserManual.tsx calls scrollIntoView only from openResult() on the search-result click path (UserManual.tsx:103 via openResult at :449); the publish mutation handler only shows the success toast and invalidates the ["manual"] query, so nothing moves the viewport to the new section. A follow-up slice needs to scroll to the returned `anchor` after a successful create and then assert it the way the stale-anchor tests already do. |
-| `UM-08` | B | Soft-deleting an appended document removes it from reader/sidebar/search and writes a Trash snapshot plus a soft-delete audit event. | The event IS emitted — commands/manual.py writes a ManualPublicationEvent event_type="manual_document_soft_deleted" (manual.py:626) and an audit/outbox pair with event_kind="manual.document_soft_deleted" (manual.py:635-638) — but NO test asserts either. The suite asserts the analogous event only for purge (test_manual_purge_writes_event_and_removes_every_revision reads _publication_event(..., "manual_document_purged")). A one-line _publication_event(..., "manual_document_soft_deleted") assertion inside test_soft_delete_writes_manual_trash_entry would close this. |
 | `UM-12` | D | An Agent artifact citing a soft-deleted revision still resolves the cited revision/block snapshot in the artifact viewer for the retention period. | c3 is NOT IMPLEMENTED, not merely untested, and no test can be written against the current code. The only section-resolution surface is backend/src/entropia/application/queries/manual.py::get_manual_section, which hard-refuses any non-ACTIVE document — `if document is None or document.deletion_state != DeletionState.ACTIVE: raise ManualDocumentNotFoundError()` (queries/manual.py:200) — and repeats the refusal for a non-ACTIVE stream entry. Its own docstring states "Draft or soft-deleted content never enters normal retrieval". There is no separate citation-resolution reader: the citation payload written by jobs/agent_tools.py::_handle_artifact_attach_citation stores document_id/revision_no/ revision_id/anchor/block_ids, but nothing reads it back through a retention-aware path. A follow-up slice must add a retention-scoped resolver (a viewer-only query that reads the pinned revision_id directly rather than going through the ACTIVE stream entry) before this clause can be covered. |
-| `UM-13` | B | Two Admins appending at the same time get two deterministic positions with no duplicate side effect. | The concurrency MECHANISM exists but is never exercised under contention. The production guards are repositories/manual.py::lock_stream (a transaction-scoped `pg_advisory_xact_lock` on MANUAL_STREAM_LOCK_KEY, manual.py:38) plus the DB-level UniqueConstraint("stream_position", name="uq_manual_stream_position") on models/manual.py:113. Every existing test drives ONE session sequentially, so neither the lock nor the unique constraint has ever had to arbitrate a race — the criterion's actual subject ("İki Admin eşzamanlı append başlatır") is untested. A follow-up needs two concurrent sessions racing create_manual_document and asserting two distinct positions with no IntegrityError leaking to the caller. |
 | `UM-15` | B | A delete with a stale stream version is MANUAL_STREAM_CONFLICT, the UI rehydrates with the latest stream, and nothing is deleted. | The server-side half is solid; the client RECOVERY half is unproven. frontend/src/lib/ manual.ts:273 documents "Stale snapshot -> 409 MANUAL_STREAM_CONFLICT verbatim (UM-15)" and UserManual.tsx:806 renders the conflict explanation, but no frontend test drives a 409 MANUAL_STREAM_CONFLICT response and asserts that the stream query is refetched and the composer re-armed with the new version. The three stale-anchor tests prove the analogous refetch-and-retry loop for UM-18, so the harness to do this already exists. Note also that no test pins the literal string "MANUAL_STREAM_CONFLICT" — c1 rests on the typed ManualStreamConflictError whose code is set at shared/errors.py:2155. |
 | `FD-02` | D | A POST for an inactive capability from a stale client cache is refused with CAPABILITY_NOT_ACTIVE, creating no job/output, and a denial is recorded. | Three of four clauses are fully proven; c4 is proven on ONE of the two call lines only. The Agent tool line writes a durable REJECTED AgentToolCall row carrying reason_code CAPABILITY_NOT_ACTIVE, which the cited test asserts. The HUMAN HTTP line raises CapabilityNotActiveError straight out of require_operational_capability (commands/capability.py) and the test explicitly asserts OutboxEvent stays at zero — the 403 leaves no audit or denial row behind, only whatever structured logging the middleware emits, which nothing asserts. If doc 22's "relevant denial/log kaydı" is meant to bind the human line too, that record does not exist yet. |
 | `FD-09` | D | WFA/Monte Carlo run as an Analysis Artifact recording method/split/seed/input refs, never writing an authoritative metric back onto an immutable Backtest Result. | Two real gaps, not just missing assertions. (1) c4 is a MODEL gap: the shipped AnalysisArtifact row records artifact_type, capability_key, input_manifest_refs, method_version, output_ref and owner — there is no split-definition and no random-seed column anywhere in commands/capability.py::create_analysis_artifact or the repository helper, so the criterion's "method/split/random seed" triple is only one third modelled and no test could assert the other two. (2) c5 repeats the FD-04/FD-05 non-mutation hole: no test re-reads the Backtest Result after artifact creation to prove no metric was back-written. Reproducibility of a WFA/MC run is exactly what a seed and split are for, so c4 is worth a schema follow-up rather than only a test. |

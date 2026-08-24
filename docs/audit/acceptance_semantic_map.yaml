@@ -20432,8 +20432,9 @@ criteria:
       — DELETE carries a BODY + Idempotency-Key
   - id: UM-08.c5
     text: A manual_document_soft_deleted publication/audit event is written for the delete.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_user_manual.py::test_soft_delete_writes_its_publication_and_audit_trail
   production_paths:
   - backend/src/entropia/application/commands/manual.py
   - backend/src/entropia/infrastructure/postgres/repositories/trash.py
@@ -20441,12 +20442,14 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_user_manual.py::test_soft_delete_writes_manual_trash_entry
   - backend/tests/integration/test_user_manual.py::test_search_excludes_soft_deleted_documents
+  - backend/tests/integration/test_user_manual.py::test_soft_delete_writes_its_publication_and_audit_trail
   - frontend/src/test/userManual.test.tsx > User Manual page > soft deletes after a two-step confirm
     — DELETE carries a BODY + Idempotency-Key
   evidence_type:
   - backend_integration
   - frontend_component
-  positive: []
+  positive:
+  - backend/tests/integration/test_user_manual.py::test_soft_delete_writes_its_publication_and_audit_trail
   negative:
   - backend/tests/integration/test_user_manual.py::test_soft_delete_writes_manual_trash_entry
   - backend/tests/integration/test_user_manual.py::test_search_excludes_soft_deleted_documents
@@ -20454,15 +20457,11 @@ criteria:
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_user_manual.py::test_soft_delete_writes_its_publication_and_audit_trail
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The event IS emitted — commands/manual.py writes a ManualPublicationEvent event_type="manual_document_soft_deleted"
-    (manual.py:626) and an audit/outbox pair with event_kind="manual.document_soft_deleted" (manual.py:635-638)
-    — but NO test asserts either. The suite asserts the analogous event only for purge (test_manual_purge_writes_event_and_removes_every_revision
-    reads _publication_event(..., "manual_document_purged")). A one-line _publication_event(..., "manual_document_soft_deleted")
-    assertion inside test_soft_delete_writes_manual_trash_entry would close this.
+  status: covered
+  notes: 'CLOSED by acceptance batch 22 (doc 21 backend). The event was always emitted — commands/manual.py writes a ManualPublicationEvent event_type="manual_document_soft_deleted" (manual.py:626) and an audit/outbox pair with event_kind="manual.document_soft_deleted" (manual.py:635-638) — but NO test read any of them, so the whole trail could be deleted from the command and every existing manual test stayed green. MEASURED: NC-1 removed the publication-event call and only the new case went red. test_soft_delete_writes_its_publication_and_audit_trail now asserts all three planes plus a fourth axis the other three cannot see, namely that the trail is APPENDED rather than rewritten. The document is revised before the delete so revision_id can distinguish the head at delete time from the first revision ever. FOUR negative controls, each landing on its own target assertion: NC-1 (no publication event) hits assertion 1; NC-2 (audit written under the publish kind) hits assertion 2; NC-3 (outbox payload drops trash_entry_id) hits assertion 3; NC-4 (the delete wipes the earlier events of that document before appending its own) hits assertion 4 ALONE — under NC-4 the first three still pass, which is how the shadow they cast over the fourth was lifted. The earlier note here proposed a one-line _publication_event assertion inside the Trash-entry test; that would have closed the clause on paper while leaving the audit row, the outbox payload and the append-versus-overwrite distinction unasserted.'
 - id: UM-09
   document: docs/spec/21_Entropia_V18_User_Manual_Page_Documentation_v1_1.md
   section: '15'
@@ -20702,8 +20701,9 @@ criteria:
   - id: UM-13.c3
     text: Two CONCURRENT appends serialize on the stream lock and both land on distinct positions
       rather than colliding or duplicating.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_user_manual.py::test_concurrent_appends_serialize_on_the_stream_lock
   production_paths:
   - backend/src/entropia/infrastructure/postgres/repositories/manual.py
   - backend/src/entropia/infrastructure/postgres/models/manual.py
@@ -20712,30 +20712,25 @@ criteria:
   - backend/tests/integration/test_user_manual.py::test_stream_baseline_first_then_unique_positions
   - backend/tests/integration/test_user_manual.py::test_restore_returns_same_position_and_revision_chain
   - backend/tests/integration/test_user_manual.py::test_create_idempotency_replay_no_duplicate
+  - backend/tests/integration/test_user_manual.py::test_concurrent_appends_serialize_on_the_stream_lock
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_user_manual.py::test_stream_baseline_first_then_unique_positions
   - backend/tests/integration/test_user_manual.py::test_restore_returns_same_position_and_revision_chain
+  - backend/tests/integration/test_user_manual.py::test_concurrent_appends_serialize_on_the_stream_lock
   negative:
   - backend/tests/integration/test_user_manual.py::test_create_idempotency_replay_no_duplicate
   auth: []
   occ: []
   idempotency:
   - backend/tests/integration/test_user_manual.py::test_create_idempotency_replay_no_duplicate
+  - backend/tests/integration/test_user_manual.py::test_concurrent_appends_serialize_on_the_stream_lock
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The concurrency MECHANISM exists but is never exercised under contention. The production
-    guards are repositories/manual.py::lock_stream (a transaction-scoped `pg_advisory_xact_lock` on
-    MANUAL_STREAM_LOCK_KEY, manual.py:38) plus the DB-level UniqueConstraint("stream_position", name="uq_manual_stream_position")
-    on models/manual.py:113. Every existing test drives ONE session sequentially, so neither the lock
-    nor the unique constraint has ever had to arbitrate a race — the criterion's actual subject ("İki
-    Admin eşzamanlı append başlatır") is untested. A follow-up needs two concurrent sessions racing
-    create_manual_document and asserting two distinct positions with no IntegrityError leaking to
-    the caller.
+  status: covered
+  notes: 'CLOSED by acceptance batch 22 (doc 21 backend). The mechanism was always there — repositories/manual.py::lock_stream takes a transaction-scoped pg_advisory_xact_lock on MANUAL_STREAM_LOCK_KEY, and the schema carries UniqueConstraint("stream_position", name="uq_manual_stream_position") plus UniqueConstraint("resulting_stream_version", name="uq_manual_event_stream_version") — but every other manual test drives ONE session sequentially, so neither guard had ever arbitrated a race. test_concurrent_appends_serialize_on_the_stream_lock runs two create_manual_document calls on two independent engines and connections, released together by an asyncio.Barrier. The barrier is what makes the race real AND deterministic in both directions: 8/8 green with the lock in place, and NC-1 (lock_stream removed from _publish_new_document) went red 5/5 with a uq_manual_stream_position violation on the loser — measured, not assumed. That control doubles as the vacuity proof: two SEQUENTIAL appends would not collide when the lock is removed, so the collision is itself evidence that the two callers really overlap. Under NC-1 all 28 pre-existing cases in the file stayed green, which is the proof the clause was open. The assertions read positions and stream versions back from PostgreSQL after session.expire_all(), because the integration session is built with expire_on_commit=False.'
 - id: UM-14
   document: docs/spec/21_Entropia_V18_User_Manual_Page_Documentation_v1_1.md
   section: '15'

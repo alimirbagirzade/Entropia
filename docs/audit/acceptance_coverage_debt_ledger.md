@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 34 |
+| B | 32 |
 | C | 6 |
 | D | 32 |
-| **open total** | **73** |
+| **open total** | **71** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (34)
+## Class B (32)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -88,8 +88,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `RH-14` | 16 | partial | A headless Agent queries a result and writes a provenance-linked artifact without mutating the Result. | c3 has no asserting test: the agent-loop test asserts the artifact, its source_task_id and its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary) after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash… |
 | `TR-07` | 20 | partial | Deleting a Rationale Family with an active assignment is blocked with no dangling assignment and no Trash Entry. | The blocker and the no-dangling-state half are directly asserted (entry count unchanged plus the family absent from the listing). The "repair plan required" half is not: nothing inspects the raised RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and no test walks the sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for restore and for assi… |
 | `TR-08` | 20 | partial | An Admin restore reactivates the same entity and revision with the owner unchanged and no new revision appended. | Three of four clauses are strongly asserted, including the subtle "no new revision" one (root.current_revision_id is captured before the delete and compared after the restore). The outbox half is the gap: commands/deletion.py does call add_outbox_event alongside the "trash.restored" audit row, but the test reads back only AuditEvent.event_kind. No test in the Trash suite queries OutboxEvent on … |
-| `UM-08` | 21 | partial | Soft-deleting an appended document removes it from reader/sidebar/search and writes a Trash snapshot plus a soft-delete audit event. | The event IS emitted — commands/manual.py writes a ManualPublicationEvent event_type="manual_document_soft_deleted" (manual.py:626) and an audit/outbox pair with event_kind="manual.document_soft_deleted" (manual.py:635-638) — but NO test asserts either. The suite asserts the analogous event only for purge (test_manual_purge_writes_event_and_removes_every_revision reads _publication_event(..., "… |
-| `UM-13` | 21 | partial | Two Admins appending at the same time get two deterministic positions with no duplicate side effect. | The concurrency MECHANISM exists but is never exercised under contention. The production guards are repositories/manual.py::lock_stream (a transaction-scoped `pg_advisory_xact_lock` on MANUAL_STREAM_LOCK_KEY, manual.py:38) plus the DB-level UniqueConstraint("stream_position", name="uq_manual_stream_position") on models/manual.py:113. Every existing test drives ONE session sequentially, so neith… |
 | `UM-15` | 21 | partial | A delete with a stale stream version is MANUAL_STREAM_CONFLICT, the UI rehydrates with the latest stream, and nothing is deleted. | The server-side half is solid; the client RECOVERY half is unproven. frontend/src/lib/ manual.ts:273 documents "Stale snapshot -> 409 MANUAL_STREAM_CONFLICT verbatim (UM-15)" and UserManual.tsx:806 renders the conflict explanation, but no frontend test drives a 409 MANUAL_STREAM_CONFLICT response and asserts that the stream query is refetched and the composer re-armed with the new version. The … |
 
 ## Class C (6)

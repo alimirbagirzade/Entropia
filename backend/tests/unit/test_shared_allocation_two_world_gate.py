@@ -28,6 +28,7 @@ Infra-free: every function under test is pure, matching
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Iterator
 from contextlib import contextmanager
 from decimal import Decimal
@@ -258,22 +259,48 @@ def test_lifting_the_flag_alone_still_folds_the_sequential_curve(
     assert combined.diagnostics["composition"]["capital_allocation"] == "shared_pool"
 
 
-def test_the_worker_fold_never_consults_the_capability_flag() -> None:
+def test_the_worker_consults_the_capability_flag_in_exactly_one_place() -> None:
     """Why the test above holds, stated structurally so it cannot drift silently.
 
     A behavioural test alone would keep passing if the worker grew a flag branch that
     happened not to change this fixture's numbers. The source-level assertion is the one
-    that survives that. When ``C4`` lands ``_use_unified_clock``, this test is the file that
-    must be updated — deliberately, as part of wiring the branch.
+    that survives that.
+
+    **Updated by `C4`, deliberately — the previous version asserted the flag was ABSENT
+    from the worker and its own docstring named this as the file to change when
+    ``_use_unified_clock`` landed.** The worker now consults the flag, so the property is
+    no longer absence but CONTAINMENT of the consultation:
+
+    * exactly ONE *call* to ``shared_allocation_is_executable``, so a second, unguarded
+      branch cannot appear beside the guard. Counted from the PARSED module, not by text:
+      the name also appears in the import and in the prose explaining why both conjuncts
+      matter, and a substring scan cannot tell a call from a docstring — it fails on the
+      worker's own explanation of itself. The two absence checks below are still text
+      scans, so do not spell those two names in this module's prose either.
+    * the flag CONSTANT still unread — the worker takes the PREDICATE, which is what keeps
+      the lift a one-line change in ``capability.py`` instead of a scattered edit.
+    * ``run_portfolio`` still absent, because the worker must drive ``iter_portfolio``:
+      the eager wrapper exhausts the loop in one synchronous call and would leave no line
+      to run the tick-strided cancellation check on (ADR §14 A21).
+    * the sequential fold still present — the half a wrong guard would silently replace.
     """
     worker = (_SRC / "application" / "jobs" / "backtest_engine.py").read_text(encoding="utf-8")
-    for absent in (
-        "shared_allocation_is_executable",
-        "SHARED_ALLOCATION_STATUS",
-        "_use_unified_clock",
-        "run_portfolio",
-    ):
+
+    calls = [
+        node
+        for node in ast.walk(ast.parse(worker))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "shared_allocation_is_executable"
+    ]
+    assert len(calls) == 1, (
+        f"the capability flag is CALLED {len(calls)} times in the worker; every call is a "
+        "branch that can drift from _use_unified_clock"
+    )
+    for absent in ("SHARED_ALLOCATION_STATUS", "run_portfolio"):
         assert absent not in worker, f"{absent!r} reached the worker — re-read this docstring"
+    assert "def _use_unified_clock(" in worker
+    assert "combine_item_runs(" in worker
 
 
 # --------------------------------------------------------------------------- #

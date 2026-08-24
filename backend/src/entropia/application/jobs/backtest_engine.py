@@ -1039,8 +1039,15 @@ def _shared_clock_inputs(
     }
     participants: list[ItemParticipant] = []
     shares: dict[str, Decimal] = {}
-    for prepared in prepared_items:
-        allocation = prepared.allocation
+    # The loop variable is ``pinned``, NOT the name the independent item loop uses. That
+    # loop's header is a LITERAL the containment gate greps for to prove it survived the
+    # wiring, and a second copy of that exact line anywhere in this module — code OR
+    # comment, the scan cannot tell them apart — lets the gate stay green with the real
+    # loop deleted, which is the silent re-price of every independent composite Result.
+    # Measured with a negative control: removing the real loop left the gate GREEN until
+    # this name was changed.
+    for pinned in prepared_items:
+        allocation = pinned.allocation
         if allocation is None:
             # The run ASKS for shared capital (``_use_unified_clock`` said so) but this
             # item's snapshot resolves to no sleeve — a missing/non-positive pool P0 or an
@@ -1049,19 +1056,19 @@ def _shared_clock_inputs(
             # on independent capital under a shared Result's label.
             return _PrepFailure(
                 RunFailureCode.MANIFEST_RESOLUTION,
-                f"Strategy item '{prepared.item_id}': the run requests SHARED capital but "
+                f"Strategy item '{pinned.item_id}': the run requests SHARED capital but "
                 "its pinned capital_execution snapshot resolves to no allocation sleeve.",
             )
-        item_id = prepared.item_id
+        item_id = pinned.item_id
         stepper = _build_stepper(
-            strategy_config=prepared.config,
+            strategy_config=pinned.config,
             execution_key=execution_key,
             item_count=item_count,
-            indicator_plan=prepared.indicator_plan,
-            timeframe=prepared.timeframe,
+            indicator_plan=pinned.indicator_plan,
+            timeframe=pinned.timeframe,
             allocation=allocation,
-            funding=prepared.funding_schedule,
-            tick_batches=prepared.tick_batches,
+            funding=pinned.funding_schedule,
+            tick_batches=pinned.tick_batches,
             # Cross-item precedence is RETIRED on this path (ADR §12 row 19, P-C2 §C.5
             # seam #5): the loop arbitrates conflict and exposure globally at P5/P6b, so
             # also handing the item the sequential ``PortfolioRules`` would enforce one
@@ -1072,14 +1079,14 @@ def _shared_clock_inputs(
         participants.append(
             build_engine_participant(
                 item_id=item_id,
-                item_kind=prepared.item_kind,
+                item_kind=pinned.item_kind,
                 pin_ordinal=pin_ordinals[item_id],
-                root_id=str(prepared.root_id) if prepared.root_id is not None else None,
-                selected_revision_id=prepared.revision_id,
+                root_id=str(pinned.root_id) if pinned.root_id is not None else None,
+                selected_revision_id=pinned.revision_id,
                 item_label=item_labels.get(item_id),
-                instrument_id=prepared.config.data.instrument_id,
+                instrument_id=pinned.config.data.instrument_id,
                 stepper=stepper,
-                bar_batches=prepared.bar_batches,
+                bar_batches=pinned.bar_batches,
             )
         )
         shares[item_id] = allocation.item_share_percent
@@ -1149,7 +1156,7 @@ async def _replay_shared_clock(
     item_labels: dict[str, str],
     base_rules: PortfolioRules | None,
 ) -> EngineOutput | dict[str, Any]:
-    """Co-simulate every prepared Strategy on ONE merged clock over ONE shared pool.
+    """Co-simulate every pinned Strategy on ONE merged clock over ONE shared pool.
 
     Returns the composite ``EngineOutput`` on success, or the DURABLE terminal reference of
     a run this function already cancelled or failed — the same two shapes ``run_backtest``'s
@@ -1180,7 +1187,7 @@ async def _replay_shared_clock(
             job,
             run,
             code=RunFailureCode.ENGINE_ERROR,
-            message=f"Shared-clock run could not be prepared: {exc}",
+            message=f"Shared-clock run could not be pinned: {exc}",
         )
     if isinstance(inputs, _PrepFailure):
         return await _fail_run(session, job, run, code=inputs.code, message=inputs.message)

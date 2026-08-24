@@ -29,7 +29,7 @@ static walk. Only a full CI run reports passes.
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
 | Backend tests **collected** (static, not a pass count) | 3731 in 354 files |
 | Backend `xfail` markers | 0 (0 strict) |
-| Frontend unit test **call sites** (static; `.each` expands at run time) | 725 in 72 files |
+| Frontend unit test **call sites** (static; `.each` expands at run time) | 726 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |
 | Acceptance criteria mapped | 383 |
 | Acceptance clauses mapped | 1175 |
@@ -38,8 +38,8 @@ static walk. Only a full CI run reports passes.
 
 | Level | covered | deliberate_future_dev | not_applicable | partial | uncovered |
 |---|---|---|---|---|---|
-| Criteria | 292 | 8 | 7 | 69 | 7 |
-| Clauses | 1050 | 27 | 12 | 4 | 82 |
+| Criteria | 293 | 8 | 7 | 68 | 7 |
+| Clauses | 1051 | 27 | 12 | 4 | 81 |
 
 ## HTTP operations by method
 

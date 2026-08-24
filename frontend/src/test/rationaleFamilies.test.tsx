@@ -117,8 +117,10 @@ const BASE_ROUTES = {
   "GET /package-rationale-assignments": ASSIGNMENTS_PAGE,
 };
 
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+// `client` is optional and defaults to a fresh QueryClient, so every existing call
+// site renders exactly as before. It is threaded through only so the RF-18 remount
+// case can mount the page TWICE against the SAME cache (see that test's comment).
+function renderPage(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/rationale-families"]}>
@@ -258,6 +260,50 @@ describe("Rationale Families page", () => {
         expected_family_current_revision_id: "rev_f1",
       },
     ]);
+  });
+
+  // RF-18.c1 (doc 10 §14): staged reassignments live ONLY in client state, so a
+  // refresh/remount drops them and the table comes back as the server projection.
+  // The sibling staging test asserts stage -> SAVE, i.e. the opposite direction: it
+  // stays green if the staging were persisted, which is exactly the defect this row
+  // is about.
+  it("discards staged reassignments on remount, leaving only the server projection", async () => {
+    const fetchMock = stubApi(BASE_ROUTES);
+    // One client, deliberately shared across BOTH mounts below.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderPage(client);
+    await screen.findByText("Cross Up");
+
+    // Stage a reassignment for the row the server reports as unassigned.
+    fireEvent.change(screen.getByLabelText("Reassign Cross Up"), { target: { value: "fam_1" } });
+    expect(screen.getByLabelText("Reassign Cross Up")).toHaveValue("fam_1");
+    expect(screen.getByText("1 pending change(s)")).toBeInTheDocument();
+
+    // "Client state" half: staging on its own reaches the server not at all. Read as
+    // a set of requests rather than a count so a future extra GET cannot mask a write.
+    const writes = () =>
+      fetchMock.mock.calls.filter(([, init]) => (init?.method ?? "GET").toUpperCase() !== "GET");
+    expect(writes()).toEqual([]);
+
+    // The refresh. Unmount the tree and mount it again against the SAME QueryClient —
+    // the discriminating world. Against a FRESH client every implementation passes
+    // trivially (the cache dies with the client), so staging parked in the query cache
+    // would go unnoticed; with the cache kept warm, only staging held inside component
+    // state can disappear here.
+    cleanup();
+    renderPage(client);
+
+    // The remounted table renders the persisted server projection…
+    expect(await screen.findByText("Cross Up")).toBeInTheDocument();
+    expect(screen.getByLabelText("Reassign Cross Up")).toHaveValue("");
+    // …and the staging is gone, read on all three surfaces that expose it.
+    expect(screen.getByText("no pending changes")).toBeInTheDocument();
+    expect(screen.queryByText("1 pending change(s)")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Assignment Changes" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
+
+    // Discarded, not silently flushed: losing the staging must not have saved it.
+    expect(writes()).toEqual([]);
   });
 
   it("refetches the registry when the ['rationale-families'] SSE prefix is invalidated", async () => {

@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 37 |
+| B | 36 |
 | C | 6 |
 | D | 32 |
-| **open total** | **76** |
+| **open total** | **75** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (37)
+## Class B (36)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -78,7 +78,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `ESP-05` | 09 | partial | The Embedded System / TA Resolver Family is seeded ACTIVE; assignment follows the shared exception while the resolver payload stays protected. | MISSING: the "resolver payload remains protected" half is never asserted, and the one shared-editing test raises a concrete question a follow-up must answer. doc 09 line 644 states that changing the Rationale Family assignment "does not change signature, adapter, validation, current revision or registry trust". The only shared-edit test, test_assign_creates_package_revision_owner_unchanged, tar… |
 | `ESP-20` | 09 | partial | A user with no ESP proposal sees only System trusted resolvers; direct ID query also enforces can_view. | MISSING: the role-aware filtering is never exercised with a FOREIGN actor. The predicate exists and is unit-tested — domain/esp/policy.py::ensure_can_view raises AccessDeniedError for a private resolver owned by someone else (unit/test_esp_policy.py::test_private_proposal_hidden_from_non_owner) — and queries/esp.py wires it in both places (list_embedded_system_packages post-filters rows through… |
 | `RF-08` | 10 | partial | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
-| `RF-18` | 10 | partial | A browser refresh with a dirty assignment table may lose staged changes; only persisted canonical server state returns. | No test unmounts/remounts the page (or otherwise simulates a refresh) with pending staged changes and asserts the "1 pending change(s)" staging is gone. The staging test asserts staging then SAVE, which is the opposite direction. The canonical-server-state half is proven only in the weak sense that the rendered rows come from the stubbed GET response. |
 | `MKD-02` | 11 | partial | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The … |
 | `RD-01` | 12 | partial | Without an approved Market Data link the creator stays locked and the server returns DEPENDENCY_BLOCKED. | The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server command + route). The criterion names "create draft/analysis command" — only create is exercised; no test posts /research-datasets/{id}/analysis without a linked market dependency and asserts DEPENDENCY_BLOCKED. ADIM 54 FINDING — c4 is very likely MISCLASSIFIED and no test can close it. The clause wants the… |
 | `RD-05` | 12 | partial | Supervisor owns drafts but cannot approve; Admin approves; User is denied; Agent works without UI. | Naming note, not a defect: the doc row writes the code as APPROVAL_ADMIN_REQUIRED; the shipped code is APPROVAL_REQUIRES_ADMIN. The behaviour (403 + admin-required) is asserted, so c2 is covered. The Agent clause is unproven: OWNER in test_research_data_persistence.py is a HUMAN Supervisor, and no test drives create_research_dataset or request_research_dataset_analysis with a PrincipalType.AGEN… |

@@ -285,7 +285,16 @@ def test_the_phase_loop_exists_but_no_production_path_reaches_it() -> None:
     # loop have to SURVIVE the wiring. Deleting either is the silent re-price of every
     # independent composite Result — no flag, no version bump, nothing a reader could see.
     assert "combine_item_runs(" in worker
-    assert "for prepared in prepared_items:" in worker
+    # EXACTLY once, not merely present. These are text scans, so a second copy of the loop
+    # header anywhere in the worker — another loop, or a comment quoting it — satisfies a
+    # bare ``in`` check while the real loop is gone. That is not hypothetical: `C4`'s own
+    # shared-branch helper looped with the same variable name, and a negative control that
+    # deleted the independent loop left this assertion GREEN. Counting pins the shadow as
+    # well as the deletion.
+    assert worker.count("for prepared in prepared_items:") == 1, (
+        "the independent item loop's header appears more than once (or not at all); a "
+        "second copy blunts this assertion into proving nothing"
+    )
     # The assertion that REPLACES "nothing calls it". A text scan cannot prove that no
     # request reaches the loop; what it can prove is that the one authorised caller reads
     # the containment flag at the branch rather than caching or re-deriving the answer.

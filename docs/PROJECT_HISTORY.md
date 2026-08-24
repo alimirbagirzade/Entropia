@@ -14749,3 +14749,86 @@ suite uçtan uca koşulmadı → geçen sayı ve coverage **CI'ın otoritesinde*
 
 Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
 `docs/ADIM105_LANDED_KICKOFF.md`.
+
+
+## ADIM 106 — kabul borcu batch 27 (doc 08 Package Library, backend): `PL-07` kapandı — vacuity tuzağı YAZMADAN ÖNCE ölçüldü
+
+**Tarih:** 2026-08-25 · **Dal:** `claude/entropia-v18-batch-27-zdee6z` · **Taban:** main `680ba1e`
+(ADIM 105 / batch 26 = #818). **ÜRÜN KODU DEĞİŞMEDİ** (`backend/src` altında sıfır satır); diff =
+tek yeni integration case + kabul defteri + üretilmiş artefaktlar + kapanış belgeleri. Migration
+yok, OpenAPI değişmedi, `ENGINE_VERSION` değişmedi, alembic head
+`0043_i08_registry_strategy_fks`, `SHARED_ALLOCATION_STATUS` = `future_dev`.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Kapanan: `PL-07.c2` — paket→strateji düzleminde no-auto-repin, İLK KEZ literal diziyle
+
+Kriterin cümlesi: *"Indicator revizyonu N'i pinleyen bir Strategy Draft, N+1 paket head'i
+olduktan sonra da N'i adlandırır — açık bir yeniden-pinleme olana dek."* Mekanizma sevk
+edilmişti: `commands/strategy_draft.py::_extract_references` her enabled bloğun
+`(root_id, revision_id, content_hash)` üçlüsünü **verbatim** dependency kenarına çevirir ve
+hiçbir yerde head çözmez. Ama garanti yalnız Trading Signal düzleminde assert edilmişti
+(`test_gateway_parity_trading_signal.py::test_a_new_revision_is_immutable_and_never_auto_repins_the_item`);
+paket→strateji düzleminde literal dizi — pinle → head'i ilerlet → geri oku — **hiç koşulmamıştı**.
+
+### ASIL DERS: VACUITY TUZAĞI BU KEZ YAZMADAN ÖNCE ÖLÇÜLDÜ (ADIM 100'ün dersi proaktif uygulandı)
+
+Mevcut strateji fixture'ları PLACEHOLDER id pinler (`pkg_int`/`pkgrev_int`) ve
+`_assert_references_active` **V1-lenient'tir** (çözülmeyen kök kabul edilir). O pinlerin üstüne
+kurulan bir *"hâlâ N'i adlandırıyor"* assertion'ı **vacuous** olurdu: pin **hiçbir satırı
+adlandırmıyor**, kayabileceği bir head **yok**. ADIM 100 bu şekli (`"result_abc123"` literal'i)
+kapanışta acıyla öğrenmişti; bu parti tuzağı **test yazılmadan önce** ölçtü ve GERÇEK bir
+ACTIVE INDICATOR paketi tohumladı (`pkg_repo.create_package`), onun **gerçek head'i N**'i
+`_valid_payload`'ın entry bloğuna pinledi.
+
+### Eksenler — her biri ayrı ölçüldü
+
+Yeni case `test_strategy_integration.py::test_pinned_indicator_revision_survives_package_head_advance`:
+(1) **atıf muhafızı** — `create_package_revision`'dan sonra head **gerçekten N+1** (`!= N`
+ayrıca assert edilir; boş bir "değişmedi" bedava geçemez); (2) **N hâlâ adreslenebilir**
+(`revision_no == 1`); (3) kayıtlı strateji revizyonunun `entry_indicator` kenarı **hâlâ N**;
+(4) draft'ın **saklanan** config'i hâlâ N; (5) **İKİNCİ Save** — referans çıkarımı artık
+tamamen N+1 dünyasında koşar — revizyon 2'ye **yine N'i** pinler ve saklanan config'i N'de
+bırakır (*"açık yeniden-pinleme olana dek"* yarısı). Head-advance sonrası her geri okuma
+`session.expire_all()`'dan geçer ve id'ler **önce yerel değişkene** alınır (ADIM 100/101'in
+MissingGreenlet kuralı).
+
+### İKİ NEGATİF KONTROL, ikisi de AYIRT EDİCİ (ADIM 105 kuralı altında)
+
+**NC-1** kenar-yazma döngüsünü çözülebilen kökün **GÜNCEL head'ini** kullanacak şekilde bozdu:
+24 testte **yalnız yeni case** kırmızı, tam olarak **ikinci-Save kenar assertion'ında**, ve
+diff aynı kökü head-yerine-pin revizyonuyla gösteriyor. **23 mevcut test YEŞİL kaldı — çünkü
+onların placeholder kökleri hiç çözülmüyor**; bu yeşil kalma clause'un açık olduğunun
+ölçümünün ta kendisidir. **NC-2** Save'i draft config'indeki `package_revision_id`'yi head'e
+yeniden yazacak şekilde bozdu: yine yalnız yeni case, **son saklanan-config assertion'ında**
+kırmızı (bu eksen NC-2 için bilerek eklendi — NC-2'nin kusuru ancak head != pin iken koşan bir
+Save'den SONRA config okunursa görünür). Her kontrol sonrası `git checkout` + `git status`
+(ADIM 100'ün SIGTERM dersi).
+
+### Sonuç ve tavanlar
+
+`PL-07.c2` → covered, kriterin son açık clause'uydu → **`PL-07` covered, `debt_class`
+KALDIRILDI**. **Tavanlar merged ağaçta TAZE ölçüldü ve İNDİ: `partial` 57 → 56,
+`debt_class.B` 25 → 24**; açık borç **63** (A=1 · B=24 · C=6 · D=32); clause `covered`
+1063 → 1064. **Doc 08 = 19/2/0** — kalan iki satır `PL-08` (sınıf D: paket-düzeyi
+timing/capability beyanı sevk edilmemiş) ve `PL-20` (sınıf D: Tool Gateway'de katalog okuma
+üyesi yok); **doc 08'de bir test slice'ının kapatabileceği sınıf-B satır KALMADI.**
+
+### Ortam ve dürüst sınır
+
+Container ÇIPLAK başladı: `.venv` yoktu (`uv sync --all-extras`), Postgres cluster'ı düşüktü —
+mevcut `16/main` cluster'ı başlatıldı, `entropia` rolü + iki DB oluşturuldu, `alembic upgrade
+head` **`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koştu (ADIM 98'in imaj notu geçerli).
+`test_strategy_integration.py` **24 passed / 0 skip** (exit code çıktı dosyasından ayrı
+okundu, `tail`'den değil); `ruff check` + `ruff format` değişen dosyada temiz;
+`--report --check-generated --ratchet` yeşil; `repository_facts` + README gömülü bloğu
+yeniden üretildi (`--check` yeşil — test collection sayısı oynadığı için ADIM 60 kuralı).
+**Frontend'e sıfır satır → hiçbir frontend kapısı koşulmadı; tam backend suite uçtan uca
+koşulmadı → geçen sayı ve coverage CI'ın otoritesinde.**
+
+**NUMARA:** dal `680ba1e`'den kesildi ve o an açık PR listesi **BOŞTU** (bu bir anlık
+görüntüdür, garanti değil — ADIM 100/101 kuralı); son kayıt `ADIM 105`'ti → bu kayıt
+**ADIM 106 / batch 27**. #818 bu oturumun başında zaten merge edilmiş bulundu (prompt'un
+"merge et" adımı kendiliğinden kapanmıştı) — STALE-BY-DEFAULT ölçümü burada da işledi.
+
+Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
+`docs/ADIM106_LANDED_KICKOFF.md`.

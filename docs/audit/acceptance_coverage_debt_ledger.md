@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 25 |
+| B | 24 |
 | C | 6 |
 | D | 32 |
-| **open total** | **64** |
+| **open total** | **63** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (25)
+## Class B (24)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -71,7 +71,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `CP-03` | 06 | partial | A visible-but-not-usable package is refused by Add Strategy From Package server-side; the UI clears stale selection state. | The server-side half is fully proven: can_view/can_use are independent in the projection and the derive command refuses both the unusable-but-visible revision (PackageNotDerivableError) and the foreign private one (AccessDeniedError). What is NOT asserted anywhere is the row's second sentence — that the UI clears stale selection state after such a denial. The mainboard test proves the picker di… |
 | `PC-02` | 07 | partial | An empty source starts no scan job, the UI shows the final empty-input text, and Send separately rejects the empty request. | In the shipped design an empty source never becomes a request at all — `EMPTY_SOURCE` fires in `normalize_request`, at the route, before the DB — so "no scan job starts" and "Send rejects the empty request" collapse into the same proven guard. The UI half is unproven: `PreCheck.tsx` renders "No Pre-Check scan yet for this request." for the no-scan case and no test asserts that string, nor is th… |
 | `PC-20` | 07 | partial | Only Admin restores or permanently deletes from Trash; a restored request must be stale and a restored ESP needs active registry policy before resolving. | c2 is the strongest part of this row and is proven precisely: restore reactivates the ROOT but deliberately leaves the trust pointer closed, so a restored resolver cannot silently start resolving again. c3 has no test — nothing asserts that a restored package REQUEST comes back with a stale Pre-Check; `test_restore_keeps_identity_marks_entry_and_audits` covers identity/audit for the generic res… |
-| `PL-07` | 08 | partial | A Strategy Draft keeps its pinned Indicator revision after a newer package revision becomes current. | MISSING: the literal PL-07 sequence is never executed. No test attaches an Indicator package revision to a Strategy Draft (or a saved Strategy revision), then appends revision N+1 to that same package root, then re-reads the draft/revision and asserts it still names revision N. The building blocks are each proven separately — create_package_revision leaves the base revision immutable and still … |
 | `ESP-05` | 09 | partial | The Embedded System / TA Resolver Family is seeded ACTIVE; assignment follows the shared exception while the resolver payload stays protected. | MISSING: the "resolver payload remains protected" half is never asserted, and the one shared-editing test raises a concrete question a follow-up must answer. doc 09 line 644 states that changing the Rationale Family assignment "does not change signature, adapter, validation, current revision or registry trust". The only shared-edit test, test_assign_creates_package_revision_owner_unchanged, tar… |
 | `RF-08` | 10 | partial | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
 | `MKD-02` | 11 | partial | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The … |

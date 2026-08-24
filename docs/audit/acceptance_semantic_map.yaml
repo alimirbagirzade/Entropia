@@ -9599,8 +9599,9 @@ criteria:
   - id: PL-07.c2
     text: A Strategy Draft that pinned Indicator revision N still names revision N after revision
       N+1 becomes the package head, until an explicit re-pin action.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_strategy_integration.py::test_pinned_indicator_revision_survives_package_head_advance
   production_paths:
   - backend/src/entropia/application/commands/package_lifecycle.py
   - backend/src/entropia/application/commands/strategy_draft.py
@@ -9609,11 +9610,13 @@ criteria:
   - backend/tests/integration/test_library_actions.py::test_create_revision_appends_and_advances_head
   - backend/tests/integration/test_create_package_persistence.py::test_full_flow_create_precheck_draft_publish
   - backend/tests/integration/test_backtest_manifest_pinning.py::test_missing_transitive_package_pin_fails_the_run
+  - backend/tests/integration/test_strategy_integration.py::test_pinned_indicator_revision_survives_package_head_advance
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_library_actions.py::test_create_revision_appends_and_advances_head
   - backend/tests/integration/test_create_package_persistence.py::test_full_flow_create_precheck_draft_publish
+  - backend/tests/integration/test_strategy_integration.py::test_pinned_indicator_revision_survives_package_head_advance
   negative:
   - backend/tests/integration/test_backtest_manifest_pinning.py::test_missing_transitive_package_pin_fails_the_run
   auth: []
@@ -9623,20 +9626,30 @@ criteria:
   historical_integrity:
   - backend/tests/integration/test_library_actions.py::test_create_revision_appends_and_advances_head
   - backend/tests/integration/test_backtest_manifest_pinning.py::test_missing_transitive_package_pin_fails_the_run
+  - backend/tests/integration/test_strategy_integration.py::test_pinned_indicator_revision_survives_package_head_advance
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'MISSING: the literal PL-07 sequence is never executed. No test attaches an Indicator package
-    revision to a Strategy Draft (or a saved Strategy revision), then appends revision N+1 to that
-    same package root, then re-reads the draft/revision and asserts it still names revision N. The
-    building blocks are each proven separately — create_package_revision leaves the base revision
-    immutable and still addressable (test_create_revision_appends_and_advances_head), the Pre-Check
-    scan pins an exact embedded revision id, and the Backtest manifest pins package revisions by id
-    — but the no-auto-repin guarantee itself is asserted only on the Trading Signal plane (test_gateway_parity_trading_signal.py::
-    test_a_new_revision_is_immutable_and_never_auto_repins_the_item), not on the package-to-strategy
-    plane this row is about. A follow-up slice should add one integration test in the strategy-draft
-    suite that advances a pinned indicator package head and asserts StrategyRevisionReference / package_ref.package_revision_id
-    is unchanged.'
+  status: covered
+  notes: 'c2 closed by ADIM 106 (batch 27). WAS: the literal PL-07 sequence was never executed —
+    the no-auto-repin guarantee was asserted only on the Trading Signal plane (test_gateway_parity_trading_signal.py::
+    test_a_new_revision_is_immutable_and_never_auto_repins_the_item), never on the package-to-strategy
+    plane this row is about. THE VACUITY TRAP, measured before writing: the shipped strategy fixtures
+    pin PLACEHOLDER ids ("pkg_int"/"pkgrev_int") that resolve to no row, and _assert_references_active
+    is V1-lenient (an unresolved root is admitted), so a "still names N" assertion built on them
+    would be vacuous — no head exists the pin COULD drift to. The new case therefore seeds a REAL
+    ACTIVE INDICATOR package via pkg_repo.create_package, pins its actual head revision N into the
+    entry indicator block, Saves, then advances the head with pkg_cmd.create_package_revision and
+    measures the axes separately: the head really is N+1 (attribution guard, != N), revision N stays
+    addressable as revision_no 1, the saved strategy revision''s entry_indicator edge still names N,
+    the draft''s STORED config still names N, and a SECOND Save — whose reference extraction runs
+    entirely in the N+1 world — pins N again and leaves the stored config at N ("until an explicit
+    re-pin action"). TWO NEGATIVE CONTROLS, both discriminating (the ADIM 105 rule): NC-1 rewrote
+    the edge-writing loop to use the resolved root''s CURRENT head — only the new test reddened, at
+    the second-Save edge assertion, with the diff showing same root / head-instead-of-pinned
+    revision; the 23 pre-existing tests stayed GREEN because their placeholder roots never resolve,
+    which is itself the measurement that the clause was open. NC-2 made Save rewrite the draft
+    config''s package_revision_id to the head — only the new test reddened, at the final
+    stored-config assertion. Read guarded against the identity map: session.expire_all() before the
+    post-advance re-reads, ids captured into locals first (ADIM 100 rule).'
 - id: PL-08
   document: docs/spec/08_Entropia_V18_Package_Library_Page_Documentation_v1_1.md
   section: '14'

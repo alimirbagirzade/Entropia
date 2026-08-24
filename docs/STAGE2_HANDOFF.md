@@ -8159,6 +8159,26 @@ kırmızısı); patch olarak taşınıp merged ağaçta yeniden koşuldu. **Bloc
 (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
 `PROJECT_HISTORY.md` §ADIM 105 · `docs/ADIM105_LANDED_KICKOFF.md`.
 
+## Stage 106 — kabul borcu batch 27 (doc 08 Package Library, backend): PL-07 kapandı landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** — tek yeni integration case + defter + üretilmiş artefaktlar.
+**`PL-07.c2`:** no-auto-repin garantisi yalnız Trading Signal düzleminde assert edilmişti;
+paket→strateji düzleminde literal dizi (pinle → head'i ilerlet → geri oku) hiç koşulmamıştı.
+**ASIL DERS: vacuity tuzağı YAZMADAN ÖNCE ölçüldü** — mevcut strateji fixture'ları placeholder
+id pinler (`pkg_int`/`pkgrev_int`) ve `_assert_references_active` V1-lenient'tir, yani o pinlerin
+üstüne kurulan "hâlâ N" iddiası vacuous olurdu (ADIM 100'ün dersi proaktif uygulandı); yeni case
+GERÇEK bir ACTIVE INDICATOR paketi tohumlar, gerçek head N'i pinler, head'i N+1'e ilerletir
+(atıf muhafızı `!= N`), N'in adreslenebilir kaldığını, kenarın/saklanan config'in N'de durduğunu
+ve İKİNCİ Save'in — çıkarım N+1 dünyasında koşarken — yine N'i pinlediğini ayrı eksenler olarak
+sürer. **İKİ negatif kontrol, ikisi de ayırt edici:** NC-1 (kenar yazımı head'i çözer) 24 testte
+yalnız yeni case'i ikinci-Save kenar assertion'ında kırmızı yaptı — 23 mevcut test yeşil kaldı
+çünkü placeholder kökler hiç çözülmüyor (yeşil kalma, clause'un açıklığının ölçümüdür); NC-2
+(Save config'i head'e yeniden yazar) yalnız son saklanan-config assertion'ını düşürdü.
+**Tavanlar İNDİ: `partial` 57 → 56, `debt_class.B` 25 → 24** (açık borç 63). **Doc 08 = 19/2/0 —
+testle kapanabilir sınıf-B satır KALMADI** (kalan `PL-08` + `PL-20`, ikisi de sınıf D).
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
+`PROJECT_HISTORY.md` §ADIM 106 · `docs/ADIM106_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

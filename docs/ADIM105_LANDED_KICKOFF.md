@@ -1,7 +1,6 @@
-<!-- doc-status: current -->
-> **CANLI KICKOFF.** Bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
-> `historical`a demote edilir ve yerine yenisi geçer (`check_classification` CI'da doğrular:
-> daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varken canlı işaret eski belgede duramaz).
+<!-- doc-status: historical -->
+> **TARİHSEL.** Bu kickoff ADIM 105'in kapanışında yazıldı; ADIM 106 (batch 27) inince
+> demote edildi. Canlı devam noktası: `docs/ADIM106_LANDED_KICKOFF.md`.
 
 # ADIM 105 LANDED — kabul borcu batch 26 (doc 06 Create Package, backend): `CP-09` + `CP-13` kapandı · sıradaki slice için kickoff
 

@@ -13348,84 +13348,159 @@ birleşik ağaç üzerinde yeniden ölçüldü.
 **Merge edilmiş ad kazanır.** Dal/commit mesajları `stage-89` yazar; slice **ADIM 93**'tür.
 `docs/ADIM93_LANDED_KICKOFF.md`.
 
-## ADIM 94 — kabul borcu batch 17 (doc 01 Mainboard, backend): `MB-01` + `MB-27` kapandı, on birinci bulgu
+---
 
-> **ÜRÜN KODU DEĞİŞMEDİ — yalnız test + defter.** Migration yok · OpenAPI değişmedi ·
-> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
-> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
-> verdict BLOCKED.** `backend/src` altında **sıfır** satır; diff = iki yeni integration case
-> + kabul defteri + üretilmiş artefakt.
+## ADIM 90 — kayıtsız inen #779'un ritüeli: G6/G7 satırları tazelendi, ve üç bayat issue durumunun İKİSİ kapıyı AÇMADI
 
-**Kapanan iki kriter: `MB-01` (c4) · `MB-27` (c4).** İkisi de doc 01'in son açık backend
-clause'uydu, ikisinde de eksik olan **ölçümün yeriydi**:
+> **BU KAYIT GERİYE DÖNÜKTÜR.** Slice `a5bc27f` ile **2026-08-19T07:00Z**'de main'e indi.
+> `PROJECT_HISTORY.md`'de tek anılma yeri **ADIM 87'nin zincir notudur** (`grep -n '#779'` →
+> **1 satır**, ve o satır #779'u yalnız *"kesildiği yer"* olarak anıyor); kendi kaydı, handoff
+> satırı ve kickoff'u **yoktu**. Kapanış ritüelinin 1–5. maddeleri bu slice için **hiç
+> koşmadı**. Desen bu depoda tanınmıştır: **#728/#729 = ADIM 69/70**, **#759 = ADIM 82**,
+> **#765/#766 = ADIM 86**. **Anlatı UYDURULMADI** — aşağıdaki her iddia ağaca ve GitHub'a
+> karşı yeniden ölçüldü, PR gövdesinden kopyalanmadı (bir yerinde gövde **fazla iddialıydı**,
+> aşağıya bak).
 
-- **`MB-01.c4`** (*guest Ready Check isteği sunucu tarafında reddedilir*) — kriterin
-  adlandırdığı dört yüzeyden üçü kanıtlıydı (projeksiyon okuma, draft yüzeyleri, RUN
-  admission); **Ready Check hiç anonim aktörle sürülmemişti**. Satırın kendi notu bunu
-  itiraf ediyordu: *"sahiplik kapısı bir anonim principal'ı muhtemelen reddederdi, ama
-  muhtemel asserted değildir"*. Artık sürülüyor: `run_readiness_check` `UnauthenticatedError`
-  fırlatır, **hiçbir immutable rapor satırı oluşmaz**, ve aynı kompozisyon üzerinde
-  authenticated bir çağrı **pozitif kontroldür**.
-- **`MB-27.c4`** (*canlı bir item'ı devre dışı bırakmak raporu STALE'e çevirir ve onu Ready
-  Check / allocation kapsamından çıkarır*) — suite buna **iki adımlı bir çıkarımla**
-  ulaşıyordu (bir unit test disable'ın hash'i oynattığını, bir başkası oynayan fingerprint'in
-  raporu stale ettiğini gösteriyordu); **hiçbir test kalıcı bir item'ı devre dışı bırakıp
-  raporu OKUMUYORDU**. Yeni case iki bağımsız gözlem yapar: raporun **etkin** durumu `stale`'e
-  düşerken **saklanan** durumu kıpırdamaz (çift önemli — yalnız `state` okuyan bir test,
-  yeniden hesaplanmış bir projeksiyonu yeniden yazılmış bir satırdan ayıramaz), ve sonraki
-  **yeniden koşu `COMPOSITION_EMPTY`** raporlar — *"Ready Check kapsamından çıkar"* yarısı
-  çıkarımla değil **doğrudan** ölçülür.
+> **ÜRÜN KODU YOK.** Değişen **tek dosya**
+> `docs/implementation/final_closure_ordered_plan_2026-08-13.md`, **+37 / −7**. Migration
+> **yok** · OpenAPI **değişmedi** · alembic head **`0043_i08_registry_strategy_fks`** ·
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = **`future_dev`**. Hiçbir imza
+> kutusu doldurulmadı, hiçbir issue durumu değiştirilmedi, **hiçbir sayı oynamadı**.
+> **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED. Açık kapı: 11.**
 
-**BEŞ NEGATİF KONTROL — VE ÜÇÜNCÜSÜ BU PARTİNİN DERSİDİR.** Her biri koşmadan önce yamasının
-uygulandığını (tek eşleşme) assert etti ve sonra ağacı geri yazdı. (1) `require_authenticated`
-silinince test **pytest.raises satırında** kırmızı ama **`AccessDeniedError` ile** — refüz
-**iki kapıyla** korunuyor (auth kapısı + `_load_workspace`'teki sahiplik kapısı), yani o
-kırmızı refüzün yokluğunu değil **auth kapısını** kanıtlar (ADIM 84'ün `TL-22.c4` şekli).
-(2) İki kapı birden düşünce **DID NOT RAISE**, yine aynı satırda. (3) İkisi de rapor-sayısı
-assertion'ına **hiç ulaşmıyor**, bu yüzden üçüncü kontrol auth kapısını **insert'in ALTINA**
-taşıdı (ADIM 83 şekli) — **ve YEŞİL geçti.** O yeşil, assertion'ın **TOTOLOJİK** olduğunu
-ortaya çıkardı: test saymadan önce `session.rollback()` çağırıyordu, yani komutun yazdığı her
-satırı atıyordu ve sayı asla düşemezdi. Rollback **silindi**, kontrol yeniden koşuldu:
-tam o satırda **`assert 1 == 0`**. **DERS: bir YAN ETKİNİN YOKLUĞUNU iddia eden assertion'ın
-önünde onu geri alan hiçbir şey olamaz.** (4) `_current_fingerprint` kapalı item'ları da
-sayınca `state == "stale"` kırmızı. (5) `list_enabled_items_with_root_state`'ten
-`is_enabled.is_(True)` düşünce `COMPOSITION_EMPTY` assertion'ı kırmızı.
+### 1. Asıl iş: kapı sicili KENDİ İÇİNDE çelişiyordu
 
-**KONTROL HARNESS'ININ KENDİSİNDE DE BİR KUSUR ÖLÇÜLDÜ.** Çok dosyalı bir kontrolde,
-**sonraki** bir dosyada patlayan tekillik assertion'ı **önceki** düzenlemeyi geri almadan
-aborte ediyordu → ürün ağacı kirli kalıyor ve **bir sonraki kontrol onu sessizce ölçüyordu**
-(fiilen oldu: sıradaki koşu `require_authenticated`'ı 0 kez buldu). Geri yazma artık
-`finally` bloğunda. **Negatif kontrol harness'i de bir ölçüm aracıdır; kirli bırakırsa
-ölçtüğün şey senin sandığın şey değildir.**
+§2'nin sayım tablosu **2026-08-18'den beri** `G6` + `G7`'yi *"resolved since … (Karar 2, signed
+2026-08-14)"* diye sayıyordu; **yirmi satır yukarıdaki** `G6` satırı hâlâ *"**UNSIGNED.**
+`decisions:467-477` all boxes `[ ]`. GH #558 **OPEN**"*, `G7` satırı da *"**UNSIGNED**"*
+diyordu. **Çelişen taraf sicilin kendisiydi — yani bu belgenin tek işlevi.**
 
-**ON BİRİNCİ BULGU — `MB-22.c4`, ÖLÇÜLDÜ, KAPATILMADI.** Kriter *"restore'dan sonra önceki
-Ready raporu artık kullanılamaz ve yeniden koşulmalıdır"* diyor. Sevk edilen davranış
-**tersi**: `list_active_items` `EntityRegistry.deletion_state == ACTIVE` ile join'lediği için
-soft delete item'ı kompozisyondan düşürür ve rapor doğru biçimde STALE okunur — ama
-**restore aynı `(root_id, revision_id)` çiftini geri koyar**, `_current_fingerprint` **orijinal
-değeri birebir** yeniden üretir ve `is_stale()` `False` döner: silme öncesi rapor yeniden
-`ready` / `is_current True` okunur. Bir kerelik probe üç fingerprint'i sırayla bastı —
-**`02edaff5…` → `9e72b8a1…` → `02edaff5…`** — yani bu **tartışılmadı, ölçüldü** (probe
-commit edilmedi, silindi). Kapatmak restore-zamanı bir bayatlık işareti ister = **ürün işi**,
-yani **sınıf D şekli**; senaryo kurulabilir olduğu için sınıf C değil. **Yeniden
-sınıflandırılMADI** — B → D **D tavanını yükseltir** = adjudication. Defterde artık **on bir**
-böyle bulgu var; bu, `PC-20.c3`'ten sonra bir **restore yolu** hakkındaki **ikinci**si.
+Ölçüldü (bu oturumda **bağımsız olarak yeniden** ölçüldü, PR'a güvenilmedi):
+`docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 2 ▸ İMZA SATIRI —
+`[x] A1+A2`, alt-karar `[x] evet`, alt-karar `[x] yalnız türetilebilir ikisi`,
+**`karar veren: alimirbagirzade (ürün sahibi)  tarih: 2026-08-14`**. Yani satırın **iki yarısı
+da** bayattı: kutular işaretli ve GH #558 kapalı.
 
-**Tavanlar İNDİ: `partial` 75 → 73, `debt_class.B` 43 → 41**; açık borç **82 → 80**
-(A=1 · B=41 · C=6 · D=32), clause `covered` 1044 → 1046, clause `uncovered` 87 → 85.
-Taban **`d47c5ba`**, freeze **taze bir `--report` koşusundan**.
+`G7` bu imzanın **üçüncü alt-kararıdır** — §9.2'nin iki sınıf-D alanı
+(`alignment_policy_versions[]`, `missing_and_stale_policies[]`) **dışarıda kalır**, imzalı sapma
+olarak. Satırın eski *"out of scope regardless"* tespiti **doğruydu ve korundu**.
 
-**ORTAM — BİRİNCİ ELDEN TUZAK.** Container slice'ın ortasında yeniden başladı, yerel Postgres
-düştü ve iki yeni case'in ilk koşusu **`ss` (İKİ SKIPPED) ile exit 0** verdi. **Skip'li yeşil
-exit code kanıt değildir** (ADIM 74'ün dersinin üçüncü örneği); cluster yeniden kaldırıldı ve
-case'ler **gerçekten** koştu. **DÜRÜST SINIR:** frontend kapıları koşulmadı (`node_modules`
-yok, frontend'de sıfır satır) ve tam suite sonuna kadar koşmadı → **geçen sayı ve coverage
-CI'ın otoritesinde.**
+Eski metin `Was "…"` deseniyle **yerinde alıntılandı** — `G4`/`G12`/`G15` satırlarının zaten
+kullandığı biçim. Böylece sicil bir düzeltmeyi sessizce yutmuyor.
 
-**NUMARA VE PARTİ ETİKETİ.** Bu kayıt yazılırken main'in son kaydı **ADIM 93**, son parti
-**batch 16** idi; **PR #806 açıktı ve kendini *"batch 17 — doc 10 backend"* diye
-adlandırıyordu.** Bu slice o başlığı **okuyup bilerek BAŞKA bir belge seçti** (doc 01), yani
-kriterler ve test dosyaları **ayrık** — ama **etiket çakışabilir**: #806 önce inerse bu kayıt
-**batch 18** olur. Numara, açık PR'ların eklediği `docs/ADIM<n>_*.md` **dosya yollarından**
-ölçüldü (#806 yeni bir kickoff eklemiyor, mevcutları düzenliyor) → **94 boştu**.
-`docs/ADIM94_LANDED_KICKOFF.md`.
+### 2. Yan ölçüm A — altı satır referansının ALTISI DA bayattı
+
+Tablodaki **altı** `decisions:NNN` işaretçisinin **hiçbiri** iddia ettiği yeri göstermiyordu
+(ör. `decisions:467-477` artık öneri paragrafının ortası, imza bloğu değil). Hepsi **bölüm
+adına** çevrildi (`decisions §Karar 2 ▸ İMZA SATIRI` biçimi), `CLAUDE.md` §Conventions'ın
+kuralı gereği: **satır no değil sembol yaz.**
+
+> **ÖLÇÜLMÜŞ İNCELİK — ileride grep'leyecek olan için.** Bugün
+> `grep -c 'decisions:[0-9]' final_closure_ordered_plan_2026-08-13.md` → **2** döner, ve bu
+> **eksik süpürme DEĞİLDİR**: kalan iki eşleşmenin ikisi de `Was "…"` **alıntısının içindedir**
+> (`G6` satırı ve §GÜNCELLEME notu). Canlı işaretçi **sıfırdır**. Alıntıyı "artık" sanıp
+> temizlemek düzeltmenin kanıtını siler.
+
+### 3. Yan ölçüm B — üç issue durumu bayattı, ama İKİSİ KAPIYI AÇMAZ
+
+**Bu kaydın en önemli cümlesi budur.** Tablo #558, #559 ve #544'ü **OPEN** yazıyordu; **üçü de
+kapalı**. Ama kapanış tek başına hiçbir şey kanıtlamaz — bu tablonun **kendi G1 kuralı**
+*issue CLOSED ≠ çözüldü* der, ve burada üç kez **farklı** sonuç verdi. Üçü de bu oturumda
+GitHub API'sinden yeniden okundu:
+
+| issue | kapanış | kayıtlı karar var mı | kapı |
+|---|---|---|---|
+| **#558** (G6/G7) | 2026-08-17T05:55:35Z, `completed` | **EVET** — tek kapanış yorumu üç karar sorusunu da **yazılı** cevaplıyor (üye alanları + top-level dizi = *"Both"*; `bundle_hash` kırılması **yok**, `research-bundle-v1 → v2` uzayları ayırıyor; kalan dört alandan *"ikisi içeri, ikisi dışarı"*). İmza ayrıca `§Karar 2`'de **bağımsız olarak** duruyor | **çözüldü** |
+| **#559** (G8) | 2026-08-18T07:23:47Z, `completed` | **HAYIR** — **sıfır yorum**, `closed_by_pull_requests` **boş**; `§Karar 3 ▸ İMZA SATIRI` **tamamen boş** (altı seçenek + kapsam alt-kararı + hüküm onayı, hepsi `[ ]`) | **AÇIK kalır** |
+| **#544** (G14) | 2026-08-18T07:23:46Z, `completed` | **HAYIR** — **sıfır yorum**, `closed_by_pull_requests` **boş**; gövdenin *"What must be decided"* bölümündeki iki soru **cevapsız** | **AÇIK kalır** |
+
+`G14` bu ayrımın en kolay yanlış okunacağı yerdir, çünkü *"Evidence written where"* sütunu
+**issue'nun kendisini** gösterir: **G5** gerçekten kendi gövdesinde karara bağlanmıştı
+(*"Decision recorded in the comments: adopt canon (option A)"*), **G14** ise kapatıldı ve
+**boş bırakıldı**. Kapalı bir issue'yu imza yerine saymak **on bir açık kapıyı dokuza**
+indirirdi; **indirilmedi.** İkisi de hâlâ etiketli (`blocks-mixed-zone-axis`,
+`product-decision` + `blocks-adim-19`).
+
+> **PR GÖVDESİ BİR NOKTADA FAZLA İDDİALIYDI — kayıt ağacı izler.** Gövde #544 için *"the body
+> still ends on 'What must be decided'"* diyor. Ölçüldü: gövde o bölümü **içerir** ama onunla
+> **bitmez** — ardından *"Safe to fix now, independent of the decision"* ve *"Do NOT"*
+> bölümleri gelir. **Sonuç değişmez** (iki karar sorusu hâlâ cevapsız, kapı hâlâ açık), ama
+> iddia şu biçimde tutulmalı: **karar bölümü cevapsız**, gövdenin son satırı değil.
+
+### 4. DERS — `cancelled` ≠ `failure`, VE ARTIK KÖKÜ BİLİNİYOR
+
+#779'un dalında (`claude/new-session-whxpih`, E2E run `32216615164`) **attempt 1**:
+
+* `A11Y — axe-core scan vs. the seeded stack (R2-14)` → conclusion **`cancelled`**
+* Asılan adım: **`Install Playwright browsers`**, `04:41:56Z → 05:20:46Z` = **38 dk 50 sn**
+* `Run the axe-core a11y scan` adımı **`skipped`** → **hiçbir test gövdesi koşmadı**
+* İş toplamı `04:40:34Z → 05:20:53Z` = **40 dk 19 sn**
+
+**attempt 2** (rerun), aynı iş: **`success`**, install adımı **24 saniye**, iş toplamı
+`05:37:36Z → 05:40:44Z` = **3 dk 08 sn**. ADIM 77'nin dersi (*"`cancelled` ≠ `failure`"*)
+üçüncü kez doğrulandı.
+
+**Ama bu dalganın ASIL kazanımı dersin kendisi değil, kökünün ölçülmesidir — ve bunu #779
+yapmadı, `7343d9b` (#795) yaptı, aynı gün SONRA.** O commit'in gövdesi log'u alıntılıyor:
+`azure.archive.ubuntu.com` apt aynası **düştü**, `playwright install --with-deps` fallback'ten
+sonra **28 dk 22 sn TAM SESSİZLİK**, sonra `##[error]The operation was canceled`. Yani iş
+**süpersede eden bir push yüzünden iptal edilmedi** — **kendi `timeout-minutes`'ına çarptı** ve
+**GitHub bir timeout'u `cancelled` diye raporlar**. Ölçümüm bunu çapraz doğruluyor: benim
+ölçtüğüm A11Y iş toplamı **40.3 dk**, #795'in adlandırdığı A11Y bütçesiyle **birebir**.
+
+**Kritik ayırt edici (kendim ölçtüm, #795 bunu söylemiyor):** aynı attempt 1'de **üç kardeş
+işin** `Install Playwright browsers` adımı **yeşil** geçti — dev-auth **2 dk 42 sn**, F-23
+**1 dk 09 sn**, Lighthouse **2 dk 09 sn**. Yani bu **genel bir kesinti değil**, tek runner'ın
+aynasının stall etmesi. *"Playwright install yavaş"* diye tavan büyütmek yanlış düzeltme olurdu.
+
+**BU SINIF ARTIK KORUNUYOR, ders "rerun et" DEĞİL.** #795 çağrıları
+`scripts/ci-install-playwright-chromium.sh`'a taşıdı (iç `PLAYWRIGHT_INSTALL_TIMEOUT_SECONDS`
++ retry) ve dış `timeout-minutes: 17` koydu — **dış sınırın iç sınırdan büyük olması zorunlu**,
+çünkü 12 dk denendiğinde retry'ı **uçuş ortasında** öldürdüğü ölçüldü. Yeni bir E2E işi
+eklerken `npx playwright install` **doğrudan yazma**, bu betikten geçir.
+
+**ORTAM DÜZELTMESİ — devir promptunun *"403, rerun edilemez"* notu BAYAT.** Bu oturumun
+GitHub yüzeyinde `actions_run_trigger` (`rerun_workflow_run` / `rerun_failed_jobs`) **mevcut**,
+yani `actions:write` **var**. **Bu oturumda kullanılmadı ve kullanılmamalıydı** — kırmızı
+hiçbir şey yoktu; kayıt yalnız yeteneğin varlığını düzeltir, kullanıldığını iddia etmez.
+
+### 5. Bu slice'ın KAPATMADIKLARI
+
+Hiçbir ürün sorusu karara bağlanmadı. **G8** ve **G14** açık; **G1/G2/G3** (komisyon), **G4**,
+**G10**, **G11**, **G12**, **G15** açık; **G16 = A-08 DEĞİŞMEDİ** (2/184 hücre, 0/10 akış, SR-1
+hiç başlamadı, **0/4**, #514 açık). **Açık kapı sayısı 11'de KALDI** ve bu bir başarısızlık
+değil, bu slice'ın **verdiği karardır**.
+
+**Suite koşulmadı ve koşulmamalıydı** — `backend/src`, `frontend/src`, migration ve test
+ağaçlarında **sıfır satır** değişti; bu kapanış da yalnız `docs/` yazar. Doğrulama olarak
+`generate_repository_facts.py --check` koşuldu.
+
+**NUMARA:** kayıt geriye dönük olduğu için **sıradaki boş numarayı** alır (ADIM 69/70, 82, 86
+emsali). Yazıldığı anda main'in son kaydı **ADIM 87** (#785), ve **iki PR numara
+iddia ediyordu**: **#797 → ADIM 88** ve **#799 → ADIM 89** → bu kayıt **90**. **#797 bu dal
+sıra beklerken ADIM 88 olarak İNDİ** (`ee5ab38`) — iddiasını doğruladı, dal onun üstüne
+**rebase edildi** (merge değil: sunucu tarafı merge bu depoda bir `PROJECT_HISTORY` kaydını
+sessizce düşürmüştü). **#799 hâlâ açık ve `docs/ADIM89_LANDED_KICKOFF.md` ekliyor**, o yüzden
+**89 alınmadı**.
+
+> **SONRA İKİ KEZ DAHA OYNADI, ama numara DEĞİŞMEDİ.** Bu dal sıra beklerken önce
+> **#803 = ADIM 91** indi (`42c8185`, **89 ile 90'ı atlayarak**), sonra **#799 = ADIM 92**
+> (`3994725` — kendisi de `89`'dan taşındı, çünkü #803 daha yüksek bir numarayla önce inmişti).
+> `ADIM90` dosya yolunu bunların **hiçbiri** eklemedi → 90 hâlâ çakışmasız, o yüzden
+> **yeniden numaralandırılmadı** (kural: *numaralar yeniden atanmaz*). Ana kayıt sırası artık
+> **87 → 88 → 91 → 92 → 90** olur; ADIM 69/70 emsali *"numaralar merge sırasının tersi"*
+> olabileceğini zaten kaydetmişti. **Bedeli kickoff'tadır:** `check_classification` canlı işareti
+> **ağaçtaki en yüksek numaralı** belgede ister, o da artık `ADIM92`'ninkidir → bu slice'ın
+> kickoff'u **`historical` olarak doğdu**. Bu bir sapma değil, ADIM 82'nin emsali (geriye dönük
+> kaydın canlı seed'i en yüksek numaralı belgedir).
+>
+> > **VE BU, KURALIN İKİ YARISINI AYIRT ETTİ.** *"Numaralar yeniden atanmaz"* **kaydın**
+> > numarasını korur; ama **kickoff dosyasının** canlılığı ayrı bir sorudur ve onu
+> > `_check_live_kickoff_is_newest` **dosya varlığından** okur, `doc-status`'tan değil. Yani
+> > bir slice numarasını koruyup kickoff'unu `historical` doğurabilir — bu iki yarıyı birbirine
+> > bağlayan bir kural yoktur. Alternatif (kaydı `93`'e taşımak) **denendi ve reddedildi**:
+> > numarayı yeniden atamak, kaydın kendi ölçüm anını da geçersizleştirirdi.
+> **`89` ve `90` ARASINDAKİ FARK:** `89` kalıcı bir **boşluktur** (#799 onu bırakıp 92'ye gitti);
+> `90` **bu kayıttır**. ADIM 87'nin dersi uygulandı:
+çakışma **başlıkta değil DOSYA YOLUNDA** aranır, ve `ADIM90` yolunu **hiçbir açık PR** eklemiyor.
+**Merge edilmiş ad kazanır**, numaralar yeniden atanmaz.

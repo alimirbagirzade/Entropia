@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 39 |
+| B | 37 |
 | C | 6 |
 | D | 32 |
-| **open total** | **78** |
+| **open total** | **76** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (39)
+## Class B (37)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -85,8 +85,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `RD-12` | 12 | partial | The Analyze job survives a browser refresh and a duplicate Analyze under the same key spawns no second job. | Worth flagging for the same reason as RD-02/RD-03, though it is milder. The doc row says a "duplicate Analyze click same idempotency key ile second job yaratmaz", but the shipped client mints a FRESH Idempotency-Key per click — the frontend test's own title is "requests analysis with a fresh Idempotency-Key". So the server-side replay guard is real and proven (test_idempotent_analyze_returns_sa… |
 | `RD-13` | 12 | partial | A second, stale write on the same draft/revision is refused; the first revision survives. | The refusal is proven on two independent mutating surfaces, and the soft-delete case also asserts the non-effect (deletion_state still ACTIVE, no Trash entry) — which is the "first revision is preserved" half. The recovery-affordance clause is untested: no frontend test drives a 409 on the revision append and asserts a reload/compare/new-revision path is offered. MEASURED 2026-08-17 (batch 05),… |
 | `RC-09` | 14 | partial | A dependency change stales the current report and an old fingerprint returns 409 COMPOSITION_STALE. | c3 has no asserting test. The frontend RUN-lock tests (mainboard.test.tsx "locks RUN until a current Ready Check passes", readyCheckShell.test.tsx "keeps RUN locked ... while the state is not ready") all drive state="not_ready"; readyCheck.test.tsx "flags a stale report with a re-run hint" renders the stale badge on a deep-linked report but asserts nothing about a RUN control. Add a case that f… |
-| `RC-10` | 14 | partial | A newer catalog revision that the draft does not pin must not stale an existing report. | No test proves a NEWER catalog revision leaves a pinned report non-stale; only is_stale(a, a) is False. domain/readiness/validators.py states the rule in a comment ("the fingerprint is over the pinned revision ids only (RC-10)") but a comment is not an assertion. The closest real test is backend/tests/integration/test_e2e_pipeline.py::test_market_successor_never_leaks_and_rerun_is_reproducible,… |
-| `RC-17` | 14 | partial | An unauthorized user checking a private composition gets a permission-safe rejection. | c2 has no asserting test: nothing asserts the 403 envelope for a readiness denial is free of composition/dependency detail. The suite does have this shape of assertion elsewhere (contract/test_mainboard_contract.py::test_guest_default_mainboard_does_not_leak_workspace_or_composition checks a leak-key set against both the body and error object), so the pattern exists — it just was never applied … |
 | `RH-13` | 16 | partial | Dropping a metric from the Result View profile never deletes historic values or the manifest. | c2 has no asserting test: no test lists Results History before and after applying a narrower metric profile to prove the row-level key_metrics digest is unaffected by a presentation preference. c3 is proven only incidentally — the pipeline test applies a personal profile revision and later asserts manifest_after.manifest_hash equals the admission hash, but the assertion is framed around the Tra… |
 | `RH-14` | 16 | partial | A headless Agent queries a result and writes a provenance-linked artifact without mutating the Result. | c3 has no asserting test: the agent-loop test asserts the artifact, its source_task_id and its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary) after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash… |
 | `TR-07` | 20 | partial | Deleting a Rationale Family with an active assignment is blocked with no dangling assignment and no Trash Entry. | The blocker and the no-dangling-state half are directly asserted (entry count unchanged plus the family absent from the listing). The "repair plan required" half is not: nothing inspects the raised RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and no test walks the sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for restore and for assi… |

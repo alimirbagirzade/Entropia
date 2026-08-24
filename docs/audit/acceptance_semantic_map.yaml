@@ -14850,17 +14850,24 @@ criteria:
   - id: RC-10.c2
     text: Publishing a NEWER approved catalog revision that the draft does not pin leaves the existing
       report current (fingerprint unchanged).
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_readiness_persistence.py::test_rc10_newer_work_object_revision_the_board_does_not_pin_keeps_the_report_current
+    - backend/tests/integration/test_readiness_persistence.py::test_rc10_newer_approved_market_revision_keeps_the_pinned_report_current
   production_paths:
   - backend/src/entropia/domain/readiness/validators.py
   - backend/src/entropia/application/queries/readiness_check.py
   test_evidence:
   - backend/tests/unit/test_readiness_validators.py::test_is_stale_detects_fingerprint_change
+  - backend/tests/integration/test_readiness_persistence.py::test_rc10_newer_work_object_revision_the_board_does_not_pin_keeps_the_report_current
+  - backend/tests/integration/test_readiness_persistence.py::test_rc10_newer_approved_market_revision_keeps_the_pinned_report_current
   evidence_type:
   - backend_unit
+  - backend_integration
   positive:
   - backend/tests/unit/test_readiness_validators.py::test_is_stale_detects_fingerprint_change
+  - backend/tests/integration/test_readiness_persistence.py::test_rc10_newer_work_object_revision_the_board_does_not_pin_keeps_the_report_current
+  - backend/tests/integration/test_readiness_persistence.py::test_rc10_newer_approved_market_revision_keeps_the_pinned_report_current
   negative: []
   auth: []
   occ: []
@@ -14868,15 +14875,37 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: No test proves a NEWER catalog revision leaves a pinned report non-stale; only is_stale(a,
-    a) is False. domain/readiness/validators.py states the rule in a comment ("the fingerprint is
-    over the pinned revision ids only (RC-10)") but a comment is not an assertion. The closest real
-    test is backend/tests/integration/test_e2e_pipeline.py::test_market_successor_never_leaks_and_rerun_is_reproducible,
+  status: covered
+  notes: 'Was "No test proves a NEWER catalog revision leaves a pinned report non-stale; only
+    is_stale(a, a) is False. domain/readiness/validators.py states the rule in a comment ("the
+    fingerprint is over the pinned revision ids only (RC-10)") but a comment is not an assertion.
+    The closest real test is
+    backend/tests/integration/test_e2e_pipeline.py::test_market_successor_never_leaks_and_rerun_is_reproducible,
     which moves the market head after a run and asserts the MANIFEST and execution_key are unchanged
-    — it never reads a readiness report back. Add a case that runs a Ready Check, approves a successor
-    revision the draft does not pin, and asserts the report still reads is_current=true.
+    — it never reads a readiness report back. Add a case that runs a Ready Check, approves a
+    successor revision the draft does not pin, and asserts the report still reads is_current=true."
+    CLOSED by acceptance batch 19 (doc 14, backend surface). The clause names one behaviour over TWO
+    catalogs, so it is driven twice. (1) The work-object catalog — a revision append advances the
+    root head while the Mainboard item keeps its pin (create_work_object_revision, AT#5), and the
+    report is read back with an unchanged fingerprint, is_current true and state == stored_state.
+    (2) The market-data catalog — RC-09''s contrast case run the other way: an APPROVED md_rev_2
+    becomes the dataset head while the strategy payload still names md_rev_1 (read back from the
+    stored payload, not from the fixture literal). Both cases assert their preconditions rather than
+    assuming them (the successor really landed; the head really moved; the pin really did not),
+    because the content-hash idempotency branch would otherwise let the test assert "nothing
+    changed" in a world where nothing was published. FOUR negative controls, each read for WHICH
+    assertion reddened. NC-1 rebuilds the current fingerprint from the ROOT HEAD instead of the
+    pinned id: only the work-object case reddens, on the fingerprint line, and the other thirteen
+    tests in the two files stay GREEN — the defect is invisible to the pre-existing suite, which is
+    what made this a real gap rather than a labelling exercise. NC-1b reruns NC-1 with the two
+    fingerprint lines dropped from the test, so the shadowed is_current assertion is measured too
+    (it reddens). NC-2 folds the market head into the fingerprint itself and is REJECTED as a
+    control: it stales the report from birth, so the market case reddens on its `before`
+    PRECONDITION and an unrelated pre-existing test reddens with it — the red would not have been
+    attributable. NC-2b instead makes the read model treat "a catalog successor exists" as
+    staleness, exactly the regression RC-10 forbids: only the market case reddens, on its target
+    is_current assertion, with the fingerprint left intact — which is why both assertions are
+    load-bearing. NC-2c removes that shadow and reddens the market case''s fingerprint assertion.'
 - id: RC-11
   document: docs/spec/14_Entropia_V18_Backtest_Ready_Check_Page_Documentation_v1_1.md
   section: '15'
@@ -15171,8 +15200,9 @@ criteria:
     - backend/tests/integration/test_admission_audit_durability.py::test_foreign_actor_run_admission_denial_is_tagged_with_its_operation
   - id: RC-17.c2
     text: The denial response body carries no confidential dependency detail about the composition.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_readiness_denial_envelope.py::test_rc17_foreign_denial_body_carries_no_composition_or_dependency_detail
   production_paths:
   - backend/src/entropia/application/commands/readiness_check.py
   - backend/src/entropia/domain/sharing
@@ -15181,6 +15211,7 @@ criteria:
   - backend/tests/integration/test_readiness_persistence.py::test_rc17_foreign_owner_denied
   - backend/tests/integration/test_admission_audit_durability.py::test_foreign_actor_ready_check_leaves_a_durable_access_denied_audit
   - backend/tests/integration/test_admission_audit_durability.py::test_foreign_actor_run_admission_denial_is_tagged_with_its_operation
+  - backend/tests/integration/test_readiness_denial_envelope.py::test_rc17_foreign_denial_body_carries_no_composition_or_dependency_detail
   evidence_type:
   - backend_integration
   positive: []
@@ -15188,23 +15219,39 @@ criteria:
   - backend/tests/integration/test_readiness_persistence.py::test_rc17_foreign_owner_denied
   - backend/tests/integration/test_admission_audit_durability.py::test_foreign_actor_ready_check_leaves_a_durable_access_denied_audit
   - backend/tests/integration/test_admission_audit_durability.py::test_foreign_actor_run_admission_denial_is_tagged_with_its_operation
+  - backend/tests/integration/test_readiness_denial_envelope.py::test_rc17_foreign_denial_body_carries_no_composition_or_dependency_detail
   auth:
   - backend/tests/integration/test_readiness_persistence.py::test_rc17_foreign_owner_denied
   - backend/tests/integration/test_admission_audit_durability.py::test_foreign_actor_ready_check_leaves_a_durable_access_denied_audit
   - backend/tests/integration/test_admission_audit_durability.py::test_foreign_actor_run_admission_denial_is_tagged_with_its_operation
+  - backend/tests/integration/test_readiness_denial_envelope.py::test_rc17_foreign_denial_body_carries_no_composition_or_dependency_detail
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'c2 has no asserting test: nothing asserts the 403 envelope for a readiness denial is free
+  status: covered
+  notes: 'Was "c2 has no asserting test: nothing asserts the 403 envelope for a readiness denial is free
     of composition/dependency detail. The suite does have this shape of assertion elsewhere (contract/test_mainboard_contract.py::test_guest_default_mainboard_does_not_leak_workspace_or_composition
     checks a leak-key set against both the body and error object), so the pattern exists — it just
     was never applied to the readiness/RUN denial routes. Add a contract case that drives POST /mainboard-compositions/{id}/readiness-checks
     as a foreign actor and asserts the error body exposes no item ids, package refs or dependency
-    names.'
+    names." CLOSED by acceptance batch 19 (doc 14, backend surface). The three pre-existing RC-17
+    tests all stop at the COMMAND boundary, where no response body exists yet; the leak half is
+    only observable on the wire, so the new case drives the real route through the ASGI app with
+    the real session (the test_library_validation_run_route.py override style). Non-vacuity is
+    established from both ends. The composition genuinely has detail to leak — a pinned strategy
+    revision, an approved indicator package, a market dataset, and a deliberate duplicate
+    attachment so the check produces an item-SCOPED blocker — and the SAME route called by the
+    owner over the SAME composition is asserted to emit three of those identifiers verbatim, so
+    "the 403 does not contain X" is an observation about the denial rather than about the
+    endpoint''s vocabulary. The assertion is a substring scan over the serialized envelope, not a
+    key lookup, plus the envelope-shape assertions (only an `error` key, empty `details`, null
+    `scope_id`). THREE negative controls, one per leak vector, each reddening a DIFFERENT
+    assertion: leaking through `details` reddens `details == []`; leaking through `scope_id`
+    reddens `scope_id is None`; leaking through free prose in `message` — where no key lookup
+    could ever find it — reddens the substring assertion. In all three the pre-existing RC-17
+    tests stay GREEN, because asserting the exception type cannot see what the envelope carries.'
 - id: RC-18
   document: docs/spec/14_Entropia_V18_Backtest_Ready_Check_Page_Documentation_v1_1.md
   section: '15'

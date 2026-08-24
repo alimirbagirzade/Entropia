@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 41 |
+| B | 39 |
 | C | 6 |
 | D | 32 |
-| **open total** | **80** |
+| **open total** | **78** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (41)
+## Class B (39)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -77,9 +77,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `ESP-03` | 09 | partial | The scoped list carries the seven V18 TA fixtures with resolver key + technical status and N/A metrics. | MISSING: no test exercises the real seeder. All seven fixtures DO exist in production code — backend/src/entropia/apps/seed.py::_ESP_TA_RESOLVERS declares ESP_TA_SMA/EMA/RMA/ATR/RSI/WMA/VWAP and _seed_esp_ta_resolvers creates a System-owned ESP package, a resolver contract and a TRUSTED_ACTIVE registry row for each — but the whole block is behind the SEED_ESP_TA=1 env flag and no test calls _se… |
 | `ESP-05` | 09 | partial | The Embedded System / TA Resolver Family is seeded ACTIVE; assignment follows the shared exception while the resolver payload stays protected. | MISSING: the "resolver payload remains protected" half is never asserted, and the one shared-editing test raises a concrete question a follow-up must answer. doc 09 line 644 states that changing the Rationale Family assignment "does not change signature, adapter, validation, current revision or registry trust". The only shared-edit test, test_assign_creates_package_revision_owner_unchanged, tar… |
 | `ESP-20` | 09 | partial | A user with no ESP proposal sees only System trusted resolvers; direct ID query also enforces can_view. | MISSING: the role-aware filtering is never exercised with a FOREIGN actor. The predicate exists and is unit-tested — domain/esp/policy.py::ensure_can_view raises AccessDeniedError for a private resolver owned by someone else (unit/test_esp_policy.py::test_private_proposal_hidden_from_non_owner) — and queries/esp.py wires it in both places (list_embedded_system_packages post-filters rows through… |
-| `RF-07` | 10 | partial | Adding a Family whose normalized name matches an active one returns RATIONALE_FAMILY_NAME_CONFLICT with no duplicate root/revision. | The conflict raise is asserted; the "duplicate root/revision oluşmaz" half is not — the test does not count RationaleFamilyRoot/Revision rows after the refusal (the idempotent-create test does count rows, but for a different scenario). |
 | `RF-08` | 10 | partial | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
-| `RF-12` | 10 | partial | Running Ready Check on a Strategy with no Rationale Family fails and leaves RUN locked. | The blank-string hole named in the audit brief is CLOSED on current main: `StrategyConfig.validate_rationale_family_not_blank` (domain/strategy/config.py:88-104) strips and rejects a blank id, and three parametrised readiness tests assert a blank id yields STRATEGY_CONFIG_INVALID / NOT_READY. What is still unproven is the second half of the criterion end to end: no test drives a family-less (or… |
 | `RF-18` | 10 | partial | A browser refresh with a dirty assignment table may lose staged changes; only persisted canonical server state returns. | No test unmounts/remounts the page (or otherwise simulates a refresh) with pending staged changes and asserts the "1 pending change(s)" staging is gone. The staging test asserts staging then SAVE, which is the opposite direction. The canonical-server-state half is proven only in the weak sense that the rendered rows come from the stubbed GET response. |
 | `MKD-02` | 11 | partial | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The … |
 | `RD-01` | 12 | partial | Without an approved Market Data link the creator stays locked and the server returns DEPENDENCY_BLOCKED. | The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server command + route). The criterion names "create draft/analysis command" — only create is exercised; no test posts /research-datasets/{id}/analysis without a linked market dependency and asserts DEPENDENCY_BLOCKED. ADIM 54 FINDING — c4 is very likely MISCLASSIFIED and no test can close it. The clause wants the… |

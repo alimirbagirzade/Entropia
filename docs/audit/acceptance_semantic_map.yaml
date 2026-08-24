@@ -11891,28 +11891,30 @@ criteria:
     - backend/tests/integration/test_rationale_persistence.py::test_duplicate_active_name_conflicts
   - id: RF-07.c2
     text: No duplicate root/revision row is created by the refused create.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_rationale_persistence.py::test_duplicate_active_name_writes_no_root_or_revision
   production_paths:
   - backend/src/entropia/application/commands/rationale.py
   - backend/src/entropia/domain/rationale/policy.py
   test_evidence:
   - backend/tests/integration/test_rationale_persistence.py::test_duplicate_active_name_conflicts
+  - backend/tests/integration/test_rationale_persistence.py::test_duplicate_active_name_writes_no_root_or_revision
   evidence_type:
   - backend_integration
   positive: []
   negative:
   - backend/tests/integration/test_rationale_persistence.py::test_duplicate_active_name_conflicts
+  - backend/tests/integration/test_rationale_persistence.py::test_duplicate_active_name_writes_no_root_or_revision
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: The conflict raise is asserted; the "duplicate root/revision oluşmaz" half is not — the test
-    does not count RationaleFamilyRoot/Revision rows after the refusal (the idempotent-create test
-    does count rows, but for a different scenario).
+  status: covered
+  notes: "Closed by `test_duplicate_active_name_writes_no_root_or_revision`, which counts RationaleFamilyRoot and RationaleFamilyRevision rows around the refusal and then re-reads the surviving revision (display_name keeps its original casing, revision_no still 1). It deliberately does NOT roll back after the raise: a rollback would discard a duplicate row and let a post-insert guard pass vacuously. Negative control: moving `_check_name_available` from the top of `_op` to below `rationale_repo.create_family` raises the SAME RationaleFamilyNameConflict and leaves the pre-existing `test_duplicate_active_name_conflicts` GREEN, while reddening this test on the root count (assert 2 == 1) - which is exactly why the clause was open."
+
 - id: RF-08
   document: docs/spec/10_Entropia_V18_Rationale_Families_Page_Documentation_v1_1.md
   section: '14'
@@ -12090,10 +12092,11 @@ criteria:
   - id: RF-12.c3
     text: With the composition NOT_READY, run admission is refused and no run/manifest/job/result
       is created.
-    status: partial
+    status: covered
     test_evidence:
     - backend/tests/integration/test_backtest_persistence.py::test_shared_allocation_run_is_refused_and_leaves_nothing_behind
     - backend/tests/integration/test_backtest_persistence.py::test_empty_composition_blocks_run_and_leaves_nothing
+    - backend/tests/integration/test_backtest_persistence.py::test_family_less_strategy_blocks_run_admission_and_leaves_nothing_behind
   production_paths:
   - backend/src/entropia/domain/strategy/config.py
   - backend/src/entropia/application/commands/strategy_draft.py
@@ -12105,6 +12108,7 @@ criteria:
   - backend/tests/integration/test_strategy_rationale_family_set.py::test_blank_family_id_rejected
   - backend/tests/integration/test_backtest_persistence.py::test_shared_allocation_run_is_refused_and_leaves_nothing_behind
   - backend/tests/integration/test_backtest_persistence.py::test_empty_composition_blocks_run_and_leaves_nothing
+  - backend/tests/integration/test_backtest_persistence.py::test_family_less_strategy_blocks_run_admission_and_leaves_nothing_behind
   evidence_type:
   - backend_unit
   - backend_integration
@@ -12116,21 +12120,16 @@ criteria:
   - backend/tests/integration/test_strategy_rationale_family_set.py::test_blank_family_id_rejected
   - backend/tests/integration/test_backtest_persistence.py::test_shared_allocation_run_is_refused_and_leaves_nothing_behind
   - backend/tests/integration/test_backtest_persistence.py::test_empty_composition_blocks_run_and_leaves_nothing
+  - backend/tests/integration/test_backtest_persistence.py::test_family_less_strategy_blocks_run_admission_and_leaves_nothing_behind
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The blank-string hole named in the audit brief is CLOSED on current main: `StrategyConfig.validate_rationale_family_not_blank`
-    (domain/strategy/config.py:88-104) strips and rejects a blank id, and three parametrised readiness
-    tests assert a blank id yields STRATEGY_CONFIG_INVALID / NOT_READY. What is still unproven is
-    the second half of the criterion end to end: no test drives a family-less (or blank-family) composition
-    through `request_backtest_run` to show RUN stays locked. The "NOT_READY -> READINESS_BLOCKED,
-    no run/manifest/job" mechanism IS asserted, but only for other blockers (shared allocation, empty
-    composition), so the family case rides on a shared code path rather than its own assertion.'
+  status: covered
+  notes: "Closed by `test_family_less_strategy_blocks_run_admission_and_leaves_nothing_behind`. The validator half was already proven at unit level; what was missing was the end-to-end second half, which rode on a shared code path proven only for OTHER blockers (shared allocation, empty composition). The test builds the SAME composition that admits happily in test_admission_queues_run_and_worker_materializes_result, differing only in the omitted rationale_family_id, then asserts NOT_READY with STRATEGY_CONFIG_INVALID, the READINESS_BLOCKED refusal carrying that code, and zero BacktestRun / BacktestResult / Job / BacktestRunManifest rows read back after flush + expire_all. `_strategy_payload` gained `rationale_family_id: str | None = 'rf_1'`, where None OMITS the key rather than storing a null (create_work_object persists the payload verbatim, so the omission survives to Ready Check as a real family-less Strategy would); every existing caller is unchanged. Two negative controls: giving rationale_family_id a default so a family-less config parses turns the composition 'ready' and reddens the readiness assertion - proving the refusal is attributable to the Family and not to some unrelated blocker in the harness; and writing a BacktestRun row before the readiness gate throws the same exception but reddens the run-count assertion."
+
 - id: RF-13
   document: docs/spec/10_Entropia_V18_Rationale_Families_Page_Documentation_v1_1.md
   section: '14'

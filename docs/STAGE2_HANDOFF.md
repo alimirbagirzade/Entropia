@@ -7734,6 +7734,56 @@ uygulandı, defter belgeleri yeni tabana karşı yeniden yazıldı.
 
 `PROJECT_HISTORY.md` §ADIM 94 · `docs/ADIM95_LANDED_KICKOFF.md`.
 
+## Stage 97 — kabul borcu batch 18 (doc 10 backend): `RF-07` + `RF-12` kapandı landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi** (`backend/src` ve `frontend/src`
+altında sıfır satır), migration **yok**, OpenAPI **değişmedi**, `ENGINE_VERSION` **değişmedi**.
+Belge + yüzey: **doc 10 (Rationale Families), backend**.
+
+**Kapananlar.** `RF-07` (`.c2` — reddedilen create hiçbir kök/revizyon bırakmıyor) ·
+`RF-12` (`.c3` — family'siz kompozisyon `request_backtest_run`'da reddediliyor ve
+run/manifest/job/result yazılmıyor). İkisinde de son açık clause'du → ikisi **covered**,
+ikisinin **`debt_class` KALDIRILDI**.
+
+**`RF-07.c2` — "raise ediyor" ≠ "YAZMADAN raise ediyor".** Mevcut test istisnayı assert edip
+duruyor; guard'ın insert'in üstünde mi altında mı olduğunu ayırt edemiyor. **Refüzden sonra
+`rollback` YAPILMIYOR** — bu depoda ilk kez yazılan kural: rollback post-insert bir guard'ın
+yazdığını **da** atar ve test vacuous geçer; `flush()` + `expire_all()` ile veritabanından okunur.
+
+**`RF-12.c3`.** Harness `_strategy_payload(rationale_family_id: str | None = "rf_1")` aldı;
+**`None` anahtarı tamamen ATAR**, `null` yazmaz. Varsayılan mevcut ~30 çağıranı bayt bayt aynı
+bırakır ve bu **ölçüldü**.
+
+**ÜÇ negatif kontrol**, her birinde hangi assertion'ın kırmızı olduğu okundu. **NK-2 harness
+değişikliği yüzünden ZORUNLU** — yeni kural: *paylaşılan bir harness'a parametre eklediysen,
+red'in senin değişikliğine atfedilemeyeceğini ayrı bir kontrolle göster.*
+
+**YENİ BULGU (on birinci) — `RF-08.c2`.** 409 hiçbir `remediation` taşımıyor; `TL-16.c4`'ten
+farkı, o zarfı genişletmeyi ister, bu **hiçbir yeni şey istemez** (aynı dosyada yirmi sınıf
+`remediation` bildiriyor) → **tek satırlık** düzeltme. Sevk **edilmedi**, **yeniden
+sınıflandırılmadı**.
+
+**İKİNCİ BULGU — #808 KAYITSIZ İNDİ.** `ADIM 94` (batch 17, doc 01 Mainboard) main'e indi ama
+**`docs/PROJECT_HISTORY.md`'ye hiç dokunmadı** (`grep -c 'MB-01'` → 0) → ritüelin 3. maddesi
+koşmadı. Bu slice o kaydı **uydurmadı**; sahibinin yazması gerekir. Hiçbir kapı yakalamıyor —
+`check_classification` kickoff dosyasına bakar, kaydın varlığına değil.
+
+**Sayılar (ölçüldü, ÜÇ farklı tabanda).** Tavanlar İNDİ: `partial` **73 → 71**, `debt_class.B`
+**41 → 39**; açık borç **80 → 78** (A=1 · B=39 · C=6 · D=32). Clause `covered` **1046 → 1048**.
+**Doc 10'un BACKEND borcu bitti**; kalan `RF-18` **frontend**.
+
+**Dürüst sınır.** Postgres ayakta + migrate + **izole DB** → iki case ve üç negatif kontrol
+gerçekten koştu (#804'ün ve #805'in dosyaları da yanında yeşil). **Tam suite ve coverage CI'a
+bırakıldı** — üç yerel deneme ortam yüzünden geçersizdi; bir önceki head'de CI `Backend`
+yeşildi, bu dal için yerel sayı **iddia edilmiyor**. Frontend'e sıfır satır.
+
+**NUMARA — üç kez taşındı.** `ADIM 93` → `94` → **`95`**. #804 `ADIM 93`'ü, **#808 HEM `ADIM 94`
+HEM `batch 17`**'yi aldı. **DERS: iki numara bağımsız taşınABİLİR demek bağımsız taşınIR demek
+değildir** — ayrı ayrı ölç. Bu kayıt **batch 18**.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 97 ·
+`docs/ADIM97_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

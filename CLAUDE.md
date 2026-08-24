@@ -237,7 +237,37 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 93 (kabul borcu batch 16, doc 02 BACKEND): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 94 (kabul borcu batch 17, doc 01 Mainboard BACKEND): ÜRÜN
+> KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.**
+> İki kriter kapandı — **`MB-01.c4`** (kriterin adlandırdığı dört yüzeyden
+> yalnız Ready Check hiç anonim aktörle sürülmemişti; artık `UnauthenticatedError` **ve hiç
+> rapor satırı yok**, authenticated çağrı pozitif kontrol) · **`MB-27.c4`** (iki adımlı çıkarım
+> yerine iki bağımsız gözlem: **etkin** durum `stale`'e düşer / **saklanan** durum kıpırdamaz,
+> ve yeniden koşu **`COMPOSITION_EMPTY`** raporlar). **BEŞ negatif kontrol; ÜÇÜNCÜSÜ DERS:**
+> guard'ı insert'in altına taşıyan kontrol **YEŞİL geçti** ve assertion'ın **TOTOLOJİK**
+> olduğunu ortaya çıkardı — test saymadan önce `session.rollback()` yapıyor, komutun yazdığı
+> satırı atıyordu. Rollback silindi, kontrol yeniden koştu: `assert 1 == 0`. **BİR YAN ETKİNİN
+> YOKLUĞUNU İDDİA EDEN ASSERTION'IN ÖNÜNDE ONU GERİ ALAN HİÇBİR ŞEY OLAMAZ.** Ayrıca **kontrol
+> harness'i onarıldı** (çok dosyalı kontrolde yarıda patlayan tekillik assertion'ı ağacı kirli
+> bırakıyor, sonraki kontrol onu sessizce ölçüyordu → geri yazma `finally`'de).
+> **ON BİRİNCİ BULGU — `MB-22.c4`:** *"restore'dan sonra rapor kullanılamaz"* iddiasının
+> **tersi** sevk edilmiş; restore aynı `(root, revision)`'ı geri koyar, fingerprint orijinaline
+> **birebir** döner (`02edaff5…` → `9e72b8a1…` → `02edaff5…`, probe ile ölçüldü) ve rapor
+> yeniden `ready`/`current` okunur → sınıf D şekli, **yeniden sınıflandırılmadı**.
+> **Tavanlar İNDİ: `partial` 75 → 73, `debt_class.B` 43 → 41**; açık borç **80**
+> (A=1 · B=41 · C=6 · D=32). **DOC 01'İN BACKEND BORCU BİTTİ** (kalan `MB-22` bulgu).
+> **ORTAM TUZAĞI: container yeniden başlayınca Postgres DÜŞER** ve koşu `ss` (iki SKIPPED) +
+> **exit 0** verir — skip'li yeşil kanıt değildir. **DÜRÜST SINIR:** frontend kapıları
+> koşulmadı, tam suite sonuna kadar koşmadı → geçen sayı ve coverage CI'ın otoritesinde.
+> **NUMARA: #806 açıkken yazıldı ve o kendini *"batch 17 / doc 10 backend"* diye adlandırıyor
+> → bu slice bilerek BAŞKA belge seçti; #806 önce inerse bu kayıt `batch 18` olur.**
+> `PROJECT_HISTORY.md` §ADIM 94 · `docs/ADIM94_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 93 (kabul borcu batch 16, doc 02 BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, beş yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > BLOCKED.** Dört kriter kapandı — **`AT-01.c2`** (kompozisyona giren tek kapı
 > `attach_mainboard_item`'dır; kaydedilmemiş draft'ın kökünde **hiç `work_object_revision`

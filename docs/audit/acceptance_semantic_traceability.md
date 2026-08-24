@@ -50,7 +50,7 @@ for this map.
 
 | Doc | covered | partial | uncovered | deliberate_future_dev | not_applicable | product_decision_required | total |
 |---|---|---|---|---|---|---|---|
-| 01 | 25 | 5 | 0 | 0 | 0 | 0 | 30 |
+| 01 | 27 | 3 | 0 | 0 | 0 | 0 | 30 |
 | 02 | 19 | 4 | 2 | 0 | 0 | 0 | 25 |
 | 03 | 18 | 2 | 1 | 0 | 0 | 0 | 21 |
 | 04 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 4 | 5 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **286** | **75** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **288** | **73** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1044 |
+| covered | 1046 |
 | partial | 5 |
-| uncovered | 87 |
+| uncovered | 85 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,20 +101,18 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 43 |
+| B | 41 |
 | C | 6 |
 | D | 32 |
-| **open total** | **82** |
+| **open total** | **80** |
 
-## Partial criteria (75)
+## Partial criteria (73)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
-| `MB-01` | B | Anonymous visitor gets no private Mainboard data and every create/Ready/RUN mutation is refused server-side. | Guest refusal is proven at three of the four named surfaces (projection read, draft create/open/list, RUN admission) and the no-leak assertion is explicit down to the absent ETag. The criterion also names "Ready" among the rejected mutations; grepping backend/tests for the readiness route and command turned up no test that drives POST .../readiness-checks with an anonymous actor (test_readiness_persistence.py only covers a foreign OWNER, RC-17). The ownership guard would plausibly deny an anonymous principal, but plausible is not asserted, so that clause is recorded uncovered rather than folded in. |
 | `MB-03` | D | An opened-but-unsaved draft row has no identity, blocks Ready Check and is excluded from the manifest. | The identity half is proven: the external opener returns {draft_id, kind, unsaved} with no root/revision/item id, and the Strategy path persists a root + editor draft with has_revision False. Two clauses fail honestly. First, `UNSAVED_MAINBOARD_DRAFT` does not exist anywhere in backend/src (grep over shared/errors.py and the whole tree returns nothing) — the shipped behaviour is that an unsaved draft is simply not a Mainboard item, so an otherwise empty board reports COMPOSITION_EMPTY instead. Second, no test attaches nothing and then asserts the snapshot/manifest omits the open draft; exclusion is a structural consequence, not an asserted one. Note also that POST /strategy-drafts now PERSISTS a root (contract file says so verbatim), so "transient" holds literally only for the external kinds. |
 | `MB-22` | B | An Admin restore returns the same root id / head pointer to ACTIVE, reattaches the original location where valid, audits, and forces a Ready rerun. | Identity, head pointer, owner, audit, OCC and the conflict-resolution path for "where valid" are all directly asserted. The last clause is not: no test restores a Strategy that was part of a checked composition and then asserts the prior Ready report is stale / a rerun is required. Staleness is fingerprint-driven, so it is likely true, but nothing in the suite states it for the restore path — the cited tests exercise generic entity/manual/market roots, not a re-attached Mainboard item. |
 | `MB-25` | A | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_FORBIDDEN" but no such code class exists), so the criterion's literal code is unimplemented and untested. And no test drives the coordinator/executor past a policy block to show the broader loop continues; the loop tests (test_agent_coordinator_loop.py, test_agent_executor.py) exercise pause/stop and happy-path continuation, not post-denial continuation. |
-| `MB-27` | B | A disabled item stays visible but leaves the snapshot, Ready Check and allocation, and the report goes stale. | Exclusion from the hashed set and from the run result is asserted directly. The last clause is a two-step inference I refuse to score as covered: one unit test shows disabling moves the hash and a different unit test (test_readiness_validators.py::test_is_stale_detects_fingerprint_change) shows a fingerprint change makes a report stale, but no test disables a persisted item and then reads the report state, nor asserts the disabled item is dropped from the Ready Check issue scope / allocation plan. The OCC axis is left empty on purpose — the OCC token here is only proven by a jsdom request assertion, and that is not a server-side conflict proof. |
 | `AT-04` | D | A Market whose instrument disagrees with the pinned market dataset is rejected server-side. | The behaviour EXISTS but at a different seam and under a different code than the criterion names. `grep -rn MARKET_DATA_INSTRUMENT_MISMATCH backend/ frontend/src` returns nothing: no such error class or blocker exists. What the server actually enforces is `RunFailureCode.INSTRUMENT_MISMATCH` -> `RUN_FAILED_INSTRUMENT_MISMATCH` inside the run worker (backend/src/entropia/application/jobs/backtest_engine.py), i.e. at RUN time, not at Save. Save only resolves the free-text instrument scope (`InstrumentScopeUnresolvableError`) and never cross-checks the pinned market dataset's instrument. So the "payload is rejected at Save with MARKET_DATA_INSTRUMENT_MISMATCH" clause has no test because it has no implementation. |
 | `AT-13` | D | Free Python/JS/Pine expressions are refused; a valid DSL AST stores schema/version/dependency trace. | The "no free expression" half holds structurally: `FormulaBasedSizing.formula_type` is `Literal["kelly_criterion","custom_formula"]` with a typed `formula_params` dict, so a Python/JS/Pine string cannot enter the schema, and a `custom_formula` selection raises STRATEGY_SIZING_UNSUPPORTED at Ready Check. The second half has no implementation to test: there is no expression DSL, no AST node type and no dependency-trace record anywhere under `backend/src/entropia/domain/strategy/`. |
 | `AT-17` | D | An enabled blackout with an invalid range returns issues at the exact row path; disabled blank rows do not block Save. | The invalid-range check is CLIENT-side only. `RestrictionFilter.config` is an untyped `dict[str, Any]` in `backend/src/entropia/domain/strategy/config.py`, and `grep -rn blackout backend/src` finds no validator: nothing on the server parses the date ranges at Save, so there is no row-path issue list to assert and a forged payload with a reversed range would be stored. The engine's fail-closed reading (an unparseable date counts as inside the window) contains the damage at run time but is not the Save-time blocker the criterion describes. The "disabled blank rows do not block save" clause is likewise unasserted on either line. |

@@ -7655,6 +7655,48 @@ gerekmedi. Ürün kodunda sıfır satır olduğu için **suite koşulmadı**; do
 `generate_repository_facts.py --check`. `PROJECT_HISTORY.md` §ADIM 90 ·
 `docs/ADIM90_LANDED_KICKOFF.md`.
 
+## Stage 94 — kabul borcu batch 17 (doc 01 Mainboard, backend): MB-01 + MB-27 kapandı landed
+
+**Ne indi.** İki yeni integration case (`backend/tests/integration/test_readiness_persistence.py`)
++ kabul defteri + üretilmiş artefakt. **`backend/src` altında sıfır satır**, migration yok,
+OpenAPI değişmedi.
+
+**Kapananlar: `MB-01` (c4) · `MB-27` (c4)** — ikisi de doc 01'in son açık backend clause'uydu.
+
+- **`MB-01.c4`**: kriterin adlandırdığı dört yüzeyden yalnız Ready Check hiç anonim aktörle
+  sürülmemişti (satırın kendi notu *"muhtemelen reddederdi"* diyordu). Artık sürülüyor:
+  `UnauthenticatedError` + **hiç rapor satırı yok** + authenticated çağrı pozitif kontrol.
+- **`MB-27.c4`**: iki adımlı çıkarım yerine iki bağımsız gözlem — **etkin** durum `stale`'e
+  düşer, **saklanan** durum kıpırdamaz; ve yeniden koşu **`COMPOSITION_EMPTY`** raporlar.
+
+**Beş negatif kontrol; üçüncüsü bu partinin dersi.** İlk ikisi `pytest.raises` satırında
+kırmızı verip rapor-sayısı assertion'ını **gölgeliyordu**; üçüncü kontrol auth kapısını
+insert'in altına taşıdı ve **yeşil geçti** → assertion'ın **totolojik** olduğu ortaya çıktı
+(test saymadan önce `session.rollback()` yapıyordu). Rollback silindi, kontrol yeniden koştu:
+`assert 1 == 0`. **Bir yan etkinin yokluğunu iddia eden assertion'ın önünde onu geri alan
+hiçbir şey olamaz.** Ayrıca **kontrol harness'inin kendisi** onarıldı: çok dosyalı bir
+kontrolde sonraki bir tekillik hatası öncekini geri almadan aborte ediyor ve ağacı kirli
+bırakıyordu → geri yazma artık `finally`'de.
+
+**ON BİRİNCİ BULGU — `MB-22.c4` (kapatılmadı, ölçüldü).** *"Restore'dan sonra rapor
+kullanılamaz"* iddiasının **tersi** sevk edilmiş: restore aynı `(root, revision)` çiftini geri
+koyar, fingerprint **orijinaline birebir döner** (`02edaff5…` → `9e72b8a1…` → `02edaff5…`) ve
+silme öncesi rapor yeniden `ready`/`current` okunur. Sınıf D şekli; **yeniden
+sınıflandırılmadı** (D tavanını yükseltirdi).
+
+**Tavanlar İNDİ: `partial` 75 → 73, `debt_class.B` 43 → 41**; açık borç **82 → 80**
+(A=1 · B=41 · C=6 · D=32). Clause `covered` 1044 → 1046, `uncovered` 87 → 85. Taban `d47c5ba`.
+
+**Ortam tuzağı (birinci elden):** container slice ortasında yeniden başladı, Postgres düştü ve
+ilk koşu **`ss` = iki SKIPPED** ile **exit 0** verdi. Skip'li yeşil exit code kanıt değildir.
+
+**NUMARA/ETİKET:** main'in son kaydı ADIM 93 / batch 16; **#806 açık ve *"batch 17"* diyor**
+(doc 10 backend) → bu slice bilerek **başka belge** seçti, ama #806 önce inerse bu kayıt
+**batch 18** olur. Numara açık PR'ların eklediği dosya yollarından ölçüldü → 94 boştu.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
+`PROJECT_HISTORY.md` §ADIM 94 · `docs/ADIM94_LANDED_KICKOFF.md`.
+
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 

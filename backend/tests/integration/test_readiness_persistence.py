@@ -44,6 +44,7 @@ from entropia.shared.errors import (
     AccessDeniedError,
     CompositionStaleError,
     ReadinessReportNotFoundError,
+    UnauthenticatedError,
 )
 
 pytestmark = pytest.mark.integration
@@ -362,3 +363,98 @@ async def test_unknown_report_not_found(session) -> None:
     await _seed_principals(session)
     with pytest.raises(ReadinessReportNotFoundError):
         await readiness_query.get_readiness_report(session, USER1, report_id="rcrpt_missing")
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 17 — doc 01 Mainboard, backend surface                     #
+#                                                                             #
+# MB-01.c4 a guest Ready Check request is rejected server-side                #
+# MB-27.c4 disabling a live item stales the report and leaves the Ready scope #
+# --------------------------------------------------------------------------- #
+
+
+async def test_guest_ready_check_is_refused_server_side_and_writes_no_report(session) -> None:
+    """MB-01.c4 — the anonymous refusal is a SERVER guarantee, not a hidden button.
+
+    The sibling clauses cover the projection read, the draft surfaces and RUN
+    admission; the Ready Check mutation the criterion also names was never driven
+    with an anonymous actor. The refusal is asserted together with its ABSENCE of
+    a side effect — a guard that raises after writing the report row would satisfy
+    ``pytest.raises`` alone — and an authenticated call over the same composition
+    afterwards is the positive control, so the refusal is attributable to the
+    actor rather than to an unusable composition.
+    """
+    await _seed_principals(session)
+    composition_id = await _composition_with_strategy(session, USER1)
+
+    before = await session.scalar(select(func.count()).select_from(ReadyCheckReport))
+
+    with pytest.raises(UnauthenticatedError):
+        await readiness_cmd.run_readiness_check(
+            session, Actor.anonymous(), composition_id=composition_id
+        )
+
+    # Deliberately NOT rolled back first: a rollback here would discard any row the
+    # command had written and make this count pass no matter what. Measured — with
+    # the guard relocated below the insert the count goes to 1 and this line reddens.
+    after = await session.scalar(select(func.count()).select_from(ReadyCheckReport))
+    assert after == before == 0  # refused BEFORE any immutable report exists
+
+    # Positive control: the same composition is checkable by its owner.
+    checked = await readiness_cmd.run_readiness_check(session, USER1, composition_id=composition_id)
+    await session.commit()
+    assert checked["report_id"]
+    assert await session.scalar(select(func.count()).select_from(ReadyCheckReport)) == 1
+
+
+async def test_disabling_a_live_item_stales_the_report_and_leaves_the_ready_scope(
+    session,
+) -> None:
+    """MB-27.c4 — the last clause of the disable row, and the one the suite only
+    ever reached by a two-step inference.
+
+    Exclusion from the hashed set and from the run result is asserted elsewhere;
+    what nothing did was disable a PERSISTED item and then READ the report. Two
+    independent observations are made here. (1) The existing report's EFFECTIVE
+    state flips to ``stale`` while its STORED state does not move — the pair
+    matters, because a test that only read ``state`` could not tell a recomputed
+    projection from a rewritten row. (2) Re-running Ready Check afterwards reports
+    an EMPTY composition, which is the "removed from Ready Check scope" half: the
+    disabled item is not merely flagged, it is gone from the checked set.
+    """
+    await _seed_principals(session)
+    composition_id = await _composition_with_strategy(session, USER1)
+
+    checked = await readiness_cmd.run_readiness_check(session, USER1, composition_id=composition_id)
+    await session.commit()
+    report_id = checked["report_id"]
+    assert checked["state"] == "ready"
+
+    fresh = await readiness_query.get_readiness_report(session, USER1, report_id=report_id)
+    assert fresh["state"] == "ready" and fresh["is_current"] is True
+
+    board = await mb_query.get_default_mainboard(session, USER1)
+    item = board["items"][0]
+    await mb_cmd.patch_mainboard_item(
+        session,
+        USER1,
+        item_id=item["item_id"],
+        intent="set_enabled",
+        expected_row_version=item["row_version"],
+        is_enabled=False,
+    )
+    await session.commit()
+
+    view = await readiness_query.get_readiness_report(session, USER1, report_id=report_id)
+    assert view["state"] == "stale"  # effective state moved...
+    assert view["stored_state"] == "ready"  # ...the immutable row did not
+    assert view["is_current"] is False
+    assert view["composition_fingerprint"] != view["current_fingerprint"]
+
+    # The disabled item is out of the CHECKED set, not merely flagged inside it.
+    rechecked = await readiness_cmd.run_readiness_check(
+        session, USER1, composition_id=composition_id
+    )
+    await session.commit()
+    assert rechecked["state"] == "not_ready"
+    assert "COMPOSITION_EMPTY" in {issue["code"] for issue in rechecked["issues"]}

@@ -74,7 +74,9 @@ criteria:
     - backend/tests/integration/test_backtest_persistence.py::test_guest_cannot_run
   - id: MB-01.c4
     text: A guest Ready Check request is rejected server-side.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_readiness_persistence.py::test_guest_ready_check_is_refused_server_side_and_writes_no_report
   - id: MB-01.c5
     text: The UI renders the permitted restricted/intro state for an unauthenticated visitor.
     status: covered
@@ -93,12 +95,14 @@ criteria:
   - backend/tests/contract/test_mainboard_contract.py::test_guest_cannot_open_strategy_draft
   - backend/tests/integration/test_strategy_integration.py::test_list_strategy_drafts_rejects_guest
   - backend/tests/integration/test_backtest_persistence.py::test_guest_cannot_run
+  - backend/tests/integration/test_readiness_persistence.py::test_guest_ready_check_is_refused_server_side_and_writes_no_report
   - frontend/e2e/specs/01-auth.spec.ts > a guest sees the unauthenticated Layout state, not a session
   evidence_type:
   - backend_contract
   - backend_integration
   - e2e
-  positive: []
+  positive:
+  - backend/tests/integration/test_readiness_persistence.py::test_guest_ready_check_is_refused_server_side_and_writes_no_report
   negative:
   - backend/tests/contract/test_mainboard_contract.py::test_guest_cannot_open_default_mainboard
   - backend/tests/contract/test_mainboard_contract.py::test_guest_default_mainboard_does_not_leak_workspace_or_composition
@@ -106,6 +110,7 @@ criteria:
   - backend/tests/contract/test_mainboard_contract.py::test_guest_cannot_open_strategy_draft
   - backend/tests/integration/test_strategy_integration.py::test_list_strategy_drafts_rejects_guest
   - backend/tests/integration/test_backtest_persistence.py::test_guest_cannot_run
+  - backend/tests/integration/test_readiness_persistence.py::test_guest_ready_check_is_refused_server_side_and_writes_no_report
   auth:
   - backend/tests/contract/test_mainboard_contract.py::test_guest_cannot_open_default_mainboard
   - backend/tests/contract/test_strategy_save_contract.py::test_guest_cannot_create_strategy_draft
@@ -116,14 +121,26 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: Guest refusal is proven at three of the four named surfaces (projection read, draft create/open/list,
+  status: covered
+  notes: 'Guest refusal is proven at three of the four named surfaces (projection read, draft create/open/list,
     RUN admission) and the no-leak assertion is explicit down to the absent ETag. The criterion also
     names "Ready" among the rejected mutations; grepping backend/tests for the readiness route and
     command turned up no test that drives POST .../readiness-checks with an anonymous actor (test_readiness_persistence.py
     only covers a foreign OWNER, RC-17). The ownership guard would plausibly deny an anonymous principal,
-    but plausible is not asserted, so that clause is recorded uncovered rather than folded in.
+    but plausible was not asserted, so that clause was recorded uncovered rather than folded in.
+    CLOSED by acceptance batch 17 (doc 01, backend surface): an anonymous actor is now driven against
+    run_readiness_check and refused with UnauthenticatedError, with NO immutable report row afterwards
+    and an authenticated call over the same composition as the positive control. THREE negative
+    controls, and the third is the one that mattered. (1) Deleting `require_authenticated(actor)`
+    reddens the test at the pytest.raises line but with AccessDeniedError — the refusal is defended
+    TWICE (the auth guard, and the ownership guard inside _load_workspace), so that red proves the
+    auth gate rather than the absence of a refusal; the TL-22.c4 shape from ADIM 84. (2) Removing
+    both guards gives DID NOT RAISE, again at the raises line. (3) Neither of those ever reaches the
+    row-count assertion, so a third control moved the guard BELOW the report insert (the ADIM 83
+    shape) with the ownership guard down — and it passed GREEN, which exposed that the count was
+    VACUOUS: the test rolled the session back before counting, discarding any row the command had
+    written. The rollback was deleted and the control re-run: `assert 1 == 0` at exactly that line.
+    An assertion about an absent side effect must not be preceded by anything that undoes it.'
 - id: MB-02
   document: docs/spec/01_Entropia_V18_Mainboard_Page_Documentation_v1_1.md
   section: '15'
@@ -1682,7 +1699,9 @@ criteria:
   - id: MB-27.c4
     text: Disabling a live item flips the existing Ready report to STALE and removes it from Ready
       Check / allocation scope.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_readiness_persistence.py::test_disabling_a_live_item_stales_the_report_and_leaves_the_ready_scope
   production_paths:
   - backend/src/entropia/domain/mainboard/composition.py
   - backend/src/entropia/application/commands/mainboard.py
@@ -1690,6 +1709,7 @@ criteria:
   test_evidence:
   - backend/tests/unit/test_mainboard_composition.py::test_disabling_a_member_changes_the_hash
   - backend/tests/integration/test_backtest_persistence.py::test_disabled_strategy_is_excluded_from_the_result
+  - backend/tests/integration/test_readiness_persistence.py::test_disabling_a_live_item_stales_the_report_and_leaves_the_ready_scope
   - frontend/src/test/mainboard.test.tsx > Mainboard > toggles enable/disable via set_enabled with
     OCC + a fresh Idempotency-Key
   - frontend/src/test/mainboard.test.tsx > Mainboard > toggles enable/disable from the compact header
@@ -1706,21 +1726,33 @@ criteria:
   negative:
   - backend/tests/unit/test_mainboard_composition.py::test_disabling_a_member_changes_the_hash
   - backend/tests/integration/test_backtest_persistence.py::test_disabled_strategy_is_excluded_from_the_result
+  - backend/tests/integration/test_readiness_persistence.py::test_disabling_a_live_item_stales_the_report_and_leaves_the_ready_scope
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_readiness_persistence.py::test_disabling_a_live_item_stales_the_report_and_leaves_the_ready_scope
   agent_parity: []
-  status: partial
-  debt_class: B
+  status: covered
   notes: 'Exclusion from the hashed set and from the run result is asserted directly. The last clause
     is a two-step inference I refuse to score as covered: one unit test shows disabling moves the
     hash and a different unit test (test_readiness_validators.py::test_is_stale_detects_fingerprint_change)
     shows a fingerprint change makes a report stale, but no test disables a persisted item and then
     reads the report state, nor asserts the disabled item is dropped from the Ready Check issue scope
     / allocation plan. The OCC axis is left empty on purpose — the OCC token here is only proven by
-    a jsdom request assertion, and that is not a server-side conflict proof.'
+    a jsdom request assertion, and that is not a server-side conflict proof. CLOSED by acceptance
+    batch 17 (doc 01, backend surface), which disables a PERSISTED item and then reads the report.
+    Two independent observations rather than the two-step inference: the report''s EFFECTIVE state
+    flips to `stale` while its STORED state does NOT move (the pair matters — reading `state` alone
+    cannot distinguish a recomputed projection from a rewritten row), and a RE-RUN afterwards reports
+    COMPOSITION_EMPTY, which is the "removed from Ready Check scope" half measured head-on rather
+    than inferred. Two negative controls, each red at the assertion under test: making
+    queries/readiness_check.py::_current_fingerprint count disabled items reddens the `stale`
+    assertion, and dropping `MainboardWorkingItem.is_enabled.is_(True)` from
+    repositories/readiness.py::list_enabled_items_with_root_state reddens the COMPOSITION_EMPTY
+    assertion. The allocation-plan half of the clause is carried by the same exclusion (the plan is
+    built from the checked set) and is not separately asserted here.'
 - id: MB-28
   document: docs/spec/01_Entropia_V18_Mainboard_Page_Documentation_v1_1.md
   section: '15'

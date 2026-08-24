@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 43 |
+| B | 41 |
 | C | 6 |
 | D | 32 |
-| **open total** | **82** |
+| **open total** | **80** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,13 +53,11 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (43)
+## Class B (41)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
-| `MB-01` | 01 | partial | Anonymous visitor gets no private Mainboard data and every create/Ready/RUN mutation is refused server-side. | Guest refusal is proven at three of the four named surfaces (projection read, draft create/open/list, RUN admission) and the no-leak assertion is explicit down to the absent ETag. The criterion also names "Ready" among the rejected mutations; grepping backend/tests for the readiness route and command turned up no test that drives POST .../readiness-checks with an anonymous actor (test_readiness… |
 | `MB-22` | 01 | partial | An Admin restore returns the same root id / head pointer to ACTIVE, reattaches the original location where valid, audits, and forces a Ready rerun. | Identity, head pointer, owner, audit, OCC and the conflict-resolution path for "where valid" are all directly asserted. The last clause is not: no test restores a Strategy that was part of a checked composition and then asserts the prior Ready report is stale / a rerun is required. Staleness is fingerprint-driven, so it is likely true, but nothing in the suite states it for the restore path — t… |
-| `MB-27` | 01 | partial | A disabled item stays visible but leaves the snapshot, Ready Check and allocation, and the report goes stale. | Exclusion from the hashed set and from the run result is asserted directly. The last clause is a two-step inference I refuse to score as covered: one unit test shows disabling moves the hash and a different unit test (test_readiness_validators.py::test_is_stale_detects_fingerprint_change) shows a fingerprint change makes a report stale, but no test disables a persisted item and then reads the r… |
 | `AT-07` | 02 | uncovered | Removing the first of two entry blocks renumbers the display order but preserves the survivor's original UUID. | No test in `frontend/src/test/strategyGraph.test.tsx` removes an entry block; the suite only extracts, seeds and round-trips blocks. `grep -rn display_order backend/tests` finds no strategy test asserting identity stability across a removal either. The dynamic-identity invariant (display number is derived, block_id is stable) is therefore unasserted on both lines. |
 | `AOS-04` | 03 | partial | A Trading Signal draft is an Unsaved transient view with no ids and is absent from Ready Check composition. | ADIM 78 FINDING - c2 is the verbatim twin of TS-02.c2 and is UNFALSIFIABLE for the same reason, so it was left open rather than marked. This row's own note already concedes the shape ("Structurally the draft has no composition row to omit, but that is an argument, not an assertion"); ADIM 76 measured why that argument cannot be turned into a failing test. MEASURED again on this base: the opener… |
 | `AOS-06` | 03 | partial | Discarding an unsaved draft leaves no Trash Entry, audit event, hash change or stale Ready Report. | ADIM 78 FINDING - c2 names an action that DOES NOT EXIST as a surface, so no test can fail on it. MEASURED on this base: grepping discard across commands/mainboard.py and routes/mainboard.py returns NOTHING - there is no discard command, no discard endpoint and no discard handler. The only mention anywhere is a comment in frontend/src/pages/OutsourceSignal.tsx:97 stating that "leaving this page… |

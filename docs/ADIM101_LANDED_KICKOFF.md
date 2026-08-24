@@ -1,7 +1,7 @@
 <!-- doc-status: historical -->
-> **HISTORICAL — demoted by ADIM 102 (kabul borcu batch 23, doc 16 Results History BACKEND).**
-> Canlı kickoff `docs/ADIM102_LANDED_KICKOFF.md`. Aşağısı yazıldığı andaki durumu kaydeder;
-> tavanları **bayattır** (`partial` 64 / `debt_class.B` 32 → ADIM 102 sonrası **62 / 30**).
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** Yazıldığı andaki durumu kaydeder;
+> SHA'lar, sayılar, alembic head'i ve "next" maddeleri bayat olabilir. Canlı kickoff artık
+> `docs/ADIM103_LANDED_KICKOFF.md`.
 
 # ADIM 101 LANDED — kabul borcu batch 22 (doc 21 User Manual, backend): iki kriter kapandı · sıradaki slice için kickoff
 

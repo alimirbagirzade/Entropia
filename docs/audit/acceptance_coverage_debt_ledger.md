@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 30 |
+| B | 29 |
 | C | 6 |
 | D | 32 |
-| **open total** | **69** |
+| **open total** | **68** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (30)
+## Class B (29)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -85,7 +85,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `RD-13` | 12 | partial | A second, stale write on the same draft/revision is refused; the first revision survives. | The refusal is proven on two independent mutating surfaces, and the soft-delete case also asserts the non-effect (deletion_state still ACTIVE, no Trash entry) — which is the "first revision is preserved" half. The recovery-affordance clause is untested: no frontend test drives a 409 on the revision append and asserts a reload/compare/new-revision path is offered. MEASURED 2026-08-17 (batch 05),… |
 | `RC-09` | 14 | partial | A dependency change stales the current report and an old fingerprint returns 409 COMPOSITION_STALE. | c3 has no asserting test. The frontend RUN-lock tests (mainboard.test.tsx "locks RUN until a current Ready Check passes", readyCheckShell.test.tsx "keeps RUN locked ... while the state is not ready") all drive state="not_ready"; readyCheck.test.tsx "flags a stale report with a re-run hint" renders the stale badge on a deep-linked report but asserts nothing about a RUN control. Add a case that f… |
 | `TR-07` | 20 | partial | Deleting a Rationale Family with an active assignment is blocked with no dangling assignment and no Trash Entry. | The blocker and the no-dangling-state half are directly asserted (entry count unchanged plus the family absent from the listing). The "repair plan required" half is not: nothing inspects the raised RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and no test walks the sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for restore and for assi… |
-| `TR-08` | 20 | partial | An Admin restore reactivates the same entity and revision with the owner unchanged and no new revision appended. | Three of four clauses are strongly asserted, including the subtle "no new revision" one (root.current_revision_id is captured before the delete and compared after the restore). The outbox half is the gap: commands/deletion.py does call add_outbox_event alongside the "trash.restored" audit row, but the test reads back only AuditEvent.event_kind. No test in the Trash suite queries OutboxEvent on … |
 | `UM-15` | 21 | partial | A delete with a stale stream version is MANUAL_STREAM_CONFLICT, the UI rehydrates with the latest stream, and nothing is deleted. | The server-side half is solid; the client RECOVERY half is unproven. frontend/src/lib/ manual.ts:273 documents "Stale snapshot -> 409 MANUAL_STREAM_CONFLICT verbatim (UM-15)" and UserManual.tsx:806 renders the conflict explanation, but no frontend test drives a 409 MANUAL_STREAM_CONFLICT response and asserts that the stream query is refetched and the composer re-armed with the new version. The … |
 
 ## Class C (6)

@@ -52,6 +52,7 @@ from entropia.infrastructure.postgres.models import (
     HumanCredential,
     HumanUser,
     Job,
+    OutboxEvent,
     Principal,
     TrashEntry,
 )
@@ -327,6 +328,55 @@ async def test_restore_keeps_identity_marks_entry_and_audits(session) -> None:
     # A second fresh restore attempt is a lifecycle conflict, not a repeat.
     with pytest.raises(EntityNotSoftDeletedError):
         await restore_trash_entry(session, ADMIN, trash_entry_id=entry.id)
+
+
+async def test_restore_emits_its_trash_outbox_event(session) -> None:
+    """TR-08.c4: a Trash outbox event is emitted on restore — read back, at last.
+
+    The restore core has always written the pair in one transaction — the
+    ``trash.restored`` audit row AND an ``entity.restored`` outbox row — but
+    every restore test read back only ``AuditEvent``, and the e2e pipeline's
+    trail counter stops at run admission, before its restore step. The ADIM 101
+    lesson verbatim: an emitted event no test reads protects nothing (removing
+    the emission left the whole Trash suite green — measured, NC-1).
+
+    Naming note, not a defect: the audit kind is ``trash.restored`` while the
+    OUTBOX event_type is ``entity.restored``. The shipped names are canonical
+    (O-02 / O-31), so the wire string is pinned here.
+    """
+    await _seed_user_principal(session)
+    root = await create_entity(session, USER, entity_type="demo_entity", payload={"v": 1})
+    await session.commit()
+    await soft_delete_entity(session, USER, entity_id=root.entity_id, reason="cleanup")
+    await session.commit()
+    entry = await _entry_for(session, root.entity_id)
+    entry_id = entry.id
+
+    restored_rows = select(OutboxEvent).where(
+        OutboxEvent.event_type == "entity.restored",
+        OutboxEvent.resource_id == root.entity_id,
+    )
+    # Attribution guard: zero such rows exist BEFORE the restore — the soft
+    # delete's own outbox row rides a different event_type, so the single row
+    # asserted below can only have come from the restore itself.
+    assert (await session.execute(restored_rows)).scalars().all() == []
+
+    restored = await restore_trash_entry(
+        session, ADMIN, trash_entry_id=entry_id, expected_head_revision_id=1
+    )
+    await session.commit()
+    assert restored["deletion_state"] == "active"  # the restore really landed
+
+    session.expire_all()
+    row = (await session.execute(restored_rows)).scalar_one()
+    # ``scalar_one`` pins EXACTLY one emission; then the row in full — resource
+    # typing, the payload as a whole dict (a dropped key survives a key-lookup
+    # comparison, not this), and published_at still NULL because the relay, not
+    # the command, publishes it.
+    assert row.resource_type == "demo_entity"
+    assert row.payload == {"trash_entry_id": entry_id}
+    assert row.correlation_id == ADMIN.correlation_id
+    assert row.published_at is None
 
 
 async def test_restore_stale_version_conflict(session) -> None:

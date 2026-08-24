@@ -8099,6 +8099,26 @@ ile YENİDEN ÖLÇÜLÜR**; taşınan bayat bir freeze `--ratchet`'i sonsuza dek
 (yeni endpoint / tablo / sayfa / job yok).
 `PROJECT_HISTORY.md` §ADIM 102 · `docs/ADIM102_LANDED_KICKOFF.md`.
 
+## Stage 103 — kabul borcu batch 24 (doc 20 Trash, backend): TR-08 kapandı landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** — tek yeni integration case
+(`test_trash_page.py::test_restore_emits_its_trash_outbox_event`) + defter + üretilmiş
+artefaktlar. `TR-08.c4` (restore'un outbox olayı — UM-08.c5'in birebir ikizi: `entity.restored`
+satırı hep yazılıyordu, hiçbir test okumuyordu; e2e pipeline'ın trail sayacı kendi restore'undan
+ÖNCE duruyor) son açık clause'du → `TR-08` **covered**, `debt_class` **KALDIRILDI**. İki negatif
+kontrol: emisyon kaldırılınca 30 testte yalnız yeni test kırmızı (`scalar_one`); payload
+boşaltılınca varlık okuması geçip kırmızı tam-sözlük eşitliğine taşındı (gölge yok).
+**Tavanlar merged ağaçta TAZE ölçüldü: `partial` 62 → 61, `debt_class.B` 30 → 29** (dalın
+#815'siz freeze'i 63/31'di, TAŞINMADI). **Doc 20'nin kapatılabilir backend borcu bitti**
+(kalan: `TR-07` bulgu · `TR-12` sınıf C).
+**SÜREÇ KAYDI:** bu oturum önce batch 23'ü (doc 16, RH-13.c2 + RH-14.c3) sonuna kadar yazdı;
+kapanışta açık **#815**'in aynı iki kriteri `ADIM 102 / batch 23` olarak kapattığı görüldü →
+çift iş **bütünüyle geri alındı** (ADIM 86 emsali), numara **103 / batch 24** alındı (yol
+ölçümü: #815 `docs/ADIM102_LANDED_KICKOFF.md` ekliyor). #815 bu PR açıkken **ADIM 102 olarak İNDİ** (`4dab3de`) →
+dal rebase edildi, `ADIM102` kickoff'u `historical`a demote edildi, canlı işaret `ADIM103`'te. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap
+güncellemesi gerekmedi. `PROJECT_HISTORY.md` §ADIM 103 · `docs/ADIM103_LANDED_KICKOFF.md`.
+
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

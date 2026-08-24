@@ -14443,3 +14443,100 @@ bırakır, çünkü ölçülen < tavan asla kırmızı vermez.
 
 Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
 `docs/ADIM102_LANDED_KICKOFF.md`.
+
+## ADIM 103 — kabul borcu batch 24 (doc 20 Trash, backend): `TR-08` kapandı, ve ÇİFT İŞ GERİ ALINDI
+
+**Tarih:** 2026-08-24 · **Dal:** `claude/entropia-v18-kabul-borcu-96llrh` · **Taban:** main `43dc70d`
+(ADIM 101 / batch 22 = #814). **ÜRÜN KODU DEĞİŞMEDİ** (`backend/src` altında sıfır satır);
+diff = tek yeni integration case + kabul defteri + üretilmiş artefaktlar + kapanış belgeleri.
+Migration yok, OpenAPI değişmedi, `ENGINE_VERSION` değişmedi, alembic head
+`0043_i08_registry_strategy_fks`, `SHARED_ALLOCATION_STATUS` = `future_dev`.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### ASIL OLAY: bu oturum ÖNCE batch 23'ü (doc 16) sonuna kadar yazdı, sonra GERİ ALDI
+
+Oturum başında `list_pull_requests(state=open)` **BOŞ** döndü ve rapor doc 16'yı (RH-13.c2 +
+RH-14.c3, ikisi de son açık clause) en değerli parti gösterdi. İki test yazıldı, **beş negatif
+kontrol** okundu (biri reddedilip yeniden kuruldu), tavanlar 62/30'a indirildi, tüm kapılar
+yeşildi. Kapanış numarası doğrulanırken açık PR listesi **yeniden** ölçüldü ve **#815** göründü:
+paralel bir oturum, bu oturum çalışırken (19:12Z) **birebir aynı iki kriteri** `ADIM 102 /
+batch 23` olarak açmıştı — kendi kaydı, kendi kickoff'u, kendi freeze'iyle, eksiksiz.
+**ADIM 86 emsali uygulandı: açık ve tamamlanmış rakip kazanır** — bu oturumun doc 16 kopyası
+(iki test + map/tavan düzenlemeleri) **bütünüyle geri alındı** (hiç push edilmemişti) ve parti
+ADIM 101 kickoff'unun işaretlediği bir sonraki en ucuz satıra döndü.
+**DERS (ADIM 100'ün "anlık görüntü" dersinin sertleşmiş hâli): boş bir açık-PR listesi alındığı
+OTURUMU bile kapsamaz.** Şimdiye kadarki kayıtlar pencereyi "PR açıkken main ilerler" diye
+çizmişti; bu partide çakışma **dal push edilmeden önce**, iki oturumun AYNI partiyi seçmesiyle
+oluştu. Parti seçiminden sonra ve kapanıştan hemen önce listeyi **iki kez** ölçmek artık
+zorunlu adım. (Geri alınan işten devralınabilir bir bulgu yok: #815'in kendi kanıtları kendi
+kaydında; bu oturumun reddedilen NC'sinin dersi — duplicate metric key'in
+`uq_metric_value_result_key`'e takılması, yani **kısıdın assertion yerine geçmesi** — aşağıdaki
+NC disiplinine taşındı.)
+
+### Kapanan: `TR-08.c4` — restore'un OUTBOX yarısı (UM-08.c5'in birebir ikizi)
+
+Kriterin son açık clause'uydu → `TR-08` **covered**, `debt_class` **KALDIRILDI**.
+**Doc 20 = 14 covered / 2 partial**; kalan iki satırın **hiçbiri kapatılabilir sınıf-B değil**:
+`TR-07` (c3 = repair-plan bulgusu, KAPATMAYA ÇALIŞMA listesinde) · `TR-12` (sınıf C, c4
+retention V1'de bilerek kapalı). **Doc 20'nin kapatılabilir backend test borcu bitti.**
+
+Şekil ADIM 101'in dersinin kendisiydi: `commands/deletion.py::_restore_entry_core` **her zaman**
+`trash.restored` audit satırının yanına `entity.restored` tipli bir **outbox** satırı yazdı
+(`payload={"trash_entry_id": …}`), ve **hiçbir test onu okumadı** — Trash suite'i yalnız
+`AuditEvent.event_kind` okur, e2e pipeline'ın audit/outbox trail sayacı ise **run admission'da
+durur**, kendi restore adımının ÖNCESİNDE. Yeni case
+(`test_trash_page.py::test_restore_emits_its_trash_outbox_event`):
+
+1. **Ad ayrımı pinlendi** — audit kind `trash.restored`, outbox event_type **`entity.restored`**;
+   doc 20 "Trash restore olayı" der, sevk edilen adlar kanoniktir (O-02/O-31).
+2. **Atıf muhafızı** — restore'dan ÖNCE bu entity için sıfır `entity.restored` satırı assert
+   edilir; soft delete'in kendi outbox satırı farklı tipte olduğu için aşağıdaki tek satır ancak
+   restore'dan gelmiş olabilir.
+3. **`scalar_one`** tam olarak BİR emisyon pinler; sonra satırın tamamı: `resource_type`,
+   payload **TAM SÖZLÜK eşitliğiyle** (`{"trash_entry_id": entry_id}` — key lookup bir anahtarın
+   düşmesini görmez), `correlation_id`, ve `published_at is None` (yayımlayan komut değil relay).
+
+**İKİ NEGATİF KONTROL, ikisi de yamanın uygulandığını doğrulayıp `finally`'de geri yazdı, ikisi
+de kırmızının HANGİ assertion'da olduğu okunarak:**
+- **NC-1 (emisyon kaldırıldı):** `test_trash_page` + `test_trash_agent_artifact` +
+  `test_e2e_pipeline` birlikte koştu — **30 testte YALNIZ yeni test kırmızı**, `scalar_one`
+  varlık okumasında (`NoResultFound`). Pipeline'ın **kendi restore'u dahil** her şeyin yeşil
+  kalması, boşluğun iddiası değil **ölçümüdür** (ADIM 101: iz silinse 27 test yeşil kalırdı —
+  burada 29 kaldı).
+- **NC-2 (olay duruyor, payload boşaltıldı):** varlık okuması **GEÇTİ**, kırmızı tam sözlük
+  eşitliğine taşındı → payload ekseni varlık ekseni tarafından **gölgelenmiyor**.
+
+### Tavanlar ve sayılar
+
+**Tavanlar İNDİ: `partial` 62 → 61, `debt_class.B` 30 → 29**; açık borç **69 → 68**
+(A=1 · B=29 · C=6 · D=32). Kriter `covered` 299 → 300, clause `covered` 1057 → 1058 /
+`uncovered` 75 → 74. Korpus 383 kriter / 1175 clause (taban, düşmedi).
+**Bu tavanlar merged ağaçta TAZE `--report`'la ölçüldü** — dalın #815 öncesi freeze'i 63/31
+okuyordu (#815'siz ağaç); rebase sonrası o freeze TAŞINMADI, yeniden ölçüldü (ADIM 93/98
+kuralı: ölçülen < tavan asla kırmızı vermez, bayat freeze kapıyı sonsuza dek yeşil bırakır).
+`test_trash_page.py` 20 → 21 passed.
+
+### NUMARA: `ADIM 103` / `batch 24` — 102 ATLANMADI, açık #815'İN
+
+Kural gereği numara başlıktan değil açık PR'ların **eklediği dosya yolundan** ölçüldü: #815
+`docs/ADIM102_LANDED_KICKOFF.md` yolunu ekliyor → bu kayıt **103 / batch 24**. **#815 bu PR
+açıkken `ADIM 102` olarak İNDİ** (`4dab3de`) → sonra-inen yükü bu dala düştü ve ödendi: dal
+merged main üzerine **REBASE edildi** (*"Update branch"* düğmesi DEĞİL), kickoff demote zinciri
+düzeltildi (`ADIM102` → `historical`, canlı işaret EN YÜKSEK numaralı `ADIM103`'te kaldı —
+`check_classification` kuralı), on belge çakışması **iki taraf da korunarak** çözüldü (§ADIM 102
+ve §ADIM 103 kayıtları yan yana, silinen başlık yok), üretilmiş artefaktlar main'den alınıp
+**yeniden üretildi** ve tavan yukarıda yazıldığı gibi taze ölçüldü.
+
+### Ortam ve dürüst sınır
+
+Container **ÇIPLAK** başladı — `.venv` yok, Postgres cluster yok; ikisi de kuruldu
+(`alembic upgrade head` `LC_ALL=C.UTF-8 PYTHONUTF8=1` ile — `en_US.UTF-8` bu imajda
+`UnicodeDecodeError` verir). Alt kümeler izole `entropia_rh` DB'sinde koştu. `ruff` /
+`ruff format` / `mypy src` temiz; `--report --check-generated --ratchet` ve
+`generate_repository_facts.py --check` yeşil. **DÜRÜST SINIR:** frontend'de sıfır satır → hiçbir
+frontend kapısı koşulmadı; tam backend suite uçtan uca koşulmadı → geçen sayı ve coverage
+**CI'ın otoritesinde**. Geri alınan doc-16 çalışmasının koşuları (47 passed, 5 NC) bu ağaçta
+artık yok; onların kaydı yalnız bu anlatıdadır.
+
+Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
+`docs/ADIM103_LANDED_KICKOFF.md`.

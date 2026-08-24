@@ -7845,6 +7845,43 @@ edilmiş, bu kayıt **ADIM 98 / batch 19**. Numara başlıktan değil **dosya yo
 `PROJECT_HISTORY.md` §ADIM 98 · `docs/ADIM98_LANDED_KICKOFF.md`.
 
 
+## Stage 99 — kabul borcu batch 20 (doc 10 FRONTEND): `RF-18` kapandı landed
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi**, migration **yok**, OpenAPI
+**değişmedi**, `ENGINE_VERSION` **değişmedi**. Belge + yüzey: **doc 10 (Rationale Families),
+frontend** — batch 18'in (doc 10 backend) tümleyeni.
+
+**Kapanan.** `RF-18` (`.c1` — sahnelenmiş yeniden atamalar yalnız istemci durumunda yaşar,
+remount'ta düşer). Son açık clause'du → **covered**, **`debt_class` KALDIRILDI**.
+
+**Neden açıktı.** Mevcut staging testi *stage → SAVE* yönünü sürüyor ve staging kalıcı olsa da
+**yeşil kalır**. Yeni case sahne kurar, **hiçbir yazma gitmediğini** (non-GET istek kümesi boş)
+assert eder, sonra **unmount + remount** edip düşüşü üç yüzeyde birden okur.
+
+**Paylaşımlı `QueryClient` TAŞIYICIDIR ve bu ÖLÇÜLDÜ.** Staging query cache'e park edilmiş bir
+dünyada **taze istemcili** sürüm 9/9 geçiyor, paylaşımlı sürüm kırmızı → taze istemci bir
+**yanlış-negatif harness** olurdu.
+
+**ÜÇ negatif kontrol.** (1) modül düzeyi store → yalnız yeni test kırmızı, **sekiz mevcut case
+YEŞİL** (clause'un açık olduğunun kanıtı) · (2) query cache → aynı assertion kırmızı ·
+(3) **atıf kontrolü** (ADIM 97 kuralı): `renderPage` opsiyonel `client` parametresi aldı, bu yüzden
+(1) yeni case harness'ı **tamamen atlayarak** yeniden koşuldu → yine kırmızı.
+
+**Sayılar — TAVAN İKİ KEZ ÖLÇÜLDÜ.** Dal önce `b7e66ad`'e karşı **71 → 70 / 39 → 38** ölçtü;
+**#811 (ADIM 98) aynı baseline'a iki kriter daha yazarak indi** → rebase + `--ratchet` **yeniden**:
+`partial` **69 → 68**, `debt_class.B` **37 → 36**; açık borç **75** (A=1 · B=36 · C=6 · D=32).
+İki freeze **çıkarılmadı**. **Doc 10'da testin kapatabileceği satır KALMADI** (kalan: `RF-08`
+kayıtlı bulgu + `RF-04`/`RF-13` sınıf D).
+
+**Dürüst sınır.** Tam frontend suite yerelde koştu (**72 dosya / 736 passed**, coverage yeşil,
+lint + typecheck temiz). **Backend'e sıfır satır → backend kapıları koşulmadı**, otorite CI.
+
+**NUMARA.** #811 **ADIM 98 / batch 19** olarak indi (doc 14, `RC-10` + `RC-17`) → bu kayıt
+**99 / batch 20**; `96` boşluk değil, #811'in taşıdığı numaradır. İkinci inen taraf bu daldı, o
+yüzden **rebase edip tavanı yeniden ölçen** de bu dal oldu.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 99 ·
+`docs/ADIM99_LANDED_KICKOFF.md`.
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 

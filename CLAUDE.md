@@ -237,7 +237,33 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 98 (kabul borcu batch 19, doc 14 Ready Check BACKEND): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 99 (kabul borcu batch 20, doc 10 FRONTEND): ÜRÜN KODU
+> DEĞİŞMEDİ, tek vitest case + bir opsiyonel harness parametresi + defter. Blocker sayısı
+> DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Tek clause **`RF-18.c1`** (sahnelenmiş yeniden
+> atamalar remount'ta düşer) → `RF-18` **covered**, **`debt_class` KALDIRILDI**.
+> **DERS (yeni kontrol kuralı): "durum kayboldu" iddiasını ölçerken cache'i SICAK tut** —
+> remount **AYNI** `QueryClient` ile yapılır; staging query cache'e park edilmiş bir dünyada
+> **taze istemcili** sürüm **9/9 geçiyor** (ölçüldü), yani taze istemci bir **yanlış-negatif
+> harness**. **ÜÇ negatif kontrol:** modül düzeyi store → **yalnız** yeni test kırmızı, **sekiz
+> mevcut case YEŞİL KALIR** (clause'un açık olduğunun kanıtı; mevcut staging testi *stage → SAVE*
+> yönünü sürüyor ve kusuru göremiyor) · query cache → aynı assertion · **atıf kontrolü**
+> (ADIM 97 kuralı): `renderPage` opsiyonel `client` parametresi aldığı için birinci kontrol yeni
+> case **harness'ı tamamen atlayarak** yeniden koşuldu → yine kırmızı.
+> **DOC 10'DA TESTİN KAPATABİLECEĞİ SATIR KALMADI** (kalan `RF-08` kayıtlı bulgu +
+> `RF-04`/`RF-13` sınıf D). **TAVAN #811 İNDİKTEN SONRA YENİDEN ÖLÇÜLDÜ, İKİ FREEZE
+> ÇIKARILMADI** — bu dal `b7e66ad`'de 71→70 / 39→38 ölçmüştü, #811 aynı dosyaya iki kriter daha
+> yazdı; merged ağaçta taze `--ratchet`: **`partial` 69 → 68, `debt_class.B` 37 → 36**, açık
+> borç **75** (A=1 · B=36 · C=6 · D=32). **DÜRÜST SINIR:** tam frontend suite **yerelde koştu**
+> (72 dosya / **736 passed**, coverage kapısı yeşil, lint + typecheck temiz); **backend'e sıfır
+> satır → hiçbir backend kapısı koşulmadı ve Postgres kurulmadı**, otorite CI.
+> **NUMARA: `96` boşluk DEĞİL — #811 onu `98`'e taşıyıp aldı**; bu kayıt **99 / batch 20**.
+> `PROJECT_HISTORY.md` §ADIM 99 · `docs/ADIM99_LANDED_KICKOFF.md`.
+>
+>
+
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. **Öncesinde ADIM 98 (kabul borcu batch 19, doc 14 Ready Check BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, üç yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.**
 > İki kriter kapandı — **`RC-10.c2`** (*"yeni bir katalog revizyonu tek başına raporu stale

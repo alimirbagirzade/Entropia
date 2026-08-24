@@ -59,7 +59,7 @@ for this map.
 | 07 | 18 | 3 | 1 | 0 | 0 | 0 | 22 |
 | 08 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
 | 09 | 15 | 5 | 0 | 0 | 0 | 0 | 20 |
-| 10 | 14 | 4 | 0 | 0 | 0 | 0 | 18 |
+| 10 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 11 | 4 | 2 | 0 | 0 | 2 | 0 | 8 |
 | 12 | 9 | 6 | 0 | 0 | 0 | 0 | 15 |
 | 13 | 4 | 1 | 0 | 0 | 4 | 0 | 9 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 4 | 5 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **292** | **69** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **293** | **68** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1050 |
+| covered | 1051 |
 | partial | 4 |
-| uncovered | 82 |
+| uncovered | 81 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 37 |
+| B | 36 |
 | C | 6 |
 | D | 32 |
-| **open total** | **76** |
+| **open total** | **75** |
 
-## Partial criteria (69)
+## Partial criteria (68)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -147,7 +147,6 @@ for this map.
 | `RF-04` | D | After a Family rename an old Backtest Run still shows the previous Family snapshot from its manifest. | Only the package-revision half is asserted. No test renames a Family and then reads an already-admitted Backtest Run's manifest: the manifest built by commands/backtest_run_context.py pins only `rationale_family_id` (an id, no display snapshot), so "previous Family snapshot görünür" has no asserting test at the Run level, and no test asserts the run/result rows are untouched by a rename. The assignment-table test even asserts the OPPOSITE for the live projection (current_family_name follows the rename), which is correct per doc 10 §8.5 but is not the RF-04 manifest claim. |
 | `RF-08` | B | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
 | `RF-13` | D | An Agent with the UI closed runs a create-Family command; root/revision/audit land server-side and the UI shows them on a later query. | No test executes `create_family` as an AGENT actor, and there is no rationale-family tool on the Agent Tool Gateway (`jobs/agent_tools.py` exposes no `rationale_family.*` tool), so the literal scenario — "Agent runs a new-Family create command with the UI closed" — is not reachable through the Agent surface at all. What IS proven is adjacent: the policy admits an AGENT principal, and an AGENT actor does persist other rationale mutations (batch assign, soft delete) with audit and Trash rows, which a later list query then reflects. |
-| `RF-18` | B | A browser refresh with a dirty assignment table may lose staged changes; only persisted canonical server state returns. | No test unmounts/remounts the page (or otherwise simulates a refresh) with pending staged changes and asserts the "1 pending change(s)" staging is gone. The staging test asserts staging then SAVE, which is the opposite direction. The canonical-server-state half is proven only in the weak sense that the rendered rows come from the stubbed GET response. |
 | `MKD-02` | B | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The Research side of the boundary is genuinely proven: the funding schedule is resolved through a Research revision with an Approved + category + content-hash gate. |
 | `MKD-04` | D | The Agent reaches the same Market Data domain capabilities through the Tool Gateway with no browser, and holds no approval authority. | Judged as behaviour. The parity half is real and asserted through the Tool Gateway. The approval half is asserted for a USER and a GUEST but never for an AGENT actor: `ensure_can_approve` gates on `actor.is_admin`, which is False for a role-less AGENT, yet tests/unit/test_market_policy.py defines no AGENT principal. There is also no market-data create/revise tool on the gateway, so "same domain capabilities" is proven only for the read/resolve surface. |
 | `RD-01` | B | Without an approved Market Data link the creator stays locked and the server returns DEPENDENCY_BLOCKED. | The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server command + route). The criterion names "create draft/analysis command" — only create is exercised; no test posts /research-datasets/{id}/analysis without a linked market dependency and asserts DEPENDENCY_BLOCKED. ADIM 54 FINDING — c4 is very likely MISCLASSIFIED and no test can close it. The clause wants the ANALYSIS command to be DEPENDENCY_BLOCKED under a missing market link, but commands/research_data.py::request_research_dataset_analysis has no such gate — and needs none: market_entity_id is a REQUIRED argument of create_research_dataset and _resolve_market_link raises DependencyBlocked there, so a dataset without an approved market link cannot exist. (Approval re-resolves the link too.) Left at class B deliberately: moving it would RAISE a ceiling, which is an adjudication, not a test slice's call. |

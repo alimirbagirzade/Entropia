@@ -13980,3 +13980,76 @@ tarafı da koruyacak** şekilde elle çözüldü: ADIM 95'in `PROJECT_HISTORY` k
 girdisi **silinmedi**, kickoff'u `historical`a demote edildi, üretilmiş artefaktlar
 **yeniden üretildi** ve `--ratchet` merged ağaçta **yeniden koşuldu**. `## ADIM` kayıt sayısı
 **89 → 90**, silinen kayıt **yok**.
+
+## ADIM 99 — kabul borcu batch 20 (doc 10 FRONTEND): `RF-18` kapandı, doc 10'un test borcu bitti
+
+**Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi** (`backend/src` ve `frontend/src/pages`,
+`frontend/src/lib` altında sıfır satır), migration **yok**, OpenAPI **değişmedi**, `ENGINE_VERSION`
+**değişmedi**, `SHARED_ALLOCATION_STATUS` **değişmedi** (`future_dev`). Belge + yüzey:
+**doc 10 (Rationale Families), FRONTEND** — batch 18'in (#806, doc 10 backend) tümleyeni.
+
+**Kapanan.** `RF-18` (`.c1` — sahnelenmiş, kaydedilmemiş yeniden atamalar yalnız istemci
+durumunda yaşar ve remount/refresh'te düşer). Kriterin **son açık clause'uydu** → `RF-18`
+**covered**, **`debt_class` KALDIRILDI**.
+
+**Neden açıktı (rule 1, ölçüldü).** Mevcut staging testi *stage → SAVE* yönünü sürüyor; staging
+kalıcı olsa da düşse de **yeşil kalır**, yani bu clause'un koruduğu kusuru göremez. Yeni assertion
+bu yüzden **başka eksende**: sahne kur, **sunucuya hiçbir yazma gitmediğini** (non-GET istek kümesi
+boş — sayı değil **küme** olarak okunur ki ileride eklenecek bir GET bir yazmayı maskeleyemesin),
+sonra **unmount + remount** ve staging'in düştüğünü onu açığa vuran **üç yüzeyin üçünde birden**
+oku (select sunucu değerinde, `no pending changes`, Save disabled, Reset kontrolü yok). Remount'tan
+sonra **ikinci bir boş-yazma assertion'ı**: düşen bir staging sessizce kaydedilmiş olmamalı.
+
+**PAYLAŞIMLI `QueryClient` TAŞIYICIDIR, ÜSLUP DEĞİL — ve bu ÖLÇÜLDÜ.** Remount kasten **aynı**
+`QueryClient` ile yapılır. Staging query cache'e park edilmiş bir dünyada **taze istemcili** sürüm
+**9/9 geçiyor**, paylaşımlı sürüm **kırmızı**: taze bir istemci her implementasyonu önemsizce
+düşürür, yani taze istemcili test bir **yanlış-negatif harness** olurdu. Ölçüm assertion'ın yanına
+yazıldı.
+
+**ÜÇ negatif kontrol, üçünde de hangi assertion'ın kırmızıya döndüğü OKUNARAK.**
+(1) Staging'i **modül düzeyi** bir store'a taşımak remount'ta hayatta bırakır → **yalnız yeni test**
+kırmızı (post-remount select değeri), **sekiz mevcut case YEŞİL KALIR** — clause'un gerçekten açık
+olduğunun kanıtı budur. (2) Staging'i **query cache'e** yazmak → aynı assertion kırmızı.
+(3) **Atıf kontrolü** (ADIM 97'nin yeni kuralı): `renderPage` **opsiyonel** bir `client` parametresi
+aldı (varsayılan taze `QueryClient` → sekiz mevcut çağıran bayt bayt aynı), bu yüzden (1) numaralı
+kontrol yeni case **`renderPage`'i tamamen atlayıp inline render ederek** yeniden koşuldu →
+**yine aynı assertion'da kırmızı**, yani red **ürün kusurudur, parametre değil**. Her kontrolden
+sonra ürün dosyası **bayt bayt geri yüklendi**; pristine ağaçta 9/9 yeşil.
+
+**TL-18 EMSALİ ÖNCE KOŞULDU.** Parti seçilmeden önce test ağacı kriter id'si için grep'lendi
+(`grep -rn 'RF-18' frontend/src backend/tests` → **boş**), yani bu bir defter gözden kaçması değil
+gerçek kapsama boşluğuydu.
+
+**Sayılar — ZİNCİR ATEŞLENDİ, TAVAN İKİ KEZ ÖLÇÜLDÜ VE İKİNCİSİ OTORİTEDİR.** Dal önce
+`b7e66ad`'e karşı donduruldu (**71 → 70** partial, **39 → 38** B) ve o ölçüm o ağaçta **doğruydu**;
+sonra **#811 (ADIM 98 / batch 19, doc 14) aynı baseline dosyasına iki kriter daha yazarak indi** →
+dal `2b41cf8` üstüne **rebase edildi** ve `--ratchet` **yeniden koşuldu**: `partial` **69 → 68**,
+`debt_class.B` **37 → 36**; açık borç **75** (A=1 · B=36 · C=6 · D=32), clause `covered`
+**1049 → 1051**, `uncovered` **83 → 81**. **`b7e66ad` sayısını taşımak tavanı gerçek sayının iki
+üstünde bırakırdı ve `--ratchet` sonsuza dek yeşil kalırdı** (ölçülen < tavan asla kırmızı vermez) —
+ADIM 91 ve ADIM 98'in aynı tuzağı. İki parti **ayrık** (doc 10 frontend ↔ doc 14 backend, ayrı test
+dosyaları), bu yüzden rebase ikisini de koruyor. **Hiçbir sayı iki freeze'in farkından
+türetilmedi.** **Doc 10'da testin kapatabileceği satır KALMADI** —
+kalan üç satırın biri kayıtlı bulgu (`RF-08`, batch 18'in `RF_08_c2_reserved_name_ships_no_remediation`
+kaydı, kullanıcıya görünen metin = **ürün kararı**), ikisi sınıf D (`RF-04`, `RF-13`).
+
+**Üretilmiş artefaktlar kendi jeneratörüyle tazelendi** (#809'un `--check-generated` kapısı):
+defter + izlenebilirlik raporu `--write-ledger`/`--write-report` ile, `repository_facts` üçlüsü
+(json + md + README bloğu) `generate_repository_facts.py --root ..` ile. Elle düzenleme **yok**.
+`--report --check-generated --ratchet` (ci.yml'ın birebir çağrısı) **yeşil**.
+
+**Dürüst sınır.** `npm ci` koşuldu ve **tam frontend suite yerelde koştu**: `72 dosya / 736 passed`,
+coverage kapısı yeşil (`Lines 84.92%`), `lint` + `typecheck` temiz. **Backend'e sıfır satır
+dokunuldu → hiçbir backend kapısı koşulmadı ve bu dal için Postgres kurulmadı**; backend'in geçen
+sayısı ve coverage'ı **CI'ın otoritesinde**. e2e/`@a11y` **yazılmadı** (koşulamayan suite'e
+assertion yazılmaz).
+
+**NUMARA — ve `96` BOŞLUK OLMADI.** Bu kayıt yazılırken `95` ve `97` main'deydi, `96` boşluk
+adayıydı ve `98`'i **açık** #811 talep ediyordu. #811 sonra **`ADIM 98` / `batch 19` olarak İNDİ**
+(kendisi de `96`'dan taşınmıştı) → `96` bir boşluk **değil**, taşınmış bir numaradır ve bu kayıt
+**`ADIM 99` / batch 20**'dir. **ADIM ile batch numarası bağımsız taşınır** (#809 hiç batch numarası
+taşımadı). Çakışma başlıkta değil **dosya yolunda** ölçüldü; `check_classification` onu görmez, ama
+canlı işaretin **en yüksek numaralı** dosyada olmasını ister → bu dal `docs/ADIM98_LANDED_KICKOFF.md`'yi
+`historical`a demote etti.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `docs/ADIM99_LANDED_KICKOFF.md`.

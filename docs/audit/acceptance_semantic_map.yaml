@@ -12392,7 +12392,10 @@ criteria:
   clauses:
   - id: RF-18.c1
     text: Staged (unsaved) reassignments live only in client state and are discarded on remount/refresh.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - frontend/src/test/rationaleFamilies.test.tsx > Rationale Families page > discards staged
+      reassignments on remount, leaving only the server projection
   - id: RF-18.c2
     text: After reload the assignment table renders exactly the server projection (GET /package-rationale-assignments).
     status: covered
@@ -12405,11 +12408,15 @@ criteria:
   test_evidence:
   - frontend/src/test/rationaleFamilies.test.tsx > Rationale Families page > renders the family registry
     and the package assignment table (two shared projections)
+  - frontend/src/test/rationaleFamilies.test.tsx > Rationale Families page > discards staged
+      reassignments on remount, leaving only the server projection
   evidence_type:
   - frontend_component
   positive:
   - frontend/src/test/rationaleFamilies.test.tsx > Rationale Families page > renders the family registry
     and the package assignment table (two shared projections)
+  - frontend/src/test/rationaleFamilies.test.tsx > Rationale Families page > discards staged
+      reassignments on remount, leaving only the server projection
   negative: []
   auth: []
   occ: []
@@ -12417,12 +12424,27 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: No test unmounts/remounts the page (or otherwise simulates a refresh) with pending staged
-    changes and asserts the "1 pending change(s)" staging is gone. The staging test asserts staging
-    then SAVE, which is the opposite direction. The canonical-server-state half is proven only in
-    the weak sense that the rendered rows come from the stubbed GET response.
+  status: covered
+  notes: 'Was: "No test unmounts/remounts the page (or otherwise simulates a refresh) with pending
+    staged changes and asserts the \"1 pending change(s)\" staging is gone. The staging test asserts
+    staging then SAVE, which is the opposite direction." CLOSED by acceptance batch 20. c1 is now
+    driven directly: the case stages Cross Up -> Momentum, asserts the staging is visible AND that
+    it reached the server not at all (the non-GET request set is empty), then unmounts and remounts
+    the page and reads the discard on all three surfaces that expose it (the select back at the
+    server value, "no pending changes", Save disabled, no Reset control), plus a second empty-write
+    assertion so a discard cannot have been a silent flush. THE REMOUNT DELIBERATELY REUSES THE SAME
+    QueryClient, and that choice is load-bearing rather than stylistic: measured, with staging parked
+    in the query cache the fresh-client version of this test passes 9/9 while the shared-client
+    version goes red, because a fresh client discards every implementation trivially. THREE negative
+    controls, each read for WHICH assertion reddened. (1) Staging lifted to a module-level store
+    survives the remount: red at the post-remount select value, and the eight pre-existing cases stay
+    GREEN - which is precisely why this clause was open, since the sibling staging test asserts stage
+    -> SAVE and cannot distinguish persisted staging from discarded staging. (2) Staging written to
+    the query cache: red at the same assertion. (3) Attribution control for the harness change - this
+    slice gave renderPage an OPTIONAL client parameter (defaulted to a fresh QueryClient, so all eight
+    existing call sites are unchanged), so control (1) was re-run with the new case rendering inline
+    and bypassing renderPage entirely: still red at the same assertion, so the red is the product
+    defect and not the parameter. Product code was restored byte-for-byte after each control.'
 - id: MKD-01
   document: docs/spec/11_Entropia_V18_Market_Data_Page_Documentation_v1_1.md
   section: '13'

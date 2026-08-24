@@ -237,7 +237,17 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 101 (kabul borcu batch 22, doc 21 User Manual BACKEND): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 102 (kabul borcu batch 23, doc 16 Results History BACKEND):
+> ÜRÜN KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.**
+> İki kriter kapandı — **`RH-13.c2`** (profil değişimi History digest'ini
+> kıpırdatmaz) · **`RH-14.c3`** (`artifact.create` referans verdiği Result satırına yazmaz);
+> ikisi de son açık clause'du → `debt_class`'ları **KALDIRILDI** ve **doc 16 BİTTİ (16/16)**.
+> **Tavanlar İNDİ: `partial` 64 → 62 · `debt_class.B` 32 → 30** (açık borç 71 → 69).
+> Taban `43dc70d`. Tam kayıt: `PROJECT_HISTORY.md` §ADIM 102 ·
+> `docs/ADIM102_LANDED_KICKOFF.md`.
+
+> Öncesinde **ADIM 101 (kabul borcu batch 22, doc 21 User Manual BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.**
 > İki kriter kapandı — **`UM-08.c5`** (soft delete'in izi) · **`UM-13.c3`** (eşzamanlı append);

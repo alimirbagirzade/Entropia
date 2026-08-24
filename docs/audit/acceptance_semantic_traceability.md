@@ -65,22 +65,22 @@ for this map.
 | 13 | 4 | 1 | 0 | 0 | 4 | 0 | 9 |
 | 14 | 17 | 1 | 0 | 0 | 0 | 0 | 18 |
 | 15 | 7 | 1 | 0 | 1 | 0 | 0 | 9 |
-| 16 | 14 | 2 | 0 | 0 | 0 | 0 | 16 |
+| 16 | 16 | 0 | 0 | 0 | 0 | 0 | 16 |
 | 17 | 11 | 3 | 2 | 0 | 0 | 0 | 16 |
 | 18 | 18 | 0 | 0 | 0 | 0 | 0 | 18 |
 | 19 | 4 | 2 | 0 | 1 | 1 | 0 | 8 |
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 6 | 3 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **297** | **64** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **299** | **62** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1055 |
+| covered | 1057 |
 | partial | 4 |
-| uncovered | 77 |
+| uncovered | 75 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 32 |
+| B | 30 |
 | C | 6 |
 | D | 32 |
-| **open total** | **71** |
+| **open total** | **69** |
 
-## Partial criteria (64)
+## Partial criteria (62)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -158,8 +158,6 @@ for this map.
 | `PE-06` | D | Trash is Admin-only, historical integrity holds, and an immutable artifact reference blocks purge. | Judged as behaviour. The Admin-only and historical-integrity halves are solidly asserted. The specific claim "immutable artifact reference purgeyi bloklar" is NOT asserted for an allocation plan or for a Result-pinned object: the only PURGE_NOT_ELIGIBLE branches in jobs/purge.py::_purge_preflight are the built-in manual baseline, a live Agent source task, and a work_object with an active run — and `_RESULT_ENTITY_TYPE` returns early (a Result is purgeable, the parent manifest being retained instead). So the closest proofs are analogous dependency blocks, not the allocation-plan case the row describes. |
 | `RC-09` | B | A dependency change stales the current report and an old fingerprint returns 409 COMPOSITION_STALE. | c3 has no asserting test. The frontend RUN-lock tests (mainboard.test.tsx "locks RUN until a current Ready Check passes", readyCheckShell.test.tsx "keeps RUN locked ... while the state is not ready") all drive state="not_ready"; readyCheck.test.tsx "flags a stale report with a re-run hint" renders the stale badge on a deep-linked report but asserts nothing about a RUN control. Add a case that feeds a STALE/is_current=false readiness projection to the Mainboard or RUN page and asserts the admit button is disabled. |
 | `BR-08` | C | The V18 prototype's local booleans, hard-coded metrics and DOM delete do not stand in for Production. | This row mixes two kinds of claim, so it is split. c1/c2 are real product behaviour and are asserted. c3 is a document-conformance statement about the V18 mockup file (docs/spec/index_guncellenmis_duzeltilmis_v18.html) not being the canonical Production spec — there is no product behaviour to assert, and CLAUDE.md records the Graphic View renderer as deliberately out of V1 scope, so no test could prove it without inventing a renderer. Rolled up to partial rather than covered because one clause carries no product assertion at all. |
-| `RH-13` | B | Dropping a metric from the Result View profile never deletes historic values or the manifest. | c2 has no asserting test: no test lists Results History before and after applying a narrower metric profile to prove the row-level key_metrics digest is unaffected by a presentation preference. c3 is proven only incidentally — the pipeline test applies a personal profile revision and later asserts manifest_after.manifest_hash equals the admission hash, but the assertion is framed around the Trash round trip, not the profile change. Add a direct list_backtest_results comparison across a create_metric_profile_revision call. ADIM 55 measured c2 and deferred it rather than rushing: `results_history._digest_from_rows` filters on the CONSTANT KEY_METRIC_KEYS, so a Result View profile revision cannot reach the digest — but proving it needs the metric REGISTRY seeded before create_metric_profile_revision will validate a selection (MetricCodeUnknownError otherwise). Plumbing, not doubt about the behaviour. |
-| `RH-14` | B | A headless Agent queries a result and writes a provenance-linked artifact without mutating the Result. | c3 has no asserting test: the agent-loop test asserts the artifact, its source_task_id and its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary) after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash snapshot before and after the artifact.create dispatch. ADIM 55 measured c3 and deferred it rather than rushing: create_analysis_artifact is capability-gated, so the proof needs the capability registry walked to Limited (test_capability_output_history::_walk_to_limited), whose seeding helper collides with this module's principals. Plumbing, not doubt about the behaviour. |
 | `AM-11` | D | Total Stops and Max Stop Streak follow the trade root's terminal reason; a partial stop leg shows only in diagnostics. | The decisive clause is untested AND the implementation looks like it contradicts the criterion: `booking.py::close_position` increments `led.stops_hit` / `led.stop_streak` whenever `reason == "stop_loss"` regardless of `is_full`, while the TradeRow it appends is relabelled `partial_exit`. So a partial stop leg would appear to count toward Total Stops. `grep -rn partial_exit backend/tests` finds six hits, none of which asserts `total_stops` / `max_stop_streak`, so no test would catch it either way. This one deserves a product/engineering decision, not just a test. |
 | `AM-12` | D | When a selected code becomes future in the registry, historical revisions survive, the active profile shows a repair warning and Apply with the invalid code fails. | Only the "Apply with an invalid code never succeeds" clause has a test, and it tests a code that was ALWAYS future rather than one that DRIFTED after being selected. No test mutates a `metric_definition.availability_status` after a profile revision pinned that code, so neither the historical-revision-survives clause nor the repair warning has any evidence; grepping the registry/profile modules turns up no repair/warning concept to point at. |
 | `AM-16` | C | The V18 screen keeps its nine default metrics, future reference list, action labels and status wording; the V10 typo is fixed in Production V1. | The registry-shape and label clauses have real asserting tests. The third clause ("Production V1'de V10 typo düzeltilir") is a document-conformance statement about the V18 mockup's own text, not a product behaviour a test can assert, so it is marked not_applicable with no evidence — which keeps the criterion as a whole at partial rather than covered. Note also that the frontend fixture uses a 3-metric registry, so the "nine checked in registry order" rendering is proven on the backend side only. |

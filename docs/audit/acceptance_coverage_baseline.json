@@ -56,12 +56,12 @@
   "ceilings": {
     "total_criteria": 383,
     "status": {
-      "partial": 64,
+      "partial": 62,
       "uncovered": 7
     },
     "debt_class": {
       "A": 1,
-      "B": 32,
+      "B": 30,
       "C": 6,
       "D": 32
     }

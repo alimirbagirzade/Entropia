@@ -14302,3 +14302,144 @@ bırakır, çünkü ölçülen < tavan asla kırmızı vermez.
 
 Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
 `docs/ADIM101_LANDED_KICKOFF.md`.
+
+## ADIM 102 — kabul borcu batch 23 (doc 16 Results History, backend): `RH-13` + `RH-14` kapandı, DOC 16 BİTTİ
+
+> **ÜRÜN KODU DEĞİŞMEDİ — yalnız test + defter.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Taban `43dc70d` (`ADIM 101` / batch 22).
+
+**Diff:** `backend/tests/integration/test_result_row_immutability.py` (+2 case, +3 yardımcı) ·
+`docs/audit/acceptance_semantic_map.yaml` · üç üretilmiş artefakt
+(`acceptance_semantic_traceability.md`, `acceptance_coverage_debt_ledger.md`,
+`repository_facts.{json,md}` + README'nin gömülü bloğu) · `acceptance_coverage_baseline.json` ·
+kapanış belgeleri. **`backend/src` altında sıfır satır.**
+
+**Doc 16 (Results History) artık 16 covered / 0 partial — her sınıftan sıfır açık borç.** Bu
+partinin seçim gerekçesi buydu: doc 16'nın açık kalan iki satırı da sınıf B, ikisi de backend,
+ikisi de kendi kriterinin tek açık clause'u; ikisini kapatmak **bir belgeyi bitirir**.
+
+### Kapanan iki kriter
+
+**`RH-13.c2` — "The Results History key-metric digest is unchanged by a Result View profile change."**
+
+Clause, doc 17 (Arrange Metrics — kişisel, revize edilebilir bir **görünüm tercihi**) ile doc 16
+§9.4 (`key_metrics` — **değişmez tarihsel kayıt** üzerindeki sabit digest) arasındaki sınırı
+adlandırır. O sınırı hiçbir şey iddia etmiyordu: hiçbir test History'yi daraltılmış bir profil
+öncesi ve sonrası listelemiyordu.
+
+Davranış **sevk edilmiş**: `results_history._digest_from_rows` ve `_load_digests` **SABİT**
+`KEY_METRIC_KEYS` üzerinde filtreler (`domain/backtest/history.py:73`), yani bir profil revizyonu
+digest'e **erişemez**. ADIM 55 bunu ölçmüş ama kapatmayı *plumbing* diyerek ertelemişti:
+`create_metric_profile_revision` bir seçimi doğrulamadan önce metrik **REGISTRY**'si seedlenmiş
+olmalıdır, yoksa `MetricCodeUnknownError`. Bu parti plumbing'i
+`test_arrange_metrics::_seed_registry` ödünç alarak sağladı.
+
+`test_result_view_profile_change_does_not_move_the_history_digest`:
+
+1. Registry + result seedlenir (`_one_result` beş anahtar metriği de yazar).
+2. `_history_digest` History'yi listeler ve bu result'ın `key_metrics`'ini döndürür —
+   **`session.expire_all()` ile**, identity map'in cevaplaması bir totoloji olurdu (ADIM 100).
+3. **Vacuity (1):** digest gerçekten DOLU mu? Beş `None` kendine eşit olurdu ve hiçbir şey
+   kanıtlamazdı → `all(before[key] is not None ...)`.
+4. Kişisel profil revizyonu uygulanır: **yalnız `profit_factor` + `total_stops`** — yani beş
+   anahtar metriğin **HEPSİ** düşürülür, clause'un en güçlü biçimi.
+5. **Vacuity (2):** komutun GERÇEKTEN persist ettiği seçim geri okunur (istenen değil), ve o
+   seçimin `KEY_METRIC_KEYS` ile kesişimi **boş** olmalıdır.
+6. Hedef: `_history_digest(...) == before` — **tam sözlük eşitliği**. Düşen anahtar da, eklenen
+   anahtar da, değişen bir `label`/`unit`/`value_format` hücresi de kırmızı verir (ADIM 98/101).
+
+**`RH-14.c3` — "Creating the artifact leaves the BacktestResult row unmodified."**
+
+`RH-14.c1/c2` agent-loop e2e testiyle asserted, ama o test **yalnız İLERİ okur**: artifact,
+`source_task_id`, `ArtifactLink`. `BacktestResult`'ı `artifact.create` sonrasında **hiç geri
+okumaz**. Link artifact tarafında durduğu için mutasyonun olmaması inşadan gelir — ama bu bir
+**argümandır, bir assertion değil**.
+
+`test_agent_artifact_create_leaves_the_referenced_result_row_untouched` sevk edilmiş gateway
+yolunu sürer (`dispatch_tool_call(tool_name="artifact.create", policy_scope="research")`),
+GERÇEK bir persist edilmiş result'a karşı; id hem `evidence_refs`'te hem bir
+`{"target_type": "backtest_result", ...}` provenance link'inde taşınır — yani artifact,
+kıpırdamadığı iddia edilen satıra **gerçekten** referans verir. Sonra `_snapshot` ile **her
+dayanıklı sütun** artı `_manifest_snapshot` geri okunur.
+
+> **ÖLÇÜM DÜZELTMESİ.** ADIM 55 bu clause'u *"`create_analysis_artifact` capability-gated, kanıt
+> için capability registry'yi Limited'a yürütmek gerekir, ve o seeding yardımcısı bu modülün
+> principal'larıyla çakışır"* diye kaydetmişti. Bu **yanlıştı**: o ad
+> `commands/capability.py::create_analysis_artifact`'e aittir; `RH-14`'ün adlandırdığı yol
+> **agent tool gateway'in `artifact.create`**'idir (`jobs/agent_tools.py::_create_agent_artifact`)
+> ve **capability-gated DEĞİLDİR**. Ne yürüyüş gerekti, ne çakışma doğdu — gereken tek plumbing
+> bir `Principal` + `AgentRuntime` + bir task satırıydı. Bu bir **yeniden sınıflandırma değildir**
+> (tavan yükselmez), yalnız ertelemenin gerekçesinin düzeltilmesidir.
+
+### İki negatif kontrol — ikisi de HEDEF assertion'ında
+
+Her ikisi de: yamanın uygulandığını **eşleşme sayısıyla** assert etti, ağacı `finally`'de geri
+yazdı, ve **her turdan sonra `git status` okundu** (ADIM 100 — `finally` SIGTERM'de koşmaz).
+
+- **NC-1** — `list_backtest_results`'ta digest çağıranın **kişisel profil seçiminden** geçirilir
+  (clause'un yasakladığı sızıntının ta kendisi). Hedef **eşitlik** assertion'ında kırmızı, beş
+  hücre de `None`. **Aynı kusur altında `test_results_history` + `test_arrange_metrics` 39/39
+  YEŞİL.**
+- **NC-2** — `_create_agent_artifact` provenance link'i üzerinden **yazar**
+  (`row_version += 1`). Hedef **snapshot** assertion'ında kırmızı, diff tam olarak
+  `row_version 2 != 1`. **Aynı kusur altında agent-loop + trash-artifact + tool-gateway 24/24
+  YEŞİL — `RH-14`'ün KENDİ kanıt testi dahil.**
+
+**GÖLGE YOK ve bu ölçüldü:** her iki kontrolde de hedeften ÖNCEKİ non-vacuity assertion'ları
+GEÇTİ (NC-2'de *"çağrı succeeded"* + *"link tam olarak bu result'ı gösteriyor"*; NC-1'de iki
+vacuity kapısı), yani ilk kırmızı hedefi gölgelemedi. Her iki kusurun mevcut suite'leri yeşil
+bırakması, yeni assertion'ların **başka bir eksene** baktığının kanıtıdır — ADIM 88'in ayrımıyla:
+kapsama, işaretleme değil.
+
+### Pazarlıksız — bu slice'ın öğrendikleri
+
+1. **`expire_all()` ELDEKİ HER NESNEYİ EXPIRE EDER, yalnız geri okuduğunu değil.** ADIM 100
+   identity map'i *"geri okumadan önce `expire_all`"* diye kaydetmişti; ters yönü de vardır.
+   `_reread` içindeki `expire_all` **task nesnesini de** expire etti, ve sonraki `task.task_id`
+   sync bağlamda lazy-load olup **`MissingGreenlet`** verdi. Kural: **expire edici bir çağrıdan
+   ÖNCE ihtiyacın olan skaler id'leri yakala.**
+2. **NEGATİF KONTROL DOĞRULAYICISI, EKLEME YAMASINI REDDEDEBİLİR.** `assert new in after and
+   old not in after` bir **değiştirme** varsayar; `new`, `old`'u İÇEREN bir **ekleme** yamasında
+   bu koşul asla sağlanamaz ve harness sahte bir *"patch NOT applied"* verir. Doğru kontrol
+   `after.count(new) == 1`'dir. Harness'in yanlış alarmı, sessiz bir yeşilden iyidir — ama
+   doğrulayıcının kendisi de test edilmelidir.
+3. **BİR BELGENİN "ERTELENDİ" NOTU BİR ÖLÇÜM DEĞİL, BİR HATIRLAMA OLABİLİR.** ADIM 55'in
+   `RH-14.c3` için yazdığı engel (capability yürüyüşü) **yanlış fonksiyona** aitti. Bir önceki
+   slice'ın gerekçesini **yeniden ölç** — özellikle *"şu yüzden pahalı"* diyorsa; pahalılığın
+   kendisi de bayatlar.
+
+### Tavanlar
+
+**`partial` 64 → 62 · `debt_class.B` 32 → 30**; açık borç **71 → 69** (A=1 · B=30 · C=6 · D=32).
+Kriter `covered` 297 → 299, clause `uncovered` 77 → 75; korpus **383 kriter / 1175 clause**
+(TABAN, düşmedi). `--report --check-generated --ratchet` **exit 0**.
+
+### Ortam ve dürüst sınır
+
+Container **çıplak** başladı — **repo bile klonlanmamıştı** (`/home/user` boştu), `backend/.venv`
+yok, Postgres cluster yok; üçü de bu slice içinde kuruldu (`add_repo` + `git clone`,
+`uv sync --all-extras`, `initdb` + `pg_ctl`, `entropia` rolü ve DB'si) ve `alembic upgrade head`
+**`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koşuldu — `en_US.UTF-8` bu imajda `UnicodeDecodeError`
+verir. Alt küme koşuları izole DB ile:
+`TEST_DATABASE_URL="postgresql+asyncpg://entropia:entropia@localhost:5432/entropia_rh"`.
+`test_result_row_immutability.py` **5 → 7 passed**, skip yok; ilgili altı suite birlikte
+**71 passed**. `ruff check` · `ruff format --check` · `mypy src` (400 dosya) **temiz**.
+
+**Dürüst sınır:** frontend'de **sıfır satır** → hiçbir frontend kapısı koşulmadı; tam backend
+suite'i **uçtan uca koşulmadı** → **geçen sayı ve coverage yüzdesi CI'ın otoritesinde**. `mypy`
+bu repoda CI'da yalnız `src` üzerinde koşar (`.github/workflows/ci.yml`), test dosyaları
+annotate edilmez — yeni yardımcılar da modülün mevcut yardımcılarıyla aynı biçimde bırakıldı.
+
+### Numara ve etiket
+
+Dal `43dc70d`'den kesildi ve o an açık PR listesi **boş** döndü. Önceki dört partinin kaydettiği
+gibi bu bir **garanti değil, anlık görüntüdür**: PR açıldıktan sonra da main ilerler. Main
+ilerlerse dal **rebase** edilir (*"Update branch"* düğmesi DEĞİL, ADIM 93/94'ün iki ölçülmüş
+zararı), çakışmalar **iki tarafı da koruyarak** çözülür, ve **tavan merged ağaçta taze bir
+`--report` ile YENİDEN ÖLÇÜLÜR** — taşınan bayat bir freeze `--ratchet`'i sonsuza dek yeşil
+bırakır, çünkü ölçülen < tavan asla kırmızı vermez.
+
+Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
+`docs/ADIM102_LANDED_KICKOFF.md`.

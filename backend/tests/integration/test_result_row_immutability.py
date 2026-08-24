@@ -44,18 +44,42 @@ from sqlalchemy import func, select
 from entropia.application.commands.backtest_run import soft_delete_backtest_result
 from entropia.application.commands.deletion import restore_trash_entry
 from entropia.application.commands.mainboard import create_work_object
-from entropia.application.queries.results_history import compare_backtest_results
+from entropia.application.commands.metric_profile import (
+    SYSTEM_DEFAULT_PROFILE_ID,
+    create_metric_profile_revision,
+)
+from entropia.application.jobs import agent_tools
+from entropia.application.queries.results_history import (
+    compare_backtest_results,
+    list_backtest_results,
+)
+from entropia.domain.agent_lab.enums import (
+    ALPHA_AGENT_ID,
+    AgentTaskPriority,
+    AgentTaskStatus,
+    RuntimeMode,
+    RuntimeStatus,
+)
+from entropia.domain.backtest.history import KEY_METRIC_KEYS
+from entropia.domain.identity import Actor
+from entropia.domain.lifecycle.enums import PrincipalType
 from entropia.infrastructure.postgres.models import (
+    AgentRuntime,
+    ArtifactLink,
     AuditEvent,
     BacktestResult,
+    Principal,
     ResultArtifactChecksum,
     ResultManifestSnapshot,
+    ResultViewMetricProfileRevision,
     TrashEntry,
 )
+from entropia.infrastructure.postgres.repositories import agent_lab as al_repo
 from entropia.shared.errors import (
     CompareRequiresTwoDistinctResultsError,
     RowVersionConflictError,
 )
+from tests.integration.test_arrange_metrics import _seed_registry
 from tests.integration.test_results_history import (
     ADMIN,
     USER1,
@@ -65,6 +89,13 @@ from tests.integration.test_results_history import (
 )
 
 pytestmark = pytest.mark.integration
+
+AGENT = Actor(
+    principal_id="agent_alpha",
+    principal_type=PrincipalType.AGENT,
+    role=None,
+    correlation_id="corr_rh14",
+)
 
 
 def _snapshot(result: BacktestResult) -> dict[str, Any]:
@@ -359,3 +390,176 @@ async def test_later_mainboard_edit_does_not_touch_a_finished_result(session) ->
 
     assert _snapshot(await _reread(session, result_id)) == before
     assert await _manifest_snapshot(session, result_id) == snapshot_before
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 23 — doc 16's last two open clauses                         #
+#                                                                              #
+# ADIM 55 measured both of these and deferred them as plumbing rather than      #
+# rushing them; this batch supplies the plumbing. Both are "X did not move"     #
+# claims, so both re-READ through ``_reread`` / a fresh query — the integration #
+# session is built with ``expire_on_commit=False``, and an identity-map answer  #
+# would make either assertion tautological.                                     #
+# --------------------------------------------------------------------------- #
+
+
+async def _apply_metric_profile(session, actor, codes: list[str]) -> list[str]:
+    """Fork a PERSONAL Result View profile whose selection is ``codes``.
+
+    Returns the selection the command actually persisted — the caller asserts
+    against that rather than against what it asked for, so a command that
+    silently widened the selection cannot make the test vacuous.
+    """
+    revision = await create_metric_profile_revision(
+        session,
+        actor,
+        profile_id=SYSTEM_DEFAULT_PROFILE_ID,
+        selected_metric_codes=codes,
+    )
+    await session.commit()
+    stored = await session.get(ResultViewMetricProfileRevision, revision["profile_revision_id"])
+    assert stored is not None, "the profile revision must actually be persisted"
+    return list(stored.selected_metric_codes)
+
+
+async def _history_digest(session, actor, result_id: str) -> dict[str, Any]:
+    """The Results History key-metric digest for ONE result, re-read from the DB."""
+    session.expire_all()
+    page = await list_backtest_results(session, actor)
+    row = next((item for item in page["items"] if item["result_id"] == result_id), None)
+    assert row is not None, "the seeded result must be visible in Results History"
+    return row["key_metrics"]
+
+
+async def test_result_view_profile_change_does_not_move_the_history_digest(
+    session,
+) -> None:
+    """RH-13.c2: a presentation preference cannot reach the historical digest.
+
+    The clause is about the boundary between doc 17 (Arrange Metrics — a personal,
+    revisable *view* preference) and doc 16 §9.4 (``key_metrics`` — a fixed digest
+    on an immutable historical record). Nothing asserted that boundary: no test
+    listed Results History before and after applying a narrower profile.
+
+    The profile applied here drops **all five** key metrics — it selects only
+    ``profit_factor`` and ``total_stops`` — which is the strongest form of the
+    clause. ``_digest_from_rows`` filters on the CONSTANT ``KEY_METRIC_KEYS``, so a
+    profile revision cannot reach it; this test is what states that.
+
+    Non-vacuity is asserted in both directions before the equality is claimed: the
+    digest must actually be POPULATED (an all-``None`` digest would compare equal to
+    itself while proving nothing), and the applied selection must actually EXCLUDE
+    the key metrics (a profile that kept them would make the comparison trivial).
+    """
+    await _seed_registry(session)
+    _workspace_id, result_id = await _one_result(session, result_id="btres_profile_1")
+
+    before = await _history_digest(session, USER1, result_id)
+    # Non-vacuity (1): the digest carries real values, not five Nones.
+    assert set(before) == set(KEY_METRIC_KEYS)
+    assert all(before[key] is not None for key in KEY_METRIC_KEYS), before
+
+    selected = await _apply_metric_profile(session, USER1, ["profit_factor", "total_stops"])
+    # Non-vacuity (2): the profile really did drop every key metric.
+    assert selected == ["profit_factor", "total_stops"]
+    assert not set(selected) & set(KEY_METRIC_KEYS)
+
+    # Full-dictionary equality, not a key lookup: a digest that LOST a key, gained
+    # one, or changed a cell's label/unit/format all fail here (ADIM 98/101).
+    assert await _history_digest(session, USER1, result_id) == before
+
+
+async def _seed_agent(session) -> None:
+    if await session.get(Principal, AGENT.principal_id) is None:
+        session.add(Principal(principal_id=AGENT.principal_id, principal_type=PrincipalType.AGENT))
+    if await session.get(AgentRuntime, ALPHA_AGENT_ID) is None:
+        session.add(
+            AgentRuntime(
+                agent_id=ALPHA_AGENT_ID,
+                mode=RuntimeMode.CONTINUOUS,
+                status=RuntimeStatus.ACTIVE,
+                row_version=1,
+            )
+        )
+    await session.flush()
+
+
+async def test_agent_artifact_create_leaves_the_referenced_result_row_untouched(
+    session,
+) -> None:
+    """RH-14.c3: building ON a result must not write TO it.
+
+    RH-14.c1/c2 are asserted by the agent-loop e2e test, but that test only ever
+    reads forward — it checks the artifact, its ``source_task_id`` and its
+    ``ArtifactLink`` rows, and never re-reads the ``BacktestResult`` afterwards. The
+    link lives on the artifact side, so non-mutation holds by construction; this
+    test is what turns that argument into an assertion.
+
+    The tool call is the SHIPPED gateway path (``artifact.create`` under the
+    ``research`` policy scope), driven against a REAL persisted result whose id is
+    carried in both ``evidence_refs`` and a provenance link — so the artifact
+    genuinely references the row whose stillness is being claimed.
+    """
+    await _seed_agent(session)
+    _workspace_id, result_id = await _one_result(session, result_id="btres_artifact_1")
+    task = await al_repo.create_task(
+        session,
+        agent_id=ALPHA_AGENT_ID,
+        task_type="research",
+        title="Does the funding-reversal edge survive out of sample?",
+        source="autonomous",
+        priority=AgentTaskPriority.AUTONOMOUS,
+        status=AgentTaskStatus.RUNNING,
+    )
+    await session.commit()
+    # Read the id BEFORE the snapshot: `_reread` calls `session.expire_all()`, which
+    # expires this object too, and a later `task.task_id` would then lazy-load from a
+    # sync context (MissingGreenlet). Same identity-map hazard as ADIM 100, other way up.
+    task_id = task.task_id
+
+    before = _snapshot(await _reread(session, result_id))
+    manifest_before = await _manifest_snapshot(session, result_id)
+
+    created = await agent_tools.dispatch_tool_call(
+        session,
+        AGENT,
+        tool_name="artifact.create",
+        policy_scope="research",
+        request={
+            "title": "Funding reversal holds on the pinned bundle",
+            "mechanism": "Long bias after negative funding extremes persists OOS.",
+            "evidence_refs": [result_id],
+            "links": [
+                {
+                    "target_type": "backtest_result",
+                    "target_id": result_id,
+                    "relation_type": "evidenced_by",
+                }
+            ],
+        },
+        task_id=task_id,
+        idempotency_key="rh14-artifact-1",
+    )
+    await session.commit()
+
+    # Non-vacuity: the call really succeeded and really points AT this result. A
+    # refused or unlinked call would leave the row still by doing nothing at all.
+    assert created["status"] == "succeeded"
+    links = (
+        (
+            await session.execute(
+                select(ArtifactLink).where(
+                    ArtifactLink.source_artifact_id == created["artifact_id"]
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [(link.target_type, link.target_id) for link in links] == [
+        ("backtest_result", result_id)
+    ]
+
+    # The target assertion: every durable column, plus the manifest snapshot.
+    assert _snapshot(await _reread(session, result_id)) == before
+    assert await _manifest_snapshot(session, result_id) == manifest_before

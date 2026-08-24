@@ -7698,6 +7698,42 @@ ilk koşu **`ss` = iki SKIPPED** ile **exit 0** verdi. Skip'li yeşil exit code 
 `PROJECT_HISTORY.md` §ADIM 94 · `docs/ADIM94_LANDED_KICKOFF.md`.
 
 
+## Stage 95 — üretilmiş kabul artefaktlarının drift kapısı (`--check-generated`) landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** (`backend/src`'te sıfır satır) · migration yok · OpenAPI değişmedi ·
+`ENGINE_VERSION` değişmedi · **tavanlar OYNAMADI** (73 partial / 7 uncovered · A1 B41 C6 D32).
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+`acceptance_semantic_scan.py` iki checked-in artefakt üretiyor. **İddia daraltıldı:** defter
+**zaten** kapılıydı (`test_the_debt_ledger_is_not_stale`); kapısız olan **rapordu** — ve
+sürüklenen de tam olarak o oldu: **ADIM 60'tan beri YEDİ parti** (`234/126` yazarken ölçülen
+`276/84`), CI hep yeşil.
+Yeni `--check-generated` bunu bloklayıcı yapar; `ci.yml:93` artık
+`--report --check-generated --ratchet` koşar (**yeni job değil, mevcut adıma bayrak**).
+
+Kapı **eksik dosyayı taze saymaz** (`MISSING`), suçlamayı **dosya başına** ayrıştırır ve hata
+mesajında **yeniden üretme komutunu** verir. Yazıcı ile kapı **tek renderer'ı paylaşır** —
+ayrışsalardı kapı tatmin edilemez olurdu (kaynak düzeyi testle pinli).
+
+**Dört negatif kontrol + testin kendisinin üç negatif kontrolü, yedisi de kırmızı.** En
+öğreticisi: rapor `d012a63`'teki ADIM 60 sürümüne geri konduğunda kapı kırmızı verdi — yani o
+yedi partilik sürüklenmeyi **gerçekten yakalardı**.
+
+**Ders:** bir kapı ölçtüğü şeyin tamamını ölçtüğünü iddia etmez. `--ratchet` **borcun
+tavanını** korur, üretilmiş belgenin doğruluğunu değil; ayrı sorular, ayrı kapılar.
+
+**Asıl ders (tam suite kazandırdı):** odaklı testler yeşilken tam suite
+`test_the_ratchet_is_wired_into_ci`'yi kırdı — CI satırının **birebir literalini** pinliyordu.
+Test kendi konusuna göre yeniden yazıldı (literal değil **bayrak** assert'i), ve o dosyayı
+okumak defterin **zaten kapılı** olduğunu ortaya çıkarıp bu kaydın ilk yanlış iddiasını
+düzeltti. **Odaklı koşu yalnız senin bildiğin kapıları koşar.**
+
+**NUMARA:** `ADIM 92` yazıldı, kapanış sırasında 92 **ve** 93 main'e indi → **94**; rebase
+sekiz belge çakışması verdiği için dal main'e sıfırlanıp yalnız dört kod dosyası yeniden
+uygulandı, defter belgeleri yeni tabana karşı yeniden yazıldı.
+
+`PROJECT_HISTORY.md` §ADIM 94 · `docs/ADIM95_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

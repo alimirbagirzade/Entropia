@@ -13603,3 +13603,88 @@ kriterler ve test dosyaları **ayrık** — ama **etiket çakışabilir**: #806 
 > şey ortak atada zaten yoktu. Doğru ölçüm merge'ün **kendi ebeveynlerine** karşıdır:
 > `git show <merge>:<dosya> | grep -c '^## <başlık>'` ile parent'ınkini karşılaştır.
 > **Bir sonraki slice: sunucu tarafı bir merge gördüğünde bunu koş.**
+
+## ADIM 95 — üretilmiş kabul artefaktlarının drift kapısı: `--check-generated`
+
+> **ÜRÜN KODU DEĞİŞMEDİ** — `backend/src`'te sıfır satır. Migration **yok** · OpenAPI
+> **değişmedi** · `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` ·
+> tavanlar **OYNAMADI** (73 partial / 7 uncovered · A1 B41 C6 D32).
+> **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+> **YENİ BLOKLAYICI CI KAPISI** — `Backend` job'ının mevcut adımına bir bayrak eklendi
+> (yeni job DEĞİL, ADIM 53/58 emsali).
+
+**Kapatılan boşluk — ve iddianın DARALTILMASI.** `acceptance_semantic_scan.py` **iki**
+checked-in artefakt üretiyor: `acceptance_semantic_traceability.md` ve
+`acceptance_coverage_debt_ledger.md`. Bu slice ilk yazıldığında *"ikisi de kapısızdı"*
+deniyordu; **tam suite bunu ÇÜRÜTTÜ** — `tests/unit/test_acceptance_semantic_map.py::
+test_the_debt_ledger_is_not_stale` **defteri zaten** her pytest koşusunda map ile
+karşılaştırıyordu. **Kapısız olan yalnız RAPORDU**, ve bu tam olarak defterin hiç
+sürüklenmemesinin, raporun yedi parti sürüklenmesinin sebebidir. `--ratchet` sözleşmenin ne
+kadarının **kanıtsız** olduğunu sınırlar; üretilmiş belgenin ağacı hâlâ **anlatıp anlatmadığı**
+hakkında hiçbir şey söylemez. `check_generated` yine **ikisini birden** kapsar: kontrolü
+CLI'ya taşır (pytest koşmadan da görünür) ve **bu script'in yazdığı her artefaktı tek yerden**
+doğrular, böylece bir sonraki eklenen unutulamaz.
+
+**Sonuç ölçüldü, tahmin edilmedi: rapor ADIM 60'tan (#719) beri YEDİ kabul partisi boyunca
+bayattı** — `234 covered / 126 partial` yazarken ölçülen `276 / 84`'tü, ve CI bu süre boyunca
+**yeşildi**. Bulgu ADIM 83 denemesinde kaydedilmişti; o slice başka bir PR tarafından kapsandı
+ve kapandı, ama **bulgunun kendisi açık kaldı** — bu slice onu kapatıyor.
+
+**Sevk edilen (üç dosya):**
+
+| Yer | Ne |
+|---|---|
+| `acceptance_semantic_scan.py::check_generated` | YENİ; iki artefaktı da render edip diskle karşılaştırır, **hangisinin** bayat olduğunu ayrı ayrı söyler |
+| `::_rendered_report` / `::_rendered_ledger` | YENİ; **yazıcı ile kapı tek renderer'ı paylaşır** — ikisi ayrışsaydı kapı tatmin EDİLEMEZ olurdu |
+| `ci.yml:93` | `--report --ratchet` → `--report --check-generated --ratchet` |
+| `tests/contract/test_acceptance_generated_drift_guard.py` | YENİ, 9 test |
+| `tests/unit/test_acceptance_semantic_map.py::test_the_ratchet_is_wired_into_ci` | ONARILDI — birebir literal yerine **bayrak** assert'i (bu slice o satırı değiştirdi) |
+
+**Kapının şekli, bilerek:** eksik dosya **"taze" saymaz** (`MISSING`, ayrı mesaj) — yoksa
+silinen bir artefakt kapıdan görünmez geçerdi. Hata mesajı **yeniden üretme komutunu adıyla**
+yazar; nasıl düzeltileceğini söylemeyen kırmızı kapı etrafından dolaşılır. Suçlama **dosya
+başına** ayrışır, ama düzeltme ipucu **ikisini birden** adlandırır (birini ötekisiz yeniden
+üretmek zaten ayrışmanın kendisidir) — test bu ayrımı `_blames()` ile bülten satırlarında
+doğrular, tüm gövdede değil.
+
+**DÖRT NEGATİF KONTROL, DÖRDÜ DE KIRMIZI** (gerçek ağaçta, her birinden sonra `git status`
+temiz): (1) **tarihsel kusurun kendisi** — rapor `d012a63`'teki ADIM 60 sürümüne geri konuldu
+→ `STALE`, yani kapı o yedi partilik sürüklenmeyi **gerçekten yakalardı**; (2) raporda tek
+sayı elle değiştirildi → kırmızı; (3) **defter** kaydırıldı → kırmızı ve **yalnız defteri**
+suçladı; (4) rapor silindi → `MISSING`. Geri konulunca yeşil.
+
+**TESTİN KENDİSİNİN ÜÇ NEGATİF KONTROLÜ, ÜÇÜ DE KIRMIZI:** `ci.yml`'dan `--check-generated`
+düşürüldü → `test_ci_actually_runs_the_guard` kırmızı; `--ratchet` düşürüldü → **aynı test**
+kırmızı (yeni kapıyı eklerken eskisini kaybetmek sessiz bir gerileme olurdu); yazıcı ortak
+renderer'ı bırakıp kendi metnini yazdı → `test_the_writers_and_the_gate_share_one_renderer`
+kırmızı. **Sonuncusu bilerek KAYNAK DÜZEYİNDE** — davranışsal bir test bu ayrışmayı göremez,
+çünkü kapının reddettiği bir şey yazan bir yazıcı sadece "hep kırmızı kapı" gibi görünür.
+
+**DERS: bir kapı, ölçtüğü şeyin TAMAMINI ölçtüğünü iddia etmez.** `--ratchet` yıllarca
+"kabul kapsamı korunuyor" diye okundu; koruduğu şey **borcun tavanıydı**, üretilmiş belgenin
+doğruluğu değil. İkisi ayrı sorulardır ve ayrı kapı isterler.
+
+**DERS 2: test ekleyen slice üretilmiş olguları TAZELEMELİ** (ADIM 60 emsali, yine yaşandı) —
+`--check` bunu kırmızıya çevirdi, yeniden üretildi.
+
+**DERS 3 — ASIL DERS: TAM SUITE, "ilgisiz" sandığın yeri kırdı.** Odaklı testler yeşilken tam
+suite `test_the_ratchet_is_wired_into_ci`'yi kırmızıya çevirdi: o test CI satırının **birebir
+literalini** (`--report --ratchet`) pinliyordu ve bu slice o satıra bir bayrak ekledi. İki
+sonucu oldu: (1) test **kendi konusu** hakkında yeniden yazıldı — artık literal değil
+**bayrakların varlığını** assert ediyor, yani yanına başka bir kapı eklendiğinde kırılmıyor
+ama ratchet düşürülürse hâlâ kırılıyor; (2) o dosyayı okumak **defterin zaten kapılı
+olduğunu** ortaya çıkardı ve bu kaydın ilk hâlindeki yanlış iddia düzeltildi. **Odaklı koşu
+bir kapının varlığını kanıtlamaz — yalnız senin bildiğin kapıları koşar.**
+
+**DERS 4 — NUMARA: bu slice İKİ KEZ taşındı.** `ADIM 92` yazıldı; kapanış commit'i yazılırken
+`git fetch` **92 ve 93'ün ikisinin de main'e indiğini** gösterdi (#799 ve #803/#804 dalgası)
+→ **94**. Rebase sekiz belge çakışması verdi (üretilmiş dosyalar dahil), o yüzden dal main'e
+**sıfırlandı** ve yalnız **dört kod dosyası** yeniden uygulandı; defter belgeleri yeni tabana
+karşı **yeniden yazıldı**, çakışma çözülerek taşınmadı.
+
+**DÜRÜST SINIR:** kapı **statiktir** (DB yok, ağ yok, test koşusu yok) ve yalnız bu iki
+artefaktı kapsar. `docs/generated/repository_facts.*` zaten kendi `--check`'iyle kapılı;
+`docs/openapi.json` ayrı drift guard'a sahip. **Başka üretilmiş belgeler taranmadı** — bu
+slice onların kapılı olduğunu iddia etmiyor.
+
+`docs/ADIM95_LANDED_KICKOFF.md`.

@@ -82,7 +82,15 @@ jobs:
         # corpus is red, and a drop below the ceiling prints the tightened block to
         # paste back. Never widen a ceiling to make this green — raise it only with
         # an adjudication in docs/audit/acceptance_coverage_debt_ledger.md.
-        run: uv run python ../docs/audit/acceptance_semantic_scan.py --root .. --report --ratchet
+        #
+        # --check-generated closes the other half. --ratchet bounds how much of the
+        # contract is UNPROVEN; it says nothing about whether this script's own
+        # checked-in output still describes the tree. Both artefacts are written by
+        # hand-run commands, so nothing stopped them going stale — the traceability
+        # report sat at ADIM 60's numbers through seven acceptance batches (234
+        # covered / 126 partial against a measured 276 / 84) with CI green the whole
+        # time. Regenerate with --write-report/--write-ledger; never hand-edit them.
+        run: uv run python ../docs/audit/acceptance_semantic_scan.py --root .. --report --check-generated --ratchet
 
       - name: OpenAPI schema drift guard
         working-directory: backend

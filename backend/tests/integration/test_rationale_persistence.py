@@ -35,6 +35,7 @@ from entropia.infrastructure.postgres.models import (
     PackageRevision,
     Principal,
     RationaleFamilyRevision,
+    RationaleFamilyRoot,
     TrashEntry,
 )
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
@@ -160,6 +161,44 @@ async def test_duplicate_active_name_conflicts(session) -> None:
 
     with pytest.raises(RationaleFamilyNameConflict):
         await rationale_cmd.create_family(session, USER, display_name="breakout / volatility")
+
+
+async def test_duplicate_active_name_writes_no_root_or_revision(session) -> None:
+    """RF-07.c2: the refused create leaves no duplicate root/revision behind.
+
+    ``test_duplicate_active_name_conflicts`` above asserts the raise and stops there,
+    which cannot tell a pre-insert guard from a post-insert one: a uniqueness check
+    placed BELOW ``rationale_repo.create_family`` raises the SAME exception while a
+    duplicate root + revision sit in the transaction. So count the rows instead, and
+    read them back from the database rather than from the identity map.
+    """
+    await _seed_principals(session)
+    original = await rationale_cmd.create_family(
+        session, USER, display_name="Breakout / Volatility"
+    )
+    await session.commit()
+    roots_before = await _count(session, RationaleFamilyRoot)
+    revisions_before = await _count(session, RationaleFamilyRevision)
+    assert roots_before == 1 and revisions_before == 1
+
+    with pytest.raises(RationaleFamilyNameConflict):
+        await rationale_cmd.create_family(session, USER, display_name="breakout / volatility")
+
+    # NOT a rollback: rolling the transaction back would discard a duplicate row and
+    # let a post-insert guard pass this test vacuously.
+    await session.flush()
+    session.expire_all()
+    assert await _count(session, RationaleFamilyRoot) == roots_before
+    assert await _count(session, RationaleFamilyRevision) == revisions_before
+
+    # The surviving row is the ORIGINAL, with its own casing — the refusal neither
+    # appended a revision nor overwrote the head.
+    root = await session.get(RationaleFamilyRoot, original["entity_id"])
+    assert root is not None
+    revision = await session.get(RationaleFamilyRevision, original["revision_id"])
+    assert revision is not None
+    assert revision.display_name == "Breakout / Volatility"
+    assert revision.revision_no == 1
 
 
 async def test_soft_deleted_name_reserved(session) -> None:

@@ -30,6 +30,7 @@ from sqlalchemy import func, select
 from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.commands import mainboard as mb_cmd
+from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.jobs.backtest_engine import run_backtest
 from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
@@ -50,6 +51,7 @@ from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import (
     BacktestResult,
     BacktestRun,
+    BacktestRunManifest,
     DiagnosticArtifact,
     Job,
     MetricValueRow,
@@ -136,11 +138,16 @@ def _strategy_payload(
     instrument_id: str = "BTCUSDT",
     costs: dict[str, str] | None = None,
     funding: dict[str, Any] | None = None,
+    rationale_family_id: str | None = "rf_1",
 ) -> dict[str, Any]:
+    # ``rationale_family_id=None`` OMITS the key entirely rather than storing a null:
+    # doc 10 §14 RF-12 is about a Strategy that never got a Family, and
+    # ``create_work_object`` stores the payload verbatim, so the omission survives to
+    # Ready Check exactly as a real family-less Strategy would.
     return {
         "strategy_root_id": "strat_root_seed",
         "display_name": "Seed strategy",
-        "rationale_family_id": "rf_1",
+        **({"rationale_family_id": rationale_family_id} if rationale_family_id is not None else {}),
         "data": {
             "instrument_id": instrument_id,
             "market_dataset_root_id": market_root_id,
@@ -216,6 +223,7 @@ async def _ready_composition(
     backtest_range: dict[str, str] | None = None,
     costs: dict[str, str] | None = None,
     funding_for: Callable[[str, str], Awaitable[dict[str, Any]]] | None = None,
+    rationale_family_id: str | None = "rf_1",
 ) -> tuple[str, str, str]:
     workspace_id = await _empty_composition(session, actor)
     # Slice B: the strategy pins a REAL market revision (FK-valid entity) and the
@@ -291,6 +299,7 @@ async def _ready_composition(
             instrument_id=strategy_instrument_id,
             costs=costs,
             funding=funding,
+            rationale_family_id=rationale_family_id,
         ),
     )
     await mb_cmd.attach_mainboard_item(
@@ -849,6 +858,47 @@ async def test_shared_allocation_run_is_refused_and_leaves_nothing_behind(sessio
     assert await _count(session, BacktestRun) == 0
     assert await _count(session, BacktestResult) == 0
     assert await _count(session, Job) == 0
+
+
+async def test_family_less_strategy_blocks_run_admission_and_leaves_nothing_behind(
+    session,
+) -> None:
+    """RF-12.c3 (doc 10 §14): a Strategy with no Rationale Family keeps RUN locked.
+
+    The validator half of RF-12 is proven at unit level
+    (``test_readiness_validators.py`` drives a missing and a blank ``rationale_family_id``
+    to STRATEGY_CONFIG_INVALID / NOT_READY). What no test drove is the SECOND half of
+    the criterion end to end: a family-less composition through ``request_backtest_run``.
+    The "NOT_READY -> READINESS_BLOCKED, nothing persisted" mechanism was asserted only
+    for OTHER blockers (shared allocation, empty composition), so the Family case rode
+    on a shared code path rather than on its own assertion.
+    """
+    await _seed_principals(session)
+    composition_id, _root, _rev = await _ready_composition(session, USER1, rationale_family_id=None)
+
+    # The composition is otherwise identical to the one that admits happily in
+    # ``test_admission_queues_run_and_worker_materializes_result`` — the ONLY difference
+    # is the missing Family, so the refusal below is attributable to it.
+    report = await readiness_cmd.run_readiness_check(session, USER1, composition_id=composition_id)
+    assert report["state"] == "not_ready"
+    assert "STRATEGY_CONFIG_INVALID" in {issue["code"] for issue in report["issues"]}
+
+    with pytest.raises(ReadinessBlockedError) as exc_info:
+        await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
+
+    error = exc_info.value
+    assert error.code == "READINESS_BLOCKED"
+    assert "STRATEGY_CONFIG_INVALID" in {d["code"] for d in error.details}
+
+    # Doc 15 §9.3: RUN stays locked — no run, no manifest, no job, no result. Read the
+    # tables back rather than trusting the raise: a guard placed BELOW the writes would
+    # throw the same exception.
+    await session.flush()
+    session.expire_all()
+    assert await _count(session, BacktestRun) == 0
+    assert await _count(session, BacktestResult) == 0
+    assert await _count(session, Job) == 0
+    assert await _count(session, BacktestRunManifest) == 0
 
 
 async def test_worker_independent_run_uses_the_strategy_own_capital(session) -> None:

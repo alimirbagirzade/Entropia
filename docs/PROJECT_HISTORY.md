@@ -13688,3 +13688,124 @@ artefaktı kapsar. `docs/generated/repository_facts.*` zaten kendi `--check`'iyl
 slice onların kapılı olduğunu iddia etmiyor.
 
 `docs/ADIM95_LANDED_KICKOFF.md`.
+
+---
+
+## ADIM 97 — kabul borcu batch 18 (doc 10 backend): `RF-07` + `RF-12` kapandı, on birinci bulgu
+
+> **ÜRÜN KODU DEĞİŞMEDİ.** Migration yok · OpenAPI değişmedi · `ENGINE_VERSION` değişmedi ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** Diff'te `backend/src` ve `frontend/src` altında **sıfır** satır; değişen
+> kod **iki** integration case + **bir** opsiyonel harness parametresi + üretilmiş/defter
+> belgeleri.
+
+**Belge + yüzey:** doc 10 (Rationale Families), **backend**.
+
+| Kriter | Kapanan clause | Yeni assertion neyi ölçüyor |
+|---|---|---|
+| `RF-07` | `.c2` | Reddedilen create **hiçbir** kök/revizyon satırı bırakmıyor (sayılar + hayatta kalan revizyon geri okunuyor) |
+| `RF-12` | `.c3` | Family'siz kompozisyon `request_backtest_run`'da reddediliyor ve **run/manifest/job/result** yazılmıyor |
+
+İkisinde de bu **son** açık clause'du → ikisi de **covered**, ikisinin de **`debt_class`
+KALDIRILDI**.
+
+### `RF-07.c2` — "raise ediyor" ile "YAZMADAN raise ediyor" AYNI İDDİA DEĞİL
+
+Mevcut `test_duplicate_active_name_conflicts` istisnayı assert edip **duruyor**; guard'ın
+`rationale_repo.create_family`'nin **üstünde** mi **altında** mı olduğunu ayırt edemez — ikisinde
+de **aynı** istisna fırlar. Yeni test satırları **sayar** ve hayatta kalan revizyonu **geri okur**.
+
+**Kritik ölçüm kararı — bu depoda İLK KEZ yazılıyor: refüzden sonra `rollback` YAPILMIYOR.**
+Rollback, post-insert bir guard'ın yazdığı satırı **da** atardı ve test **vacuous** geçerdi;
+`flush()` + `expire_all()` ile aynı transaction içinde **veritabanından** okunuyor.
+
+### `RF-12.c3` — validator kanıtlıydı, UÇTAN UCA yarısı değildi
+
+*"NOT_READY → READINESS_BLOCKED, hiçbir şey kalmıyor"* mekanizması yalnız **BAŞKA** blocker'lar
+için (shared allocation, boş kompozisyon) kanıtlıydı. `_strategy_payload` artık
+`rationale_family_id: str | None = "rf_1"` alıyor; **`None` anahtarı tamamen ATAR**, `null`
+yazmaz — `create_work_object` payload'u birebir saklar ve StrategyConfig doğrulaması **yapmaz**.
+Varsayılan mevcut ~30 çağıranı **bayt bayt aynı** bırakır ve bu **ölçüldü**.
+
+### ÜÇ NEGATİF KONTROL — hepsi elle koştu, hepsinde HANGİ assertion'ın kırmızı olduğu okundu
+
+| # | Ürüne enjekte edilen kusur | Kırmızıya dönen |
+|---|---|---|
+| 1 | `_check_name_available` `_op`'un tepesinden `create_family`'nin **ALTINA** taşındı | **yalnız** yeni `RF-07` testi, kök sayısında (`assert 2 == 1`); `test_duplicate_active_name_conflicts` **YEŞİL** kaldı |
+| 2 | `rationale_family_id` bir **default** aldı | yeni `RF-12` testi, **readiness** assertion'ında (`assert 'ready' == 'not_ready'`) |
+| 3 | Readiness kapısından **ÖNCE** bir `BacktestRun` satırı yazıldı | yeni `RF-12` testi, **run sayısı** assertion'ında (`assert 1 == 0`) |
+
+**NK-2 AYRI BİR EKSENDİR VE HARNESS DEĞİŞİKLİĞİ YÜZÜNDEN ZORUNLUDUR** — yeni bir kontrol kuralı:
+*paylaşılan bir harness'a parametre eklediysen, red'in senin değişikliğine atfedilemeyeceğini
+ayrı bir kontrolle göster.*
+
+### YENİ BULGU — `RF-08.c2`: sevk edilen hata **hiçbir** kurtarma metni taşımıyor
+
+Doc 10 §10.1 kurtarma metnini **kelimesi kelimesine** veriyor; `RationaleFamilyNameReserved`
+yalnız `code`+`message` bildiriyor ve tek raise yeri **çıplak** → 409 hiçbir `remediation`
+taşımıyor. **`TL-16.c4`'ten farkı:** o zarfı **genişletmeyi** ister, bu **hiçbir yeni şey
+istemez** — aynı dosyada **yirmi** sınıf `remediation` bildiriyor → **tek satırlık** bir
+düzeltme. Sevk **EDİLMEDİ** (kabul partisi test-only, kullanıcı metni ürün kararı) ve **yeniden
+sınıflandırılmadı** (B → D tavanı yükseltir).
+
+### Sayılar (ölçüldü — ÜÇ FARKLI TABANDA)
+
+**Tavanlar İNDİ: `partial` 73 → 71, `debt_class.B` 41 → 39.** Açık borç **80 → 78**
+(A=1 · B=39 · C=6 · D=32). Clause: `covered` **1046 → 1048**, `uncovered` **86 → 84**.
+`total_criteria` **383** (TABAN) ve `uncovered` **kriter** sayısı **7** değişmedi.
+
+**Doc 10'un BACKEND borcu bitti.** Kalan: `RF-08` (bulgu) ve `RF-18` (**frontend**).
+
+### İKİNCİ BULGU — #808 KAYITSIZ İNDİ (kapanış ritüeli md. 3 atlandı)
+
+**Ölçüldü:** #808 (`ADIM 94`, batch 17, doc 01 Mainboard `MB-01` + `MB-27`) main'e indi ve
+`CLAUDE.md`, `STAGE2_HANDOFF.md`, `docs/ADIM94_LANDED_KICKOFF.md`, defter, baseline ve üretilmiş
+artefaktları güncelledi — ama **`docs/PROJECT_HISTORY.md`'ye HİÇ DOKUNMADI**
+(`git diff --stat f4d02c3 origin/main` içinde o dosya **yok**; `grep -c 'MB-01'` → **0**). Yani
+ritüelin **3. maddesi koşmadı** ve `ADIM 94`'ün tam kaydı yok. Bu depoda tanınan bir desen
+(#728/#729, #759, #765/#766, #779). **Bu slice o kaydı UYDURMADI** — kaydı sahibinin yazması
+gerekir; buraya yalnız **ölçülen olgu** yazıldı. Hiçbir kapı bunu yakalamadı: `check_classification`
+kickoff dosyasına bakar, `PROJECT_HISTORY` kaydının varlığına değil.
+
+> **SONRADAN KAPANDI — bu dal sıra beklerken.** Sahibi kaydı yazdı: **#810** (`521e8de`,
+> *"docs(stage-94): PROJECT_HISTORY'nin ADIM 94 kaydını geri koy (#808 merge'ünde düştü)"*,
+> +99 satır) ve bu dal onun üstüne **rebase edildi** → §ADIM 94 artık bu belgede, bu kaydın
+> hemen üstünde. **Bulgu geri alınmadı, çünkü ölçüm doğruydu ve ders değişmedi:** kayıt
+> #808'in **kendi** kapanışında yazılmadı, bir sonraki slice'ın telafi işi oldu, ve **hiçbir
+> kapı** aradaki pencerede kırmızı vermedi. #810'un commit başlığı sebebi *"merge'ünde düştü"*
+> diye adlandırıyor — bu dalın ölçtüğü şeyle (dosyaya hiç dokunulmadı) aynı sonucu verir,
+> **ayrımı bu dal karara bağlamadı.**
+
+### Dürüst sınırlar
+
+- **Postgres ayakta ve migrate edilmiş, İZOLE bir `TEST_DATABASE_URL` ile** → iki case ve üç
+  negatif kontrolün **hepsi gerçekten koştu**; #804'ün ve #805'in dokunduğu dosyalar da yanında
+  koşuldu, hepsi yeşil.
+- **Tam suite ve coverage kapısı CI'a bırakıldı** — üç yerel deneme de **ortam** yüzünden
+  geçersizdi (paylaşılan DB çekişmesi, yanlış cwd → sistem Python, Postgres çökmesi). Bir
+  önceki head'de (`37e5f45`) CI'ın `Backend` job'ı **yeşildi**; bu dal için yerel bir passed
+  sayısı ya da coverage yüzdesi **iddia edilmiyor**.
+- **Frontend'e sıfır satır**; e2e / `@a11y` suite'lerine hiçbir assertion yazılmadı.
+
+### Numara — bu kayıt DÖRT KEZ taşındı, ve dördüncüsü öncekilerden BAŞKA bir sebep
+
+`ADIM 93` → `ADIM 94` → `ADIM 95` → **`ADIM 97`**. Birincisi #804 (`ADIM 93` adını aldı),
+ikincisi **#808** ki o **HEM `ADIM 94` HEM `batch 17`**'yi birlikte aldı, üçüncüsü **#809**
+(`2a790ff`, *"üretilmiş kabul artefaktlarının drift kapısı"*) — o **`ADIM 95`** adını, başlığını
+ve `docs/ADIM95_LANDED_KICKOFF.md` dosyasını main'e indirdi. **DERS: "iki numara bağımsız
+taşınabilir" demek "bağımsız taşınır" demek DEĞİLDİR** — #804'te parti numarası yerinde
+kalmıştı, #808'de kalmadı, #809'da ise **parti numarası hiç yoktu** (o bir kabul partisi değil,
+bir CI kapısı). İkisini de **ayrı ayrı** ölç. Bu kayıt **`batch 18`**, ve o etiket **serbest
+ölçüldü**: main'deki tek `batch 18` geçişi ADIM 94'ün *bir sonrakini tahmin eden* cümlesidir,
+bir talep değil.
+
+**DÖRDÜNCÜ TAŞIMA 96'YA DEĞİL 97'YE:** `ADIM 96`'yı **açık** #811 talep ediyor ve talebi
+`docs/ADIM96_LANDED_KICKOFF.md` **dosyasını ekleyerek** yapıyor (ölçüldü, PR dosya listesinden).
+`check_classification` çakışmayı başlıktan değil **dosya yolundan** okur (ADIM 91'in dersi), o
+yüzden 96 alınmadı. **Ama ADIM 92'nin dersi de duruyor: ayrılan numara güvenli numara değildir**
+— #811 inmeden 97'yi başka bir dal alırsa bu kayıt yine taşınır.
+
+**TAVAN ÜÇ TABANDA YENİDEN ÖLÇÜLDÜ** (`3994725` 77/45 → `d47c5ba` 73/41 → `fb3d771` 71/39) ve
+**elle aritmetiğin yakalayacağı bir tuzak var:** bu dal ile #808 **ikisi de tam iki kriter**
+kapatıyor, ve bu dalın #808 **öncesi** freeze'i **73/41** taşıyordu — #808 sonradan **aynı
+sayıları** bambaşka kriterler için yazdı. **Sayıların eşleşmesi hiçbir şey kanıtlamaz.**

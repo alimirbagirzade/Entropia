@@ -237,7 +237,59 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 95 (üretilmiş kabul artefaktlarının drift kapısı):
+> `future_dev`. **Son dalga — ADIM 97 (kabul borcu batch 18, doc 10 BACKEND): ÜRÜN KODU
+> DEĞİŞMEDİ, iki pytest case + bir opsiyonel harness parametresi + defter.
+> Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> İki kriter kapandı — **`RF-07`** (`.c2`) · **`RF-12`** (`.c3`); ikisinde de son açık
+> clause'du → ikisinin de **`debt_class` KALDIRILDI**.
+> **DERS 1: "raise ediyor" ile "YAZMADAN raise ediyor" AYNI İDDİA DEĞİLDİR** — mevcut
+> `test_duplicate_active_name_conflicts` istisnayı assert edip duruyor ve guard'ın insert'in
+> **üstünde mi altında mı** olduğunu ayırt edemiyor; yeni test satırları **sayar** ve hayatta
+> kalan revizyonu geri okur. **DERS 2 (bu depoda İLK KEZ yazılıyor): refüz testinde `rollback`
+> YAPMA** — rollback post-insert bir guard'ın yazdığı satırı **da** atar ve test **vacuous**
+> geçer; `flush()` + `expire_all()` ile aynı transaction içinde **veritabanından** oku.
+> **DERS 3 (yeni kontrol kuralı): paylaşılan bir HARNESS'a parametre eklediysen red'i kendi
+> değişikliğine atfedilemez yap** — `RF-12`'de Family'yi geri koyan negatif kontrol
+> kompozisyonun `ready` olduğunu gösterir. **ÜÇ negatif kontrol, üçünde de hangi assertion'da
+> kırmızıya döndüğü OKUNARAK:** `_check_name_available`'ı insert'in altına taşımak **yalnız**
+> yeni testi kök sayısında düşürür (eski test **yeşil kalır**) · `rationale_family_id`'ye
+> default vermek readiness assertion'ını düşürür · readiness kapısından önce `BacktestRun`
+> yazmak run-sayısı assertion'ını düşürür. **Tavanlar İNDİ: `partial` 73 → 71, `debt_class.B`
+> 41 → 39**; açık borç **78** (A=1 · B=39 · C=6 · D=32), clause `covered` 1046 → 1048.
+> **Doc 10'un BACKEND borcu bitti** (kalan `RF-18` **frontend**).
+> **ON BİRİNCİ BULGU — `RF-08.c2`:** doc 10 §10.1 kurtarma metnini **kelimesi kelimesine**
+> veriyor ama `RationaleFamilyNameReserved` yalnız `code`+`message` bildiriyor ve tek raise yeri
+> **çıplak** → 409 hiçbir `remediation` taşımıyor. **`TL-16.c4`'ten farkı ÖLÇÜLDÜ:** o zarfı
+> **genişletmeyi** ister, bu **hiçbir yeni şey istemez** (aynı dosyada **yirmi** sınıf onu
+> bildiriyor) → spec'in yazdığı metinle **tek satırlık** bir düzeltme. Sevk **EDİLMEDİ** ve
+> **yeniden sınıflandırılmadı**.
+> **İKİNCİ BULGU — #808 KAYITSIZ İNDİ, SONRADAN KAPANDI:** `ADIM 94` main'e indi ama
+> `docs/PROJECT_HISTORY.md`'ye **hiç dokunmadı** (`grep -c 'MB-01'` → **0**) → kapanış
+> ritüelinin **3. maddesi koşmadı**. Bu slice o kaydı **UYDURMADI**; sahibi yazdı — **#810**
+> (`521e8de`, +99 satır) bu dal sıra beklerken indi, dal onun üstüne **rebase edildi**.
+> **Ders değişmedi: hiçbir kapı aradaki pencereyi yakalamıyor** — `check_classification`
+> kickoff **dosyasına** bakar, `PROJECT_HISTORY` kaydının varlığına değil.
+> **DÜRÜST SINIR:** Postgres ayakta + migrate + **izole DB** → iki case ve üç negatif kontrol
+> **gerçekten koştu** (#804'ün ve #805'in dosyaları da yanında yeşil); **tam suite ve coverage
+> CI'a bırakıldı** — üç yerel deneme ortam yüzünden geçersizdi (paylaşılan DB çekişmesi, yanlış
+> cwd → sistem Python, Postgres çökmesi), bu dal için yerel sayı **iddia edilmiyor**.
+> **NUMARA DÖRT KEZ TAŞINDI: `ADIM 93` → `94` → `95` → `97`.** Üçüncüsünü **#809** aldı
+> (kabul partisi DEĞİL, bir CI kapısı — yani parti numarası hiç taşımadı), `96`'yı ise
+> **açık #811** `docs/ADIM96_LANDED_KICKOFF.md` **dosyasını ekleyerek** talep ediyor →
+> çakışma başlıkta değil **DOSYA YOLUNDA** ölçülür (ADIM 91), ve ayrılan numara güvenli
+> numara değildir (ADIM 92). #804 `ADIM 93`'ü aldı; **#808 HEM
+> `ADIM 94` HEM `batch 17`'yi birlikte aldı** → bu kayıt `batch 18`. **DERS: iki numara bağımsız
+> taşınABİLİR demek bağımsız taşınIR demek DEĞİLDİR** — ayrı ayrı ölç. **Tavan ÜÇ tabanda
+> yeniden ölçüldü** (77/45 → 73/41 → 71/39) ve **elle aritmetik tuzağı var:** bu dal ile #808
+> **ikisi de tam iki kriter** kapatıyor ve bu dalın #808 öncesi freeze'i **73/41** taşıyordu —
+> #808 sonradan **aynı sayıları** başka kriterler için yazdı. **Sayıların eşleşmesi hiçbir şey
+> kanıtlamaz.** `PROJECT_HISTORY.md` §ADIM 97 · `docs/ADIM97_LANDED_KICKOFF.md`.
+>
+>
+
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. **Öncesinde ADIM 95 (üretilmiş kabul artefaktlarının drift kapısı):
 > ÜRÜN KODU DEĞİŞMEDİ (`backend/src`'te sıfır satır), TAVANLAR OYNAMADI (73 partial /
 > 7 uncovered · A1 B41 C6 D32). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > `acceptance_semantic_scan.py` iki checked-in artefakt üretiyor; **iddia ölçümle DARALTILDI**

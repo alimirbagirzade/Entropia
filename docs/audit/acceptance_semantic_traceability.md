@@ -59,7 +59,7 @@ for this map.
 | 07 | 18 | 3 | 1 | 0 | 0 | 0 | 22 |
 | 08 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
 | 09 | 15 | 5 | 0 | 0 | 0 | 0 | 20 |
-| 10 | 12 | 6 | 0 | 0 | 0 | 0 | 18 |
+| 10 | 14 | 4 | 0 | 0 | 0 | 0 | 18 |
 | 11 | 4 | 2 | 0 | 0 | 2 | 0 | 8 |
 | 12 | 9 | 6 | 0 | 0 | 0 | 0 | 15 |
 | 13 | 4 | 1 | 0 | 0 | 4 | 0 | 9 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 4 | 5 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **288** | **73** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **290** | **71** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1046 |
-| partial | 5 |
-| uncovered | 85 |
+| covered | 1048 |
+| partial | 4 |
+| uncovered | 84 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 41 |
+| B | 39 |
 | C | 6 |
 | D | 32 |
-| **open total** | **80** |
+| **open total** | **78** |
 
-## Partial criteria (73)
+## Partial criteria (71)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -145,9 +145,7 @@ for this map.
 | `ESP-16` | D | Deprecation with reason/replacement closes new selection while history still resolves the original pinned revision. | TWO THINGS MISSING. (1) REPLACEMENT POLICY IS INERT — this is an implementation gap, not only a test gap. deprecate_resolver accepts replacement_revision_id and esp_repo.set_trust_state persists it, and queries/esp.py::_registry_dict echoes it back, but NOTHING READS IT: the resolution path (resolve_embedded_dependency -> domain/esp/resolver.py::evaluate_resolution) returns RESOLVER_NOT_ACTIVE for a DEPRECATED entry and never redirects to the nominated replacement. So "new conversion resolves replacement policy" is not implemented and cannot be tested. A follow-up slice must decide whether resolution should auto-follow the replacement or whether the caller must re-pin, then implement and test the chosen rule. (2) The required-reason guard is real in production — commands/esp.py::deprecate_resolver raises ResolverContractInvalid on a blank reason — but no backend test exercises it; the only "requires a reason" assertion is the jsdom one in embedded.test.tsx, and a UI requirement is not the server rule. Add a one-line negative test for the blank-reason raise. |
 | `ESP-20` | B | A user with no ESP proposal sees only System trusted resolvers; direct ID query also enforces can_view. | MISSING: the role-aware filtering is never exercised with a FOREIGN actor. The predicate exists and is unit-tested — domain/esp/policy.py::ensure_can_view raises AccessDeniedError for a private resolver owned by someone else (unit/test_esp_policy.py::test_private_proposal_hidden_from_non_owner) — and queries/esp.py wires it in both places (list_embedded_system_packages post-filters rows through _can_view; get_esp_detail calls ensure_can_view before projecting). But no test drives either query as a non-owner: the only listing test, integration/test_esp_persistence.py::test_list_filters_by_visibility_scope, creates BOTH the system and the private resolver under the SAME OWNER and asserts a visibility_scope FILTER, not a policy exclusion — it would pass unchanged if _can_view were deleted. The ESP detail query is called with a foreign actor nowhere in the suite (its only call site in tests is integration/test_typed_contract_replay_parity.py, with the owner). A follow-up slice should seed user_2's PRIVATE proposal plus a SYSTEM resolver, then assert that user_1's list contains only the system row and that get_esp_detail on user_2's root raises AccessDeniedError. test_private_proposal_hidden_from_non_owner is deliberately NOT cited as evidence here: it proves the predicate, not that either query applies it. |
 | `RF-04` | D | After a Family rename an old Backtest Run still shows the previous Family snapshot from its manifest. | Only the package-revision half is asserted. No test renames a Family and then reads an already-admitted Backtest Run's manifest: the manifest built by commands/backtest_run_context.py pins only `rationale_family_id` (an id, no display snapshot), so "previous Family snapshot görünür" has no asserting test at the Run level, and no test asserts the run/result rows are untouched by a rename. The assignment-table test even asserts the OPPOSITE for the live projection (current_family_name follows the rename), which is correct per doc 10 §8.5 but is not the RF-04 manifest claim. |
-| `RF-07` | B | Adding a Family whose normalized name matches an active one returns RATIONALE_FAMILY_NAME_CONFLICT with no duplicate root/revision. | The conflict raise is asserted; the "duplicate root/revision oluşmaz" half is not — the test does not count RationaleFamilyRoot/Revision rows after the refusal (the idempotent-create test does count rows, but for a different scenario). |
 | `RF-08` | B | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
-| `RF-12` | B | Running Ready Check on a Strategy with no Rationale Family fails and leaves RUN locked. | The blank-string hole named in the audit brief is CLOSED on current main: `StrategyConfig.validate_rationale_family_not_blank` (domain/strategy/config.py:88-104) strips and rejects a blank id, and three parametrised readiness tests assert a blank id yields STRATEGY_CONFIG_INVALID / NOT_READY. What is still unproven is the second half of the criterion end to end: no test drives a family-less (or blank-family) composition through `request_backtest_run` to show RUN stays locked. The "NOT_READY -> READINESS_BLOCKED, no run/manifest/job" mechanism IS asserted, but only for other blockers (shared allocation, empty composition), so the family case rides on a shared code path rather than its own assertion. |
 | `RF-13` | D | An Agent with the UI closed runs a create-Family command; root/revision/audit land server-side and the UI shows them on a later query. | No test executes `create_family` as an AGENT actor, and there is no rationale-family tool on the Agent Tool Gateway (`jobs/agent_tools.py` exposes no `rationale_family.*` tool), so the literal scenario — "Agent runs a new-Family create command with the UI closed" — is not reachable through the Agent surface at all. What IS proven is adjacent: the policy admits an AGENT principal, and an AGENT actor does persist other rationale mutations (batch assign, soft delete) with audit and Trash rows, which a later list query then reflects. |
 | `RF-18` | B | A browser refresh with a dirty assignment table may lose staged changes; only persisted canonical server state returns. | No test unmounts/remounts the page (or otherwise simulates a refresh) with pending staged changes and asserts the "1 pending change(s)" staging is gone. The staging test asserts staging then SAVE, which is the opposite direction. The canonical-server-state half is proven only in the weak sense that the rendered rows come from the stubbed GET response. |
 | `MKD-02` | B | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The Research side of the boundary is genuinely proven: the funding schedule is resolved through a Research revision with an Approved + category + content-hash gate. |

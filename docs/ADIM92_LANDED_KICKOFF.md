@@ -1,6 +1,7 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
-> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** ADIM 93 ile `historical`a demote
+> edildi; canlı kickoff `docs/ADIM93_LANDED_KICKOFF.md`. Aşağıdaki SHA'lar, tavanlar ve "next"
+> maddeleri yazıldıkları anı dondurur.
 
 # ADIM 92 LANDED — `C4` / E5: worker'ın paylaşımlı saat dalı · sıradaki slice için kickoff
 

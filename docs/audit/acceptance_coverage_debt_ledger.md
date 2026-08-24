@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 29 |
+| B | 27 |
 | C | 6 |
 | D | 32 |
-| **open total** | **68** |
+| **open total** | **66** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (29)
+## Class B (27)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -74,9 +74,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `PC-02` | 07 | partial | An empty source starts no scan job, the UI shows the final empty-input text, and Send separately rejects the empty request. | In the shipped design an empty source never becomes a request at all — `EMPTY_SOURCE` fires in `normalize_request`, at the route, before the DB — so "no scan job starts" and "Send rejects the empty request" collapse into the same proven guard. The UI half is unproven: `PreCheck.tsx` renders "No Pre-Check scan yet for this request." for the no-scan case and no test asserts that string, nor is th… |
 | `PC-20` | 07 | partial | Only Admin restores or permanently deletes from Trash; a restored request must be stale and a restored ESP needs active registry policy before resolving. | c2 is the strongest part of this row and is proven precisely: restore reactivates the ROOT but deliberately leaves the trust pointer closed, so a restored resolver cannot silently start resolving again. c3 has no test — nothing asserts that a restored package REQUEST comes back with a stale Pre-Check; `test_restore_keeps_identity_marks_entry_and_audits` covers identity/audit for the generic res… |
 | `PL-07` | 08 | partial | A Strategy Draft keeps its pinned Indicator revision after a newer package revision becomes current. | MISSING: the literal PL-07 sequence is never executed. No test attaches an Indicator package revision to a Strategy Draft (or a saved Strategy revision), then appends revision N+1 to that same package root, then re-reads the draft/revision and asserts it still names revision N. The building blocks are each proven separately — create_package_revision leaves the base revision immutable and still … |
-| `ESP-03` | 09 | partial | The scoped list carries the seven V18 TA fixtures with resolver key + technical status and N/A metrics. | MISSING: no test exercises the real seeder. All seven fixtures DO exist in production code — backend/src/entropia/apps/seed.py::_ESP_TA_RESOLVERS declares ESP_TA_SMA/EMA/RMA/ATR/RSI/WMA/VWAP and _seed_esp_ta_resolvers creates a System-owned ESP package, a resolver contract and a TRUSTED_ACTIVE registry row for each — but the whole block is behind the SEED_ESP_TA=1 env flag and no test calls _se… |
 | `ESP-05` | 09 | partial | The Embedded System / TA Resolver Family is seeded ACTIVE; assignment follows the shared exception while the resolver payload stays protected. | MISSING: the "resolver payload remains protected" half is never asserted, and the one shared-editing test raises a concrete question a follow-up must answer. doc 09 line 644 states that changing the Rationale Family assignment "does not change signature, adapter, validation, current revision or registry trust". The only shared-edit test, test_assign_creates_package_revision_owner_unchanged, tar… |
-| `ESP-20` | 09 | partial | A user with no ESP proposal sees only System trusted resolvers; direct ID query also enforces can_view. | MISSING: the role-aware filtering is never exercised with a FOREIGN actor. The predicate exists and is unit-tested — domain/esp/policy.py::ensure_can_view raises AccessDeniedError for a private resolver owned by someone else (unit/test_esp_policy.py::test_private_proposal_hidden_from_non_owner) — and queries/esp.py wires it in both places (list_embedded_system_packages post-filters rows through… |
 | `RF-08` | 10 | partial | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
 | `MKD-02` | 11 | partial | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The … |
 | `RD-01` | 12 | partial | Without an approved Market Data link the creator stays locked and the server returns DEPENDENCY_BLOCKED. | The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server command + route). The criterion names "create draft/analysis command" — only create is exercised; no test posts /research-datasets/{id}/analysis without a linked market dependency and asserts DEPENDENCY_BLOCKED. ADIM 54 FINDING — c4 is very likely MISCLASSIFIED and no test can close it. The clause wants the… |

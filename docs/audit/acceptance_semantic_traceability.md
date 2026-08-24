@@ -55,7 +55,7 @@ for this map.
 | 03 | 18 | 2 | 1 | 0 | 0 | 0 | 21 |
 | 04 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
 | 05 | 17 | 6 | 0 | 0 | 0 | 0 | 23 |
-| 06 | 10 | 5 | 1 | 0 | 0 | 0 | 16 |
+| 06 | 12 | 3 | 1 | 0 | 0 | 0 | 16 |
 | 07 | 18 | 3 | 1 | 0 | 0 | 0 | 22 |
 | 08 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
 | 09 | 17 | 3 | 0 | 0 | 0 | 0 | 20 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 14 | 2 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 6 | 3 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **302** | **59** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **304** | **57** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1061 |
+| covered | 1063 |
 | partial | 4 |
-| uncovered | 71 |
+| uncovered | 69 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -91,7 +91,7 @@ for this map.
 | Evidence type | Criteria |
 |---|---|
 | backend_contract | 71 |
-| backend_integration | 324 |
+| backend_integration | 325 |
 | backend_unit | 131 |
 | e2e | 16 |
 | frontend_component | 132 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 27 |
+| B | 25 |
 | C | 6 |
 | D | 32 |
-| **open total** | **66** |
+| **open total** | **64** |
 
-## Partial criteria (59)
+## Partial criteria (57)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -130,9 +130,7 @@ for this map.
 | `TL-16` | B | Concurrent editors on the same expected head — exactly one wins, the other gets a 409. | c3 CLOSED by acceptance batch 11 (doc 05 backend); c4 MEASURED AND FOUND UNSHIPPED, and the criterion therefore stays partial/class B. c3: test_stale_expected_head_conflicts raises on a FABRICATED token and stops, which proves the guard rejects a token that never existed — it cannot distinguish that from last-write-wins between two real writers who both read the same real head, because the loser silently replacing the winner would leave it green. The new test drives both writers off the SAME observed head, then counts what the root holds: revision_no == [1, 2], the head is the winner's revision id, and the loser's display_name appears in NO revision payload. Negative control: deleting the expected_head_revision_id guard in commands/trade_log.py turned it red with DID NOT RAISE. c4 is the FINDING and was NOT acted on. The raise site is a bare "raise WorkObjectRevisionConflictError()" (commands/trade_log.py, mirrored in trading_signal.py and mainboard.py); AppError.__init__ then sets details=[] and leaves scope_id/field_path None, so the 409 envelope carries the class-level code, message, category, retryable and suggested_action and NOTHING about the server's current head. The canonical state the clause names does not exist on the wire, which is the class D definition, not test debt: no test can assert a field the product never populates. It was NOT moved — B -> D would RAISE the D ceiling, and ceilings only fall except by adjudication. Trade Log is intentionally NOT in the dual-token matrix (test_occ_dual_token_contract.py has no trade-log param) — it takes a body token only. |
 | `CP-03` | B | A visible-but-not-usable package is refused by Add Strategy From Package server-side; the UI clears stale selection state. | The server-side half is fully proven: can_view/can_use are independent in the projection and the derive command refuses both the unusable-but-visible revision (PackageNotDerivableError) and the foreign private one (AccessDeniedError). What is NOT asserted anywhere is the row's second sentence — that the UI clears stale selection state after such a denial. The mainboard test proves the picker disables an ineligible row up-front, which is a different assertion from clearing an already made selection once the server refuses it. |
 | `CP-06` | C | Changing the target runtime after a Passed Pre-Check makes the report stale and Send refuses to start candidate generation. | The staleness mechanism and the Send refusal are both proven, but the stale test mutates `PackageRequest.context_hash` directly rather than changing the target runtime. `test_context_hash_changes_with_each_input` varies the source hash and the declared dependencies, never `target_runtime`, so no test proves that a runtime change alone moves the hash. Note the scenario is also unreachable in Production — `SUPPORTED_TARGET_RUNTIMES == {python}` (CP-05) — which is exactly why the clause is recorded as unproven rather than quietly rolled up. |
-| `CP-09` | B | The same Send Idempotency-Key returns the same request/job identity; the same C.D.P key creates no second draft. | `submit_candidate_generation` does accept `idempotency_key` and wraps its body in `run_idempotent`, but no test in the suite passes a key to it twice: a grep for `idempotency_key` across the create-package integration tests hits only the C.D.P call. The Send-replay half is therefore an untested code path, not a proven one. |
 | `CP-12` | D | Static review and a prefix-invariance test must write critical evidence on future-data/repaint findings and Approve must be refused server-side. | The gate half holds: `repaint_future_leak` is one of the mandatory checks and a blocked/failed check keeps the report from passing, which is what stops Approve. What no test shows is a POSITIVE detection — a candidate that actually reads future data or repaints, producing critical evidence. And the row's "prefix-invariance test" has no implementation to test: `jobs/package_validation.py` uses "prefix" only for canonical-key prefixes in the plan probe; there is no prefix-truncation invariance run anywhere in the production tree. |
-| `CP-13` | B | Supervisor/Agent may request approval but only Admin executes publish and the ESP registry transition; the backend guard holds regardless of UI state. | The prohibition half is proven on both surfaces and for both principals. The permission half — "Supervisor veya Agent valid candidate için approval request oluşturabilir" — is not: no test drives `request_approval` (or the create-package equivalent) with a SUPERVISOR or AGENT actor; the permission unit tests only exercise owner/foreign-user/admin. So the row's affirmative clause is unproven. |
 | `PC-02` | B | An empty source starts no scan job, the UI shows the final empty-input text, and Send separately rejects the empty request. | In the shipped design an empty source never becomes a request at all — `EMPTY_SOURCE` fires in `normalize_request`, at the route, before the DB — so "no scan job starts" and "Send rejects the empty request" collapse into the same proven guard. The UI half is unproven: `PreCheck.tsx` renders "No Pre-Check scan yet for this request." for the no-scan case and no test asserts that string, nor is there an empty-input branch keyed to an empty source. ADIM 76 FINDING — c2 is very likely MISCLASSIFIED and no test can close it as written. The clause wants the Pre-Check surface to show a "final empty-input text" for an EMPTY SOURCE (doc 07 §16 PC-02: "UI shows TA PRE-CHECK RESULT with final empty-input text"). MEASURED on base 0f0651d: (1) `EMPTY_SOURCE` appears NOWHERE in `frontend/src` — grepping the code and every empty-source spelling across the whole frontend tree returns only unrelated hits in `marketData.test.tsx` and `panelLogs.test.tsx`; the only `EmptyState` on the Pre-Check page (`pages/PreCheck.tsx:123`) is "No requests yet", an empty request LIST, not an empty source. (2) More decisively, the state is UNCONSTRUCTIBLE on the shipped surface: the overlay is rendered as `{precheckOpen && detail !== null ? <PreCheckModal … />}` (`pages/CreatePackage.tsx:765`), so Pre-Check cannot be opened without a persisted request — and a request with an empty source cannot be persisted, because the route rejects it before the DB. There is therefore no reachable screen on which an "empty-input" Pre-Check result could be rendered. That makes c2 closer to class C (a scenario Production cannot construct) than to class B; either way it is NOT test debt. NOT RECLASSIFIED — B -> C/D RAISES that ceiling and is an adjudication, not a test slice's call. This makes NINE such open findings across the ledger. |
 | `PC-16` | D | An Agent hitting a missing dependency blocks only the conversion branch while unrelated Agent tasks continue and a follow-up/proposal artifact may be queued. | The "may be queued" half is real and proven on the Agent plane. The branch-isolation half cannot be proven today for the same reason as PC-15: there is no Agent Pre-Check entry point, so no Agent conversion branch exists to be blocked while siblings continue. Recorded as partial rather than covered so the missing half stays visible. |
 | `PC-20` | B | Only Admin restores or permanently deletes from Trash; a restored request must be stale and a restored ESP needs active registry policy before resolving. | c2 is the strongest part of this row and is proven precisely: restore reactivates the ROOT but deliberately leaves the trust pointer closed, so a restored resolver cannot silently start resolving again. c3 has no test — nothing asserts that a restored package REQUEST comes back with a stale Pre-Check; `test_restore_keeps_identity_marks_entry_and_audits` covers identity/audit for the generic restore, not request staleness. ADIM 72 FINDING — c3 is very likely MISCLASSIFIED and no test can close it as written. The clause names a behaviour that IS NOT SHIPPED, not merely untested. MEASURED on this base: a package request IS a trashable registry root (`repositories/create_package.py` registers it as `entity_type="package_request"`), so the scenario is constructible — but restore runs `commands/deletion.py::_restore_registry_target`, which only flips `deletion_state` back to ACTIVE and clears `deleted_at/deleted_by/delete_reason`. It touches neither the request's `context_hash` nor its `current_scan_id`, and there is no package-request-specific restore branch at all (the typed branches are backtest_result, manual_document and hypothesis_artifact). `cp_repo.get_current_scan` then reads `detail.current_scan_id` through a plain `session.get` with NO deletion filter, so the old PASSED scan comes back intact, and `_enforce_precheck_gate` compares only context_hash and registry_fingerprint — both unchanged by a delete/restore cycle. A restored request therefore PASSES the Send gate rather than coming back stale. Doc 07 §5 (the "deleted / restored request" lifecycle row) does demand "restored request current dependencies için stale kabul edilir", so this is a genuine product gap: it needs a restore-time staleness marker, i.e. class D, not test debt. NOT RECLASSIFIED — B -> D would RAISE the D ceiling and that is an adjudication, not a test slice's call. This makes EIGHT such open findings across the ledger. |

@@ -302,3 +302,92 @@ async def test_approve_repeat_is_idempotent(session) -> None:
     # The second approve short-circuits (already APPROVED) — no duplicate decision/audit.
     assert await _count(session, ApprovalDecision, target_entity_id=root.entity_id) == 1
     assert await _count(session, AuditEvent, event_kind="package.approved_published") == 1
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 26 — CP-13.c4 (doc 06 §14): the PERMISSION half of the      #
+# approval boundary, for the two principals the row names                     #
+# --------------------------------------------------------------------------- #
+
+SUPERVISOR = Actor(
+    principal_id="user_supervisor", principal_type=PrincipalType.HUMAN, role=Role.SUPERVISOR
+)
+AGENT = Actor(principal_id="agent_alpha", principal_type=PrincipalType.AGENT, role=None)
+
+
+async def _seed_actor_principal(session, actor: Actor) -> None:
+    if await session.get(Principal, actor.principal_id) is None:
+        session.add(Principal(principal_id=actor.principal_id, principal_type=actor.principal_type))
+        await session.flush()
+
+
+@pytest.mark.parametrize(
+    "actor_name",
+    ["supervisor", "agent"],
+)
+async def test_supervisor_and_agent_can_request_approval_but_not_publish(
+    session, actor_name: str
+) -> None:
+    """CP-13.c4: "Supervisor veya Agent valid candidate için approval request
+    oluşturabilir fakat Admin-only publish'i execute edemez" (doc 06 §14).
+
+    The PROHIBITION half is proven for both principals already (CP-13.c1/c2, on the
+    CreatePackage route and the ESP registry). The PERMISSION half never was: every
+    request-approval test drives OWNER, a plain USER, so nothing showed that a
+    Supervisor or an Agent may open the approval gate at all. A guard tightened to
+    "only Admin may request approval" would have kept the whole suite green.
+
+    Both halves are asserted on the SAME root in one case, which is what the row's
+    sentence actually claims: the actor advances the candidate to APPROVAL_REQUESTED
+    and is still refused the publish that follows it.
+    """
+    actor = SUPERVISOR if actor_name == "supervisor" else AGENT
+    await _seed_principals(session)
+    await _seed_actor_principal(session, actor)
+    root = await _make_pkg(session, owner=actor.principal_id, name=f"Candidate {actor_name}")
+    head = root.current_revision_id or ""
+    # Captured BEFORE any expire: reading an id off an expired instance triggers a
+    # synchronous lazy refresh, which is a MissingGreenlet on an async session.
+    entity_id = root.entity_id
+
+    # Vacuity guard: a VALID candidate that has NOT been requested yet — otherwise
+    # "it is approval_requested afterwards" could hold before the call too.
+    base = await pkg_repo.get_revision(session, head)
+    assert base is not None
+    assert base.validation_state == PackageValidationState.PASSED
+    assert base.approval_state == ApprovalState.DRAFT
+    assert not _admin_can_approve(root, base)
+
+    result = await pkg_cmd.request_package_approval(
+        session, actor, entity_id=entity_id, revision_id=head
+    )
+    await session.flush()
+
+    # The permission half: the transition really landed, read back from the row.
+    assert result["approval_state"] == str(ApprovalState.APPROVAL_REQUESTED)
+    session.expire_all()
+    requested = await pkg_repo.get_revision(session, head)
+    assert requested is not None
+    # ``expire_all`` expired the root too; re-load it with await rather than letting a
+    # synchronous attribute read trigger a lazy refresh (MissingGreenlet).
+    root = await session.get(EntityRegistry, entity_id)
+    assert root is not None
+    assert requested.approval_state == ApprovalState.APPROVAL_REQUESTED
+    # ...and it is attributed to THIS actor, not to some ambient admin.
+    assert (
+        await _count(
+            session,
+            AuditEvent,
+            event_kind="package.approval_requested",
+            actor_principal_id=actor.principal_id,
+        )
+        == 1
+    )
+
+    # The prohibition half, on the very root this actor just advanced: the gate it
+    # opened is an ADMIN's to walk through.
+    assert _admin_can_approve(root, requested)
+    with pytest.raises(ApprovalRequiresAdmin):
+        await pkg_cmd.approve_and_publish_package(
+            session, actor, entity_id=entity_id, revision_id=head
+        )

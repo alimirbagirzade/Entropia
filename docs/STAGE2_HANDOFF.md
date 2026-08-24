@@ -8137,6 +8137,28 @@ rationale-assignable değil (`RATIONALE_ASSIGNABLE_PACKAGE_KINDS = {INDICATOR, C
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
 `PROJECT_HISTORY.md` §ADIM 104 · `docs/ADIM104_LANDED_KICKOFF.md`.
 
+
+## Stage 105 — kabul borcu batch 26 (doc 06 Create Package, backend): CP-09 + CP-13 kapandı landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** — iki yeni integration case + defter + üretilmiş artefaktlar.
+**`CP-09.c2`:** `submit_candidate_generation` hep `run_idempotent` ile sarılıydı ama hiçbir test
+ona iki kez anahtar geçirmemişti; yeni case iki ekseni sürer (yanıtın TAM sözlük eşitliği + tek
+durable `Job`) ve ilk çağrının gerçekten admit ettiğini ayrıca pinler. **`CP-13.c4`:** onay
+sınırının izin yarısı hiç sürülmemişti (her request-approval testi düz USER olan `OWNER`'ı
+kullanıyor); yeni parametrik case `request_package_approval`'ı Supervisor ve Agent için **kendi
+paketleri** üzerinde koşar, geçişi satırdan geri okur, audit'i aktöre atfeder ve **aynı kök
+üzerinde** publish'in `ApprovalRequiresAdmin` verdiğini pinler. **ASIL DERS: bir negatif kontrol
+KIRMIZI VERDİĞİ HÂLDE reddedilebilir** — ilk NC 10 testi birden (mevcutlar dahil) kırmızı yaptı,
+yani ayırt edici değildi; yeniden kurulan sürüm USER+Admin'i geçirip yalnız Supervisor/Agent'ı
+reddediyor → **30 testte yalnız iki yeni case kırmızı, 28 mevcut test yeşil**. **İki ölçülmüş
+sınır deftere yazıldı** (CP-09.c2'nin iki ekseni tek satırlık kusurla ayrışmıyor;
+`request_package_approval` Owner-or-Admin olduğu için c4 aktörün KENDİ adayı için geçerlidir).
+**Tavanlar İNDİ: `partial` 59 → 57, `debt_class.B` 27 → 25** (açık borç 64). Doc 06 = 12/3/1.
+**SÜREÇ:** parti #817 CI'dayken yazıldı ama o dala İTİLMEDİ (karışma + CI restart + facts kapısı
+kırmızısı); patch olarak taşınıp merged ağaçta yeniden koşuldu. **Blocker sayısı DEĞİŞMEDİ
+(1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
+`PROJECT_HISTORY.md` §ADIM 105 · `docs/ADIM105_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

@@ -7577,31 +7577,49 @@ criteria:
     - backend/tests/integration/test_create_package_persistence.py::test_create_draft_is_idempotent
   - id: CP-09.c2
     text: A repeated Send under the same Idempotency-Key returns the same request/job identity.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_create_package_persistence.py::test_send_replay_under_the_same_key_returns_one_request_and_one_job
   production_paths:
   - backend/src/entropia/application/commands/create_package.py
   - backend/src/entropia/application/idempotency.py
   test_evidence:
   - backend/tests/integration/test_create_package_persistence.py::test_create_draft_is_idempotent
+  - backend/tests/integration/test_create_package_persistence.py::test_send_replay_under_the_same_key_returns_one_request_and_one_job
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_create_package_persistence.py::test_create_draft_is_idempotent
+  - backend/tests/integration/test_create_package_persistence.py::test_send_replay_under_the_same_key_returns_one_request_and_one_job
   negative: []
   auth: []
   occ: []
   idempotency:
   - backend/tests/integration/test_create_package_persistence.py::test_create_draft_is_idempotent
+  - backend/tests/integration/test_create_package_persistence.py::test_send_replay_under_the_same_key_returns_one_request_and_one_job
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: '`submit_candidate_generation` does accept `idempotency_key` and wraps its body in `run_idempotent`,
-    but no test in the suite passes a key to it twice: a grep for `idempotency_key` across the create-package
-    integration tests hits only the C.D.P call. The Send-replay half is therefore an untested code
-    path, not a proven one.'
+  status: covered
+  notes: 'c2 closed by ADIM 105 (batch 26). WAS: `submit_candidate_generation` did accept
+    `idempotency_key` and wrapped its body in `run_idempotent`, but no test in the suite passed a
+    key to it twice — a grep for `idempotency_key` across the create-package integration tests hit
+    only the C.D.P call, so the Send-replay half was an untested code path rather than a proven one.
+    HOW IT CLOSED: the new case admits the same request twice under one key and asserts TWO axes.
+    Axis 1 is identity — the WHOLE response dict is compared, so a differing job_id, state or
+    request_version reddens it; note the replay can only be served from the idempotency record,
+    because re-running the body would raise on the candidate_generating -> candidate_generating edge.
+    Axis 2 is the side-effect count: exactly one durable Job row across both calls. A vacuity guard
+    pins that the FIRST call really admitted (state moved, a Job exists) — without it "the second
+    matches the first" would also hold for two calls that both did nothing. NEGATIVE CONTROL NC-1
+    bypassed run_idempotent entirely: across 30 tests ONLY this case reddened, and it reddened by
+    the replay RAISING IllegalCreatePackageTransition — the clause broken in its strongest form
+    (the replay does not return the same identity because it does not return at all). MEASURED
+    BOUNDARY, recorded rather than papered over (the ADIM 100 precedent): the two axes could not be
+    separated by any one-line defect. A defect that returns the cached body while still enqueueing a
+    second job would need the enqueue moved outside the idempotent body, which also changes what the
+    first call returns, so every local patch reddens the vacuity guard before reaching axis 2. Axis
+    2 is therefore asserted but not independently negative-controlled.'
 - id: CP-10
   document: docs/spec/06_Entropia_V18_Add_Package_Create_Package_Page_Documentation_v1_1.md
   section: '15'
@@ -7796,11 +7814,13 @@ criteria:
       head token and shows the Admin denial verbatim
   - id: CP-13.c4
     text: A Supervisor or an Agent CAN create an approval request for a valid candidate.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_library_approval.py::test_supervisor_and_agent_can_request_approval_but_not_publish
   production_paths:
   - backend/src/entropia/application/commands/create_package.py
   - backend/src/entropia/application/commands/esp.py
+  - backend/src/entropia/application/commands/package_lifecycle.py
   - backend/src/entropia/domain/package/policy.py
   - frontend/src/pages/CreatePackage.tsx
   test_evidence:
@@ -7814,11 +7834,14 @@ criteria:
     note for a non-admin at eligible_for_approval (R2-12)
   - frontend/src/test/createPackage.test.tsx > Create Package page > sends approve with the draft
     head token and shows the Admin denial verbatim
+  - backend/tests/integration/test_library_approval.py::test_supervisor_and_agent_can_request_approval_but_not_publish
   evidence_type:
   - backend_contract
   - backend_unit
+  - backend_integration
   - frontend_component
-  positive: []
+  positive:
+  - backend/tests/integration/test_library_approval.py::test_supervisor_and_agent_can_request_approval_but_not_publish
   negative:
   - backend/tests/contract/test_create_package_contract.py::test_non_admin_approve_rejected
   - backend/tests/contract/test_create_package_contract.py::test_agent_approve_rejected
@@ -7841,14 +7864,35 @@ criteria:
   idempotency: []
   async_recovery: []
   historical_integrity: []
-  agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The prohibition half is proven on both surfaces and for both principals. The permission
-    half — "Supervisor veya Agent valid candidate için approval request oluşturabilir" — is not: no
-    test drives `request_approval` (or the create-package equivalent) with a SUPERVISOR or AGENT actor;
-    the permission unit tests only exercise owner/foreign-user/admin. So the row''s affirmative clause
-    is unproven.'
+  agent_parity:
+  - backend/tests/integration/test_library_approval.py::test_supervisor_and_agent_can_request_approval_but_not_publish
+  status: covered
+  notes: 'c4 closed by ADIM 105 (batch 26). WAS: the prohibition half was proven on both surfaces and
+    for both principals, but the permission half — "Supervisor veya Agent valid candidate için approval
+    request oluşturabilir" — was not: no test drove request_approval with a SUPERVISOR or AGENT actor;
+    the permission unit tests only exercised owner/foreign-user/admin. HOW IT CLOSED: the shipped
+    command that literally creates an approval request is
+    commands/package_lifecycle.py::request_package_approval (DRAFT -> APPROVAL_REQUESTED, audited
+    package.approval_requested) — added to production_paths here. The new parametrized case runs it for
+    a SUPERVISOR and for an AGENT, each on a package they OWN, and asserts the whole shape: the
+    transition read back from the row, the audit attributed to THAT actor, and — on the same root the
+    actor just advanced — that approve_and_publish_package still raises ApprovalRequiresAdmin. Vacuity
+    guards pin that the candidate is genuinely valid and NOT yet requested (validation PASSED,
+    approval_state DRAFT, the Admin gate still closed) before the call. NEGATIVE CONTROLS, and the
+    FIRST ONE WAS REJECTED: passing owner_principal_id=None to ensure_can_edit turned 10 tests red
+    including pre-existing ones, so it was NOT discriminating — it broke the plain-USER owner path the
+    old tests already cover, which proves falsifiability but not that this case adds an axis. The
+    rebuilt control admits USER owners and Admins and refuses ONLY Supervisor/Agent (the realistic
+    "only a User may request approval" tightening): across 30 tests exactly the two new parametrized
+    cases reddened and all 28 pre-existing tests stayed GREEN — the measured proof the permission half
+    was uncovered. Two further controls confirm the individual assertions are live (the transition not
+    persisted -> the state read-back reddens; the audit kind renamed -> the attribution count reddens),
+    but both also redden pre-existing tests, so they are falsifiability evidence rather than gap
+    evidence and are recorded as such. MEASURED BOUNDARY: request_package_approval is Owner-or-Admin
+    (domain/identity/policy.py::can_edit), so the affirmative clause holds for a Supervisor or Agent
+    acting on THEIR OWN candidate — which is what doc 06 line 1364 and line 1090 describe. A Supervisor
+    requesting approval on someone ELSE''s candidate is refused; that reading is not what the row
+    claims and was not asserted.'
 - id: CP-14
   document: docs/spec/06_Entropia_V18_Add_Package_Create_Package_Page_Documentation_v1_1.md
   section: '15'

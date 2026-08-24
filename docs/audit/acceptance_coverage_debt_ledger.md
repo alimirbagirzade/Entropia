@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 27 |
+| B | 25 |
 | C | 6 |
 | D | 32 |
-| **open total** | **66** |
+| **open total** | **64** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (27)
+## Class B (25)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -69,8 +69,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `TL-14` | 05 | partial | Import returns a durable job id; the worker owns the work and the UI recovers from job state. | test_trade_log_import_is_handed_off_to_its_data_actor is the PR #528 regression guard: it asserts the tool call is admitted (status succeeded) while the WORK is still queued (import_status == "queued", import_job_kind == TRADE_LOG_IMPORT) and that worker_actors._dispatch_pending_data_job sends run_trade_log_import for that job_id — the exact hand-off the Gateway plane used to skip, leaving agen… |
 | `TL-16` | 05 | partial | Concurrent editors on the same expected head — exactly one wins, the other gets a 409. | c3 CLOSED by acceptance batch 11 (doc 05 backend); c4 MEASURED AND FOUND UNSHIPPED, and the criterion therefore stays partial/class B. c3: test_stale_expected_head_conflicts raises on a FABRICATED token and stops, which proves the guard rejects a token that never existed — it cannot distinguish that from last-write-wins between two real writers who both read the same real head, because the lose… |
 | `CP-03` | 06 | partial | A visible-but-not-usable package is refused by Add Strategy From Package server-side; the UI clears stale selection state. | The server-side half is fully proven: can_view/can_use are independent in the projection and the derive command refuses both the unusable-but-visible revision (PackageNotDerivableError) and the foreign private one (AccessDeniedError). What is NOT asserted anywhere is the row's second sentence — that the UI clears stale selection state after such a denial. The mainboard test proves the picker di… |
-| `CP-09` | 06 | partial | The same Send Idempotency-Key returns the same request/job identity; the same C.D.P key creates no second draft. | `submit_candidate_generation` does accept `idempotency_key` and wraps its body in `run_idempotent`, but no test in the suite passes a key to it twice: a grep for `idempotency_key` across the create-package integration tests hits only the C.D.P call. The Send-replay half is therefore an untested code path, not a proven one. |
-| `CP-13` | 06 | partial | Supervisor/Agent may request approval but only Admin executes publish and the ESP registry transition; the backend guard holds regardless of UI state. | The prohibition half is proven on both surfaces and for both principals. The permission half — "Supervisor veya Agent valid candidate için approval request oluşturabilir" — is not: no test drives `request_approval` (or the create-package equivalent) with a SUPERVISOR or AGENT actor; the permission unit tests only exercise owner/foreign-user/admin. So the row's affirmative clause is unproven. |
 | `PC-02` | 07 | partial | An empty source starts no scan job, the UI shows the final empty-input text, and Send separately rejects the empty request. | In the shipped design an empty source never becomes a request at all — `EMPTY_SOURCE` fires in `normalize_request`, at the route, before the DB — so "no scan job starts" and "Send rejects the empty request" collapse into the same proven guard. The UI half is unproven: `PreCheck.tsx` renders "No Pre-Check scan yet for this request." for the no-scan case and no test asserts that string, nor is th… |
 | `PC-20` | 07 | partial | Only Admin restores or permanently deletes from Trash; a restored request must be stale and a restored ESP needs active registry policy before resolving. | c2 is the strongest part of this row and is proven precisely: restore reactivates the ROOT but deliberately leaves the trust pointer closed, so a restored resolver cannot silently start resolving again. c3 has no test — nothing asserts that a restored package REQUEST comes back with a stale Pre-Check; `test_restore_keeps_identity_marks_entry_and_audits` covers identity/audit for the generic res… |
 | `PL-07` | 08 | partial | A Strategy Draft keeps its pinned Indicator revision after a newer package revision becomes current. | MISSING: the literal PL-07 sequence is never executed. No test attaches an Indicator package revision to a Strategy Draft (or a saved Strategy revision), then appends revision N+1 to that same package root, then re-reads the draft/revision and asserts it still names revision N. The building blocks are each proven separately — create_package_revision leaves the base revision immutable and still … |

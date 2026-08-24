@@ -237,7 +237,34 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 104 (kabul borcu batch 25, doc 09 ESP BACKEND): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 105 (kabul borcu batch 26, doc 06 Create Package BACKEND): ÜRÜN
+> KODU DEĞİŞMEDİ, iki integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> İki kriter kapandı — **`CP-09.c2`** (Send'in idempotency replay'i: komut hep `run_idempotent` ile
+> sarılıydı ama hiçbir test ona iki kez anahtar geçirmemişti; yeni case yanıtın TAM sözlük eşitliğini
+> ve tek durable `Job`'ı ayrı eksenler olarak sürer) · **`CP-13.c4`** (onay sınırının İZİN yarısı:
+> her request-approval testi düz USER olan `OWNER`'ı kullanıyordu, Supervisor/Agent hiç sürülmemişti;
+> yeni parametrik case `request_package_approval`'ı ikisi için de KENDİ paketleri üzerinde koşar ve
+> AYNI kök üzerinde publish'in `ApprovalRequiresAdmin` verdiğini pinler). **Tavanlar İNDİ: `partial`
+> 59 → 57, `debt_class.B` 27 → 25**; açık borç **64** (A=1 · B=25 · C=6 · D=32). Doc 06 = 12/3/1.
+> **ASIL DERS (üçüncü şekil): BİR NEGATİF KONTROL, KIRMIZI VERDİĞİ HÂLDE REDDEDİLEBİLİR** — ilk NC
+> `ensure_can_edit`'e `owner_principal_id=None` geçirip **10 testi birden** (mevcutlar dahil) kırmızı
+> yaptı, yani **ayırt edici değildi**: kontrolün iki işi vardır, assertion'ın canlı olduğunu ve
+> **boşluğun gerçek** olduğunu göstermek; ikincisi ancak mevcut suite o kusur altında **yeşil
+> kalırsa** kanıtlanır. Reddedilip *"USER+Admin geçer, yalnız Supervisor/Agent reddedilir"* biçiminde
+> yeniden kuruldu → **30 testte yalnız iki yeni case kırmızı, 28 mevcut test yeşil**. (Batch 24/25
+> *"yanlış sebeple kırmızı"*yı öğretmişti; bu **doğru sebep, yanlış kapsam**.) **İKİ ÖLÇÜLMÜŞ SINIR
+> DEFTERE YAZILDI, kapatılmadı:** `CP-09.c2`'nin iki ekseni tek satırlık hiçbir kusurda ayrışmıyor
+> (enqueue'yu idempotent gövdenin dışına almak birinci çağrıyı da değiştirir) ·
+> `request_package_approval` **Owner-or-Admin**, yani c4 aktörün **kendi** adayı için geçerlidir.
+> **SÜREÇ DERSİ: açık bir PR'ın dalı sonraki partinin çalışma alanı DEĞİLDİR** — batch 26 #817 CI'dayken
+> yazıldı ama o dala itilmedi (karışma + ~48 dk CI restart + `repository_facts --check` kırmızısı);
+> patch olarak taşınıp merged ağaçta yeniden koşuldu.
+> `PROJECT_HISTORY.md` §ADIM 105 · `docs/ADIM105_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 104 (kabul borcu batch 25, doc 09 ESP BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, iki integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > İki kriter kapandı — **`ESP-20`** (c2+c3: rol farkındalıklı filtre İLK KEZ yabancı aktörle
 > sürüldü; predicate vardı, iki sorguya da bağlıydı, ama tek listing testi iki kaydı da AYNI

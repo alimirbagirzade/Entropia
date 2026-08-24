@@ -237,7 +237,43 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev` (**DEĞİŞMEDİ**). **Son dalga — ADIM 92 (`C4`/E5, worker'ın paylaşımlı saat dalı):
+> `future_dev`. **Son dalga — ADIM 93 (kabul borcu batch 16, doc 02 BACKEND): ÜRÜN KODU
+> DEĞİŞMEDİ, beş yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> BLOCKED.** Dört kriter kapandı — **`AT-01.c2`** (kompozisyona giren tek kapı
+> `attach_mainboard_item`'dır; kaydedilmemiş draft'ın kökünde **hiç `work_object_revision`
+> yok** → iki sahte-id dalı da reddedilir, Save + kendi mirror'ı **pozitif kontrol**) ·
+> **`AT-11.c2/c3`** (kapalı stop hem saklanan `strategy_revision.payload`'dan hem pinlenmiş
+> `protection_stop_indicator` **kenarından** düşer; re-enable draft'ın **kendi saklanmış**
+> değerini revalidate eder → 422) · **`AT-22.c3`** (Supervisor red / Admin grant, **aynı**
+> yabancı draft, sahip değişmez) · **`AT-23.c3`** (zaten revizyonu olan kök Clear'lanır;
+> revizyon + kenarlar + head pointer sağ, `trash_entries` **doğrudan** sorgulanır).
+> **YEDİ negatif kontrol, hepsi doğru assertion'da kırmızı** ve her biri koşmadan önce
+> **yamasının uygulandığını** assert etti. **DERS: aynı mekanizmadan beslenen iki
+> assertion'ın ilki ikincisini GÖLGELER** — kenar assertion'ı ancak testin payload satırı
+> geçici olarak düşürülünce ölçülebildi. **DERS 2: bir reddi exception SINIFIYLA pinleme**
+> (AOS-12 kind kontrolü aynı sınıfı fırlatıp testi yeşil tutardı) → zarfın ekolanan alanını
+> assert et. **Tavanlar İNDİ: `partial` 79 → 75, `debt_class.B` 47 → 43**; açık borç **82**
+> (A=1 · B=43 · C=6 · D=32). **DOC 02'NİN BACKEND BORCU BİTTİ** — kalan tek test kalemi
+> `AT-07` ve o **frontend**. **ORTAM DEĞİŞTİ: bu container'da Postgres 16 kurulu**, yerel
+> cluster kaldırıldı ve integration suite **gerçekten koştu** → son beş dalganın *"Postgres
+> yok, otorite CI"* sınırı **artık zorunlu değil** (komutlar kickoff §çapalar). **DÜRÜST
+> SINIR:** frontend kapıları koşulmadı (`node_modules` yok, frontend'de sıfır satır); tam
+> suite'in **geçen** sayısı ve coverage CI'ın otoritesinde. **NUMARA: bu kayıt `ADIM 89` /
+> *"batch 15"* yazıldı; #803 **91**'i + *"batch 15"*'i, #799 **92**'yi merge edilmiş adla aldı
+> → bu kayıt **93** / *"batch 16"*. **89'un BOŞ olması onu güvenli yapmıyordu** — kapı canlı
+> kickoff'un ağaçtaki EN YÜKSEK numaralı `ADIM<n>` DOSYASI olmasını ister, `doc-status`
+> işaretine değil. **DERS (asıl olan): tavan hatası SESSİZ olurdu.** Dal 79/47'yi kendi
+> tabanına karşı doğru ölçmüştü, ama #803 indikten sonra main **zaten** 79/47'deydi; rebase
+> sonrası taze `--report` **75/43** verdi (kriterler ayrık → ikisi de düşürüyor). Eski
+> freeze'le `--ratchet` **yeşil kalırdı** — ölçülen < tavan asla kırmızı vermez — ve tavan
+> dört fazla taşırdı. **Kapı bunu yakalamaz, koşturan kişi yakalar.**
+> `PROJECT_HISTORY.md` §ADIM 93 ·
+> `docs/ADIM93_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev` (**DEĞİŞMEDİ**). Öncesinde **ADIM 92 (`C4`/E5, worker'ın paylaşımlı saat dalı):
 > ÜRÜN KODU DEĞİŞTİ (tek dosya), gözlenebilir ÜRETİM DAVRANIŞI DEĞİŞMEDİ; 50 golden digest BAYT
 > BAYT AYNI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `_use_unified_clock` **tek**
 > yerde (iki conjunct da taşıyıcı), dal item döngüsünün **kardeşi** + ADR §3.2'nin

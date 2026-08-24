@@ -13232,3 +13232,118 @@ frontend'de **sıfır satır** değişti) → otoritesi CI. `npm run visual` / `
 **Containment AÇILMADI:** `G10` (ADR §16 Gate 2) hâlâ **talep edilmedi**; `G8`/`G11`/`G12`/`G14`
 açık; Karar 1 (#552 komisyon tabanı) ve Karar 3 (#559) **imzasız**. Sıradaki plan kalemi `C5`
 (zaten sevk edilmiş, ADIM 72'de ölçüldü) değil, **`C6`** — ve onun önünde iki imza var.
+## ADIM 93 — kabul borcu batch 16 (doc 02 Add Strategy / Strategy Details, backend): dört kriter kapandı, doc 02'nin backend borcu bitti
+
+> **ÜRÜN KODU DEĞİŞMEDİ — yalnız test + defter.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** `backend/src` altında **sıfır** satır; diff = beş yeni integration case
+> + kabul defteri + üretilmiş artefakt.
+
+**Kapanan dört kriter: `AT-01` (c2) · `AT-11` (c2 + c3) · `AT-22` (c3) · `AT-23` (c3).**
+Doc 02 bugüne kadar **hiç parti görmemişti** ve en büyük dokunulmamış sınıf-B havuzuydu
+(5 kriter). Dördünde de eksik olan **mekanizma değil DİKİŞTİ** — davranış sevk edilmiş,
+ölçüldüğü yer yanlış ya da yetersizdi:
+
+- **`AT-01.c2`** (*unsaved draft Ready Check / RUN inputuna giremez*) yalnızca bir
+  **projeksiyon bayrağından** okunuyordu (`has_revision is False`). Yeni test kapıyı **onu
+  zorlayan dikişte** ölçer: bir kompozisyona giren tek yol `attach_mainboard_item`'dır ve o
+  tam `(root_id, revision_id)` çiftini çözer (L5 — ad ya da "latest" çözümü yok). Test önce
+  **kaydedilmemiş draft'ın kökünde HİÇ `work_object_revision` satırı olmadığını** assert
+  eder (asıl taşıyıcı olgu budur), sonra bir istemcinin deneyebileceği **iki sahte-id
+  dalını** sürer: (1) var olmayan revizyon id'si, (2) **BAŞKA** bir strateji kökünden
+  ödünç alınmış **gerçek, aynı-kind** revizyon. İkincisi bilerek **sınıfla değil ekolanan
+  alanla** pinlenir — aksi halde AOS-12'nin kind kontrolü de aynı `ValidationError`'ı
+  fırlatıp testi yeşil tutardı. Save + kendi mirror revizyonuyla attach **pozitif
+  kontroldür**: aynı kök, aynı aktör, aynı workspace → red, arızalı harness'a değil eksik
+  revizyona atfedilebilir.
+- **`AT-11.c2/c3`** `filter_disabled_sections`'a **izole** bakıyordu. c2 artık **saklanan**
+  `strategy_revision.payload`'ı ve **pinlenmiş `protection_stop_indicator` bağımlılık
+  kenarını** geri okur: tek Save'de **kapalı** bir percentage stop + **kapalı** bir Logic
+  stop bloğu, **açık** bir trailing stop + **açık** bir Logic bloğunun yanında gider, yani
+  bölümü toptan düşürerek test geçilemez. c3 daha keskin: kapalı stop, `PercentageStop.
+  loss_percentage`'ın `gt 0` kısıtını **İHLAL EDEN** bir değerle kaydedilir ve **Save kabul
+  eder** (kapalı bölümler parse'tan ÖNCE filtrelenir, Binding Decision #2); re-enable
+  yaması draft'ın **kendi saklanmış** stop bölümünü yalnız `enabled` çevrilmiş hâlde geri
+  gönderir → 422 yalnız **saklanan değerden** gelebilir. İstemci hiçbir şey yeniden
+  sunmaz — "eski değer revalidate edilir" cümlesinin gerçek okunuşu budur.
+- **`AT-22.c3`** kriterin adlandırdığı **İKİ aktörü de** aynı yabancı draft üzerinde sürer:
+  Supervisor `ACCESS_DENIED` alır, Admin gerçek bir `strategy_revision` yazar (admin
+  principal'ıyla damgalı) ve kökün `owner_principal_id`'si sonradan geri okunur → **grant
+  bir düzenlemedir, devralma değil**.
+- **`AT-23.c3`** sevk edilmiş Clear testi **hiç kaydedilmemiş** bir draft'ı temizliyordu.
+  Yeni test **zaten revizyonu olan** bir kökü Clear'lar ve revizyonu geri okur:
+  `revision_number`, `config_hash`, kanonik payload ve pinlenmiş bağımlılık kenarları
+  değişmez, `strategy_root.current_revision_id` hâlâ ona çözer, ve **doğrudan bir
+  `trash_entries` sorgusu** boş döner — c2'nin dolaylı "Trash kaydı yok" yarısı ilk kez
+  **doğrudan** asserted.
+
+**YEDİ NEGATİF KONTROL, HEPSİ KIRMIZI VE HEPSİ DOĞRU ASSERTION'DA.** Her biri koşmadan önce
+**yamasının gerçekten uygulandığını** doğruladı (tek eşleşme sayısı assert edildi, sonra
+dosya birebir geri yazıldı) — ADIM 88'in dersi: *yeşil bir kontrol çoğu zaman hiç
+uygulanmamış bir kontroldür*. Kontroller: (1) `mainboard.py`'deki `revision.entity_id !=
+root_id` kontrolünü sil → ödünç-revizyon dalı **DID NOT RAISE**; (2) kapalı sabit stopları
+koru → payload assertion'ı; (3) kapalı Logic bloklarını koru → payload assertion'ı;
+(4) **aynı kırılma + payload satırı testten geçici olarak çıkarılmış** → red **bağımlılık
+kenarı** assertion'ına iner (aksi halde o yarı gölgede kalır ve ölçülmemiş olurdu);
+(5) `gt 0` kısıtını gevşet → c3 **DID NOT RAISE**; (6) `policy.py`'deki iki satırlık
+`if actor.is_admin: return True` grant'ini sil → Admin save'i `AccessDeniedError`;
+(7) Clear'a head pointer'ı null'la / saklanan revizyon payload'ını kurcala → iki ayrı
+assertion. **DERS: bir testin iki yarısı aynı tek mekanizmadan besleniyorsa, ilk kırmızı
+ikincisini GÖLGELER** — kontrol (4) bu yüzden ürün kırılmasının yanında **testin kendi
+satırını** da geçici olarak düşürür; yoksa "kenar da ölçülüyor" bir varsayım olarak kalırdı.
+
+**Tavanlar İNDİ: `partial` 79 → 75, `debt_class.B` 47 → 43**; açık borç **86 → 82**
+(A=1 · B=43 · C=6 · D=32), clause `covered` 1039 → 1044, clause `uncovered` 91 → 87.
+Sayısal otorite `docs/audit/acceptance_coverage_baseline.json` — taban `3994725` üzerine
+**taze bir `--report` koşusuyla** donduruldu, iki freeze'in farkından türetilmedi.
+
+**DOC 02'NİN BACKEND BORCU BİTTİ.** Belgede kalan tek test-kapatılabilir satır **`AT-07`**
+(bir entry bloğu silinince görüntü numarası yeniden numaralanır ama `block_id` UUID'si
+sabit kalır) ve o **FRONTEND**'dir → bir doc 02 frontend partisi bekler; bulgu değil,
+sıradan sınıf-B. Kalan beş satır **sınıf D**'dir (`AT-04` `AT-06` `AT-13` `AT-17` `AT-19` —
+kriterin adlandırdığı kod `backend/src`'te yok). **BU PARTİDE YENİ BULGU YOK.**
+
+**YAN İŞ:** `acceptance_semantic_traceability.md`'nin doc 05 satırı **bayattı** (16/6/1
+yazıyordu, doğrusu 17/6/0) — ADIM 88 `TL-18`'i kapatmıştı ama bu **üretilmiş** belge o
+kapanışta yeniden üretilmemişti. O dosya `--check` kapısının **kapsamında değil**, bu yüzden
+sessizce bayatlıyor (ADIM 87 aynısını ADIM 42 sayıları için kaydetmişti). Yeniden üretildi.
+
+**ORTAM (ölçülmüş, önceki dalgaların kaydından FARKLI):** bu container'da **Postgres 16
+ikilileri kurulu** (`/usr/lib/postgresql/16/bin`) — `initdb` + `pg_ctl` ile yerel bir cluster
+kaldırıldı ve integration suite'i **gerçekten koştu** (bu dosyanın 18 mevcut case'i + 5
+yenisi yeşil). Son beş dalga *"Postgres yok → otorite CI"* diye kapandı; **o sınır artık
+zorunlu değil.** `ruff check`, `ruff format --check`, `mypy src` yerelde yeşil.
+**DÜRÜST SINIR:** frontend kapıları koşulmadı (`node_modules` yok, frontend'de sıfır satır)
+ve **tam suite'in geçen sayısı ile coverage yüzdesi CI'ın otoritesindedir.**
+
+**NUMARA VE PARTİ ETİKETİ — ÇAKIŞMA ÖNGÖRÜLDÜ VE GERÇEKLEŞTİ; BU KAYIT ÇÖZÜMÜDÜR.**
+Bu kayıt `ADIM 89` / *"batch 15"* yazıldı: o an main'in son kaydı **ADIM 88** idi, **89
+boştu**, ama **#803** kendini `stage-91` + *"batch 15"*, **#802** ise `stage-90` diye
+adlandırıyordu. Kayıt o zaman *"ikinci inen taraf hem numarayı hem `batch` etiketini yeniden
+doğrulamak, rebase edip tavanı kendi `--report` koşusuyla yeniden dondurmak zorundadır"*
+diye yazmıştı. **İkinci inen taraf bu oldu ve üç şeyin üçü de gerekti:**
+
+| Yazıldığı hâli | İndiği hâli | Neden |
+|---|---|---|
+| `ADIM 89` | **`ADIM 93`** | #803 **91**'i, #799 **92**'yi aldı → 89 **artık kullanılamaz** |
+| *"batch 15"* | *"batch 16"* | #803 aynı etiketi **merge edilmiş** olarak aldı |
+| tavan 83 → 79 / 51 → 47 | **79 → 75 / 47 → 43** | o rakamlar **taban** oldu, sonuç değil |
+
+**89'un boş olması onu güvenli yapmıyordu — #803 89'u atlayıp 91'i aldı ve ÖNCE indi.**
+`generate_repository_facts.py::_check_live_kickoff_is_newest` canlı kickoff'un ağaçtaki **en
+yüksek numaralı** `ADIM<n>` dosyası olmasını ister ve **dosya varlığına** bakar, `doc-status`
+işaretine değil. Yani soru *"numara boş mu"* değil, ***"inen her şeyin üstünde mi"***. Bu
+kayıt aynı gözlemi #799'un ADIM 92 kaydıyla **bağımsız olarak** paylaşıyor.
+
+**Tavan hatası sessiz olurdu ve asıl mesele budur.** Dal 79/47'yi kendi tabanına karşı doğru
+ölçmüştü; #803 indikten sonra **main zaten 79/47'deydi**. Rebase'den sonra taze `--report`
+**75/43** verdi — iki slice'ın kriterleri ayrık olduğu için ikisi de düşürüyordu. Eski
+freeze'le inseydi `--ratchet` **yeşil kalırdı** (ölçülen < tavan asla kırmızı vermez), ama
+tavan **dört fazla** taşırdı ve baseline'ın kendi README'sinin dediği olurdu: *"a ceiling set
+above the measured figure would silently license the next unproven criterion."* **Kapı bunu
+yakalamaz; kapıyı koşturan kişi yakalar.** Rakamlar iki freeze'in farkından **türetilmedi**,
+birleşik ağaç üzerinde yeniden ölçüldü.
+
+**Merge edilmiş ad kazanır.** Dal/commit mesajları `stage-89` yazar; slice **ADIM 93**'tür.
+`docs/ADIM93_LANDED_KICKOFF.md`.

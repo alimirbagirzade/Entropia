@@ -19513,12 +19513,15 @@ criteria:
     - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
   - id: TR-08.c4
     text: A Trash outbox event is emitted on restore.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_trash_page.py::test_restore_emits_its_trash_outbox_event
   production_paths:
   - backend/src/entropia/application/commands/deletion.py
   - backend/src/entropia/infrastructure/postgres/repositories/trash.py
   test_evidence:
   - backend/tests/integration/test_trash_page.py::test_restore_keeps_identity_marks_entry_and_audits
+  - backend/tests/integration/test_trash_page.py::test_restore_emits_its_trash_outbox_event
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
   - backend/tests/integration/test_trash_agent_artifact.py::test_artifact_trash_roundtrip_restore_then_purge
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
@@ -19526,6 +19529,7 @@ criteria:
   - backend_integration
   positive:
   - backend/tests/integration/test_trash_page.py::test_restore_keeps_identity_marks_entry_and_audits
+  - backend/tests/integration/test_trash_page.py::test_restore_emits_its_trash_outbox_event
   - backend/tests/integration/test_trash_page.py::test_backtest_result_trash_roundtrip
   - backend/tests/integration/test_trash_agent_artifact.py::test_artifact_trash_roundtrip_restore_then_purge
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
@@ -19537,14 +19541,19 @@ criteria:
   historical_integrity:
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Three of four clauses are strongly asserted, including the subtle "no new revision" one
-    (root.current_revision_id is captured before the delete and compared after the restore). The outbox
-    half is the gap: commands/deletion.py does call add_outbox_event alongside the "trash.restored"
-    audit row, but the test reads back only AuditEvent.event_kind. No test in the Trash suite queries
-    OutboxEvent on the restore path — the only outbox count assertions are on soft-delete surfaces
-    — so emission is unproven for restore.'
+  status: covered
+  notes: 'c4 closed by ADIM 103 (batch 24) — the UM-08.c5 twin the ADIM 101 kickoff predicted: the
+    restore core has always written an entity.restored outbox row next to the trash.restored audit
+    row, and NO test read it (the e2e pipeline''s trail counter stops at run admission, before its
+    restore step). The new case pins the wire event_type — audit kind trash.restored vs OUTBOX type
+    entity.restored, shipped names canonical per O-02/O-31 — asserts ZERO such rows exist before the
+    restore (attribution: the soft delete''s own outbox row rides a different type), then reads back
+    EXACTLY one via scalar_one and compares resource_type, the payload as a FULL dict, correlation_id
+    and published_at is None. Negative control NC-1 removed the emission: across test_trash_page +
+    test_trash_agent_artifact + test_e2e_pipeline (30 tests, the pipeline''s own restore included)
+    ONLY the new test went red, at the scalar_one existence read — the measured form of the gap.
+    NC-2 kept the event but emptied its payload: the existence read PASSED and the red moved to the
+    full-dict equality, so the payload axis is not shadowed by the existence axis.'
 - id: TR-09
   document: docs/spec/20_Entropia_V18_Trash_Page_Documentation_v1_1.md
   section: '15'

@@ -69,18 +69,18 @@ for this map.
 | 17 | 11 | 3 | 2 | 0 | 0 | 0 | 16 |
 | 18 | 18 | 0 | 0 | 0 | 0 | 0 | 18 |
 | 19 | 4 | 2 | 0 | 1 | 1 | 0 | 8 |
-| 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
+| 20 | 14 | 2 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 6 | 3 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **299** | **62** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **300** | **61** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1057 |
+| covered | 1058 |
 | partial | 4 |
-| uncovered | 75 |
+| uncovered | 74 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 30 |
+| B | 29 |
 | C | 6 |
 | D | 32 |
-| **open total** | **69** |
+| **open total** | **68** |
 
-## Partial criteria (62)
+## Partial criteria (61)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -164,7 +164,6 @@ for this map.
 | `PM-03` | C | V18's local-array role mutation, fake backtest metrics log and demo role switch are separated out as Prototype only. | Split deliberately. The three production counterparts of the V18 prototype shortcuts ARE testable and are proven: role change is a durable, OCC-guarded, audited server command with a last-admin guard; the backtest log renders server truth and shows honest none-cells where a result has no metric rows; and the effective role is read fresh from the server, so a client-side role toggle cannot grant authority. What cannot be tested is the row's literal claim — that doc 19's prose labels those three as Prototype — so the criterion cannot roll up to covered. |
 | `PM-06` | C | Trash is mentioned only as Admin-only and in the event-retention context; restore/purge belong to another page's scope. | Mixed row. The two enforceable halves are proven: Trash is Admin-only on every surface, and the Logs plane retains an event whose subject was deleted (which is what "event retention context" means operationally). The third half — that doc 19 DEFERS restore/purge to doc 20's scope — is a statement about document boundaries, not about running code, so it is marked not_applicable and the criterion cannot roll up to covered. |
 | `TR-07` | B | Deleting a Rationale Family with an active assignment is blocked with no dangling assignment and no Trash Entry. | The blocker and the no-dangling-state half are directly asserted (entry count unchanged plus the family absent from the listing). The "repair plan required" half is not: nothing inspects the raised RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and no test walks the sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for restore and for assigning to a soft-deleted family, but none of them completes this row's repair loop, so none is cited here. |
-| `TR-08` | B | An Admin restore reactivates the same entity and revision with the owner unchanged and no new revision appended. | Three of four clauses are strongly asserted, including the subtle "no new revision" one (root.current_revision_id is captured before the delete and compared after the restore). The outbox half is the gap: commands/deletion.py does call add_outbox_event alongside the "trash.restored" audit row, but the test reads back only AuditEvent.event_kind. No test in the Trash suite queries OutboxEvent on the restore path — the only outbox count assertions are on soft-delete surfaces — so emission is unproven for restore. |
 | `TR-12` | C | A retention-blocked purge is rejected by the worker, leaving the root soft_deleted and the entry purge_failed with its reason. | Split deliberately. The worker-rejection MECHANISM this row describes is fully proven, and clause 2 matters most: it exercises a genuine production blocker (a live Agent source task, doc 20 §10) rather than a monkeypatched preflight, so the failure path is not an artifact of the test harness. Clause 4 is the retention window itself, which CLAUDE.md and doc 20 §16 record as deliberately closed for Production V1 ("retention auto-purge — Production V1'de kapalı"). No retention policy is evaluated anywhere in jobs/purge.py, so no test can assert one without inventing product; the criterion rolls up to partial on that clause alone. Clause 1's monkeypatched error message ("Retention policy blocks this cleanup.") is illustrative test text, not a real retention implementation, and is not treated as evidence of one. |
 | `UM-04` | D | A valid pasted-text append creates root, Published revision, stream entry and audit atomically and the UI scrolls to the new anchor. | The atomic publish and the client dispatch are proven, but the "UI scrolls to the new anchor" half is NOT IMPLEMENTED, not merely untested. frontend/src/pages/UserManual.tsx calls scrollIntoView only from openResult() on the search-result click path (UserManual.tsx:103 via openResult at :449); the publish mutation handler only shows the success toast and invalidates the ["manual"] query, so nothing moves the viewport to the new section. A follow-up slice needs to scroll to the returned `anchor` after a successful create and then assert it the way the stale-anchor tests already do. |
 | `UM-12` | D | An Agent artifact citing a soft-deleted revision still resolves the cited revision/block snapshot in the artifact viewer for the retention period. | c3 is NOT IMPLEMENTED, not merely untested, and no test can be written against the current code. The only section-resolution surface is backend/src/entropia/application/queries/manual.py::get_manual_section, which hard-refuses any non-ACTIVE document — `if document is None or document.deletion_state != DeletionState.ACTIVE: raise ManualDocumentNotFoundError()` (queries/manual.py:200) — and repeats the refusal for a non-ACTIVE stream entry. Its own docstring states "Draft or soft-deleted content never enters normal retrieval". There is no separate citation-resolution reader: the citation payload written by jobs/agent_tools.py::_handle_artifact_attach_citation stores document_id/revision_no/ revision_id/anchor/block_ids, but nothing reads it back through a retention-aware path. A follow-up slice must add a retention-scoped resolver (a viewer-only query that reads the pinned revision_id directly rather than going through the ACTIVE stream entry) before this clause can be covered. |

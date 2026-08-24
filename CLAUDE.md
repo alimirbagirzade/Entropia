@@ -237,7 +237,28 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 102 (kabul borcu batch 23, doc 16 Results History BACKEND):
+> `future_dev`. **Son dalga — ADIM 103 (kabul borcu batch 24, doc 20 Trash BACKEND): ÜRÜN KODU
+> DEĞİŞMEDİ, tek integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> `TR-08.c4` kapandı (restore'un `entity.restored` outbox satırı İLK KEZ okundu — UM-08.c5'in
+> ikizi; emisyon kaldırılınca 30 testte yalnız yeni test kırmızı, pipeline'ın kendi restore'u
+> dahil gerisi yeşil = boşluğun ölçümü) → `TR-08` covered, `debt_class` KALDIRILDI; doc 20'nin
+> kapatılabilir backend borcu bitti (`TR-07` bulgu · `TR-12` sınıf C). **Tavanlar merged ağaçta
+> TAZE ölçüldü: `partial` 62 → 61, `debt_class.B` 30 → 29**; açık borç **68**
+> (A=1 · B=29 · C=6 · D=32). **ASIL DERS: BOŞ AÇIK-PR LİSTESİ ALINDIĞI OTURUMU BİLE
+> KAPSAMAZ** — bu oturum önce batch 23'ü (doc 16, RH-13+RH-14) sonuna kadar yazdı; kapanışta
+> paralel oturumun açık **#815**'inin aynı iki kriteri `ADIM 102 / batch 23` olarak kapattığı
+> görüldü → çift iş push edilmeden BÜTÜNÜYLE geri alındı (ADIM 86 emsali), parti doc 20'ye
+> döndü, numara **103 / batch 24** (yol ölçümü: #815 `ADIM102` dosyasını ekliyor). #815 bu PR
+> açıkken ADIM 102 olarak İNDİ → dal REBASE edildi ("Update branch" değil), kickoff zinciri
+> düzeltildi (`ADIM102` → historical), tavan TAŞINMADI — taze `--report`'tan ölçüldü. İkinci
+> ders: bir unique kısıt assertion'ın yerine geçebilir — "ekleme" kusurunu YENİ bir anahtarla
+> kur, kırmızının satırını oku.
+> `PROJECT_HISTORY.md` §ADIM 103 · `docs/ADIM103_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 102 (kabul borcu batch 23, doc 16 Results History BACKEND):
 > ÜRÜN KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.**
 > İki kriter kapandı — **`RH-13.c2`** (profil değişimi History digest'ini

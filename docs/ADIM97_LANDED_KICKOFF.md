@@ -1,9 +1,8 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
-> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
-> Bir sonraki slice inince bu belge `historical`a demote edilir
-> (`check_classification` CI'da doğrular: canlı işaret ağaçtaki EN YÜKSEK numaralı
-> `docs/ADIM<n>…KICKOFF.md` üzerinde olmalıdır).
+<!-- doc-status: historical -->
+> **HISTORICAL KICKOFF — canlı olan `docs/ADIM98_LANDED_KICKOFF.md`'dir.**
+> Bu belge yazıldığı andaki durumu kaydeder; SHA'lar, sayılar ve "next" maddeleri bayat
+> olabilir. Sayısal gerçekler için otorite: `CLAUDE.md` §Current position +
+> `docs/generated/repository_facts.md` (üretilmiş).
 
 # ADIM 97 LANDED — kabul borcu batch 18 (doc 10 backend) · sıradaki slice için kickoff
 

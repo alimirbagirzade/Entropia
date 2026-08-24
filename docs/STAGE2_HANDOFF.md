@@ -7733,7 +7733,6 @@ sekiz belge çakışması verdiği için dal main'e sıfırlanıp yalnız dört 
 uygulandı, defter belgeleri yeni tabana karşı yeniden yazıldı.
 
 `PROJECT_HISTORY.md` §ADIM 94 · `docs/ADIM95_LANDED_KICKOFF.md`.
-
 ## Stage 97 — kabul borcu batch 18 (doc 10 backend): `RF-07` + `RF-12` kapandı landed
 
 **Ne indi.** Yalnız **test + defter**. Ürün kodu **değişmedi** (`backend/src` ve `frontend/src`
@@ -7783,6 +7782,69 @@ değildir** — ayrı ayrı ölç. Bu kayıt **batch 18**.
 
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 97 ·
 `docs/ADIM97_LANDED_KICKOFF.md`.
+
+## Stage 98 — kabul borcu batch 19 (doc 14 Backtest Ready Check, backend): RC-10 + RC-17 kapandı landed
+
+**Ne indi.** İki yeni integration case (`backend/tests/integration/test_readiness_persistence.py`)
++ bir yeni dosya (`backend/tests/integration/test_readiness_denial_envelope.py`) + kabul defteri
++ üretilmiş artefakt. **`backend/src` altında sıfır satır**, migration yok, OpenAPI değişmedi.
+
+**Kapananlar: `RC-10` (c2) · `RC-17` (c2)** — ikisi de kendi kriterinin **son açık clause'uydu**,
+ikisinin de `debt_class`'ı KALDIRILDI. **Doc 14'ün backend borcu bitti**; kalan tek satır
+`RC-09.c3` ve o **frontend**.
+
+- **`RC-10.c2`** (*yeni bir katalog revizyonu tek başına raporu stale etmez*): suite'te bunun
+  karşılığı yalnız `is_stale(a, a) is False` unit gerçeğiydi — o gerçek, current fingerprint'in
+  **hangi revizyon id'sinden** kurulduğu hakkında hiçbir şey söylemez. Clause tek davranışı **iki
+  katalog** üzerinde adlandırıyor, iki kez sürüldü: (1) iş nesnesi kataloğu — revizyon append kök
+  head'ini ilerletir, item pinini korur (AT#5); (2) market-data kataloğu — `md_rev_2` APPROVED
+  head olur, payload hâlâ `md_rev_1`'i adlandırır (pin **saklanan payload'dan** geri okunur).
+  Her iki case de ön koşullarını **assert eder** (successor indi mi, head oynadı mı, pin oynamadı
+  mı) — content-hash idempotency dalı sessizce no-op yaparsa test totolojik olurdu.
+- **`RC-17.c2`** (*reddin gövdesi kompozisyon ayrıntısı taşımaz*): üç mevcut RC-17 testi de
+  **komut sınırında** durur, orada gövde henüz yoktur. Yeni case rotayı ASGI app üzerinden gerçek
+  session'la sürer ve **serileştirilmiş zarfı** tarar. Vacuity iki uçtan kapatıldı: kompozisyonun
+  sızdıracak ayrıntısı gerçekten var (pinli revizyon, onaylı paket, dataset, **bilerek eklenmiş
+  duplicate item** → item-scoped blocker), ve **aynı rota sahibine çağrıldığında o kimliklerin
+  üçünü birebir yayımlar** (pozitif kontrol).
+
+**Yedi negatif kontrol — ve bu partinin dersi: BİR KONTROL YANLIŞ YERDE KIRMIZI VEREBİLİR.**
+İlk market-axis kontrolü (market head'ini fingerprint'in **kendisine** katmak) raporu
+**doğduğu anda** stale ediyordu → yeni case **`before` ÖN KOŞULUNDA** kırmızı verdi ve yanında
+**ilgisiz, önceden var olan bir testi** de düşürdü; kırmızı **clause'a atfedilemezdi** →
+kontrol **reddedildi**. Yerine okuma modelini *"katalog successor'ı var = stale"* yapan kontrol
+kuruldu: yalnız market case'i, **hedef assertion'ında** kırmızı, fingerprint el değmemiş — bu
+yüzden **iki assertion da taşıyıcı**. İki kontrol de yalnız **gölge kaldırmak** için var
+(fingerprint satırları önce kırmızı verip `is_current`'ı gölgeliyor). RC-17 tarafında üç sızıntı
+vektörünün üçü de **ayrı** bir assertion'ı düşürür; `message` içindeki düz metne konan sızıntıyı
+**hiçbir key lookup bulamaz** → kontrol bir **substring taraması** olmak zorunda.
+**Yedi kontrolün hepsinde önceden var olan suite YEŞİL kaldı** — ikisinin de gerçek boşluk
+olduğunun kanıtı.
+
+**Tavanlar İNDİ: `partial` 71 → 69, `debt_class.B` 39 → 37**; açık borç **78 → 76**
+(A=1 · B=37 · C=6 · D=32). Clause `covered` 1048 → 1050, `uncovered` 83 → 82. Doc 14
+**17 covered / 1 partial**. Taban `b7e66ad`.
+
+**Ortam (birinci elden):** container **çıplak** başladı — `backend/.venv` yok, Postgres cluster
+yok. İkisi de bu slice içinde kuruldu; üç yeni case ve yedi kontrol **gerçekten koştu**
+(dört dosya, **77 nokta / exit 0**, skip yok). **`alembic upgrade head` `LC_ALL=en_US.UTF-8` ile
+`UnicodeDecodeError` verdi** bu imajda — `LC_ALL=C.UTF-8 PYTHONUTF8=1` ile geçti.
+**YAML tuzağı:** RC-10'un notu **düz skalerdi** ve eklenen metindeki bir `: ` `ScannerError`
+verdi → not tek tırnaklı skalere çevrildi.
+
+**Dürüst sınır:** frontend kapıları koşulmadı (frontend'de sıfır satır, `node_modules` yok),
+E2E/A11Y koşulamadı → oralara assertion **yazılmadı**; tam backend suite sonuna kadar koşmadı
+(yalnız `--collect-only`, 353 dosya / exit 0) → **geçen sayı ve coverage CI'ın otoritesinde**.
+
+**NUMARA/ETİKET:** main'in son kaydı ADIM 94 / batch 18 metni main'de zaten var; **açık iki
+PR'ın (#806, #809) İKİSİ de `docs/ADIM95_LANDED_KICKOFF.md` ekliyor** → 95 iki kez talep
+edilmiş, bu kayıt **ADIM 98 / batch 19**. Numara başlıktan değil **dosya yolundan** ölçüldü.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi
+(yeni endpoint / tablo / sayfa / job yok).
+`PROJECT_HISTORY.md` §ADIM 98 · `docs/ADIM98_LANDED_KICKOFF.md`.
+
+
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 

@@ -30,6 +30,7 @@ from entropia.domain.lifecycle.enums import (
 )
 from entropia.domain.market_data.enums import MarketDataType, MarketRevisionState
 from entropia.domain.package.enums import PackageValidationState
+from entropia.domain.readiness.enums import ReadinessState
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     MainboardCompositionSnapshot,
@@ -39,6 +40,7 @@ from entropia.infrastructure.postgres.models import (
     ReadyCheckReport,
 )
 from entropia.infrastructure.postgres.models.audit import OutboxEvent
+from entropia.infrastructure.postgres.repositories import mainboard as mb_repo
 from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.shared.errors import (
     AccessDeniedError,
@@ -458,3 +460,143 @@ async def test_disabling_a_live_item_stales_the_report_and_leaves_the_ready_scop
     await session.commit()
     assert rechecked["state"] == "not_ready"
     assert "COMPOSITION_EMPTY" in {issue["code"] for issue in rechecked["issues"]}
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 19 — doc 14 Backtest Ready Check, backend surface           #
+#                                                                             #
+# RC-10.c2 a NEWER catalog revision the draft does not pin never stales a      #
+#          report; the fingerprint is over the PINNED revision ids only.       #
+#                                                                             #
+# The sibling clause (`RC-10.c1`) is a pure unit fact — ``is_stale(a, a)`` is  #
+# False — and says nothing about which revision id the current fingerprint is  #
+# built from. The two cases below drive the two catalogs a composition pins:   #
+# the work object's own revision head, and the market dataset the strategy     #
+# payload names. Both assert the CONTRAST directly (fingerprint unchanged,     #
+# effective state still the stored one, ``is_current`` still true) rather than #
+# inferring it from an unchanged manifest, which is what                       #
+# ``test_e2e_pipeline.py::test_market_successor_never_leaks_and_rerun_is_...`` #
+# already proves without ever reading a readiness report back.                 #
+# --------------------------------------------------------------------------- #
+
+
+async def _pinned_item(session, composition_id: str):
+    items = await mb_repo.list_active_items(session, composition_id)
+    assert len(items) == 1, "the fixture attaches exactly one item"
+    return items[0]
+
+
+async def test_rc10_newer_work_object_revision_the_board_does_not_pin_keeps_the_report_current(
+    session,
+) -> None:
+    """RC-10.c2 — the work-object catalog axis.
+
+    A revision append advances the ROOT head but never re-pins the Mainboard item
+    (``commands/mainboard.py::create_work_object_revision``, AT#5). The report must
+    therefore stay current. Every precondition is measured rather than assumed: if
+    the successor silently no-op'd (the content-hash idempotency branch) the head
+    would not move and this test would assert "nothing changed" in a world where
+    nothing was published — the vacuous shape ADIM 91 recorded.
+    """
+    await _seed_principals(session)
+    composition_id = await _composition_with_strategy(session, USER1)
+    report = await readiness_cmd.run_readiness_check(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    item = await _pinned_item(session, composition_id)
+    root = await session.get(EntityRegistry, item.work_object_root_id)
+    assert root is not None
+    pinned_revision_id = item.pinned_revision_id
+    assert root.current_revision_id == pinned_revision_id  # head == pin BEFORE the append
+
+    before = await readiness_query.get_readiness_report(
+        session, USER1, report_id=report["report_id"]
+    )
+    assert before["is_current"] is True
+
+    # Publish revision N+1 on the SAME root. The payload must differ, else the
+    # content-hash branch returns the existing head and nothing is published.
+    successor_payload = _strategy_payload()
+    successor_payload["display_name"] = "Seed strategy (successor)"
+    successor = await mb_cmd.create_work_object_revision(
+        session, USER1, root_id=item.work_object_root_id, payload=successor_payload
+    )
+    await session.commit()
+
+    # The successor really landed, and it really is one the board does not pin.
+    assert successor["revision_id"] != pinned_revision_id
+    await session.refresh(root)
+    assert root.current_revision_id == successor["revision_id"]
+    assert (await _pinned_item(session, composition_id)).pinned_revision_id == pinned_revision_id
+
+    after = await readiness_query.get_readiness_report(
+        session, USER1, report_id=report["report_id"]
+    )
+    # "does not stale solely because a newer catalog revision exists" (doc 14 §15).
+    assert after["current_fingerprint"] == after["composition_fingerprint"]
+    assert after["current_fingerprint"] == before["current_fingerprint"]
+    assert after["is_current"] is True
+    assert after["state"] == after["stored_state"] == before["state"]
+    assert after["state"] != str(ReadinessState.STALE)
+
+
+async def test_rc10_newer_approved_market_revision_keeps_the_pinned_report_current(
+    session,
+) -> None:
+    """RC-10.c2 — the market-data catalog axis.
+
+    RC-09's contrast case: changing the market dataset revision the draft pins
+    stales the report. RC-10 is the other half — publishing an APPROVED successor
+    the draft does NOT pin must not. The strategy payload pins ``md_rev_1``
+    verbatim, so moving the dataset root's head to ``md_rev_2`` leaves every pinned
+    id untouched.
+    """
+    await _seed_principals(session)
+    composition_id = await _composition_with_strategy(session, USER1)
+    report = await readiness_cmd.run_readiness_check(session, USER1, composition_id=composition_id)
+    await session.commit()
+
+    before = await readiness_query.get_readiness_report(
+        session, USER1, report_id=report["report_id"]
+    )
+    assert before["is_current"] is True
+
+    md_root = await session.get(EntityRegistry, "md_root_1")
+    assert md_root is not None and md_root.current_revision_id == "md_rev_1"
+    session.add(
+        MarketDatasetRevision(
+            revision_id="md_rev_2",
+            entity_id=md_root.entity_id,
+            revision_no=2,
+            market_data_type=MarketDataType.OHLCV,
+            revision_state=MarketRevisionState.APPROVED,
+            payload={},
+            content_hash="c" * 64,
+            created_by_principal_id="user_1",
+        )
+    )
+    md_root.current_revision_id = "md_rev_2"
+    await session.commit()
+
+    # The successor really is the catalog head, and it really is APPROVED — a DRAFT
+    # successor would be invisible to any resolver and prove nothing.
+    await session.refresh(md_root)
+    assert md_root.current_revision_id == "md_rev_2"
+    successor = await session.get(MarketDatasetRevision, "md_rev_2")
+    assert successor is not None
+    assert successor.revision_state == MarketRevisionState.APPROVED
+    # The draft still names the OLD exact revision (doc 14 §15 "still pins old exact
+    # revision") — read back from the stored payload, not from the fixture literal.
+    item = await _pinned_item(session, composition_id)
+    revision = await mb_repo.get_work_object_revision(session, item.pinned_revision_id)
+    assert revision is not None
+    assert revision.payload["data"]["market_dataset_revision_id"] == "md_rev_1"
+
+    after = await readiness_query.get_readiness_report(
+        session, USER1, report_id=report["report_id"]
+    )
+    assert after["current_fingerprint"] == after["composition_fingerprint"]
+    assert after["current_fingerprint"] == before["current_fingerprint"]
+    assert after["is_current"] is True
+    assert after["state"] == after["stored_state"] == before["state"]
+    assert after["state"] != str(ReadinessState.STALE)

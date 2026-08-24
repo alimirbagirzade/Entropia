@@ -237,7 +237,55 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 97 (kabul borcu batch 18, doc 10 BACKEND): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 98 (kabul borcu batch 19, doc 14 Ready Check BACKEND): ÜRÜN
+> KODU DEĞİŞMEDİ, üç yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.**
+> İki kriter kapandı — **`RC-10.c2`** (*"yeni bir katalog revizyonu tek başına raporu stale
+> etmez"*; suite'te karşılığı yalnız `is_stale(a, a) is False` idi, o da fingerprint'in HANGİ
+> revizyon id'sinden kurulduğunu söylemez → clause **iki katalog** üzerinde sürüldü: iş nesnesi
+> head'i ilerler/pin durur, ve APPROVED `md_rev_2` dataset head'i olur/payload `md_rev_1`'i
+> adlandırır) · **`RC-17.c2`** (üç mevcut testin üçü de **komut sınırında** durur, orada gövde
+> yoktur; yeni case rotayı **ASGI app + gerçek session** ile sürüp **serileştirilmiş zarfı**
+> tarar, ve pozitif kontrol aynı rotanın sahibine **aynı kimlikleri yayımladığını** assert eder).
+> **YEDİ negatif kontrol; BİRİ REDDEDİLDİ VE DERS ODUR:** market head'ini fingerprint'in
+> **kendisine** katan kontrol raporu **doğduğu anda** stale ediyordu → test kendi **ÖN
+> KOŞULUNDA** kırmızı verdi ve yanında **ilgisiz, önceden var olan** bir testi de düşürdü;
+> kırmızı vardı ama **clause'a atfedilemiyordu**. **BİR KONTROL YALNIZ HEDEF TESTİ VE YALNIZ
+> HEDEF ASSERTION'I DÜŞÜRMELİDİR** — yerine ön koşulu bozmayan biri kuruldu. İkinci ders:
+> **KEY LOOKUP BİR SIZINTI TESTİ DEĞİLDİR** — sızıntı `message` içindeki düz metne konunca
+> `details == []` ve `scope_id is None` **yeşil kalır**, yakalayan tek şey substring taramasıdır.
+> **Yedi kontrolün hepsinde önceden var olan suite YEŞİL kaldı** (istisna **tipini** assert
+> etmek zarfın ne taşıdığını göremez) → ikisi de gerçek boşluktu.
+> **Tavanlar İNDİ: `partial` 71 → 69, `debt_class.B` 39 → 37**; açık borç **76**
+> (A=1 · B=37 · C=6 · D=32). **DOC 14'ÜN BACKEND BORCU BİTTİ** (kalan `RC-09.c3` frontend).
+> **ORTAM: container ÇIPLAK başlayabilir** — `.venv` ve Postgres cluster'ı **yoktu**, ikisi de
+> kuruldu; **`alembic upgrade head` `LC_ALL=en_US.UTF-8` ile `UnicodeDecodeError` verir bu
+> imajda** (`C.UTF-8` + `PYTHONUTF8=1` ile geçer). **DÜRÜST SINIR:** frontend kapıları
+> koşulmadı (frontend'de sıfır satır), tam suite sonuna kadar koşmadı (yalnız `--collect-only`)
+> → geçen sayı ve coverage CI'ın otoritesinde. **NUMARA: açık İKİ PR (#806, #809) da
+> `docs/ADIM95_LANDED_KICKOFF.md` ekliyordu; PR açıkken **#809 `95`'i, sonra #806 `97` + `batch
+> 18`'i aldı** → bu kayıt **`96` → `98`'e taşındı** (kickoff dosyası dahil yeniden adlandırıldı;
+> `check_classification` canlı işaretin EN YÜKSEK numaralı dosyada olmasını ister) ve
+> **`batch 19`** kaldı. `batch 18` boşluk OLMADI — #806 doldurdu, yani atlama kararı doğru çıktı.**
+> **İKİ KEZ REBASE, VE İKİNCİSİ BİR TAVAN HATASI YAKALADI:** *"Update branch"* düğmesi hiç
+> kullanılmadı (ADIM 93/94'ün iki zararı); her seferinde main üzerine rebase edildi, çakışmalar
+> **iki tarafı da koruyarak** çözüldü (ADIM 95 ve 97'nin kayıtları+handoff'ları duruyor,
+> kickoff'ları `historical`), `## ADIM` sayısı 89 → 90 → **91**, silinen kayıt yok. **ASIL
+> BULGU:** bu dalın ikinci freeze'i **71/39** taşıyordu ve #806 sonradan **aynı sayıları** başka
+> iki kriter için yazdı (iki dal da tam iki kriter kapatıyor) → kendi 71/39'unu taşımak tavanı
+> gerçek sayının **iki üstünde** bırakırdı ve **`--ratchet` sonsuza dek yeşil kalırdı**. Merged
+> ağaçta taze `--report`: **69 / 37**. **Kapı bunu yakalamaz, koşturan kişi yakalar.**
+> `PROJECT_HISTORY.md` §ADIM 98 · `docs/ADIM98_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 95 (üretilmiş kabul artefaktlarının drift kapısı):
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 97 (kabul borcu batch 18, doc 10 BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, iki pytest case + bir opsiyonel harness parametresi + defter.
 > Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > İki kriter kapandı — **`RF-07`** (`.c2`) · **`RF-12`** (`.c3`); ikisinde de son açık
@@ -275,7 +323,8 @@ Before stopping a working session, produce **ALL** of the following:
 > cwd → sistem Python, Postgres çökmesi), bu dal için yerel sayı **iddia edilmiyor**.
 > **NUMARA DÖRT KEZ TAŞINDI: `ADIM 93` → `94` → `95` → `97`.** Üçüncüsünü **#809** aldı
 > (kabul partisi DEĞİL, bir CI kapısı — yani parti numarası hiç taşımadı), `96`'yı ise
-> **açık #811** `docs/ADIM96_LANDED_KICKOFF.md` **dosyasını ekleyerek** talep ediyor →
+> **açık #811** `docs/ADIM96_LANDED_KICKOFF.md` **dosyasını ekleyerek** talep ediyordu
+> (o PR bu kayıt indikten sonra **`ADIM 98`'e renumber etti**, dosya adı dahil) →
 > çakışma başlıkta değil **DOSYA YOLUNDA** ölçülür (ADIM 91), ve ayrılan numara güvenli
 > numara değildir (ADIM 92). #804 `ADIM 93`'ü aldı; **#808 HEM
 > `ADIM 94` HEM `batch 17`'yi birlikte aldı** → bu kayıt `batch 18`. **DERS: iki numara bağımsız

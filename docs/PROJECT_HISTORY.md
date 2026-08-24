@@ -13799,8 +13799,8 @@ bir CI kapısı). İkisini de **ayrı ayrı** ölç. Bu kayıt **`batch 18`**, v
 ölçüldü**: main'deki tek `batch 18` geçişi ADIM 94'ün *bir sonrakini tahmin eden* cümlesidir,
 bir talep değil.
 
-**DÖRDÜNCÜ TAŞIMA 96'YA DEĞİL 97'YE:** `ADIM 96`'yı **açık** #811 talep ediyor ve talebi
-`docs/ADIM96_LANDED_KICKOFF.md` **dosyasını ekleyerek** yapıyor (ölçüldü, PR dosya listesinden).
+**DÖRDÜNCÜ TAŞIMA 96'YA DEĞİL 97'YE:** `ADIM 98`'yı **açık** #811 talep ediyor ve talebi
+`docs/ADIM98_LANDED_KICKOFF.md` **dosyasını ekleyerek** yapıyor (ölçüldü, PR dosya listesinden).
 `check_classification` çakışmayı başlıktan değil **dosya yolundan** okur (ADIM 91'in dersi), o
 yüzden 96 alınmadı. **Ama ADIM 92'nin dersi de duruyor: ayrılan numara güvenli numara değildir**
 — #811 inmeden 97'yi başka bir dal alırsa bu kayıt yine taşınır.
@@ -13809,3 +13809,174 @@ yüzden 96 alınmadı. **Ama ADIM 92'nin dersi de duruyor: ayrılan numara güve
 **elle aritmetiğin yakalayacağı bir tuzak var:** bu dal ile #808 **ikisi de tam iki kriter**
 kapatıyor, ve bu dalın #808 **öncesi** freeze'i **73/41** taşıyordu — #808 sonradan **aynı
 sayıları** bambaşka kriterler için yazdı. **Sayıların eşleşmesi hiçbir şey kanıtlamaz.**
+---
+
+## ADIM 98 — kabul borcu batch 19 (doc 14 Backtest Ready Check, backend): `RC-10` + `RC-17` kapandı, doc 14'ün backend borcu bitti
+
+> **ÜRÜN KODU DEĞİŞMEDİ — yalnız test + defter.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** `backend/src` altında **sıfır** satır; diff = üç yeni integration case
+> (ikisi mevcut dosyaya, biri yeni dosyaya) + kabul defteri + üretilmiş artefakt.
+
+**Kapanan iki kriter: `RC-10` (c2) · `RC-17` (c2).** İkisi de kendi kriterinin **son açık
+clause'uydu** → ikisinin de `debt_class`'ı KALDIRILDI. **Tavanlar İNDİ: `partial` 71 → 69,
+`debt_class.B` 39 → 37**; açık borç **78 → 76** (A=1 · B=37 · C=6 · D=32). Clause `covered`
+1048 → 1050, `uncovered` 83 → 82. **Doc 14 artık 17 covered / 1 partial** ve kalan tek satır
+(`RC-09.c3`) **frontend**.
+
+### `RC-10.c2` — "yeni bir katalog revizyonu tek başına raporu stale etmez"
+
+Kriter (doc 14 §15) şunu söylüyor: *"Another catalog revision appears, but current draft still
+pins old exact revision → Existing report does not stale solely because a newer catalog
+revision exists."* Suite'te bu iddianın karşılığı **tek bir unit gerçeği** idi:
+`is_stale(a, a)` `False` döner (`test_readiness_validators.py::test_is_stale_detects_fingerprint_change`).
+O gerçek, **current fingerprint'in HANGİ revizyon id'sinden kurulduğu** hakkında hiçbir şey
+söylemez — oysa kriterin koruduğu kusur tam olarak orada yaşar. `validators.py::is_stale`'in
+docstring'i kuralı **yazıyordu** (*"the fingerprint is over the pinned revision ids only
+(RC-10, doc 14 §13)"*) ama **bir yorum assertion değildir**.
+
+Clause **tek bir davranışı İKİ katalog üzerinde** adlandırıyor, o yüzden iki kez sürüldü —
+ikisi de `test_readiness_persistence.py`'ye, ayrı testler olarak (tek testte toplamak birinci
+kırmızının ikinciyi gölgelemesi demekti):
+
+- **İş nesnesi kataloğu** — köke revizyon N+1 eklenir; `create_work_object_revision`'ın
+  sözleşmesi *"A revision append NEVER auto-repins any Mainboard item (AT#5)"* der, yani **kök
+  head'i ilerler, item pinini korur**. Rapor geri okunur: fingerprint **kıpırdamaz**,
+  `is_current` **true** kalır, `state == stored_state`.
+- **Market-data kataloğu** — RC-09'un **tersten** koşulmuş hâli: `md_rev_2` APPROVED olarak
+  dataset head'i olur, strateji payload'ı hâlâ `md_rev_1`'i adlandırır. Pin **fixture
+  literalinden değil, SAKLANAN payload'dan** geri okunur.
+
+**Her iki case de ön koşullarını VARSAYMAZ, ASSERT EDER** (successor gerçekten indi mi, head
+gerçekten oynadı mı, pin gerçekten oynamadı mı): `create_work_object_revision`'ın
+content-hash idempotency dalı, payload aynı kalırsa mevcut head'i döndürür ve **hiçbir şey
+yayımlanmaz** — o dünyada test *"hiçbir şey değişmedi"* der ve **totolojik** olur (ADIM 91'in
+şekli).
+
+### `RC-17.c2` — reddin GÖVDESİ kompozisyon ayrıntısı taşımaz
+
+Kriterin iki yarısı var: 403, ve *"no confidential dependency details in response"*. **403 yarısı
+üç kez pinliydi** — ama **üçü de KOMUT sınırında durur**, orada bir response gövdesi henüz
+**yoktur**. Sızıntı yarısı yalnız **wire'da** gözlenebilir, o yüzden yeni case rotayı ASGI app
+üzerinden **gerçek session'la** sürer (`test_library_readiness…` değil,
+`test_library_validation_run_route.py`'nin override deseni) ve **serileştirilmiş zarfı** tarar.
+
+Vacuity **iki uçtan birden** kapatıldı:
+1. **Kompozisyonun sızdıracak ayrıntısı GERÇEKTEN var** — pinli bir strateji revizyonu, onaylı
+   bir indicator paketi, bir market dataset, ve **bilerek eklenmiş bir duplicate item** (ki
+   check **item-SCOPED** bir blocker üretsin; bir Mainboard item id'sini bir readiness
+   gövdesine sokan şey odur).
+2. **Aynı rota, AYNI kompozisyon üzerinde, sahibine çağrıldığında o kimliklerin üçünü birebir
+   YAYIMLAR** — bu assert edilir. Bu pozitif kontrol olmadan *"403 X'i içermiyor"* iddiası, bu
+   uç noktanın **hiç üretemeyeceği** bir X için de doğru olurdu.
+
+Assertion bir **substring taraması**dır, key lookup değil (aşağıdaki üçüncü negatif kontrol
+bunun neden zorunlu olduğunu ölçtü), artı zarf-şekli assertion'ları: yalnız `error` anahtarı,
+`details == []`, `scope_id is None`.
+
+### Yedi negatif kontrol — ve BU PARTİNİN DERSİ: bir kontrol YANLIŞ YERDE kırmızı verebilir
+
+Hepsi yamasının **uygulandığını** koşmadan önce assert etti ve geri yazmayı **`finally`'de**
+yaptı (ADIM 94'ün onardığı harness).
+
+| # | Yama | Kırmızıya dönen |
+|---|---|---|
+| NC-1 | current fingerprint **KÖK HEAD'inden** kurulur (pin yerine) | yalnız iş-nesnesi case'i, **fingerprint** satırında |
+| NC-1b | NC-1 + testin iki fingerprint satırı düşürülür | aynı case, **`is_current`** satırında |
+| NC-2 | market head **fingerprint'e katılır** | **REDDEDİLDİ — aşağıya bak** |
+| NC-2b | okuma modeli *"katalog successor'ı var"*ı stale sayar | yalnız market case'i, **`is_current`** satırında |
+| NC-2c | NC-2 + market case'inin `before` ön koşulu düşürülür | market case'i, **fingerprint** satırında |
+| NC-3a | red `details` üzerinden sızdırır | `details == []` |
+| NC-3b | red `scope_id` üzerinden sızdırır | `scope_id is None` |
+| NC-3c | red **`message` içindeki düz metinde** sızdırır | **substring** assertion'ı |
+
+**NC-2 bir kontrol olarak REDDEDİLDİ ve sebebi bu partinin asıl kaydı.** Yama market head'ini
+fingerprint'in **kendisine** katıyordu; o zaman rapor **doğduğu anda** stale olur, yani yeni
+case **`before["is_current"] is True` ÖN KOŞULUNDA** kırmızı verdi ve yanına **ilgisiz, önceden
+var olan bir testi** (`test_disabling_a_live_item_stales_the_report…`) de düşürdü. Kırmızı
+vardı, ama **clause'a atfedilemezdi** — kontrol *"successor raporu stale ediyor mu"* sorusunu
+değil *"fingerprint hesabı bozuldu mu"* sorusunu ölçüyordu. Yerine NC-2b kuruldu: okuma modeli
+katalog successor'ını staleness sayar, fingerprint **el değmeden kalır** → yalnız market case'i,
+**hedef assertion'ında** kırmızı. **İki assertion'ın da (fingerprint VE `is_current`) taşıyıcı
+olmasının sebebi budur** — NC-2b fingerprint'i hiç oynatmadan testi düşürüyor, NC-2c ise
+fingerprint'i oynatarak.
+
+**NC-3c ayrı bir ders:** sızıntı `message` içindeki serbest metne konduğunda **hiçbir key
+lookup onu bulamaz**; yakalayan tek şey serileştirilmiş gövdeye karşı koşan substring
+taramasıdır. Zarf-şekli assertion'ları (üç tanesi) gerekli ama **yeterli değil**.
+
+**Yedi kontrolün hepsinde önceden var olan suite YEŞİL kaldı** — NC-1'de iki dosyadaki diğer
+on üç test, NC-3'ün üç varyantında ise `test_rc17_foreign_owner_denied` + iki durable-audit
+case'i. **Bu, iki kalemin de gerçek bir boşluk olduğunun kanıtıdır**: bir istisna **tipini**
+assert etmek zarfın ne taşıdığını göremez, ve pin/head ayrımı mevcut hiçbir assertion'ın
+ekseninde değildi (ADIM 88'in *"kapsama zaten sevk edilmiş olabilir"* uyarısı bu partide
+`grep -rn RC-10 RC-17` ile ölçüldü: yalnız yorum ve docstring anmaları çıktı).
+
+### Ortam + dürüst sınır
+
+- **Container ÇIPLAK başladı**: `backend/.venv` **yoktu** ve Postgres cluster'ı **yoktu**
+  (`pg_isready` → `no response`). İkisi de bu slice içinde kuruldu (`uv sync --all-extras`,
+  `initdb` + `pg_ctl` + rol/DB + `alembic upgrade head`). Üç yeni case ve yedi negatif kontrol
+  **gerçekten koştu** — `s` (skip) **yok**, dört dosyalık koşu **77 nokta / exit 0**.
+- **`alembic upgrade head` `LC_ALL=en_US.UTF-8` ile PATLADI** bu container'da
+  (`UnicodeDecodeError: 'ascii' codec …`); `LC_ALL=C.UTF-8 LANG=C.UTF-8 PYTHONUTF8=1` ile geçti.
+  CLAUDE.md §Local verify'ın `en_US.UTF-8` çapası bu imajda **yok**.
+- **YAML tuzağı, ADIM 94'ün uyarısının aynısı ama farklı yerden:** RC-10'un `notes`'u **düz
+  skalerdi** ve eklenen metin bir `: ` içeriyordu (*"the other way: an APPROVED md_rev_2"*) →
+  `ScannerError`. Not **tek tırnaklı** skalere çevrildi (apostroflar ikilenerek). RC-17'nin notu
+  zaten tek tırnaklıydı ve sorun çıkarmadı — **hangi biçimde olduğuna yazmadan önce bak**.
+- **Koşulmayanlar:** frontend kapıları (`node_modules` yok, frontend'de **sıfır** satır) ve
+  E2E/A11Y → oralara assertion **yazılmadı**. Tam backend suite sonuna kadar koşmadı (yalnız
+  `--collect-only` ile 353 dosya / exit 0 doğrulandı) → **geçen sayı ve coverage CI'ın
+  otoritesinde**.
+- **Codemap tazelenmedi, bilerek:** yeni endpoint / tablo / sayfa / job **yok**.
+
+### Numara
+
+Bu kayıt **ADIM 98** / **batch 19**, ve numara **iki kez** ölçüldü — ikincisi zorunluydu.
+
+PR açılırken main'in son kaydı `## ADIM 94`'tü ve **açık iki PR'ın (#806, #809) İKİSİ de**
+`docs/ADIM95_LANDED_KICKOFF.md` ekliyordu, yani 95 iki kez talep edilmiş durumdaydı → bu kayıt
+96 seçildi (ölçüm başlıktan değil **dosya yolundan**, ADIM 94'ün 6. dersi). **Bu PR açıkken
+#809 gerçekten ADIM 95 olarak indi** (`0315e43`) → seçim doğrulandı, **taşımaya gerek kalmadı**;
+hâlâ açık olan #806 renumber etmek zorunda.
+
+**`batch 18` bir boşluk OLMADI.** Bu kayıt yazılırken o etiket #806'nın **açık** talebiydi ve atlanmıştı — inmezse 17 ile 19 arasında kalıcı bir boşluk kalacaktı (ADIM 89 emsali). **#806 indi ve etiketi doldurdu** (ADIM 97 = batch 18), yani atlama kararı doğru çıktı: açık bir talebin üstüne yazmak, iki dal aynı etiketle inerse **sessiz** bir atıf çakışması üretirdi.
+
+**DAL İKİ KEZ REBASE EDİLDİ, VE İKİNCİSİ BİR TAVAN HATASINI YAKALADI.**
+
+Birinci rebase (#809 = ADIM 95 inince): PR `mergeable_state: dirty` oldu, yedi belge
+çakışması. İkinci rebase (#806 = ADIM 97 / batch 18 inince): sekiz çakışma, **artı bir sayı
+sorunu**. Sunucu tarafı *"Update branch"* düğmesi **hiçbirinde kullanılmadı** (ADIM 93 ve
+ADIM 94'ün iki ölçülmüş zararı); her seferinde `origin/main` üzerine **rebase** edildi ve
+çakışmalar **iki tarafı da koruyacak** şekilde elle çözüldü: ADIM 95'in ve ADIM 97'nin
+`PROJECT_HISTORY` kayıtları ile handoff girdileri **silinmedi**, kickoff demote zinciri her
+seferinde **bir kademe kaydırıldı**, üretilmiş dosyalarda main alınıp **yeniden üretildi**.
+Ölçüm: `## ADIM` kayıt sayısı ilk rebase'te **89 → 90**, ikincisinde **90 → 91**; silinen
+kayıt **yok**.
+
+**ASIL BULGU — TAVAN ARİTMETİĞİ SESSİZCE YANLIŞ OLABİLİRDİ.** Bu dalın ikinci freeze'i
+(taban `2a790ff`) **71 partial / B 39** taşıyordu. #806 sonra indi ve **o da 71/39** yazdı —
+**başka iki kriter için**. İki dal da tam iki sınıf-B kriteri kapatıyor, bu yüzden sayılar
+**ayrık iş ölçerken çakıştı**. Kendi 71/39'umu taşımak tavanı gerçek sayının **iki üstünde**
+bırakırdı ve `--ratchet` **sonsuza dek yeşil kalırdı** — ölçülen < tavan asla kırmızı vermez.
+Merged ağaçta taze `--report` koşuldu: **69 / B 37**. #806'nın kendi kaydı bu tuzağı aynı
+cümleyle adlandırıyor (*"Sayıların eşleşmesi hiçbir şey kanıtlamaz"*) — **kapı bunu yakalamaz,
+koşturan kişi yakalar** (ADIM 93'ün dersi, ikinci kez ölçüldü).
+
+**NUMARA DA İKİ KEZ TAŞINDI: `96` → `98`.** #809 `95`'i aldı (bir CI kapısı, parti numarası
+taşımadı), #806 ise `97`'yi **ve** `batch 18`'i aldı. Bu yüzden **`batch 18` artık bir boşluk
+DEĞİL** — bu kayıt yazılırken öyle olacağı sanılmıştı, #806 indi ve etiketi doldurdu; bu kayıt
+`batch 19` olarak kaldı. Kickoff dosyası da yeniden adlandırıldı
+(`ADIM96_LANDED_KICKOFF.md` → `ADIM98_LANDED_KICKOFF.md`), çünkü `check_classification` canlı
+işaretin ağaçtaki **en yüksek numaralı** dosyada olmasını ister — `97` inince `96` canlı
+kalamazdı.
+
+**REBASE GERÇEKTEN GEREKTİ.** #809 indikten sonra PR `mergeable_state: dirty` oldu (yedi belge
+çakışması). Sunucu tarafı *"Update branch"* düğmesi **kullanılmadı** (ADIM 93 ve ADIM 94'ün iki
+ölçülmüş zararı); dal `origin/main` üzerine **rebase** edildi ve çakışmaların her biri **iki
+tarafı da koruyacak** şekilde elle çözüldü: ADIM 95'in `PROJECT_HISTORY` kaydı ve handoff
+girdisi **silinmedi**, kickoff'u `historical`a demote edildi, üretilmiş artefaktlar
+**yeniden üretildi** ve `--ratchet` merged ağaçta **yeniden koşuldu**. `## ADIM` kayıt sayısı
+**89 → 90**, silinen kayıt **yok**.

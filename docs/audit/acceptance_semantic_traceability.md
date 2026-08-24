@@ -63,7 +63,7 @@ for this map.
 | 11 | 4 | 2 | 0 | 0 | 2 | 0 | 8 |
 | 12 | 9 | 6 | 0 | 0 | 0 | 0 | 15 |
 | 13 | 4 | 1 | 0 | 0 | 4 | 0 | 9 |
-| 14 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
+| 14 | 17 | 1 | 0 | 0 | 0 | 0 | 18 |
 | 15 | 7 | 1 | 0 | 1 | 0 | 0 | 9 |
 | 16 | 14 | 2 | 0 | 0 | 0 | 0 | 16 |
 | 17 | 11 | 3 | 2 | 0 | 0 | 0 | 16 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 4 | 5 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **290** | **71** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **292** | **69** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1048 |
+| covered | 1050 |
 | partial | 4 |
-| uncovered | 84 |
+| uncovered | 82 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -91,7 +91,7 @@ for this map.
 | Evidence type | Criteria |
 |---|---|
 | backend_contract | 71 |
-| backend_integration | 322 |
+| backend_integration | 323 |
 | backend_unit | 131 |
 | e2e | 16 |
 | frontend_component | 132 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 39 |
+| B | 37 |
 | C | 6 |
 | D | 32 |
-| **open total** | **78** |
+| **open total** | **76** |
 
-## Partial criteria (71)
+## Partial criteria (69)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -158,8 +158,6 @@ for this map.
 | `RD-13` | B | A second, stale write on the same draft/revision is refused; the first revision survives. | The refusal is proven on two independent mutating surfaces, and the soft-delete case also asserts the non-effect (deletion_state still ACTIVE, no Trash entry) — which is the "first revision is preserved" half. The recovery-affordance clause is untested: no frontend test drives a 409 on the revision append and asserts a reload/compare/new-revision path is offered. MEASURED 2026-08-17 (batch 05), RECORDED not acted on: the affordance this clause names is NOT SHIPPED. Grepping the whole frontend for ROW_VERSION_CONFLICT / STALE_REVISION / conflict finds the verbatim-error path on Trash, Market Data, Library and Mainboard, but nothing on the Research Data revision-append surface — neither ResearchData.tsx nor ResearchLifecycle.tsx renders a reload / compare / new-revision recovery path. So this reads class D (an implementation gap), not class B. It was NOT reclassified: B -> D RAISES the D ceiling, which is an adjudication rather than a test slice's call. |
 | `PE-06` | D | Trash is Admin-only, historical integrity holds, and an immutable artifact reference blocks purge. | Judged as behaviour. The Admin-only and historical-integrity halves are solidly asserted. The specific claim "immutable artifact reference purgeyi bloklar" is NOT asserted for an allocation plan or for a Result-pinned object: the only PURGE_NOT_ELIGIBLE branches in jobs/purge.py::_purge_preflight are the built-in manual baseline, a live Agent source task, and a work_object with an active run — and `_RESULT_ENTITY_TYPE` returns early (a Result is purgeable, the parent manifest being retained instead). So the closest proofs are analogous dependency blocks, not the allocation-plan case the row describes. |
 | `RC-09` | B | A dependency change stales the current report and an old fingerprint returns 409 COMPOSITION_STALE. | c3 has no asserting test. The frontend RUN-lock tests (mainboard.test.tsx "locks RUN until a current Ready Check passes", readyCheckShell.test.tsx "keeps RUN locked ... while the state is not ready") all drive state="not_ready"; readyCheck.test.tsx "flags a stale report with a re-run hint" renders the stale badge on a deep-linked report but asserts nothing about a RUN control. Add a case that feeds a STALE/is_current=false readiness projection to the Mainboard or RUN page and asserts the admit button is disabled. |
-| `RC-10` | B | A newer catalog revision that the draft does not pin must not stale an existing report. | No test proves a NEWER catalog revision leaves a pinned report non-stale; only is_stale(a, a) is False. domain/readiness/validators.py states the rule in a comment ("the fingerprint is over the pinned revision ids only (RC-10)") but a comment is not an assertion. The closest real test is backend/tests/integration/test_e2e_pipeline.py::test_market_successor_never_leaks_and_rerun_is_reproducible, which moves the market head after a run and asserts the MANIFEST and execution_key are unchanged — it never reads a readiness report back. Add a case that runs a Ready Check, approves a successor revision the draft does not pin, and asserts the report still reads is_current=true. |
-| `RC-17` | B | An unauthorized user checking a private composition gets a permission-safe rejection. | c2 has no asserting test: nothing asserts the 403 envelope for a readiness denial is free of composition/dependency detail. The suite does have this shape of assertion elsewhere (contract/test_mainboard_contract.py::test_guest_default_mainboard_does_not_leak_workspace_or_composition checks a leak-key set against both the body and error object), so the pattern exists — it just was never applied to the readiness/RUN denial routes. Add a contract case that drives POST /mainboard-compositions/{id}/readiness-checks as a foreign actor and asserts the error body exposes no item ids, package refs or dependency names. |
 | `BR-08` | C | The V18 prototype's local booleans, hard-coded metrics and DOM delete do not stand in for Production. | This row mixes two kinds of claim, so it is split. c1/c2 are real product behaviour and are asserted. c3 is a document-conformance statement about the V18 mockup file (docs/spec/index_guncellenmis_duzeltilmis_v18.html) not being the canonical Production spec — there is no product behaviour to assert, and CLAUDE.md records the Graphic View renderer as deliberately out of V1 scope, so no test could prove it without inventing a renderer. Rolled up to partial rather than covered because one clause carries no product assertion at all. |
 | `RH-13` | B | Dropping a metric from the Result View profile never deletes historic values or the manifest. | c2 has no asserting test: no test lists Results History before and after applying a narrower metric profile to prove the row-level key_metrics digest is unaffected by a presentation preference. c3 is proven only incidentally — the pipeline test applies a personal profile revision and later asserts manifest_after.manifest_hash equals the admission hash, but the assertion is framed around the Trash round trip, not the profile change. Add a direct list_backtest_results comparison across a create_metric_profile_revision call. ADIM 55 measured c2 and deferred it rather than rushing: `results_history._digest_from_rows` filters on the CONSTANT KEY_METRIC_KEYS, so a Result View profile revision cannot reach the digest — but proving it needs the metric REGISTRY seeded before create_metric_profile_revision will validate a selection (MetricCodeUnknownError otherwise). Plumbing, not doubt about the behaviour. |
 | `RH-14` | B | A headless Agent queries a result and writes a provenance-linked artifact without mutating the Result. | c3 has no asserting test: the agent-loop test asserts the artifact, its source_task_id and its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary) after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash snapshot before and after the artifact.create dispatch. ADIM 55 measured c3 and deferred it rather than rushing: create_analysis_artifact is capability-gated, so the proof needs the capability registry walked to Limited (test_capability_output_history::_walk_to_limited), whose seeding helper collides with this module's principals. Plumbing, not doubt about the behaviour. |

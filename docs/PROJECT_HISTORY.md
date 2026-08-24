@@ -13504,3 +13504,102 @@ sessizce düşürmüştü). **#799 hâlâ açık ve `docs/ADIM89_LANDED_KICKOFF.
 > `90` **bu kayıttır**. ADIM 87'nin dersi uygulandı:
 çakışma **başlıkta değil DOSYA YOLUNDA** aranır, ve `ADIM90` yolunu **hiçbir açık PR** eklemiyor.
 **Merge edilmiş ad kazanır**, numaralar yeniden atanmaz.
+
+## ADIM 94 — kabul borcu batch 17 (doc 01 Mainboard, backend): `MB-01` + `MB-27` kapandı, on birinci bulgu
+
+> **ÜRÜN KODU DEĞİŞMEDİ — yalnız test + defter.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** `backend/src` altında **sıfır** satır; diff = iki yeni integration case
+> + kabul defteri + üretilmiş artefakt.
+
+**Kapanan iki kriter: `MB-01` (c4) · `MB-27` (c4).** İkisi de doc 01'in son açık backend
+clause'uydu, ikisinde de eksik olan **ölçümün yeriydi**:
+
+- **`MB-01.c4`** (*guest Ready Check isteği sunucu tarafında reddedilir*) — kriterin
+  adlandırdığı dört yüzeyden üçü kanıtlıydı (projeksiyon okuma, draft yüzeyleri, RUN
+  admission); **Ready Check hiç anonim aktörle sürülmemişti**. Satırın kendi notu bunu
+  itiraf ediyordu: *"sahiplik kapısı bir anonim principal'ı muhtemelen reddederdi, ama
+  muhtemel asserted değildir"*. Artık sürülüyor: `run_readiness_check` `UnauthenticatedError`
+  fırlatır, **hiçbir immutable rapor satırı oluşmaz**, ve aynı kompozisyon üzerinde
+  authenticated bir çağrı **pozitif kontroldür**.
+- **`MB-27.c4`** (*canlı bir item'ı devre dışı bırakmak raporu STALE'e çevirir ve onu Ready
+  Check / allocation kapsamından çıkarır*) — suite buna **iki adımlı bir çıkarımla**
+  ulaşıyordu (bir unit test disable'ın hash'i oynattığını, bir başkası oynayan fingerprint'in
+  raporu stale ettiğini gösteriyordu); **hiçbir test kalıcı bir item'ı devre dışı bırakıp
+  raporu OKUMUYORDU**. Yeni case iki bağımsız gözlem yapar: raporun **etkin** durumu `stale`'e
+  düşerken **saklanan** durumu kıpırdamaz (çift önemli — yalnız `state` okuyan bir test,
+  yeniden hesaplanmış bir projeksiyonu yeniden yazılmış bir satırdan ayıramaz), ve sonraki
+  **yeniden koşu `COMPOSITION_EMPTY`** raporlar — *"Ready Check kapsamından çıkar"* yarısı
+  çıkarımla değil **doğrudan** ölçülür.
+
+**BEŞ NEGATİF KONTROL — VE ÜÇÜNCÜSÜ BU PARTİNİN DERSİDİR.** Her biri koşmadan önce yamasının
+uygulandığını (tek eşleşme) assert etti ve sonra ağacı geri yazdı. (1) `require_authenticated`
+silinince test **pytest.raises satırında** kırmızı ama **`AccessDeniedError` ile** — refüz
+**iki kapıyla** korunuyor (auth kapısı + `_load_workspace`'teki sahiplik kapısı), yani o
+kırmızı refüzün yokluğunu değil **auth kapısını** kanıtlar (ADIM 84'ün `TL-22.c4` şekli).
+(2) İki kapı birden düşünce **DID NOT RAISE**, yine aynı satırda. (3) İkisi de rapor-sayısı
+assertion'ına **hiç ulaşmıyor**, bu yüzden üçüncü kontrol auth kapısını **insert'in ALTINA**
+taşıdı (ADIM 83 şekli) — **ve YEŞİL geçti.** O yeşil, assertion'ın **TOTOLOJİK** olduğunu
+ortaya çıkardı: test saymadan önce `session.rollback()` çağırıyordu, yani komutun yazdığı her
+satırı atıyordu ve sayı asla düşemezdi. Rollback **silindi**, kontrol yeniden koşuldu:
+tam o satırda **`assert 1 == 0`**. **DERS: bir YAN ETKİNİN YOKLUĞUNU iddia eden assertion'ın
+önünde onu geri alan hiçbir şey olamaz.** (4) `_current_fingerprint` kapalı item'ları da
+sayınca `state == "stale"` kırmızı. (5) `list_enabled_items_with_root_state`'ten
+`is_enabled.is_(True)` düşünce `COMPOSITION_EMPTY` assertion'ı kırmızı.
+
+**KONTROL HARNESS'ININ KENDİSİNDE DE BİR KUSUR ÖLÇÜLDÜ.** Çok dosyalı bir kontrolde,
+**sonraki** bir dosyada patlayan tekillik assertion'ı **önceki** düzenlemeyi geri almadan
+aborte ediyordu → ürün ağacı kirli kalıyor ve **bir sonraki kontrol onu sessizce ölçüyordu**
+(fiilen oldu: sıradaki koşu `require_authenticated`'ı 0 kez buldu). Geri yazma artık
+`finally` bloğunda. **Negatif kontrol harness'i de bir ölçüm aracıdır; kirli bırakırsa
+ölçtüğün şey senin sandığın şey değildir.**
+
+**ON BİRİNCİ BULGU — `MB-22.c4`, ÖLÇÜLDÜ, KAPATILMADI.** Kriter *"restore'dan sonra önceki
+Ready raporu artık kullanılamaz ve yeniden koşulmalıdır"* diyor. Sevk edilen davranış
+**tersi**: `list_active_items` `EntityRegistry.deletion_state == ACTIVE` ile join'lediği için
+soft delete item'ı kompozisyondan düşürür ve rapor doğru biçimde STALE okunur — ama
+**restore aynı `(root_id, revision_id)` çiftini geri koyar**, `_current_fingerprint` **orijinal
+değeri birebir** yeniden üretir ve `is_stale()` `False` döner: silme öncesi rapor yeniden
+`ready` / `is_current True` okunur. Bir kerelik probe üç fingerprint'i sırayla bastı —
+**`02edaff5…` → `9e72b8a1…` → `02edaff5…`** — yani bu **tartışılmadı, ölçüldü** (probe
+commit edilmedi, silindi). Kapatmak restore-zamanı bir bayatlık işareti ister = **ürün işi**,
+yani **sınıf D şekli**; senaryo kurulabilir olduğu için sınıf C değil. **Yeniden
+sınıflandırılMADI** — B → D **D tavanını yükseltir** = adjudication. Defterde artık **on bir**
+böyle bulgu var; bu, `PC-20.c3`'ten sonra bir **restore yolu** hakkındaki **ikinci**si.
+
+**Tavanlar İNDİ: `partial` 75 → 73, `debt_class.B` 43 → 41**; açık borç **82 → 80**
+(A=1 · B=41 · C=6 · D=32), clause `covered` 1044 → 1046, clause `uncovered` 87 → 85.
+Taban **`d47c5ba`**, freeze **taze bir `--report` koşusundan**.
+
+**ORTAM — BİRİNCİ ELDEN TUZAK.** Container slice'ın ortasında yeniden başladı, yerel Postgres
+düştü ve iki yeni case'in ilk koşusu **`ss` (İKİ SKIPPED) ile exit 0** verdi. **Skip'li yeşil
+exit code kanıt değildir** (ADIM 74'ün dersinin üçüncü örneği); cluster yeniden kaldırıldı ve
+case'ler **gerçekten** koştu. **DÜRÜST SINIR:** frontend kapıları koşulmadı (`node_modules`
+yok, frontend'de sıfır satır) ve tam suite sonuna kadar koşmadı → **geçen sayı ve coverage
+CI'ın otoritesinde.**
+
+**NUMARA VE PARTİ ETİKETİ.** Bu kayıt yazılırken main'in son kaydı **ADIM 93**, son parti
+**batch 16** idi; **PR #806 açıktı ve kendini *"batch 17 — doc 10 backend"* diye
+adlandırıyordu.** Bu slice o başlığı **okuyup bilerek BAŞKA bir belge seçti** (doc 01), yani
+kriterler ve test dosyaları **ayrık** — ama **etiket çakışabilir**: #806 önce inerse bu kayıt
+**batch 18** olur. Numara, açık PR'ların eklediği `docs/ADIM<n>_*.md` **dosya yollarından**
+ölçüldü (#806 yeni bir kickoff eklemiyor, mevcutları düzenliyor) → **94 boştu**.
+`docs/ADIM94_LANDED_KICKOFF.md`.
+
+> **BU KAYIT BİR KEZ KAYBOLDU VE GERİ KONDU (#808 sonrası).** PR #808 merge edildi ve iki
+> yeni test, `STAGE2_HANDOFF.md` §Stage 94, `CLAUDE.md` bloğu, `ADIM94_LANDED_KICKOFF.md`
+> ve tavan (73/41) main'e **indi** — ama `PROJECT_HISTORY.md`'nin bu bölümü **inmedi**.
+> Kök **ölçüldü**: dal açıkken main üç kez ilerledi (#807, #805, #802) ve auto-merge her
+> seferinde **sunucu tarafı bir "Merge branch 'main'" commit'i** üretti; bunlardan
+> **`099ce97`** bu bölümü düşürdü — `git show 6b82de9:docs/PROJECT_HISTORY.md | grep -c
+> '^## ADIM 94'` → **1**, aynı grep `099ce97`'de → **0**. Bu, deponun **dördüncü** docs
+> regresyonu (#590, #604 ve ADIM 61'den sonra) ve yine **hiçbir CI kapısı görmedi**.
+>
+> **ASIL DERS BURADA: KONTROLÜM YANLIŞ SORUYU SORDU.** Merge'den sonra
+> `git diff origin/main...HEAD -- docs/PROJECT_HISTORY.md | grep '^-## '` koştum ve **boş**
+> döndü; bunu *"kayıt silme yok"* diye okudum. **Üç noktalı diff merge-base'e karşı ölçer**,
+> yani merge'ün **BENİM tarafımdan** düşürdüğü bir bölümü **yapısal olarak göremez** — silinen
+> şey ortak atada zaten yoktu. Doğru ölçüm merge'ün **kendi ebeveynlerine** karşıdır:
+> `git show <merge>:<dosya> | grep -c '^## <başlık>'` ile parent'ınkini karşılaştır.
+> **Bir sonraki slice: sunucu tarafı bir merge gördüğünde bunu koş.**

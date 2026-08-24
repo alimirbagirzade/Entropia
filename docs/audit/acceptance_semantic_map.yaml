@@ -16486,8 +16486,9 @@ criteria:
     - backend/tests/integration/test_arrange_metrics.py::test_result_metrics_presentation_and_null
   - id: RH-13.c2
     text: The Results History key-metric digest is unchanged by a Result View profile change.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_result_view_profile_change_does_not_move_the_history_digest
   - id: RH-13.c3
     text: The immutable Result manifest is unchanged after a profile revision is applied.
     status: covered
@@ -16500,11 +16501,13 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_arrange_metrics.py::test_result_metrics_presentation_and_null
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_result_row_immutability.py::test_result_view_profile_change_does_not_move_the_history_digest
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_arrange_metrics.py::test_result_metrics_presentation_and_null
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_result_row_immutability.py::test_result_view_profile_change_does_not_move_the_history_digest
   negative: []
   auth: []
   occ: []
@@ -16512,19 +16515,23 @@ criteria:
   async_recovery: []
   historical_integrity:
   - backend/tests/integration/test_e2e_pipeline.py::test_full_pipeline_run_history_metrics_trash_restore
+  - backend/tests/integration/test_result_row_immutability.py::test_result_view_profile_change_does_not_move_the_history_digest
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'c2 has no asserting test: no test lists Results History before and after applying a narrower
-    metric profile to prove the row-level key_metrics digest is unaffected by a presentation preference.
-    c3 is proven only incidentally — the pipeline test applies a personal profile revision and later
-    asserts manifest_after.manifest_hash equals the admission hash, but the assertion is framed around
-    the Trash round trip, not the profile change. Add a direct list_backtest_results comparison across
-    a create_metric_profile_revision call. ADIM 55 measured c2 and deferred it rather than rushing:
-    `results_history._digest_from_rows` filters on the CONSTANT KEY_METRIC_KEYS, so a Result View
-    profile revision cannot reach the digest — but proving it needs the metric REGISTRY seeded before
-    create_metric_profile_revision will validate a selection (MetricCodeUnknownError otherwise). Plumbing,
-    not doubt about the behaviour.'
+  status: covered
+  notes: 'c2 CLOSED by acceptance batch 23 (doc 16 backend): ADIM 55 deferred it as plumbing (the metric REGISTRY must be seeded
+    before create_metric_profile_revision will validate a selection, MetricCodeUnknownError otherwise);
+    batch 23 supplied that plumbing by reusing test_arrange_metrics._seed_registry. The new test lists
+    Results History, applies a PERSONAL profile revision selecting only profit_factor + total_stops —
+    which drops ALL FIVE key metrics, the strongest form of the clause — and re-lists. Non-vacuity is
+    asserted in both directions before the equality: the digest must be POPULATED (an all-None digest
+    would compare equal to itself while proving nothing) and the persisted selection must actually
+    EXCLUDE every KEY_METRIC_KEYS member. The comparison is FULL-DICTIONARY equality, so a lost key, a
+    gained key or a changed cell all fail (ADIM 98/101). Negative control: filtering the History digest
+    through the caller''s personal profile selection in list_backtest_results turned it red ON THE
+    TARGET assertion (all five cells None), while test_results_history + test_arrange_metrics stayed
+    39/39 GREEN under the same defect — so the new assertion looks at an axis nothing else covered.
+    c3 remains proven only incidentally (the pipeline test asserts manifest_after.manifest_hash around
+    the Trash round trip, not around the profile change), but it IS asserted.'
 - id: RH-14
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'
@@ -16545,36 +16552,48 @@ criteria:
     - backend/tests/integration/test_e2e_agent_loop.py::test_agent_loop_directive_to_hypothesis_without_ui
   - id: RH-14.c3
     text: Creating the artifact leaves the BacktestResult row unmodified.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_result_row_immutability.py::test_agent_artifact_create_leaves_the_referenced_result_row_untouched
   production_paths:
   - backend/src/entropia/application/jobs/agent_tools.py
   - backend/src/entropia/domain/agent_lab/tool_gateway.py
   - backend/src/entropia/application/commands/agent_artifact.py
   test_evidence:
   - backend/tests/integration/test_e2e_agent_loop.py::test_agent_loop_directive_to_hypothesis_without_ui
+  - backend/tests/integration/test_result_row_immutability.py::test_agent_artifact_create_leaves_the_referenced_result_row_untouched
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_e2e_agent_loop.py::test_agent_loop_directive_to_hypothesis_without_ui
+  - backend/tests/integration/test_result_row_immutability.py::test_agent_artifact_create_leaves_the_referenced_result_row_untouched
   negative: []
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
-  historical_integrity: []
+  historical_integrity:
+  - backend/tests/integration/test_result_row_immutability.py::test_agent_artifact_create_leaves_the_referenced_result_row_untouched
   agent_parity:
   - backend/tests/integration/test_e2e_agent_loop.py::test_agent_loop_directive_to_hypothesis_without_ui
-  status: partial
-  debt_class: B
-  notes: 'c3 has no asserting test: the agent-loop test asserts the artifact, its source_task_id and
-    its ArtifactLink rows, but never re-reads the BacktestResult (row_version, manifest_hash or summary)
-    after artifact.create to show it was untouched. The link is stored on the artifact side, so mutation
-    is unlikely by construction — but that is an argument, not an assertion. Add a row_version/manifest_hash
-    snapshot before and after the artifact.create dispatch. ADIM 55 measured c3 and deferred it rather
-    than rushing: create_analysis_artifact is capability-gated, so the proof needs the capability
-    registry walked to Limited (test_capability_output_history::_walk_to_limited), whose seeding helper
-    collides with this module''s principals. Plumbing, not doubt about the behaviour.'
+  - backend/tests/integration/test_result_row_immutability.py::test_agent_artifact_create_leaves_the_referenced_result_row_untouched
+  status: covered
+  notes: 'c3 CLOSED by acceptance batch 23 (doc 16 backend): the agent-loop test only ever read FORWARD — artifact, source_task_id,
+    ArtifactLink — and never re-read the BacktestResult afterwards, so non-mutation was an argument from
+    construction, not an assertion. The new test drives the SHIPPED gateway path (artifact.create under
+    the research policy scope) against a REAL persisted result whose id is carried in BOTH evidence_refs
+    and a provenance link, then re-reads every durable column plus the manifest snapshot. MEASUREMENT
+    CORRECTION: ADIM 55 recorded this clause as blocked on walking the capability registry to Limited,
+    having read it against commands/capability.create_analysis_artifact; the path RH-14 actually names is
+    the agent tool gateway artifact.create, which is NOT capability-gated, so no walk was needed and no
+    principal collision arose. Negative control: making artifact.create write through its provenance link
+    (row_version += 1 on the linked BacktestResult) turned it red ON THE TARGET assertion with the diff
+    exactly row_version 2 != 1 — the non-vacuity assertions above it (call succeeded, link points at this
+    result) PASSED, so nothing shadowed the target. Under the same defect the agent-loop, Trash-artifact
+    and tool-gateway suites stayed 24/24 GREEN, including RH-14''s own evidence test. Re-reads go through
+    _reread (session.expire_all), and the task id is captured BEFORE that call — expire_all expires the
+    task row too, and a later lazy load raises MissingGreenlet (ADIM 100''s identity-map hazard, other
+    way up).'
 - id: RH-15
   document: docs/spec/16_Entropia_V18_Results_History_Page_Documentation_v1_1.md
   section: '16'

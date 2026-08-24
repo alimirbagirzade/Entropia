@@ -8017,6 +8017,88 @@ yeşil bırakır (ölçülen < tavan asla kırmızı vermez).
 `PROJECT_HISTORY.md` §ADIM 101 · `docs/ADIM101_LANDED_KICKOFF.md`.
 
 
+## Stage 102 — kabul borcu batch 23 (doc 16 Results History, backend): RH-13 + RH-14 kapandı, DOC 16 BİTTİ landed
+
+**Ne indi.** İki yeni integration case (`backend/tests/integration/test_result_row_immutability.py`)
++ kabul defteri + üretilmiş artefaktlar. **`backend/src` altında sıfır satır**, migration yok,
+OpenAPI değişmedi.
+
+**Kapananlar: `RH-13` (c2) · `RH-14` (c3)** — ikisi de kendi kriterinin **son açık clause'uydu**,
+ikisinin de `debt_class`'ı KALDIRILDI. **Doc 16 artık 16 covered / 0 partial — HER SINIFTAN sıfır
+açık borç.** İkisini de **ADIM 55 ölçmüş ve *plumbing* diyerek ertelemişti**; bu parti o plumbing'i
+sağladı, ve ertelemenin iki gerekçesinden **biri yanlış çıktı** (aşağıda).
+
+- **`RH-13.c2` — doc 17 ile doc 16 arasındaki sınır hiç iddia edilmemişti.** Hiçbir test Results
+  History'yi daraltılmış bir profil ÖNCESİ ve SONRASI listelemiyordu. Yeni case `_seed_registry`
+  ile metrik REGISTRY'sini kurar (ADIM 55'in ertelediği plumbing), sonra **yalnız `profit_factor`
+  + `total_stops`** seçen kişisel bir profil revizyonu uygular — yani **BEŞ anahtar metriğin
+  HEPSİNİ** düşürür, clause'un en güçlü biçimi. Karşılaştırma **tam sözlük eşitliğidir**: düşen
+  bir anahtar da, eklenen bir anahtar da, değişen bir hücre de kırmızı verir (ADIM 98/101).
+  **Vacuity iki yönde kapatıldı:** digest'in gerçekten DOLU olduğu (beş `None` kendine eşit olurdu)
+  VE persist edilen seçimin anahtar metrikleri gerçekten DIŞLADIĞI, eşitlik iddia edilmeden önce
+  assert edilir.
+- **`RH-14.c3` — mevcut kanıt yalnız İLERİ okuyordu.** Agent-loop e2e testi artifact'ı,
+  `source_task_id`'sini ve `ArtifactLink` satırlarını assert eder ama `BacktestResult`'ı sonradan
+  **hiç geri okumaz**; mutasyonun yokluğu bir **inşa argümanıydı, bir assertion değil**. Yeni case
+  **sevk edilmiş gateway yolunu** (`artifact.create`, `research` policy scope) GERÇEK bir persist
+  edilmiş result'a karşı sürer — id hem `evidence_refs`'te hem bir provenance link'inde taşınır —
+  sonra her dayanıklı sütunu artı manifest snapshot'ını geri okur.
+  **ÖLÇÜM DÜZELTMESİ:** ADIM 55 bu clause'u *"capability registry'yi Limited'a yürütmek gerekir"*
+  diye kaydetmişti, çünkü onu `commands/capability.create_analysis_artifact`'a karşı okumuştu.
+  `RH-14`'ün adlandırdığı yol **agent tool gateway `artifact.create`**'tir ve o **capability-gated
+  DEĞİLDİR** — ne yürüyüş gerekti ne de principal çakışması doğdu.
+
+**İki negatif kontrol, ikisi de HEDEF assertion'ında kırmızı** (her biri yamanın uygulandığını
+eşleşme sayısıyla assert etti, ağacı `finally`'de geri yazdı, ve her turdan sonra `git status`
+okundu):
+
+- **NC-1** — `list_backtest_results` digest'i çağıranın kişisel profil seçiminden geçirir
+  (clause'un yasakladığı sızıntının ta kendisi) → hedef **eşitlik** assertion'ında kırmızı, beş
+  hücre de `None`. **Aynı kusur altında `test_results_history` + `test_arrange_metrics` 39/39
+  YEŞİL kaldı.**
+- **NC-2** — `artifact.create` provenance link'i üzerinden yazar (`row_version += 1`) → hedef
+  **snapshot** assertion'ında kırmızı, diff tam olarak `row_version 2 != 1`. **Aynı kusur altında
+  agent-loop + trash-artifact + tool-gateway suite'leri 24/24 YEŞİL kaldı — `RH-14`'ün KENDİ kanıt
+  testi dahil.**
+
+**GÖLGE YOK, ölçüldü:** her iki kontrolde de hedeften ÖNCEKİ non-vacuity assertion'ları GEÇTİ
+(NC-2'de "çağrı başarılı" + "link bu result'ı gösteriyor"), yani kırmızı gölgelenmedi. Her iki
+kusurun mevcut suite'leri yeşil bırakması, yeni assertion'ların **başka bir eksene** baktığının
+kanıtıdır — işaretleme değil, kapsama.
+
+**Bu partinin öğrendiği (ADIM 100'ün identity-map tehlikesi, TERS YÖNDEN):** `_reread`
+`session.expire_all()` çağırır ve bu **eldeki DİĞER nesneleri de** expire eder. `task.task_id`
+snapshot'tan SONRA okununca sync bağlamda lazy-load olur → `MissingGreenlet`. id **expire_all'dan
+ÖNCE** yakalanır. Negatif kontrol harness'inin doğrulayıcısı da aynı turda düzeltildi: `new`,
+`old`'u İÇEREBİLİR (değiştirme değil **ekleme** yaması), o yüzden kontrol *"`old` kayboldu mu"*
+değil *"tam metin tam olarak bir kez var mı"* olmalıdır — ilk hali sahte bir başarısızlık üretti
+ve yamayı reddetti.
+
+**Tavanlar İNDİ: `partial` 64 → 62, `debt_class.B` 32 → 30**; açık borç **71 → 69**
+(A=1 · B=30 · C=6 · D=32); kriter `covered` 297 → 299, clause `uncovered` 77 → 75. Taban `43dc70d`.
+
+**Ortam (birinci elden):** container **çıplak** başladı — `backend/.venv` yok, Postgres cluster
+yok, **ve repo bile klonlanmamıştı**; üçü de bu slice içinde kuruldu ve iki case ile iki kontrol
+**gerçekten koştu** (`test_result_row_immutability.py` **5 → 7 passed**, skip yok; ilgili altı
+suite birlikte **71 passed**). `alembic upgrade head` **`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile
+koşuldu (`en_US.UTF-8` bu imajda `UnicodeDecodeError`). `ruff check` · `ruff format --check` ·
+`mypy src` (400 dosya) **temiz**.
+
+**Dürüst sınır:** frontend'de sıfır satır → **hiçbir frontend kapısı koşulmadı**; tam backend
+suite'i **uçtan uca koşulmadı** → geçen sayı ve coverage yüzdesi **CI'ın otoritesinde**. `mypy`
+CI'da yalnız `src` üzerinde koşar; test dosyası bu modülün mevcut yardımcıları gibi annotate
+edilmemiştir ve bu kasıtlıdır.
+
+**NUMARA/ETİKET:** dal `43dc70d`'den kesildi ve o an açık PR listesi **boş** döndü — önceki dört
+partinin kaydettiği gibi bu bir **garanti değil, anlık görüntüdür**. PR açıkken main ilerlerse dal
+**rebase** edilir (*"Update branch"* düğmesi DEĞİL) ve tavan **merged ağaçta taze bir `--report`
+ile YENİDEN ÖLÇÜLÜR**; taşınan bayat bir freeze `--ratchet`'i sonsuza dek yeşil bırakır
+(ölçülen < tavan asla kırmızı vermez).
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi
+(yeni endpoint / tablo / sayfa / job yok).
+`PROJECT_HISTORY.md` §ADIM 102 · `docs/ADIM102_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

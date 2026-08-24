@@ -237,7 +237,36 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 94 (kabul borcu batch 17, doc 01 Mainboard BACKEND): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 95 (üretilmiş kabul artefaktlarının drift kapısı):
+> ÜRÜN KODU DEĞİŞMEDİ (`backend/src`'te sıfır satır), TAVANLAR OYNAMADI (73 partial /
+> 7 uncovered · A1 B41 C6 D32). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> `acceptance_semantic_scan.py` iki checked-in artefakt üretiyor; **iddia ölçümle DARALTILDI**
+> — defter **zaten** kapılıydı (`test_the_debt_ledger_is_not_stale`), **kapısız olan RAPORDU**
+> ve sürüklenen de o oldu: **ADIM 60'tan (#719) beri YEDİ kabul partisi**
+> (`234 covered / 126 partial` ↔ ölçülen `276 / 84`), **CI hep yeşildi**. Yeni
+> `::check_generated` + `ci.yml` → `--report --check-generated --ratchet` (**yeni job DEĞİL**,
+> mevcut adıma bayrak). Kapı **eksik dosyayı taze saymaz** (`MISSING`), suçlamayı **dosya
+> başına** ayrıştırır, hata mesajında **yeniden üretme komutunu** verir; **yazıcı ile kapı tek
+> renderer'ı paylaşır** (ayrışsalardı kapı *tatmin edilemez* olurdu → kaynak düzeyi test).
+> **DÖRT negatif kontrol + testin kendisinin ÜÇ negatif kontrolü, yedisi de kırmızı**; en
+> öğreticisi **tarihsel kusurun kendisi** — rapor `d012a63`'teki ADIM 60 sürümüne geri konuldu
+> ve kapı kırmızı verdi. **DERS: bir kapı ölçtüğü şeyin TAMAMINI ölçtüğünü iddia etmez** —
+> `--ratchet` **borcun tavanını** korur, üretilmiş belgenin doğruluğunu değil.
+> **DERS 2:** test ekleyen slice olguları tazelemeli (ADIM 60 emsali yine yaşandı).
+> **DERS 3 (asıl): TAM SUITE, odaklı koşunun göremediği kapıyı kırdı** —
+> `test_the_ratchet_is_wired_into_ci` CI satırının **birebir literalini** pinliyordu; test
+> kendi konusuna göre yeniden yazıldı (literal değil **bayrak** assert'i) ve o dosyayı okumak
+> yukarıdaki yanlış iddiayı ortaya çıkardı. **NUMARA: bu slice İKİ KEZ taşındı** (92 → 94;
+> kapanış yazılırken main 92 **ve** 93'ü birden aldı) ve rebase sekiz belge çakışması verdiği
+> için dal main'e **sıfırlanıp** yalnız dört kod dosyası yeniden uygulandı.
+> **DÜRÜST SINIR:** kapı yalnız bu **iki** artefaktı kapsar; `repository_facts.*` ve
+> `openapi.json` zaten kendi guard'larına sahip, **başka üretilmiş belgeler taranmadı**.
+> `PROJECT_HISTORY.md` §ADIM 95 · `docs/ADIM95_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 94 (kabul borcu batch 17, doc 01 Mainboard BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.**
 > İki kriter kapandı — **`MB-01.c4`** (kriterin adlandırdığı dört yüzeyden

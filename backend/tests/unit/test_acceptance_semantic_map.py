@@ -725,6 +725,19 @@ def test_the_debt_ledger_is_not_stale(shipped_map: dict[str, Any]) -> None:
 
 
 def test_the_ratchet_is_wired_into_ci() -> None:
-    """A ceiling nothing runs is a comment."""
+    """A ceiling nothing runs is a comment.
+
+    The literal moved when ``--check-generated`` was added to the same step
+    (ADIM 92). Asserting the flags rather than the whole string keeps this test
+    about ITS subject — that the ratchet still runs — instead of breaking every
+    time a sibling gate joins the line.
+    """
     workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "acceptance_semantic_scan.py --root .. --report --ratchet" in workflow
+    line = next(
+        ln
+        for ln in workflow.splitlines()
+        if "acceptance_semantic_scan.py" in ln and ln.lstrip().startswith("run:")
+    )
+    assert "--root .." in line
+    assert "--report" in line
+    assert "--ratchet" in line

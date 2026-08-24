@@ -29,6 +29,11 @@ What makes it fail (exit 1):
   * an `unfalsifiable` clause marker that is not a bool, or one set true on a
     clause whose status is not `uncovered`
 
+What makes `--check-generated` fail (exit 1):
+
+  * the checked-in traceability report or debt ledger no longer matching what the
+    map renders — including one of them being deleted outright
+
 What makes `--ratchet` fail (exit 1):
 
   * the count of `partial` / `uncovered` criteria, or of any A/B/C/D debt class,
@@ -41,6 +46,13 @@ of the contract is unproven, which is how 131 partial + 8 uncovered criteria pas
 green for months. `--ratchet` freezes that debt as a ceiling instead, the same trade
 the a11y ratchet already makes in this repo (`frontend/e2e/a11y-baseline.json`).
 
+`--check-generated` closes the remaining hole. This script WRITES two checked-in
+artefacts (`--write-report`, `--write-ledger`) from hand-run commands, so nothing
+stopped them going stale: the traceability report sat at ADIM 60's numbers through
+seven acceptance batches — `234 covered / 126 partial` against a measured
+`276 / 84` — with CI green throughout, because no gate compared a generated file
+with its own generator.
+
 Resolution is STATIC — `ast` for Python, title extraction for vitest/playwright.
 No database, no test run, no network: this is safe to run as a fast CI gate and
 its verdict cannot drift with the environment.
@@ -48,6 +60,7 @@ its verdict cannot drift with the environment.
 Usage (from the repo root):
     python3 docs/audit/acceptance_semantic_scan.py            # gate
     python3 docs/audit/acceptance_semantic_scan.py --report   # gate + coverage tables
+    python3 docs/audit/acceptance_semantic_scan.py --check-generated  # artefact drift
 """
 
 from __future__ import annotations
@@ -66,6 +79,11 @@ import yaml
 
 MAP_PATH = "docs/audit/acceptance_semantic_map.yaml"
 BASELINE_PATH = "docs/audit/acceptance_coverage_baseline.json"
+# The two artefacts this script GENERATES. They are checked in, so they can drift
+# from the map that produces them; ``--check-generated`` is what makes that drift
+# a red gate rather than a document nobody re-reads.
+REPORT_PATH = "docs/audit/acceptance_semantic_traceability.md"
+LEDGER_PATH = "docs/audit/acceptance_coverage_debt_ledger.md"
 
 # --------------------------------------------------------------------------
 # Vocabulary
@@ -996,6 +1014,51 @@ def ledger(document: dict[str, Any]) -> str:
 # --------------------------------------------------------------------------
 
 
+def _rendered_report(document: dict) -> str:
+    return REPORT_PREAMBLE + report(document) + "\n"
+
+
+def _rendered_ledger(document: dict) -> str:
+    return LEDGER_PREAMBLE + ledger(document) + "\n"
+
+
+def check_generated(document: dict, root: str) -> tuple[bool, list[str]]:
+    """Verify the checked-in generated artefacts match what the map produces NOW.
+
+    ``--ratchet`` bounds how much of the contract is unproven; it says nothing
+    about whether the human-readable artefacts still describe the tree. They are
+    written by hand-run commands, so nothing stopped them going stale: the
+    traceability report sat at ADIM 60's numbers through seven acceptance batches
+    (234 covered / 126 partial against a measured 276 / 84) because no gate ever
+    compared the file on disk with its own generator.
+    """
+    findings: list[str] = []
+    for label, rel, expected in (
+        ("traceability report", REPORT_PATH, _rendered_report(document)),
+        ("debt ledger", LEDGER_PATH, _rendered_ledger(document)),
+    ):
+        target = os.path.join(root, rel)
+        if not os.path.isfile(target):
+            findings.append(f"{rel} is MISSING — the {label} is generated, not optional.")
+            continue
+        with open(target, encoding="utf-8") as fh:
+            actual = fh.read()
+        if actual != expected:
+            findings.append(
+                f"{rel} is STALE — the map moved but the {label} was not regenerated."
+            )
+    if findings:
+        lines = ["FAIL: generated acceptance artefacts do not match the map\n"]
+        lines.extend(f"  - {finding}" for finding in findings)
+        lines.append(
+            "\nRegenerate (never hand-edit the numbers) with:\n"
+            "  cd backend && uv run python ../docs/audit/acceptance_semantic_scan.py \\\n"
+            f"      --root .. --write-report {REPORT_PATH} --write-ledger {LEDGER_PATH}"
+        )
+        return False, lines
+    return True, ["generated acceptance artefacts are fresh (report + ledger match the map)."]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--map", default=MAP_PATH)
@@ -1010,6 +1073,12 @@ def main(argv: list[str] | None = None) -> int:
         "--write-ledger",
         metavar="PATH",
         help="regenerate the A/B/C/D debt ledger at PATH",
+    )
+    parser.add_argument(
+        "--check-generated",
+        action="store_true",
+        help="fail when the checked-in traceability report / debt ledger no longer "
+        "match the map (the drift guard for this script's own output)",
     )
     parser.add_argument(
         "--ratchet",
@@ -1046,20 +1115,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_report:
         target = os.path.join(args.root, args.write_report)
         with open(target, "w", encoding="utf-8") as fh:
-            fh.write(REPORT_PREAMBLE)
-            fh.write(report(document))
-            fh.write("\n")
+            fh.write(_rendered_report(document))
         print(f"wrote {args.write_report}")
     if args.write_ledger:
         target = os.path.join(args.root, args.write_ledger)
         with open(target, "w", encoding="utf-8") as fh:
-            fh.write(LEDGER_PREAMBLE)
-            fh.write(ledger(document))
-            fh.write("\n")
+            fh.write(_rendered_ledger(document))
         print(f"wrote {args.write_ledger}")
     if args.report:
         print()
         print(report(document))
+    if args.check_generated:
+        ok, lines = check_generated(document, args.root)
+        print()
+        print("\n".join(lines), file=sys.stderr if not ok else sys.stdout)
+        if not ok:
+            return 1
     if args.ratchet:
         path = os.path.join(args.root, args.ratchet)
         if not os.path.isfile(path):

@@ -237,7 +237,62 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 99 (kabul borcu batch 20, doc 10 FRONTEND): ÜRÜN KODU
+> `future_dev`. **Son dalga — ADIM 100 (kabul borcu batch 21, doc 22 Future Dev BACKEND): ÜRÜN
+> KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.**
+> İki kriter kapandı — **`FD-04.c4`** · **`FD-05.c4`**; ikisi de son açık clause'du → ikisinin de
+> `debt_class`'ı **KALDIRILDI**. **Davranış ZATEN SEVK EDİLMİŞTİ** (`query_view_dataset` ile
+> `create_analysis_artifact`'in gövdelerinde herhangi bir result tablosuna **tek bir yazma yok**);
+> boşluk şuydu: doc 22'nin FD-04/FD-05 testlerinin **hepsi** komuta **literal** bir ref veriyordu —
+> `"result_abc123"` — ve o dize **hiçbir satırı adlandırmıyor** → *"referans edilen Backtest
+> Result'a dokunulmadı"* iddiası doğruydu çünkü **dokunulacak bir şey yoktu**. Yeni case'ler
+> **yoğun** bir result tohumlar (3 kanonik metrik, 2 trade-ledger satırı, pinlenmiş manifest
+> snapshot'ı), **o result'ın kendi id'sini** ref olarak geçirir ve her şeyi **Postgres'ten** geri
+> okur. **ÜÇ TAŞIYICI, üçü de ölçüldü:** yoğunluk muhafızı (boş kökte "değişmedi" **bedavadır**) ·
+> geri okumadan önce **`session.expire_all()`** — integration fixture'ı `expire_on_commit=False`
+> kurar, yoksa karşılaştırma veritabanına değil **identity map'e** karşı yapılır (ADIM 94
+> kuralının **okuma yoluna** uygulanmış hâli) · işlemin **gerçekten indiği**. **BEŞ negatif
+> kontrol, beşi de HEDEF assertion'ında kırmızı ve beşinde de önceden var olan 23 test YEŞİL
+> kaldı** (24 nokta + 1 F) — boşluğun *iddiası* değil **ölçümü**. **ASIL DERS: EZME ile EKLEME
+> AYRI KUSUR SINIFLARIDIR** — satır **demetlerini** karşılaştırmak ezmeyi (NC-3), tam sıralı
+> **listeleri** karşılaştırmak eklemeyi (NC-4) yakalar, hiçbiri diğerini göremez ve `count(*)`
+> ikisini birden kaçırır. **İKİNCİ DERS: `finally` SÜREÇ SIGTERM ALIRSA KOŞMAZ** — bir kontrol
+> koşusu araç zaman aşımıyla öldü, ağaç yamalı kaldı ve bir sonraki kontrol onu **sessizce**
+> ölçerdi → **her turdan sonra `git status`**. **GÖLGE AÇIKÇA KABUL EDİLDİ:** `FD-05` case'inin
+> son `result_row` assertion'ı üç assertion tarafından gölgelenir → **kendi ekseni sayılmadı**
+> (o iddia `FD-04`'ün NC-1'i ile bağımsız ölçülüyor) ve defter notu bunu **yazıyor**.
+> **Tavanlar İNDİ: `partial` 68 → 66, `debt_class.B` 36 → 34**; açık borç **73**
+> (A=1 · B=34 · C=6 · D=32). **DOC 22'DE SINIF-B KALMADI** — kalan üç `partial` satırın üçü de
+> sınıf D (`FD-02.c4` insan HTTP hattında denial kaydı yok · `FD-09.c4` `AnalysisArtifact`'te
+> split/seed **kolonu** yok · `FD-13.c4` refüz `_audit_and_outbox`'a hiç ulaşmadan raise ediyor).
+> **ORTAM: container ÇIPLAK başladı** — `.venv` ve Postgres cluster'ı yoktu, ikisi de kuruldu;
+> `alembic upgrade head` **`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koşuldu. **DÜRÜST SINIR:** frontend
+> kapıları koşulmadı (frontend'de sıfır satır) → geçen sayı ve coverage CI'ın otoritesinde.
+> **NUMARA: dal `2b41cf8`'den kesildi ve o an AÇIK PR LİSTESİ BOŞTU** (`ADIM 99` / `batch 20`
+> yazıldı) — **ikisini de kaybetti:** bu PR açıkken **#812** indi ve `ADIM 99` ile `batch 20`'nin
+> **İKİSİNİ birden** merge edilmiş adla aldı → bu kayıt **`ADIM 100` / `batch 21`**, kickoff
+> dosyası dahil yeniden adlandırıldı. **DERS: boş bir açık-PR listesi bir GARANTİ değil, bir ANLIK
+> GÖRÜNTÜDÜR** — dal PR'ını açtıktan sonra da main ilerler (ADIM 91 "çakışma dosya yolunda ölçülür"
+> ve ADIM 92 "ayrılan numara güvenli değildir" üzerine üçüncü şekil), ve ADIM 97'nin *"iki numara
+> bağımsız taşınABİLİR demek bağımsız taşınIR demek DEĞİLDİR"* uyarısı burada **birebir** gerçekleşti.
+> **REBASE edildi, *"Update branch"* düğmesi KULLANILMADI**; on çakışmanın hepsi **iki tarafı da
+> koruyarak** çözüldü (`## ADIM` 92 → **93**, silinen kayıt yok) ve **TAVAN TAŞINMADI** — dalın ilk
+> freeze'i 67/35 idi, arada #812 `RF-18`'i kapatıp tavanı 68/36'ya çekti, merged ağaçta taze
+> `--report` **66/34** verdi. 67/35'i taşımak tavanı gerçek sayının bir üstünde bırakır ve
+> `--ratchet` sonsuza dek yeşil kalırdı.
+> **YAN İŞ: `docs/generated/repository_facts.*` + README'nin gömülü bloğu bayatladı** (iki test
+> collection sayısını oynattı) → yeniden üretildi; ADIM 60'ın dersi bu partide yine yaşandı.
+> `PROJECT_HISTORY.md` §ADIM 100 · `docs/ADIM100_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 98 (kabul borcu batch 19, doc 14 Ready Check BACKEND): ÜRÜN
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 99 (kabul borcu batch 20, doc 10 FRONTEND): ÜRÜN KODU
 > DEĞİŞMEDİ, tek vitest case + bir opsiyonel harness parametresi + defter. Blocker sayısı
 > DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Tek clause **`RF-18.c1`** (sahnelenmiş yeniden
 > atamalar remount'ta düşer) → `RF-18` **covered**, **`debt_class` KALDIRILDI**.

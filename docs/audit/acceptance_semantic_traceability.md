@@ -71,16 +71,16 @@ for this map.
 | 19 | 4 | 2 | 0 | 1 | 1 | 0 | 8 |
 | 20 | 13 | 3 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 13 | 5 | 0 | 0 | 0 | 0 | 18 |
-| 22 | 4 | 5 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **293** | **68** | **7** | **8** | **7** | **0** | **383** |
+| 22 | 6 | 3 | 0 | 6 | 0 | 0 | 15 |
+| **all** | **295** | **66** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1051 |
+| covered | 1053 |
 | partial | 4 |
-| uncovered | 81 |
+| uncovered | 79 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 36 |
+| B | 34 |
 | C | 6 |
 | D | 32 |
-| **open total** | **75** |
+| **open total** | **73** |
 
-## Partial criteria (68)
+## Partial criteria (66)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -174,8 +174,6 @@ for this map.
 | `UM-13` | B | Two Admins appending at the same time get two deterministic positions with no duplicate side effect. | The concurrency MECHANISM exists but is never exercised under contention. The production guards are repositories/manual.py::lock_stream (a transaction-scoped `pg_advisory_xact_lock` on MANUAL_STREAM_LOCK_KEY, manual.py:38) plus the DB-level UniqueConstraint("stream_position", name="uq_manual_stream_position") on models/manual.py:113. Every existing test drives ONE session sequentially, so neither the lock nor the unique constraint has ever had to arbitrate a race — the criterion's actual subject ("İki Admin eşzamanlı append başlatır") is untested. A follow-up needs two concurrent sessions racing create_manual_document and asserting two distinct positions with no IntegrityError leaking to the caller. |
 | `UM-15` | B | A delete with a stale stream version is MANUAL_STREAM_CONFLICT, the UI rehydrates with the latest stream, and nothing is deleted. | The server-side half is solid; the client RECOVERY half is unproven. frontend/src/lib/ manual.ts:273 documents "Stale snapshot -> 409 MANUAL_STREAM_CONFLICT verbatim (UM-15)" and UserManual.tsx:806 renders the conflict explanation, but no frontend test drives a 409 MANUAL_STREAM_CONFLICT response and asserts that the stream query is refetched and the composer re-armed with the new version. The three stale-anchor tests prove the analogous refetch-and-retry loop for UM-18, so the harness to do this already exists. Note also that no test pins the literal string "MANUAL_STREAM_CONFLICT" — c1 rests on the typed ManualStreamConflictError whose code is set at shared/errors.py:2155. |
 | `FD-02` | D | A POST for an inactive capability from a stale client cache is refused with CAPABILITY_NOT_ACTIVE, creating no job/output, and a denial is recorded. | Three of four clauses are fully proven; c4 is proven on ONE of the two call lines only. The Agent tool line writes a durable REJECTED AgentToolCall row carrying reason_code CAPABILITY_NOT_ACTIVE, which the cited test asserts. The HUMAN HTTP line raises CapabilityNotActiveError straight out of require_operational_capability (commands/capability.py) and the test explicitly asserts OutboxEvent stays at zero — the 403 leaves no audit or denial row behind, only whatever structured logging the middleware emits, which nothing asserts. If doc 22's "relevant denial/log kaydı" is meant to bind the human line too, that record does not exist yet. |
-| `FD-04` | B | With Graphic View Limited/Active a selected Backtest Result prepares a View Dataset from exact pinned refs without changing the result manifest or state. | The read-side guarantee (exact pinned refs, fail-closed validation) is proven; the NON-MUTATION guarantee is asserted nowhere. No test snapshots the referenced Backtest Result manifest or its lifecycle state before and after query_view_dataset and compares them — the criterion's "result view manifest/result stateini değiştirmez" half rests on code reading alone (commands/capability.py::query_view_dataset only inserts a ViewDataset row and one outbox event). Cheap fix: assert the result row's row_version / manifest checksum is unchanged across the call. |
-| `FD-05` | B | A completed Backtest Review is a separate immutable artifact with evidence references; canonical metrics, trade ledger and the original run manifest are untouched. | Same gap shape as FD-04: "separate artifact" is proven, "original stays untouched" is not. The test name says is_immutable_root but the body only asserts the CREATED row's fields — it neither attempts a mutation of the artifact nor re-reads the referenced Backtest Result to show its metrics/ledger/manifest are byte-identical afterwards. Immutability currently rests on the absence of any update command, which is a code-shape argument, not a test. |
 | `FD-09` | D | WFA/Monte Carlo run as an Analysis Artifact recording method/split/seed/input refs, never writing an authoritative metric back onto an immutable Backtest Result. | Two real gaps, not just missing assertions. (1) c4 is a MODEL gap: the shipped AnalysisArtifact row records artifact_type, capability_key, input_manifest_refs, method_version, output_ref and owner — there is no split-definition and no random-seed column anywhere in commands/capability.py::create_analysis_artifact or the repository helper, so the criterion's "method/split/random seed" triple is only one third modelled and no test could assert the other two. (2) c5 repeats the FD-04/FD-05 non-mutation hole: no test re-reads the Backtest Result after artifact creation to prove no metric was back-written. Reproducibility of a WFA/MC run is exactly what a seed and split are for, so c4 is worth a schema follow-up rather than only a test. |
 | `FD-13` | D | A non-Admin lifecycle transition call is denied server-side with CAPABILITY_ACCESS_DENIED, no state transition and an audit-relevant denial. | c4 is NOT IMPLEMENTED. domain/identity/policy.py::require_capability_admin raises CapabilityAccessDeniedError immediately (policy.py:76) BEFORE commands/capability.py::transition_capability reaches any _audit_and_outbox call, so a refused transition writes no AuditEvent and no OutboxEvent row — the cited test's "zero activation events" assertion is consistent with that. There is also no route-level contract test for this endpoint (no capability file exists under backend/tests/contract/), so the 403 status code itself is inferred from the ForbiddenError base class rather than asserted over HTTP. Two follow-ups: persist a denial audit row, and add a contract test pinning 403 + CAPABILITY_ACCESS_DENIED on the transition route. |
 

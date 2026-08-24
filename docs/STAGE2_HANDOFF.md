@@ -7882,6 +7882,69 @@ yüzden **rebase edip tavanı yeniden ölçen** de bu dal oldu.
 
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `PROJECT_HISTORY.md` §ADIM 99 ·
 `docs/ADIM99_LANDED_KICKOFF.md`.
+## Stage 100 — kabul borcu batch 21 (doc 22 Future Dev, backend): FD-04 + FD-05 kapandı landed
+
+**Ne indi.** İki yeni integration case (`backend/tests/integration/test_future_dev.py`) + kabul
+defteri + üretilmiş artefaktlar. **`backend/src` altında sıfır satır**, migration yok, OpenAPI
+değişmedi.
+
+**Kapananlar: `FD-04` (c4) · `FD-05` (c4)** — ikisi de kendi kriterinin **son açık clause'uydu**,
+ikisinin de `debt_class`'ı KALDIRILDI. Doc 22 artık **6 covered / 3 partial / 6
+deliberate_future_dev** (4 → 6 covered, 5 → 3 partial).
+
+- **Ortak şekil:** iki clause da *"referans edilen Backtest Result'a dokunulmadı"* der ve
+  **davranış zaten sevk edilmiş** (`query_view_dataset` ile `create_analysis_artifact`'in
+  gövdelerinde herhangi bir result tablosuna **tek bir yazma yok**). Boşluk şuydu: doc 22'nin
+  FD-04/FD-05 testlerinin **hepsi** komuta **literal** bir ref veriyordu — `"result_abc123"` —
+  ve o dize **hiçbir satırı adlandırmıyor**, yani iddia doğruydu çünkü **dokunulacak bir şey
+  yoktu** (ADIM 91'in "iddia yanlış dünyada ölçülmüştü" şekli). Yeni case'ler **yoğun** bir
+  result tohumlar (3 kanonik metrik — biri bilerek `value=None`/`no_drawdown` —, 2 trade-ledger
+  satırı, pinlenmiş `result_manifest_snapshot`), **o result'ın kendi id'sini** ref olarak geçirir
+  ve her şeyi **Postgres'ten** geri okur.
+- **Üç taşıyıcı, üçü de ölçüldü:** yoğunluk muhafızı (boş result'ta "değişmedi" **bedavadır**) ·
+  geri okumadan önce **`session.expire_all()`** — fixture `expire_on_commit=False` kurar, yoksa
+  karşılaştırma veritabanına değil **identity map'e** karşı yapılır (ADIM 94 kuralının okuma
+  yoluna uygulanmış hâli) · işlemin **gerçekten indiği** (`ViewDataset`/`AnalysisArtifact`
+  satırı var **ve** gerçek result id'sini taşıyor), yoksa "hiçbir şey kıpırdamadı" hiçbir şey
+  yapmamış bir çağrı için de doğrudur.
+
+**Beş negatif kontrol, beşi de hedef assertion'ında kırmızı:** NC-1 `row_version` geri-yazması →
+`result_row` · NC-2 pinlenmiş manifest yeniden yazımı → `manifest_snapshot` · NC-3 metrik ezme →
+`metrics` · NC-4 ledger satırı **EKLEME** → `ledger` · NC-5 manifest yeniden yazımı (artifact
+yolundan) → `manifest_snapshot`. **Beşinde de tam olarak bir test düştü (24 yeşil + 1 kırmızı) ve
+önceden var olan 23 test YEŞİL kaldı** — bu, boşluğun iddiası değil **ölçümü**. **NC-3/NC-4 çifti
+dersin kendisi:** satır **demetlerini** karşılaştırmak bir **ezmeyi**, tam sıralı **listeleri**
+karşılaştırmak bir **eklemeyi** yakalar; hiçbiri diğerinin kusurunu göremez. `FD-05` case'inin
+son `result_row` assertion'ı üç assertion tarafından **gölgelenir** → **kendi ekseni sayılmadı**,
+o iddia `FD-04`'ün NC-1'i ile bağımsız ölçülüyor; defter notu bunu açıkça yazar.
+
+**Tavanlar İNDİ: `partial` 68 → 66, `debt_class.B` 36 → 34**; açık borç **75 → 73**
+(A=1 · B=34 · C=6 · D=32). Taban `bc25d22`. **Tavan TAŞINMADI** — dalın rebase öncesi freeze'i
+67/35 taşıyordu ve arada inen #812 başka bir kriteri (`RF-18`) kapatmıştı; merged ağaçta taze
+`--report` ile **yeniden ölçüldü**.
+
+**Ortam (birinci elden):** container **çıplak** başladı — `backend/.venv` yok, Postgres cluster
+yok; ikisi de bu slice içinde kuruldu ve iki case ile beş kontrol **gerçekten koştu**
+(`test_future_dev.py` **23 → 25 passed**, skip yok). `alembic upgrade head`
+**`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koşuldu (`en_US.UTF-8` bu imajda `UnicodeDecodeError`).
+**Yeni tuzak:** bir kontrol koşusu Bash aracının zaman aşımıyla **SIGTERM** aldı, `finally`
+**koşmadı** ve ağaç yamalı kaldı → **her kontrol turundan sonra `git status`'e bak**.
+
+**Dürüst sınır:** frontend kapıları koşulmadı (frontend'de sıfır satır, `node_modules` yok) →
+otorite CI; geçen sayı ve coverage yüzdesi yine **CI'ın otoritesinde**.
+
+**NUMARA/ETİKET:** dal `2b41cf8`'den kesildi ve o an açık PR listesi **boştu** → `ADIM 99` /
+`batch 20` yazıldı. Bu PR açıkken **#812 indi ve İKİSİNİ de aldı** → bu kayıt **ADIM 100 /
+batch 21**, kickoff dosyası dahil yeniden adlandırıldı. **Boş bir açık-PR listesi bir garanti
+değil, bir anlık görüntüdür** — dal PR'ını açtıktan sonra da main ilerler. Dal `origin/main`
+üzerine **rebase** edildi (*"Update branch"* düğmesi kullanılmadı); on çakışmanın hepsi **iki
+tarafı da koruyarak** çözüldü, `## ADIM` sayısı 92 → **93**.
+
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi
+(yeni endpoint / tablo / sayfa / job yok).
+`PROJECT_HISTORY.md` §ADIM 100 · `docs/ADIM100_LANDED_KICKOFF.md`.
+
+
 
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 

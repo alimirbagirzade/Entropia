@@ -1,7 +1,10 @@
-<!-- doc-status: current -->
-> **CANLI KICKOFF.** Bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
-> `historical`a demote edilir ve yerine yenisi geçer (`check_classification` CI'da doğrular:
-> ağaçtaki en yüksek numaralı `ADIM<n>…KICKOFF.md` canlı olmalıdır).
+<!-- doc-status: historical -->
+> **HISTORICAL RECORD — bu belge GÜNCEL GERÇEK DEĞİLDİR.** ADIM 92 ile `historical`a demote
+> edildi; canlı kickoff `docs/ADIM92_LANDED_KICKOFF.md`. Aşağıdaki SHA'lar, tavanlar ve "next"
+> maddeleri yazıldıkları anı dondurur — §NUMARA'nın *"#799 `docs/ADIM89_LANDED_KICKOFF.md`
+> ekliyor"* ölçümü DAHİL: o ölçüm yazıldığı anda doğruydu, ama bu belge 91 olarak **önce
+> inince** 89 numarası `check_classification` için kullanılamaz hâle geldi (kapı canlı
+> kickoff'un ağaçtaki EN YÜKSEK numara olmasını ister) ve #799 **92**'ye taşındı.
 
 # ADIM 91 — kabul borcu batch 15 (doc 17 backend) landed
 

@@ -13,10 +13,14 @@ idempotent transition replay; Retired terminality (FD-11); inactive operation
 view-dataset preparation from pinned refs (FD-04) and immutable analysis
 artifacts requiring method_version (FD-05/09); CR-08 Agent tool exposure +
 recorded REJECTED denial while Placeholder (FD-10); no Live Trade order route
-(FD-12); an L1 FK insert-order proof for the new create_* helpers.
+(FD-12); an L1 FK insert-order proof for the new create_* helpers; and — against
+a REAL seeded Backtest Result rather than a literal ref — that neither operation
+writes anything back onto it (FD-04.c4 / FD-05.c4).
 """
 
 from __future__ import annotations
+
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select
@@ -38,6 +42,7 @@ from entropia.domain.agent_lab.tool_gateway import (
     ToolName,
     exposed_tool_names,
 )
+from entropia.domain.backtest.enums import MetricAvailability
 from entropia.domain.capability.baseline import (
     BASELINE_CAPABILITIES,
     GRAPHIC_VIEW_INTRO,
@@ -57,11 +62,15 @@ from entropia.infrastructure.postgres.models import (
     AgentRuntime,
     AnalysisArtifact,
     AuditEvent,
+    BacktestResult,
     CapabilityActivationEvent,
     FutureCapability,
     Job,
+    MetricValueRow,
     OutboxEvent,
     Principal,
+    ResultManifestSnapshot,
+    TradeLedgerRow,
     ViewDataset,
 )
 from entropia.infrastructure.postgres.repositories import capability as capability_repo
@@ -676,3 +685,260 @@ async def test_seeded_capability_keys_match_tool_gate_keys() -> None:
     assert gated_keys <= seed_keys
     assert ToolName.VIEW_DATASET_QUERY in CAPABILITY_GATED_TOOLS
     assert ToolName.ANALYSIS_ARTIFACT_CREATE in CAPABILITY_GATED_TOOLS
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 21 — the referenced Backtest Result is READ, never WRITTEN   #
+# (FD-04.c4 / FD-05.c4, doc 22 §16)                                             #
+# --------------------------------------------------------------------------- #
+#
+# Every FD-04/FD-05 test above hands the commands a LITERAL ref ("result_abc123")
+# that names no row at all, so "the referenced Backtest Result is untouched" was
+# true only because there was nothing to touch. These two cases seed a REAL,
+# DENSE result — canonical metrics, a trade ledger and the pinned run-manifest
+# snapshot — pass ITS id as the ref, and read the whole thing back out of
+# Postgres afterwards. Without the density guard the claim would be vacuous on
+# an empty result; without re-reading from the database it would be an assertion
+# about the identity map (the fixture runs with expire_on_commit=False).
+
+_RESULT_ID = "res_fd_immutable"
+_RUN_ID = "run_fd_immutable"
+_MANIFEST_BODY = {
+    "manifest_version": "v1",
+    "composition_snapshot_id": "snap_fd_1",
+    "instruments": ["BTCUSDT"],
+    "market_data_revision_refs": ["mkt_rev_9"],
+}
+
+
+async def _seed_backtest_result(session) -> None:
+    """One dense, immutable Backtest Result: 3 canonical metrics, 2 trade ledger
+    rows and the manifest snapshot pinned to the result (doc 15 §9.1, §12)."""
+    session.add(
+        BacktestResult(
+            result_id=_RESULT_ID,
+            run_id=_RUN_ID,
+            manifest_id="man_fd_1",
+            manifest_hash="a" * 64,
+            workspace_entity_id="ws_fd_1",
+            composition_fingerprint="f" * 64,
+            engine_version="backtest-engine-fd-test",
+            deletion_state="active",
+            row_version=1,
+            created_by_principal_id=USER.principal_id,
+        )
+    )
+    await session.flush()
+    for index, (key, label, value, availability) in enumerate(
+        (
+            ("net_profit", "Net Profit", Decimal("1250.75"), MetricAvailability.COMPUTED),
+            ("max_drawdown", "Max Drawdown", Decimal("310.50"), MetricAvailability.COMPUTED),
+            ("romad", "RoMaD", None, MetricAvailability.NO_DRAWDOWN),
+        )
+    ):
+        session.add(
+            MetricValueRow(
+                metric_value_id=f"mv_fd_{index}",
+                result_id=_RESULT_ID,
+                metric_key=key,
+                label=label,
+                unit="usd",
+                value_format="decimal_2",
+                value=value,
+                availability=availability,
+                formula_version="metric-v1",
+                position_index=index,
+            )
+        )
+    for seq, (direction, entry, exit_price, pnl) in enumerate(
+        (
+            ("long", Decimal("100.00"), Decimal("110.00"), Decimal("10.00")),
+            ("short", Decimal("120.00"), Decimal("115.00"), Decimal("5.00")),
+        ),
+        start=1,
+    ):
+        session.add(
+            TradeLedgerRow(
+                trade_row_id=f"tr_fd_{seq}",
+                result_id=_RESULT_ID,
+                seq=seq,
+                entry_time=f"2026-01-0{seq}T00:00:00Z",
+                exit_time=f"2026-01-0{seq}T06:00:00Z",
+                direction=direction,
+                entry_price=entry,
+                exit_price=exit_price,
+                pnl=pnl,
+                exit_reason="target",
+            )
+        )
+    session.add(
+        ResultManifestSnapshot(
+            snapshot_id="rms_fd_1",
+            result_id=_RESULT_ID,
+            manifest_hash="a" * 64,
+            execution_key="exec_fd_1",
+            engine_version="backtest-engine-fd-test",
+            manifest=dict(_MANIFEST_BODY),
+        )
+    )
+    await session.commit()
+
+
+async def _result_snapshot(session) -> dict[str, object]:
+    """Read the whole result back OUT OF POSTGRES, not out of the identity map.
+
+    ``expire_all`` is load-bearing: the integration session is built with
+    ``expire_on_commit=False``, so without it every field below would be served
+    from the objects this process already holds and a mutation that reached the
+    database on another statement could still compare equal.
+    """
+    session.expire_all()
+    row = await session.get(BacktestResult, _RESULT_ID)
+    assert row is not None
+    metrics = (
+        (
+            await session.execute(
+                select(MetricValueRow)
+                .where(MetricValueRow.result_id == _RESULT_ID)
+                .order_by(MetricValueRow.position_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    ledger = (
+        (
+            await session.execute(
+                select(TradeLedgerRow)
+                .where(TradeLedgerRow.result_id == _RESULT_ID)
+                .order_by(TradeLedgerRow.seq)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    manifest = (
+        (
+            await session.execute(
+                select(ResultManifestSnapshot).where(ResultManifestSnapshot.result_id == _RESULT_ID)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "result_row": (
+            row.result_id,
+            row.run_id,
+            row.manifest_id,
+            row.manifest_hash,
+            row.workspace_entity_id,
+            row.composition_fingerprint,
+            row.engine_version,
+            row.deletion_state,
+            row.row_version,
+        ),
+        "metrics": [
+            (
+                m.metric_value_id,
+                m.metric_key,
+                m.label,
+                m.unit,
+                m.value_format,
+                None if m.value is None else str(m.value),
+                str(m.availability),
+                m.formula_version,
+                m.position_index,
+            )
+            for m in metrics
+        ],
+        "ledger": [
+            (
+                t.trade_row_id,
+                t.seq,
+                t.entry_time,
+                t.exit_time,
+                t.direction,
+                str(t.entry_price),
+                None if t.exit_price is None else str(t.exit_price),
+                None if t.pnl is None else str(t.pnl),
+                t.exit_reason,
+            )
+            for t in ledger
+        ],
+        "manifest_snapshot": [
+            (s.snapshot_id, s.manifest_hash, s.execution_key, s.engine_version, s.manifest)
+            for s in manifest
+        ],
+    }
+
+
+def _assert_dense(before: dict[str, object]) -> None:
+    """Vacuity guard: "nothing changed" is free on an empty result."""
+    assert len(before["metrics"]) == 3
+    assert len(before["ledger"]) == 2
+    assert before["manifest_snapshot"] and before["manifest_snapshot"][0][4] == _MANIFEST_BODY
+
+
+async def test_view_dataset_never_writes_the_referenced_result(session) -> None:
+    """FD-04.c4 — preparing a View Dataset from a REAL result ref leaves that
+    result's manifest and result state exactly as they were."""
+    await _seed(session)
+    await _walk_to_limited(session, GRAPHIC_VIEW)
+    await _seed_backtest_result(session)
+    before = await _result_snapshot(session)
+    _assert_dense(before)
+
+    result = await query_view_dataset(
+        session,
+        USER,
+        source_manifest_refs=[_RESULT_ID, "mkt_rev_9"],
+        schema_version="v1",
+        idempotency_key="vds-immutable",
+    )
+    await session.commit()
+
+    # The command really landed — otherwise "nothing moved" also holds for a
+    # call that did nothing at all.
+    dataset = await session.get(ViewDataset, result["view_dataset_id"])
+    assert dataset is not None
+    assert dataset.source_manifest_refs == [_RESULT_ID, "mkt_rev_9"]
+
+    after = await _result_snapshot(session)
+    # Two independent axes of the same clause: a defect can move the result's
+    # own state without touching the pinned manifest copy, and vice versa.
+    assert after["result_row"] == before["result_row"]
+    assert after["manifest_snapshot"] == before["manifest_snapshot"]
+
+
+async def test_analysis_artifact_never_writes_the_referenced_result(session) -> None:
+    """FD-05.c4 — creating the review artifact leaves the canonical metrics, the
+    trade ledger and the original run manifest byte-identical."""
+    await _seed(session)
+    await _walk_to_limited(session, BACKTEST_REVIEW)
+    await _seed_backtest_result(session)
+    before = await _result_snapshot(session)
+    _assert_dense(before)
+
+    result = await create_analysis_artifact(
+        session,
+        AGENT,
+        artifact_type="backtest_review",
+        input_manifest_refs=[_RESULT_ID],
+        method_version="review-v1",
+        idempotency_key="aart-immutable",
+    )
+    await session.commit()
+
+    artifact = await session.get(AnalysisArtifact, result["artifact_id"])
+    assert artifact is not None
+    assert artifact.input_manifest_refs == [_RESULT_ID]
+
+    after = await _result_snapshot(session)
+    # Three separately breakable axes. Comparing the full row tuples (not counts)
+    # catches an overwrite; comparing the lists (not just their heads) catches an
+    # appended metric or trade row, which an overwrite check would miss.
+    assert after["metrics"] == before["metrics"]
+    assert after["ledger"] == before["ledger"]
+    assert after["manifest_snapshot"] == before["manifest_snapshot"]
+    assert after["result_row"] == before["result_row"]

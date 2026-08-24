@@ -21283,14 +21283,16 @@ criteria:
   - id: FD-04.c4
     text: Preparing a View Dataset does not mutate the referenced Backtest Result manifest or its
       result state.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_future_dev.py::test_view_dataset_never_writes_the_referenced_result
   production_paths:
   - backend/src/entropia/application/commands/capability.py
   - backend/src/entropia/infrastructure/postgres/repositories/capability.py
   - frontend/src/pages/FutureDevGraphicView.tsx
   test_evidence:
   - backend/tests/integration/test_future_dev.py::test_view_dataset_limited_pins_sources_and_validates
+  - backend/tests/integration/test_future_dev.py::test_view_dataset_never_writes_the_referenced_result
   - frontend/src/test/futureDev.test.tsx > Future Dev / Graphic View page > POSTs the pinned view-dataset
     refs with an Idempotency-Key and omits blank optional lists
   - frontend/src/test/futureDev.test.tsx > Future Dev / Graphic View page > blocks a view-dataset
@@ -21300,6 +21302,7 @@ criteria:
   - frontend_component
   positive:
   - backend/tests/integration/test_future_dev.py::test_view_dataset_limited_pins_sources_and_validates
+  - backend/tests/integration/test_future_dev.py::test_view_dataset_never_writes_the_referenced_result
   - frontend/src/test/futureDev.test.tsx > Future Dev / Graphic View page > POSTs the pinned view-dataset
     refs with an Idempotency-Key and omits blank optional lists
   negative:
@@ -21312,15 +21315,24 @@ criteria:
   async_recovery: []
   historical_integrity:
   - backend/tests/integration/test_future_dev.py::test_view_dataset_limited_pins_sources_and_validates
+  - backend/tests/integration/test_future_dev.py::test_view_dataset_never_writes_the_referenced_result
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'The read-side guarantee (exact pinned refs, fail-closed validation) is proven; the NON-MUTATION
-    guarantee is asserted nowhere. No test snapshots the referenced Backtest Result manifest or its
-    lifecycle state before and after query_view_dataset and compares them — the criterion''s "result
-    view manifest/result stateini değiştirmez" half rests on code reading alone (commands/capability.py::query_view_dataset
-    only inserts a ViewDataset row and one outbox event). Cheap fix: assert the result row''s row_version
-    / manifest checksum is unchanged across the call.'
+  status: covered
+  notes: 'Closed by acceptance batch 21 (ADIM 100) with no product change. The gap was never that
+    query_view_dataset writes a result — it does not — but that every FD-04 test handed the command
+    a LITERAL ref ("result_abc123") naming no row at all, so "the referenced Backtest Result is
+    untouched" was true only because there was nothing to touch. The new case seeds a DENSE result
+    (three canonical metrics, two trade-ledger rows and the pinned ResultManifestSnapshot), passes
+    ITS id as the ref, and re-reads the whole thing out of Postgres. Three things are load-bearing
+    and were each measured: the density guard (on an empty result the claim is free); the
+    session.expire_all() before the re-read (the integration fixture is expire_on_commit=False, so
+    without it the comparison is against the identity map, not the database); and the assertion that
+    the ViewDataset row really landed with the real ref (otherwise "nothing moved" also holds for a
+    call that did nothing). The clause is asserted on TWO separate axes — the result row tuple
+    (row_version / deletion_state / manifest_hash) and the pinned manifest snapshot — because a
+    defect can move one without the other: NC-1 (row_version back-write) reddens only the first and
+    NC-2 (manifest rewrite) only the second. Under both controls the 23 pre-existing tests in the
+    file stayed GREEN, which is the measured form of the original gap.'
 - id: FD-05
   document: docs/spec/22_Entropia_V18_Future_Dev_Page_Documentation_v1_1.md
   section: '16'
@@ -21350,14 +21362,16 @@ criteria:
   - id: FD-05.c4
     text: Creating the review artifact leaves the canonical Backtest Result metrics, the trade ledger
       and the original run manifest unchanged.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_future_dev.py::test_analysis_artifact_never_writes_the_referenced_result
   production_paths:
   - backend/src/entropia/application/commands/capability.py
   - backend/src/entropia/infrastructure/postgres/repositories/capability.py
   - frontend/src/pages/FutureDev.tsx
   test_evidence:
   - backend/tests/integration/test_future_dev.py::test_analysis_artifact_limited_requires_method_and_is_immutable_root
+  - backend/tests/integration/test_future_dev.py::test_analysis_artifact_never_writes_the_referenced_result
   - frontend/src/test/futureDev.test.tsx > Future Dev page > POSTs the analysis artifact with an Idempotency-Key
     and reports the created id
   evidence_type:
@@ -21365,6 +21379,7 @@ criteria:
   - frontend_component
   positive:
   - backend/tests/integration/test_future_dev.py::test_analysis_artifact_limited_requires_method_and_is_immutable_root
+  - backend/tests/integration/test_future_dev.py::test_analysis_artifact_never_writes_the_referenced_result
   - frontend/src/test/futureDev.test.tsx > Future Dev page > POSTs the analysis artifact with an Idempotency-Key
     and reports the created id
   negative:
@@ -21375,14 +21390,19 @@ criteria:
   async_recovery: []
   historical_integrity:
   - backend/tests/integration/test_future_dev.py::test_analysis_artifact_limited_requires_method_and_is_immutable_root
+  - backend/tests/integration/test_future_dev.py::test_analysis_artifact_never_writes_the_referenced_result
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: 'Same gap shape as FD-04: "separate artifact" is proven, "original stays untouched" is not.
-    The test name says is_immutable_root but the body only asserts the CREATED row''s fields — it
-    neither attempts a mutation of the artifact nor re-reads the referenced Backtest Result to show
-    its metrics/ledger/manifest are byte-identical afterwards. Immutability currently rests on the
-    absence of any update command, which is a code-shape argument, not a test.'
+  status: covered
+  notes: 'Closed by acceptance batch 21 (ADIM 100) with no product change, sharing FD-04.c4''s seeded
+    result. The clause names THREE surfaces and each is asserted separately, because they fail
+    separately: metrics, trade ledger and the pinned ResultManifestSnapshot. Comparing the full row
+    tuples rather than counts catches an OVERWRITE; comparing the whole ordered lists rather than
+    their heads catches an APPEND, which an overwrite check cannot see — NC-3 (metric back-write)
+    reddens only the metrics assertion, NC-4 (injected trade-ledger row) only the ledger one and
+    NC-5 (manifest rewrite) only the manifest one, so none of the three is decorative. The
+    result-row assertion at the end of this case is deliberately NOT counted as its own axis here:
+    it sits behind three earlier assertions that shadow it, and it is independently measured by
+    FD-04.c4''s NC-1. Under all three controls the 23 pre-existing tests in the file stayed GREEN.'
 - id: FD-06
   document: docs/spec/22_Entropia_V18_Future_Dev_Page_Documentation_v1_1.md
   section: '16'

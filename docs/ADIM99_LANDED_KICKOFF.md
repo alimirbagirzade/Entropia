@@ -1,8 +1,7 @@
-<!-- doc-status: current -->
-> **CURRENT SLICE KICKOFF.** Sayısal gerçekler için otorite:
-> `CLAUDE.md` §Current position + `docs/generated/repository_facts.md` (üretilmiş).
-> Bu belge **ADIM 99 indikten sonraki** durumu tarif eder ve **STALE-BY-DEFAULT** okunmalıdır:
-> önce `git fetch`, `git log --oneline origin/main -8`, `list_pull_requests(state=open)`.
+<!-- doc-status: historical -->
+> **HISTORICAL — demoted by ADIM 100 (kabul borcu batch 21, doc 22 Future Dev BACKEND).**
+> Canlı kickoff `docs/ADIM100_LANDED_KICKOFF.md`. Aşağısı yazıldığı andaki durumu kaydeder;
+> tavanları **bayattır** (`partial` 68 / `debt_class.B` 36 → ADIM 100 sonrası **66 / 34**).
 
 # ADIM 99 landed — kabul borcu batch 20 (doc 10 FRONTEND): `RF-18` kapandı
 

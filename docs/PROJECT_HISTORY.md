@@ -14053,3 +14053,125 @@ canlı işaretin **en yüksek numaralı** dosyada olmasını ister → bu dal `d
 `historical`a demote etti.
 
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `docs/ADIM99_LANDED_KICKOFF.md`.
+---
+
+## ADIM 100 — kabul borcu batch 21 (doc 22 Future Dev, backend): `FD-04` + `FD-05` kapandı, referans edilen Backtest Result ilk kez GERÇEK bir satır
+
+> **ÜRÜN KODU DEĞİŞMEDİ — yalnız test + defter.** Migration yok · OpenAPI değişmedi ·
+> `ENGINE_VERSION` değişmedi · alembic head `0043_i08_registry_strategy_fks` ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+> verdict BLOCKED.** `backend/src` altında **sıfır** satır; diff = iki yeni integration case
+> (mevcut `test_future_dev.py`'ye) + kabul defteri + üretilmiş artefaktlar.
+
+**Kapanan iki kriter: `FD-04` (c4) · `FD-05` (c4).** İkisi de kendi kriterinin **son açık
+clause'uydu** → ikisinin de `debt_class`'ı KALDIRILDI. **Tavanlar İNDİ: `partial` 68 → 66,
+`debt_class.B` 36 → 34**; açık borç **75 → 73** (A=1 · B=34 · C=6 · D=32). Clause `covered`
+1051 → 1053, `uncovered` 81 → 79. **Doc 22 artık 6 covered / 3 partial / 6 deliberate_future_dev** (4 → 6 covered, 5 → 3 partial).
+
+> **BU SAYILAR REBASE SONRASI YENİDEN ÖLÇÜLDÜ, TAŞINMADI.** Dalın ilk freeze'i (taban `2b41cf8`)
+> **67/35** taşıyordu. Bu PR açıkken **#812** indi ve **başka** bir kriteri (`RF-18`, doc 10
+> frontend) kapatarak tavanı 69/37'den **68/36**'ya çekti. Kendi 67/35'imi taşımak tavanı gerçek
+> sayının **bir üstünde** bırakırdı ve `--ratchet` sonsuza dek yeşil kalırdı — ölçülen < tavan
+> **asla** kırmızı vermez. Merged ağaçta taze `--report`: **66 / 34**. Batch 18 ve 19'un kayıtları
+> bu tuzağı aynı kelimelerle yazıyor; **kapı bunu yakalamaz, koşturan kişi yakalar.**
+
+### İkisinin de aynı şekli vardı: iddia doğruydu, ama HİÇBİR ŞEYE karşı ölçülmüştü
+
+`FD-04.c4` *"Preparing a View Dataset does not mutate the referenced Backtest Result manifest
+or its result state"*, `FD-05.c4` *"Creating the review artifact leaves the canonical Backtest
+Result metrics, the trade ledger and the original run manifest unchanged"* der. **Davranış
+zaten sevk edilmişti** ve bu ölçüldü: `commands/capability.py::query_view_dataset` ile
+`::create_analysis_artifact`'in gövdelerinde herhangi bir result tablosuna **tek bir yazma
+yok** — ikisi de kendi satırını (`ViewDataset` / `AnalysisArtifact`) INSERT eder ve bir outbox
+olayı yazar, hepsi bu. Yani bunlar **sınıf D değil**: kusur tek noktalı ve kurulabilir (komuta
+bir geri-yazma eklemek yeter).
+
+**Boşluk şuradaydı:** doc 22'nin FD-04/FD-05 testlerinin **hepsi** komuta bir **LİTERAL** ref
+veriyordu — `"result_abc123"` — ve o dize **hiçbir satırı adlandırmıyor**. *"Referans edilen
+Backtest Result'a dokunulmadı"* iddiası bu dünyada doğruydu çünkü **dokunulacak bir şey
+yoktu**. `ADIM 91`'in şeklinin bir başka örneği: iddia yanlış dünyada ölçülmüştü.
+
+Yeni iki case **tek bir YOĞUN result** tohumlar — üç kanonik `metric_value` satırı (biri
+bilerek `value=None` + `availability=no_drawdown`, L4'ün "eksik metrik asla 0 değildir"
+kuralının şeklini taşısın diye), iki `trade_ledger_row`, ve result'a pinlenmiş
+`result_manifest_snapshot` — sonra o result'ın **kendi id'sini** ref olarak geçirir ve
+her şeyi **Postgres'ten** geri okur.
+
+### Taşıyıcı olan üç şey, üçü de ölçüldü
+
+1. **Yoğunluk muhafızı (`_assert_dense`).** Boş bir result üzerinde *"hiçbir şey değişmedi"*
+   **bedavadır**. Test çağrıdan ÖNCE 3 metrik / 2 ledger satırı / boş olmayan manifest gövdesi
+   assert eder.
+2. **`session.expire_all()` geri okumadan önce.** Integration fixture'ı session'ı
+   **`expire_on_commit=False`** ile kurar (`tests/integration/conftest.py:48`), yani commit
+   identity map'i temizlemez ve `expire_all` olmadan karşılaştırma **veritabanına değil, bu
+   sürecin elinde tuttuğu nesnelere** karşı yapılır. Bu, ADIM 94'ün kuralının
+   (*"bir yan etkinin YOKLUĞUNU iddia eden assertion'ın önünde onu geri alan hiçbir şey
+   olamaz"*) rollback yerine **okuma yoluna** uygulanmış hâli.
+3. **İşlemin gerçekten indiği.** `ViewDataset` / `AnalysisArtifact` satırı var **ve** gerçek
+   result id'sini taşıyor — yoksa *"hiçbir şey kıpırdamadı"* **hiçbir şey yapmamış** bir çağrı
+   için de doğrudur (ADIM 91'in birinci dersi).
+
+### BEŞ negatif kontrol — ve HANGİ assertion'da kırmızıya döndükleri okundu
+
+Hepsi `commands/capability.py`'ye guard'lı bir geri-yazma enjekte eder (`if row is not None`),
+koşmadan önce yamanın diske uygulandığını **eşleşme sayısıyla** assert eder ve ağacı
+`finally`'de geri yazar.
+
+| # | Enjekte edilen kusur | Kırmızıya dönen assertion |
+|---|---|---|
+| NC-1 | `query_view_dataset` result'ın `row_version`'ını artırır | `after["result_row"] == before["result_row"]` |
+| NC-2 | `query_view_dataset` pinlenmiş manifest'i yeniden yazar | `after["manifest_snapshot"] == …` |
+| NC-3 | `create_analysis_artifact` bir metrik değerini ezer | `after["metrics"] == …` |
+| NC-4 | `create_analysis_artifact` bir ledger satırı EKLER | `after["ledger"] == …` |
+| NC-5 | `create_analysis_artifact` pinlenmiş manifest'i yeniden yazar | `after["manifest_snapshot"] == …` |
+
+**Beşinde de tam olarak BİR test kırmızıya döndü** (`.......................F.` /
+`........................F` — 24 yeşil + 1 kırmızı) ve **önceden var olan 23 testin hepsi
+YEŞİL kaldı**. Bu, boşluğun *iddiası* değil **ölçümüdür**: literal ref'li testler bu kusur
+sınıfını göremiyor, çünkü kusur ancak ref gerçek bir satırı adlandırdığında tetiklenir.
+
+**NC-3 ile NC-4 çifti dersin kendisidir:** tam satır **demetlerini** karşılaştırmak bir
+**EZMEyi** yakalar, tam sıralı **listeleri** karşılaştırmak bir **EKLEMEyi** yakalar, ve
+hiçbiri diğerinin kusurunu göremez. İkisi de taşıyıcıdır; biri silinseydi bir kusur sınıfı
+görünmez olurdu (ADIM 98 §2'nin şekli).
+
+**Gölge açıkça kabul edildi.** `FD-05` case'inin sonundaki `result_row` assertion'ı kendinden
+önceki üç assertion tarafından **gölgelenir** ve bu yüzden **kendi ekseni sayılmadı** — o iddia
+`FD-04`'ün NC-1'i tarafından bağımsız olarak ölçülüyor. Defter notu bunu **yazıyor**; sessizce
+bırakmak, ölçülmemiş bir assertion'ı ölçülmüş gibi göstermek olurdu.
+
+### Dürüst sınır
+
+- **Postgres 16 bu container'da KURULDU** (`.venv` de yoktu) → iki case ve beş negatif kontrol
+  **gerçekten koştu**; `test_future_dev.py` **23 → 25 passed**, **sıfır skip**.
+  `alembic upgrade head` **`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koşuldu — `en_US.UTF-8` bu
+  imajda `UnicodeDecodeError` verir.
+- **Frontend kapıları koşulmadı** (`node_modules` yok, frontend'de sıfır satır) → otorite CI.
+- Tam suite yerelde koşuldu ama **geçen sayı ve coverage yüzdesinin otoritesi yine CI'dır**.
+- **Bir negatif kontrol koşusu Bash aracının zaman aşımıyla SIGTERM aldı ve `finally` koşmadı**
+  → ağaç yamalı kaldı ve `git status` bunu gösterdi. Ders ADIM 94'ünkinin dış tarafı:
+  `finally` süreç öldürülürse çalışmaz, o yüzden **her kontrol turundan sonra
+  `git status`'e bak** — bir sonraki kontrol kirli ağacı sessizce ölçer.
+
+### Numara ve parti etiketi
+
+Dal `2b41cf8`'den kesildi ve o an `list_pull_requests(state=open)` **`[]` döndürdü**, en yüksek
+kickoff `ADIM98`, son kayıt `ADIM 98` / `batch 19` idi → bu kayıt **`ADIM 99` / `batch 20`**
+yazıldı. **İkisini de kaybetti.** Bu PR (#813) açıkken **#812** indi (`bc25d22`) ve **ADIM 99
+ile batch 20'nin İKİSİNİ birden** merge edilmiş adla aldı → bu kayıt **`ADIM 100` / `batch 21`**,
+kickoff dosyası da (`docs/ADIM99…` → `docs/ADIM100…`) yeniden adlandırıldı. **Merge edilmiş ad
+kazanır**; dal ve commit mesajı `stage-99` yazar.
+
+**DERS: BOŞ BİR AÇIK-PR LİSTESİ BİR GARANTİ DEĞİL, BİR ANLIK GÖRÜNTÜDÜR.** ADIM 91 *"çakışma
+başlıkta değil DOSYA YOLUNDA ölçülür"* dedi, ADIM 92 *"ayrılan numara güvenli numara değildir"*
+dedi; bu parti üçüncüsünü ekliyor — **hiç talep edilmemiş numara da güvenli değildir**, çünkü
+dal PR'ını açtıktan sonra da main ilerler. Ve ADIM 97'nin uyarısı burada **birebir** gerçekleşti:
+*"iki numara bağımsız taşınABİLİR demek bağımsız taşınIR demek DEĞİLDİR"* — #812 ikisini de aldı.
+
+**REBASE GERÇEKTEN GEREKTİ ve sunucu tarafı *"Update branch"* düğmesi KULLANILMADI** (ADIM 93 ve
+94'ün iki ölçülmüş zararı). On dosya çakıştı; çözüm **iki tarafı da korudu**: #812'nin
+`PROJECT_HISTORY` kaydı ve `STAGE2_HANDOFF` girdisi **silinmedi**, kickoff'u `historical`a demote
+edildi, üretilmiş dosyalar main'den alınıp **yeniden üretildi**, ve tavan merged ağaçta
+**yeniden ölçüldü**. `acceptance_semantic_map.yaml` **kendiliğinden birleşti** — iki dal ayrık
+kriterlere dokunuyordu. `## ADIM` kayıt sayısı **92 → 93**, silinen kayıt **yok**.

@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 36 |
+| B | 34 |
 | C | 6 |
 | D | 32 |
-| **open total** | **75** |
+| **open total** | **73** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (36)
+## Class B (34)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -91,8 +91,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `UM-08` | 21 | partial | Soft-deleting an appended document removes it from reader/sidebar/search and writes a Trash snapshot plus a soft-delete audit event. | The event IS emitted — commands/manual.py writes a ManualPublicationEvent event_type="manual_document_soft_deleted" (manual.py:626) and an audit/outbox pair with event_kind="manual.document_soft_deleted" (manual.py:635-638) — but NO test asserts either. The suite asserts the analogous event only for purge (test_manual_purge_writes_event_and_removes_every_revision reads _publication_event(..., "… |
 | `UM-13` | 21 | partial | Two Admins appending at the same time get two deterministic positions with no duplicate side effect. | The concurrency MECHANISM exists but is never exercised under contention. The production guards are repositories/manual.py::lock_stream (a transaction-scoped `pg_advisory_xact_lock` on MANUAL_STREAM_LOCK_KEY, manual.py:38) plus the DB-level UniqueConstraint("stream_position", name="uq_manual_stream_position") on models/manual.py:113. Every existing test drives ONE session sequentially, so neith… |
 | `UM-15` | 21 | partial | A delete with a stale stream version is MANUAL_STREAM_CONFLICT, the UI rehydrates with the latest stream, and nothing is deleted. | The server-side half is solid; the client RECOVERY half is unproven. frontend/src/lib/ manual.ts:273 documents "Stale snapshot -> 409 MANUAL_STREAM_CONFLICT verbatim (UM-15)" and UserManual.tsx:806 renders the conflict explanation, but no frontend test drives a 409 MANUAL_STREAM_CONFLICT response and asserts that the stream query is refetched and the composer re-armed with the new version. The … |
-| `FD-04` | 22 | partial | With Graphic View Limited/Active a selected Backtest Result prepares a View Dataset from exact pinned refs without changing the result manifest or state. | The read-side guarantee (exact pinned refs, fail-closed validation) is proven; the NON-MUTATION guarantee is asserted nowhere. No test snapshots the referenced Backtest Result manifest or its lifecycle state before and after query_view_dataset and compares them — the criterion's "result view manifest/result stateini değiştirmez" half rests on code reading alone (commands/capability.py::query_vi… |
-| `FD-05` | 22 | partial | A completed Backtest Review is a separate immutable artifact with evidence references; canonical metrics, trade ledger and the original run manifest are untouched. | Same gap shape as FD-04: "separate artifact" is proven, "original stays untouched" is not. The test name says is_immutable_root but the body only asserts the CREATED row's fields — it neither attempts a mutation of the artifact nor re-reads the referenced Backtest Result to show its metrics/ledger/manifest are byte-identical afterwards. Immutability currently rests on the absence of any update … |
 
 ## Class C (6)
 

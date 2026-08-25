@@ -97,6 +97,24 @@ taşınırlarsa güncelleme zinciri kopar.
 | `vercel-composition-patterns` | `architecture-*`, `state-*`, `patterns-*` — `react19-*` ATLA (React 18.3) |
 | `vercel-react-best-practices` | `rerender-*`, `rendering-*`, `js-*`, `advanced-*` — `async-*`/`bundle-*`/`server-*`/`client-swr-*` Next.js + RSC özel, GEÇERSİZ |
 
+## `skills/sast-*` — vendor'lanan güvenlik tarayıcıları (10 skill)
+
+`utkusen/sast-skills` (MIT) deposundan **ölçülerek seçilmiş** bir alt küme. Upstream
+skill'leri `sast-files/.claude/skills/` altında tuttuğu için `npx skills` bu yerleşimi
+çözmez → `skills-lock.json`'a **girmediler**, sürüm takibi elle yapılır. **Gövdeler
+birebir**; yalnız `description` alanları bu deponun sembollerine çapalanacak biçimde
+yeniden yazıldı (ölçüm: 4124 → 1821 char; varsayılan listing bütçesi ≈ 2000 char, yani
+kısaltılmasaydı **tüm** skill'lerin açıklaması kesilirdi).
+
+**Sıra zorunludur:** `sast-analysis` (→ `sast/architecture.md`) → ilgili `sast-*` →
+`sast-report`. Çıktı `sast/` altına yazılır ve **`.gitignore`'dadır**.
+
+**Bunlar DENETÇİDİR, DÜZELTİCİ DEĞİL.** Bir bulguyu uygulamadan önce
+`entropia-canonical-rules` ile doğrula: *"doğrulama ekle"* ya da *"zarfı değiştir"*
+önerisi karara bağlanmış bir alanı (O-02, O-12, O-13, O-30, K-06, K-07) gevşetiyor olabilir.
+
+Alınan / alınmayan her depo ve gerekçesi: **`../docs/EXTERNAL_SKILLS_REGISTRY.md`**.
+
 Bu ayrımı `frontend/src/**/*.ts(x)` yazılırken plugin'in
 `hooks/vendor-react-rules.sh` PreToolUse hook'u hatırlatır. Sınırın kendisi
 (presentation-only, ellenmeyenler) o hook'ta değil, `entropia-frontend-parity`

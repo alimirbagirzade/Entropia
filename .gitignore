@@ -71,3 +71,6 @@ node_modules
 
 # large local walkthrough videos (transcript .md IS tracked)
 docs/spec/Video*/*.mp4
+
+# utkusen/sast-skills tarama çıktısı (yerel, commit edilmez)
+sast/

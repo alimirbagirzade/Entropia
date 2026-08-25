@@ -250,6 +250,13 @@ Before stopping a working session, produce **ALL** of the following:
 > değişmedi; blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08).** `PROJECT_HISTORY.md`
 > kaydı ve kickoff'u **YOK, bilerek** — bu bir ADIM slice'ı değil, araç
 > yapılandırması (PR #739 emsali).
+>
+> **Dış kaynak sicili — YENİ:** `docs/EXTERNAL_SKILLS_REGISTRY.md`. 17 depo karara
+> bağlandı; **`utkusen/sast-skills`'ten 10 skill vendor'landı** (alt küme grep'le
+> seçildi, 13 depo gerekçesiyle ALINMADI). Bir dış skill/plugin önerisi geldiğinde
+> **önce oraya bak, yeniden tartışma**. Sıra zorunlu: `sast-analysis` → `sast-*` →
+> `sast-report`; bulgu bir düzeltme emri DEĞİL, `entropia-canonical-rules` ile doğrula.
+> Oturum başı yönlendirme tablosu `hooks/session-brief.sh`'te (otomatik enjekte edilir).
 
 > **Araç yapılandırması — SLICE DEĞİL (PR #739, 2026-08-17):** `.claude/settings.json`
 > `permissions.allow` **18 → 42** girdi. Eklenenler: §Local verify'ın dört backend adımı,

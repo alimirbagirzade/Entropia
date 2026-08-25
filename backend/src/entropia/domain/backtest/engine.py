@@ -950,8 +950,8 @@ def _build_stepper(
                 initial_capital * portfolio_rules.max_total_exposure_percent / _HUNDRED
             ).quantize(_MONEY)
     long_ok, short_ok = _direction_flags(config.position_entry_logic.direction_mode)
-    half_spread, slippage, commission = _cost_params(config)
-    fill_costs = FillCosts(half_spread, slippage, commission)
+    half_spread, slippage, commission, commission_basis = _cost_params(config)
+    fill_costs = FillCosts(half_spread, slippage, commission, commission_basis)
     trail_pct = _trail_pct(config)
     # F-07f: trailing stop profit-lock activation threshold (Master Ref §9.2 "Activate
     # After Profit %") — mirrors ``trail_pct``, threaded into every opened position.
@@ -1707,7 +1707,11 @@ def _build_stepper(
                 # the charge lands on equity, not in the trade row's pnl, so the exit's
                 # own ``commission`` in ``close_position`` is the only one that lot
                 # carries. Booking it in both places would double-count.
-                led.equity = (led.equity - commission).quantize(_MONEY)
+                #
+                # Karar 1: derived from THIS fill's notional. ``pos.entry_notional`` is
+                # exactly that here — the position was just opened, so it has taken one
+                # fill and nothing has scaled or stacked into it yet.
+                led.equity = (led.equity - fill_costs.fee(pos.entry_notional)).quantize(_MONEY)
             fill_detail: dict[str, Any] = {
                 "position_seq": pos.position_seq,
                 "fill_price": str(pos.entry_price),
@@ -3210,8 +3214,12 @@ def _build_stepper(
                                 position.peak_notional, position.entry_notional
                             )
                             led.stack_entries_added += 1
-                            if commission > _ZERO:
-                                led.equity = (led.equity - commission).quantize(_MONEY)
+                            # Karar 1: the stacked TRANCHE is this fill, not the whole
+                            # position — pricing the rebased total would charge the
+                            # already-billed original size a second time.
+                            stack_fee = fill_costs.fee(stack_eff * tranche)
+                            if stack_fee > _ZERO:
+                                led.equity = (led.equity - stack_fee).quantize(_MONEY)
                             _emit(
                                 "stack_entry_added",
                                 event_time=bar.timestamp,
@@ -3389,11 +3397,16 @@ def _build_stepper(
                         layer_timeframe(config, position.layers_filled),
                     )
                     led.scale_layers_added += 1
-                    if commission > _ZERO:
-                        # The layer's own entry fill pays its commission NOW; the close
-                        # still books one round trip (initial entry + exit) — N layers
-                        # pay exactly N extra fills, no double counting.
-                        led.equity = (led.equity - commission).quantize(_MONEY)
+                    # The layer's own entry fill pays its commission NOW; the close
+                    # still books one round trip (initial entry + exit) — N layers
+                    # pay exactly N extra fills, no double counting.
+                    #
+                    # Karar 1: the LAYER is this fill (``layer_eff * layer_size``), not
+                    # the rebased position — ``entry_notional`` was just recomputed over
+                    # the whole stack and pricing it would re-bill every earlier layer.
+                    layer_fee = fill_costs.fee(layer_eff * layer_size)
+                    if layer_fee > _ZERO:
+                        led.equity = (led.equity - layer_fee).quantize(_MONEY)
                     _emit(
                         "scale_layer_added",
                         event_time=bar.timestamp,

@@ -12,7 +12,7 @@
 >
 > | Karar | Kapı | Durum | İmzanın YERİ |
 > |---|---|---|---|
-> | 1 — commission modeli (#552) | — | **İMZASIZ** | — (ama #720 per-fill'i imza olmadan **sevk etti**; `CLAUDE.md` §Current position, P-B) |
+> | 1 — commission modeli (#552) | — | **İMZALI** (2026-08-25: dağılım=per-fill onaylandı + taban=açık mod, varsayılan `flat`) | **bu belge**, §Karar 1 İMZA SATIRI |
 > | 2 — research bundle shape (#558) | — | **İMZALI** (A1+A2, 2026-08-14) | **bu belge**, §Karar 2 imza satırı |
 > | 3 — DST fold/gap (#559) | — | **İMZASIZ** | — |
 > | 4 — ADR §6/§8 amendment | **G9** | **İMZALI** (APPROVED as stated, 2026-08-17) | **ADR-0002 §13.2** |
@@ -21,8 +21,10 @@
 >
 > **Ölçülmüş sonuç:** `C2` (E4b) artık bir imza beklemiyor. ADIM 72'nin *"sıradaki hamle bir
 > İMZADIR"* tespiti G9/G13 için **geçersizdir**; `CLAUDE.md` §Current position bunu ADIM 76
-> kaydında zaten yazıyor. Hâlâ imza bekleyen üç kapı **G12 (Karar 6)**, **Karar 1** ve
-> **Karar 3**'tür — ve bunlar `C2`'yi değil, sırasıyla `C6`, `F3` ve `C9`'u tutar.
+> kaydında zaten yazıyor. Hâlâ imza bekleyen **İKİ** kapı **G12 (Karar 6)** ve **Karar 3**'tür — ve bunlar `C2`'yi
+> değil, sırasıyla `C6` ve `C9`'u tutar. **Karar 1 2026-08-25'te imzalandı** (yukarıdaki
+> tablo ve §Karar 1 İMZA SATIRI); `F3` artık bir imzayı değil, imzanın istediği **uygulamayı**
+> bekler.
 
 - **Tarih:** 2026-08-13
 - **Base:** `origin/main` @ `0d8bf8f7134d86d77a7eee10023dadd3d80aab0d`
@@ -297,12 +299,67 @@ eklenmelidir. Bu, model seçiminden bağımsız olarak `:7513`'ün istediği "ma
 
 **Karar 1 — commission modeli:**
 
-`[ ] A (per-fill)`  `[ ] B (one round-trip allocation)`  `[ ] C (bps on notional)`
-`[ ] D (hiçbir şey yapma — sevk edilen davranış imzalı sapma olarak kanonik ilan edilir)`
+`[x] A (per-fill)` — **DAĞILIM ekseni**  `[ ] B (one round-trip allocation)`
+`[x] C (bps on notional)` — **TABAN ekseni, ama AÇIK MOD olarak; varsayılan `flat`**
+`[ ] D (hiçbir şey yapma)`
 
-Zorunlu ek — `execution_content.commission_model` manifest alanı: `[ ] evet` `[ ] hayır (gerekçe: ______)`
+Zorunlu ek — `execution_content.commission_model` manifest alanı: `[x] evet` `[ ] hayır`
 
-karar veren: ________________  tarih: ____________
+karar veren: **ürün sahibi (alimirbagirzade)**  tarih: **2026-08-25**
+
+#### İmzalanan okuma (seçenek listesi ÖLÇÜMLE DARALTILDI)
+
+Bu karar **A/B/C'den biri değildir** ve bunu gizlemek yerine yazıyoruz. Belgenin seçenek
+listesi 2026-08-13'te, **#720'den bir gün önce** yazıldı ve tek bir eksen varsayıyordu:
+*"commission modeli"*. Ölçüldüğünde eksen **İKİ** çıktı ve ikisi bağımsızdır:
+
+| eksen | soru | imzalanan | durum |
+|---|---|---|---|
+| **DAĞILIM** | ücret *neye göre* bölünür? (fill mi, round trip mi) | **per-fill** (A) | **ZATEN SEVK EDİLDİ** — #720, `booking.py:111`; bu imza onu **onaylar**, yeni kod istemez |
+| **TABAN** | ücret *neyin üzerinden* hesaplanır? (düz tutar mı, notional'ın oranı mı) | **açık mod alanı**, varsayılan `flat` | **YENİ İŞ** — C'nin belgede geçen *"ya da yanına `commission_mode: flat\|bps` eklenir"* varyantı |
+
+**Neden C'nin tam hâli DEĞİL.** Tam C (`commission`'ı bir orana çevirmek) kanona en sadık
+olandır ve belge bunu dürüstçe yazıyor. Reddedilme sebebi maliyet değil, **#550'nin ikizi bir
+göç tuzağıdır**: saklanan `commission: 7` bugün *7 para birimi*, tam C'den sonra *7 bps*
+demektir ve **mekanik olarak çevrilemez** — 7'yi yazan kullanıcının hangisini kastettiğini
+hiçbir pinli veri geri getirmez. #550 bunu bir Ready Check blocker'ı ile çözmek zorunda kaldı.
+Varsayılanı `flat` olan bir mod alanı o tuzağı **tamamen ortadan kaldırır**: kayıtlı her
+revizyon bugünkü anlamını **korur**, hiçbir sayı oynamaz, hiçbir blocker gerekmez.
+
+**#550 ile ARASINDAKİ FARK, ölçüldü ve karara girdi.** #550'de kanon + doc 02 + v18 mockup +
+**sevk edilen UI** dördü birden `%` diyordu (4 kaynak ↔ 1 motor) — kullanıcıya *"bu bir
+yüzdedir"* **söylenmişti**, o yüzden sessiz yeniden yorumlama bir yalanın düzeltilmesiydi.
+Burada öyle bir kaynak **yok**: `StrategyConfigForm.tsx:395` ve v18 mockup `:5621` Commission'ı
+**birimsiz** bir input olarak çiziyor (`base_position_size`'ın `unit="%"`i gibi bir işaret
+YOK, 2026-08-25'te ölçüldü). Yani kullanıcıya bps **hiç vaat edilmedi** ve sessizce bps'e
+geçmek bir düzeltme değil, **yeni bir yalan** olurdu.
+
+**Kanon bu okumayla ÇELİŞMİYOR, tam tersi:** Mod. 6 §6.2 (`:7425`) zaten
+*"Birim/para formatı **konfigürasyonla açık olmalı**; boşsa policy default değil, **manifestte
+resolved default** taşınmalıdır"* diyor — imzalanan şey **birebir budur**. Mod. 4 §2.3'ün
+(`:3110`) bps örneği bir **yasak** değil bir **örnektir**; `bps` modu onu **erişilebilir**
+kılar, `flat` varsayılanı ise §6.2'nin *"resolved default"* şartını karşılar. Yani üç kanon
+satırı da (K1/K2/K3) aynı anda karşılanır — A/B/C'nin hiçbiri bunu tek başına yapamıyordu.
+
+#### Uygulama sınırı (bu imzanın İSTEDİĞİ iş)
+
+1. `CostsModel`'e `commission_basis: Literal["flat","bps"] = "flat"` (`config.py:310`).
+   **Varsayılan taşıyıcıdır** — onu kaldırmak göç tuzağını geri getirir.
+2. `FillCosts` (`execution/costs.py:47`, **tek kurulum yeri** `engine.py:954`) basis'i taşır
+   ve ücreti **tek bir yerden** türetir; `bps` altında `fee = commission / 10_000 × |notional|`.
+   **Altı ücret yeri** bu tek fonksiyondan geçmelidir — bugün üçü `booking.py`'de
+   (`:111`, `:239`), üçü `engine.py`'de (`:1698` giriş, `:3213` stacking, `:3392` scale layer)
+   ve her biri kendi fill notional'ını bilmek zorundadır. Kopyalama = altı ayrı taban.
+3. **`execution_content.commission_model`** (K1, yukarıdaki zorunlu ek) —
+   `execution_key`'in İÇİNDE. Bugün manifest komisyon hakkında **hiçbir şey** beyan etmiyor
+   (2026-08-25'te ölçüldü); `ENGINE_VERSION` string'i *"per-fill-commission"* içeriyor ama o
+   bir **AD**, beyan edilmiş bir alan değil.
+4. `ENGINE_VERSION` bump'ı **GEREKMEZ** — varsayılan `flat` altında tek bir sayı oynamaz.
+   Bu, kabul kriteridir ve **ölçülerek** kanıtlanmalıdır: komisyon fiyatlayan iki golden
+   senaryo (`costs.commission_round_trip`, `costs.commission_scale_ladder` — 50'nin 2'si)
+   **bayt bayt aynı** kalmalıdır. Oynarlarsa varsayılan taşımıyor demektir.
+5. OpenAPI drift guard'ı tetiklenir → `docs/openapi.json` **yeniden üretilir**, elle
+   düzenlenmez.
 
 ---
 

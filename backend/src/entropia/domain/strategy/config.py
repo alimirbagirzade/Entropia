@@ -310,7 +310,36 @@ class StopOrderDetails(BaseModel):
 class CostsModel(BaseModel):
     """Commission, spread, slippage (§2)."""
 
-    commission: Decimal | None = Field(default=None, description="Per-trade fee")
+    commission: Decimal | None = Field(
+        default=None,
+        description=(
+            "Per-fill commission MAGNITUDE. What it is measured in is declared by "
+            "`commission_basis`, not by this field: an absolute amount under `flat`, "
+            "a rate in basis points of the fill's notional under `bps`."
+        ),
+    )
+
+    # Karar 1 (GH #552, signed 2026-08-25). Master Ref Modul 6 §6.2 requires the unit of a
+    # cost input to be EXPLICIT in the config rather than implied by a policy default, and
+    # Modul 4 §2.3's only concrete commission example is rate-based ("Notional uzerinden bps
+    # bazli"). The shipped schema said neither — it carried a bare number described as a
+    # "Per-trade fee", and the UI and the v18 mockup both render it WITHOUT a unit marker,
+    # so nothing ever told the user which reading they were typing.
+    #
+    # The default is load-bearing and must not be removed. `flat` reproduces every saved
+    # revision's meaning exactly, which is what keeps this from becoming GH #550's twin: a
+    # stored `commission: 7` means 7 currency units today, and would mean 7 bps under a
+    # silent re-reading. That number is NOT mechanically convertible — nothing pinned
+    # recovers which the author meant — so #550 needed a Ready Check blocker to surface it.
+    # Defaulting to `flat` removes the migration entirely instead of gating it.
+    commission_basis: Literal["flat", "bps"] = Field(
+        default="flat",
+        description=(
+            "How `commission` is measured. `flat`: an absolute amount charged once per "
+            "fill. `bps`: basis points of that fill's own notional "
+            "(fee = commission / 10000 * |fill_price * fill_size|)."
+        ),
+    )
     spread: Decimal | None = Field(default=None, description="Bid-ask spread")
 
     slippage_mode: Literal["percentage_slippage", "historical_slippage_if_available"] = Field(

@@ -212,7 +212,13 @@ Tek digest → **PASS**.
 
 > **Prompt'un talimatı:** *"ÖNCE canonical commission modelini kanıtla. Spec açık değilse
 > KOD YAZMADAN STOP ve PO DECISION REQUIRED raporu üret. Model kararı yokken test
-> expectation uydurma."* — **Bu durum tam olarak budur. Kod yazılmadı.**
+> expectation uydurma."* — Bu bölüm o raporu üretti ve **kod yazılmadan durdu**.
+>
+> **SONRA NE OLDU (aynı gün):** rapor ürün sahibine sunuldu ve **Karar 1 2026-08-25'te
+> İMZALANDI** — `docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1 İMZA
+> SATIRI. Yani aşağıdaki *"imzasız"* tespiti **bu belgenin yazıldığı ana aittir**; karar
+> artık verilmiştir ve uygulaması bu PR'ın ikinci yarısıdır (§11). Bölüm **bilerek
+> silinmedi**: kararın hangi ölçümlerin üzerine verildiğini o ölçümler gösterir.
 
 **Ayrım kritik:** komisyonun **DAĞILIMI** (per-fill ↔ round-trip) karara bağlandı ve
 sevk edildi (PD-2, #720, §5). Karara bağlanmayan şey **TABANDIR**: komisyon *neyin*
@@ -294,6 +300,73 @@ OpenAPI ve kabul borcu tavanları **el değmedi**.
 * **#550 / #551 / #552: üç kusur da kapalı ve kapalılıkları ÖLÇÜLDÜ** — issue durumuna
   değil, sevk edilen davranışa bakılarak. Duplicate fix yazılmadı.
 * **Dokuz kabul kaleminin dokuzu da PASS.**
-* **Tek açık kalem bir kusur değil, bir imzadır:** komisyonun tabanı (§7) — kanon ile
-  sevk edilen şema çelişiyor, Karar 1 imzasız, **kod yazılmadı**.
+* **Komisyonun tabanı (§7) bu oturumda İMZALANDI** ve uygulandı — §11.
 * Paylaşımlı portföy wiring'ine **dokunulmadı** (promptun kapsam sınırı).
+
+
+---
+
+## 11. Karar 1 imzalandı ve uygulandı (2026-08-25, aynı oturum)
+
+§7 bir **PO DECISION REQUIRED** raporuydu ve kod yazmadan durdu. Rapor sunuldu, ürün
+sahibi kararı verdi; bu bölüm **kararın kendisini değil, uygulamanın ölçümlerini** kaydeder.
+Kararın metni ve gerekçesi `docs/decisions/closure_product_decisions_2026-08-13.md`
+§Karar 1'dedir (**otorite orasıdır**).
+
+**İmzalanan:** eksen **İKİYE** ayrıldı — **dağılım** = per-fill (#720 zaten sevk etti, imza
+onaylar) · **taban** = `commission_basis: flat|bps`, **varsayılan `flat`**.
+
+**Neden tam bps değil:** tam C, saklanan `commission: 7`'nin anlamını değiştirirdi
+(*7 para birimi* → *7 bps*) ve bu **mekanik olarak çevrilemez** — #550'nin birebir ikizi,
+ki o bir Ready Check blocker'ı gerektirmişti. Varsayılanı `flat` olan bir mod alanı göçü
+**gerektirmez**: her kayıtlı revizyon anlamını korur. Ayrıca #550'de UI `%` diyordu (4 kaynak
+↔ 1 motor), burada **UI de mockup da birimi hiç söylemiyor** → kullanıcıya bps hiç vaat
+edilmedi.
+
+### Ölçümler
+
+| iddia | ölçülen |
+|---|---|
+| varsayılan hiçbir sayıyı oynatmaz | komisyon fiyatlayan **iki** golden senaryo bayt bayt aynı → **`ENGINE_VERSION` bump'ı GEREKMEDİ** |
+| `bps` kanonun formülünü uygular | giriş notional `1000.00` → `0.70`; çıkış `952.38` → `0.67`; **toplam `1.37`** (aynı büyüklük `flat` iken `14.00`) |
+| oranda lineer | 7 bps → `1.37`, 50 bps → `9.76` |
+| tek türetim | **altı** ücret yerinin altısı `FillCosts.fee()`'den geçer (3 `booking`, 3 `engine`: giriş / stacking / scale layer) |
+
+### Negatif kontroller (üçü de ayırt edici)
+
+| kontrol | kusur | kırmızı |
+|---|---|---|
+| NC-1 | varsayılan `bps`'e çevrildi | dört mevcut komisyon oracle'ı → **varsayılan taşıyıcı** |
+| NC-2 | `flat` notional ile ölçeklendi | mevcutlar + yeni `flat` testi → **iki taban ayrı** |
+| NC-3 | giriş yeri kendi tabanını inline etti | **yalnız iki yeni `bps` testi**; flat + golden **yeşil** |
+
+**NC-3 asıl derstir:** böyle bir kusur `flat` altında **görünmez**, çünkü orada notional zaten
+yok sayılır. Mevcut suite'in yeşil kalması boşluğun **ölçümüdür** — tek türetim kuralı bu
+yüzden vardır ve #552'nin ilk kusuru (bir yerin kendi tabanını hesaplaması) tam bu şekildi.
+
+### AÇIK KALAN — `execution_content.commission_model` (K1 rider'ı)
+
+İmzanın zorunlu eki bu alanı **`execution_key` İÇİNDE** istiyor, gerekçesi: *"aksi halde iki
+farklı ücret modeliyle üretilmiş iki run aynı reprodüksiyon kimliğini paylaşır."*
+**Bu gerekçe ÖLÇÜLDÜ ve TUTMUYOR:** `_pinned_items` `selected_revision_id`'yi hash'ler,
+`commission_basis` değişince yeni revizyon doğar → anahtar zaten ayrışır
+(`a8d36214…` ≠ `b7c4a61b…`). Yani taban execution_key'e **transitif** ulaşıyor.
+
+Alanı `execution_content`'e koymanın **ölçülmüş bedeli**: her execution_key kayar — hiçbir
+sayı oynamadan, hiçbir sürüm bump'ı olmadan → **beyan edilmemiş** bir namespace kayması,
+oysa bu depoda o kaymayı `ENGINE_VERSION` bildirir. K1'in istediği *"manifestte açık"* şartı
+alan manifest'te olduğu sürece karşılanır; `mainboard_item_labels` tam bu emsaldir
+(manifest'te, `execution_content` **dışında**, gerekçesi yazılı).
+
+**Alan bu PR'da EKLENMEDİ** ve bu bir eksiklik değil, bir **bekleyen adjudication**'dır:
+imzanın harfi ile ölçülen gerçek ayrıştı, ve bunu tek taraflı çözmek imzayı sessizce yeniden
+yazmak olurdu. Üç seçenek ürün sahibine sunuldu (dışarı koy / içeri + bump / içeri + bump yok).
+
+### Dürüst sınır
+
+**Frontend'e `commission_basis` seçici EKLENMEDİ, bilerek:** v18 mockup görsel otoritedir
+(`CLAUDE.md` §UI) ve `:5621` Commission'ı birimsiz tek bir input olarak çizer — mockup'ta
+olmayan bir alan eklemek bir **sapmadır**. Bugün `bps` API üzerinden ayarlanır; UI'ye
+taşımak bir mockup güncellemesi ister. **OpenAPI regen GEREKMEDİ** (ölçüldü: `CostsModel`
+snapshot'ta yayımlanmıyor, drift kapısı `exit 0`) — imzanın maliyet tahmini bu kalemde
+fazlaydı.

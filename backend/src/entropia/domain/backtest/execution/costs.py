@@ -43,6 +43,10 @@ if TYPE_CHECKING:
     from entropia.domain.strategy.config import StrategyConfig
 
 
+#: Basis points per unit: a ``bps`` commission of 1 is 0.01% of the fill notional.
+_BPS_PER_UNIT = Decimal("10000")
+
+
 @dataclass(frozen=True, slots=True)
 class FillCosts:
     """The pinned per-fill cost triple, carried as one value instead of three parallel
@@ -52,6 +56,33 @@ class FillCosts:
     half_spread: Decimal
     slippage: Decimal
     commission: Decimal
+    #: Karar 1 (GH #552, signed 2026-08-25) — how ``commission`` is measured.
+    #: Defaulted so every existing ``FillCosts(half_spread, slippage, commission)``
+    #: construction keeps its exact meaning.
+    commission_basis: str = "flat"
+
+    def fee(self, notional: Decimal) -> Decimal:
+        """The commission this ONE fill pays, given its own notional.
+
+        The single derivation of the fee. There are six charge sites (three in
+        ``booking``, three in ``engine`` — entry, stacking, scale layer) and under
+        ``bps`` each of them owes a DIFFERENT amount, because each fill has a
+        different notional. Inlining the arithmetic at any of them would create a
+        second basis that drifts silently, which is the shape GH #552 already had
+        once: the fee scaled with the number of partial CLOSES rather than fills
+        because one site computed its own.
+
+        ``flat`` ignores ``notional`` entirely and returns the configured amount —
+        byte-identical to the pre-Karar-1 behaviour, which is what lets the default
+        move no number. ``bps`` reads ``commission`` as basis points of the fill's
+        notional (Master Ref Modul 4 §2.3). ``abs`` because a short's notional may
+        arrive signed; a fee is never a rebate.
+        """
+        if self.commission <= _ZERO:
+            return _ZERO
+        if self.commission_basis == "bps":
+            return (self.commission / _BPS_PER_UNIT * abs(notional)).quantize(_MONEY)
+        return self.commission
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,13 +156,16 @@ def due_funding_charges(
     return index, charges
 
 
-def _cost_params(config: StrategyConfig) -> tuple[Decimal, Decimal, Decimal]:
-    """(half_spread, slippage_fraction, per_fill_commission) — all non-negative."""
+def _cost_params(config: StrategyConfig) -> tuple[Decimal, Decimal, Decimal, str]:
+    """(half_spread, slippage_fraction, commission_magnitude, commission_basis).
+
+    The first three are non-negative. The magnitude is NOT a money amount on its own
+    any more — ``commission_basis`` says what it measures (Karar 1)."""
     costs = config.data.costs
     spread = (costs.spread or _ZERO) / Decimal("2")
     slippage = (costs.slippage_value or _ZERO) / _HUNDRED
     commission = costs.commission or _ZERO
-    return spread, slippage, commission
+    return spread, slippage, commission, costs.commission_basis
 
 
 def _effective_fill(

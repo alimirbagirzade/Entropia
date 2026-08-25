@@ -60,7 +60,7 @@ for this map.
 | 08 | 19 | 2 | 0 | 0 | 0 | 0 | 21 |
 | 09 | 17 | 3 | 0 | 0 | 0 | 0 | 20 |
 | 10 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
-| 11 | 4 | 2 | 0 | 0 | 2 | 0 | 8 |
+| 11 | 5 | 1 | 0 | 0 | 2 | 0 | 8 |
 | 12 | 9 | 6 | 0 | 0 | 0 | 0 | 15 |
 | 13 | 4 | 1 | 0 | 0 | 4 | 0 | 9 |
 | 14 | 17 | 1 | 0 | 0 | 0 | 0 | 18 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 14 | 2 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 6 | 3 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **305** | **56** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **306** | **55** | **7** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1064 |
+| covered | 1065 |
 | partial | 4 |
-| uncovered | 68 |
+| uncovered | 67 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -101,12 +101,12 @@ for this map.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 24 |
+| B | 23 |
 | C | 6 |
 | D | 32 |
-| **open total** | **63** |
+| **open total** | **62** |
 
-## Partial criteria (56)
+## Partial criteria (55)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -142,7 +142,6 @@ for this map.
 | `RF-04` | D | After a Family rename an old Backtest Run still shows the previous Family snapshot from its manifest. | Only the package-revision half is asserted. No test renames a Family and then reads an already-admitted Backtest Run's manifest: the manifest built by commands/backtest_run_context.py pins only `rationale_family_id` (an id, no display snapshot), so "previous Family snapshot görünür" has no asserting test at the Run level, and no test asserts the run/result rows are untouched by a rename. The assignment-table test even asserts the OPPOSITE for the live projection (current_family_name follows the rename), which is correct per doc 10 §8.5 but is not the RF-04 manifest claim. |
 | `RF-08` | B | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
 | `RF-13` | D | An Agent with the UI closed runs a create-Family command; root/revision/audit land server-side and the UI shows them on a later query. | No test executes `create_family` as an AGENT actor, and there is no rationale-family tool on the Agent Tool Gateway (`jobs/agent_tools.py` exposes no `rationale_family.*` tool), so the literal scenario — "Agent runs a new-Family create command with the UI closed" — is not reachable through the Agent surface at all. What IS proven is adjacent: the policy admits an AGENT principal, and an AGENT actor does persist other rationale mutations (batch assign, soft delete) with audit and Trash rows, which a later list query then reflects. |
-| `MKD-02` | B | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The Research side of the boundary is genuinely proven: the funding schedule is resolved through a Research revision with an Approved + category + content-hash gate. |
 | `MKD-04` | D | The Agent reaches the same Market Data domain capabilities through the Tool Gateway with no browser, and holds no approval authority. | Judged as behaviour. The parity half is real and asserted through the Tool Gateway. The approval half is asserted for a USER and a GUEST but never for an AGENT actor: `ensure_can_approve` gates on `actor.is_admin`, which is False for a role-less AGENT, yet tests/unit/test_market_policy.py defines no AGENT principal. There is also no market-data create/revise tool on the gateway, so "same domain capabilities" is proven only for the read/resolve surface. |
 | `RD-01` | B | Without an approved Market Data link the creator stays locked and the server returns DEPENDENCY_BLOCKED. | The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server command + route). The criterion names "create draft/analysis command" — only create is exercised; no test posts /research-datasets/{id}/analysis without a linked market dependency and asserts DEPENDENCY_BLOCKED. ADIM 54 FINDING — c4 is very likely MISCLASSIFIED and no test can close it. The clause wants the ANALYSIS command to be DEPENDENCY_BLOCKED under a missing market link, but commands/research_data.py::request_research_dataset_analysis has no such gate — and needs none: market_entity_id is a REQUIRED argument of create_research_dataset and _resolve_market_link raises DependencyBlocked there, so a dataset without an approved market link cannot exist. (Approval re-resolves the link too.) Left at class B deliberately: moving it would RAISE a ceiling, which is an adjudication, not a test slice's call. |
 | `RD-02` | D | The creator opens with the V18 observed defaults (category, event/available time, delay, frequency, timezone, usage, status). | SPEC-vs-IMPLEMENTATION CONTRADICTION on clause c4, not merely a missing test. WHAT THE DOC ROW REQUIRES: doc 12 §14 row 2 lists the V18 observed defaults as "available time Fixed delay; delay 2 minutes". WHAT THE CODE ACTUALLY DOES: the time-policy form initialises the available-time rule to the FIRST entry of the shipped constant, which is same_as_event_time, and renders no delay input at all until the user selects fixed_delay. Observed at frontend/src/components/ResearchLifecycle.tsx:310 — `const [availablePolicy, setAvailablePolicy] = useState<string>(AVAILABLE_TIME_POLICIES[0]);` with `AVAILABLE_TIME_POLICIES = ["same_as_event_time", "fixed_delay", ...]` declared at frontend/src/lib/researchData.ts:308-314. There is no 2-minute (120s) default anywhere in the form. The shipped behaviour is confirmed by the test `frontend/src/test/researchDataLifecycle.test.tsx > Research Data revision lifecycle > sends delay_seconds null for a non-fixed available policy`, whose own comment reads "The default policy (same_as_event_time) shows no delay input". That test asserts the SHIPPED default, so it cannot be cited as evidence for the SPEC'D default — the two disagree. c4 is therefore uncovered, and this needs a product ruling (change the doc row or change the form default), not a new test. The event-time default (c3) does match: provider_event_timestamp is EVENT_TIME_SEMANTICS[0] and is asserted in the submitted body. |

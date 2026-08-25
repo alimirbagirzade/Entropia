@@ -41,10 +41,10 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 24 |
+| B | 23 |
 | C | 6 |
 | D | 32 |
-| **open total** | **63** |
+| **open total** | **62** |
 | _of which unfalsifiable clauses (still counted)_ | _4_ |
 
 ## Class A (1)
@@ -53,7 +53,7 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 |---|---|---|---|---|
 | `MB-25` | 01 | partial | An Agent editing a human private root is refused server-side and the policy block is recorded on its task. | The refusal and its durable recording are strongly proven — the gateway test asserts the tool call's failure_code equals the human line's code and that the human draft's row_version/payload did not move. Two clauses fail. The code is `ACCESS_DENIED`, not `OBJECT_EDIT_FORBIDDEN`: grepping backend/src for OBJECT_EDIT_FORBIDDEN returns nothing (routes/strategy.py's docstring mentions a 403 "EDIT_F… |
 
-## Class B (24)
+## Class B (23)
 
 | ID | Doc | Status | Summary | Why |
 |---|---|---|---|---|
@@ -73,7 +73,6 @@ them to class C would raise a ceiling and is a separate, unsigned decision.
 | `PC-20` | 07 | partial | Only Admin restores or permanently deletes from Trash; a restored request must be stale and a restored ESP needs active registry policy before resolving. | c2 is the strongest part of this row and is proven precisely: restore reactivates the ROOT but deliberately leaves the trust pointer closed, so a restored resolver cannot silently start resolving again. c3 has no test — nothing asserts that a restored package REQUEST comes back with a stale Pre-Check; `test_restore_keeps_identity_marks_entry_and_audits` covers identity/audit for the generic res… |
 | `ESP-05` | 09 | partial | The Embedded System / TA Resolver Family is seeded ACTIVE; assignment follows the shared exception while the resolver payload stays protected. | MISSING: the "resolver payload remains protected" half is never asserted, and the one shared-editing test raises a concrete question a follow-up must answer. doc 09 line 644 states that changing the Rationale Family assignment "does not change signature, adapter, validation, current revision or registry trust". The only shared-edit test, test_assign_creates_package_revision_owner_unchanged, tar… |
 | `RF-08` | 10 | partial | Creating a Family reusing a soft-deleted Family's name returns RATIONALE_FAMILY_NAME_RESERVED with recovery guidance. | Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the three recovery affordances the criterion names (restore the deleted family, rename it, or pick a different name) — no test inspects the error's remediation / suggested_action for this code, and the Rationale Families page tests do not render a reserved-name recovery path. |
-| `MKD-02` | 11 | partial | Funding/OI/liquidation/order-book/feature data stay out of the Market Data canonical schema; the Research Data boundary holds. | This row is NOT pure document conformance — it asserts a real schema boundary, so I judged it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest / funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the Market Data enum's membership (or that a funding-typed market revision is refused), so c1 has no asserting test. The … |
 | `RD-01` | 12 | partial | Without an approved Market Data link the creator stays locked and the server returns DEPENDENCY_BLOCKED. | The create half is proven on all three planes (jsdom lock, unmocked e2e registry, server command + route). The criterion names "create draft/analysis command" — only create is exercised; no test posts /research-datasets/{id}/analysis without a linked market dependency and asserts DEPENDENCY_BLOCKED. ADIM 54 FINDING — c4 is very likely MISCLASSIFIED and no test can close it. The clause wants the… |
 | `RD-05` | 12 | partial | Supervisor owns drafts but cannot approve; Admin approves; User is denied; Agent works without UI. | Naming note, not a defect: the doc row writes the code as APPROVAL_ADMIN_REQUIRED; the shipped code is APPROVAL_REQUIRES_ADMIN. The behaviour (403 + admin-required) is asserted, so c2 is covered. The Agent clause is unproven: OWNER in test_research_data_persistence.py is a HUMAN Supervisor, and no test drives create_research_dataset or request_research_dataset_analysis with a PrincipalType.AGEN… |
 | `RD-12` | 12 | partial | The Analyze job survives a browser refresh and a duplicate Analyze under the same key spawns no second job. | Worth flagging for the same reason as RD-02/RD-03, though it is milder. The doc row says a "duplicate Analyze click same idempotency key ile second job yaratmaz", but the shipped client mints a FRESH Idempotency-Key per click — the frontend test's own title is "requests analysis with a fresh Idempotency-Key". So the server-side replay guard is real and proven (test_idempotent_analyze_returns_sa… |

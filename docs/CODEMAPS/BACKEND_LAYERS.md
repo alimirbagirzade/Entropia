@@ -1,6 +1,6 @@
 # BACKEND_LAYERS — modül haritası
 
-Katmanlar: `domain/` (saf, I/O yok) → `application/{commands,queries,jobs}` → `infrastructure/` → `apps/{api,worker,scheduler}`.
+Katmanlar: `domain/` (saf, I/O yok) → `application/{commands,queries,jobs}` → `infrastructure/` → `apps/{api,worker,scheduler,runner}`. `apps/runner/` is the direct, non-HTTP admission entry point (bulk-execution plan §4 slice B1): it RESOLVES its actor from the database and goes through `commands/backtest_run.py::request_backtest_run`, so it inherits the Ready Check refusal rather than owning a second admission path.
 
 > **Dosya sayıları buraya YAZILMAZ.** Üretilmiş satır:
 > [`docs/generated/repository_facts.md`](../generated/repository_facts.md) §Summary ▸

@@ -15046,3 +15046,242 @@ yüzden **kapanış öncesi bu iki fonksiyonu elle koştur**; yoksa hatayı 52 s
 
 Codemap güncellemesi **gerekmedi** (yeni endpoint / tablo / sayfa / job yok → kapanış ritüeli md. 5
 atlandı, bilerek). `docs/ADIM108_LANDED_KICKOFF.md`.
+
+---
+
+## ADIM 109 — kayıtsız inen #820'nin ritüeli: A-08 devam kartı + **ölçülemeyen bir tazelemenin kaydı** — YAPILAMAYAN BİR ÖLÇÜMÜN DOĞRU ÇIKTISI, YAPILMIŞ GİBİ GÖRÜNEN BİR SAYI DEĞİL, YAPILAMADIĞININ KAYDIDIR
+
+**Tarih:** 2026-08-25 · **Dal:** `docs/stage-109-landed` · **Taban:** `a7261de` (ADIM 108 / #823)
+**Kaydedilen slice:** **PR #820**, main'e `99a7f30` olarak indi (squash), 2026-08-25
+**Bu kayıt bir DEFTERDİR** — kaydettiği slice DOCS-ONLY'dir, bu kapanış da öyle.
+
+### Neden geriye dönük bir kayıt
+
+#820 main'deydi ve **kendi `## ADIM` kaydı yoktu**: `grep -c "^## ADIM.*#820" docs/PROJECT_HISTORY.md`
+→ **0** (ölçüldü). Yani kapanış ritüelinin 1–6. maddeleri o slice için hiç koşmadı. Bu, bu depoda
+tekrar eden bir şekildir (ADIM 69/70 = #728/#729, ADIM 82 = #759, ADIM 86 = #765/#766, ADIM 90 =
+#779, ADIM 108 = #822) ve her seferinde çare aynıdır: **kaydı sonraki bir oturum yazar, ama
+anlatısını UYDURMAZ** — yalnız ölçebildiğini yazar.
+
+**Zincirin öteki ucu zaten yazılıydı:** ADIM 108 kaydının §*"DÜRÜST SINIR — #820 DA KAYITSIZ İNDİ ve
+bu kapanış onu YAZMADI"* paragrafı #820'yi ölçüp *"kaydını sahibi yazmalıdır (ADIM 97 emsali)"*
+demişti. **Bu kayıt odur.** ADIM 108'in ölçtüklerini tekrarlamaz; onlara **atıf yapar**.
+
+### Ne indi — ölçülen diff
+
+`git show --numstat 99a7f30`:
+
+| Dosya | + | − |
+|---|---:|---:|
+| `docs/implementation/a11y_screen_reader_audit_runbook.md` | 116 | 9 |
+| `docs/audit/a11y_screen_reader_audit_results.md` | 106 | 5 |
+| **toplam** | **222** | **14** |
+
+`git show --name-only --format="" 99a7f30` **yalnız bu iki `docs/` yolunu** döndürür — **ürün
+kodunda, testte, migration'da SIFIR satır**. Commit gövdesi bunu iddia ediyordu; gövdeye körü körüne
+güvenilmedi, diff okundu.
+
+**Runbook — YENİ §0, bir sayfalık *next-session card*.** Devam eden kombinasyon **SR-2**
+(VoiceOver/Safari); **SR-1'in hâlâ ne makinesi ne denetçisi var**. Rota **1 `/`**, hücre sırası
+**A-3**, sonra **A-4…A-8**; A-1 ve A-2 **dolu, yeniden yapılmaz** (A-2'nin üç landmark'ı;
+`contentinfo` beklenmiyor — D-11). Sonra rota **2 → 23**, sonra §2'nin **on akışı**. Kartın
+kendisi, denetçinin gerçekten okuduğu yerde, **tek bir kombinasyonun tamamlanmasının bile** çıkış
+kriteri 1'i **1/2**'de ve kriter 2'yi **23/46** rotada bıraktığını tekrarlar — worksheet §5 bunu
+zaten söylüyordu, kart onu **kaybolmayacağı yere** koydu.
+
+**Runbook §4/§6.4 — üç bayat ifade düzeltildi:** K-2/K-3/K-4/K-6b artık çözülmüş olarak anılıyor ·
+*"21 pages"* → **22** · **K-6 → K-6a** (K-6 ADIM 50'de ikiye ayrılmıştı; runbook hâlâ bölünmemiş adı
+kullanıyordu).
+
+**Worksheet — üç yeni bölüm:** §6.1a (tazeleme denemesi, aşağıda) · §6.1b (üç bayat advisory
+`note`'u **kaydedildi**) · §6.1c (rota listesi yeniden türetildi).
+
+### ASIL DEĞER — §6.1a: bir ölçüm yapılamadı ve **yerine bir sayı uydurulmadı**
+
+Slice'tan prechecks'i yeniden koşup reach sayılarını tazelemesi istendi (§4'ün soğuk-koşu kuralı
+gereği **iki kez**). **Koşamadı, ve §6'da tek bir sayıya dokunmadı.** Ölçülen şey engelin kendisi
+oldu ve §6.1a'ya tablo hâlinde yazıldı: `docker` **ikilisi var**, **daemon YOK**
+(`dial unix /var/run/docker.sock: no such file or directory`), **`minio` YOK**; `redis-server`,
+`psql`, `node` ve Playwright Chromium var, `frontend/node_modules` yok.
+`scripts/a11y-audit-stack.sh` compose tabanlıdır ve compose dosyası `postgres`, `redis`, `minio`,
+`migrate`, `provision`, `api` ve beş worker bildirir → **daemon yoksa stack yoktur**, dolayısıyla
+`specs/20-a11y-prechecks.spec.ts`'in yürüyeceği **seeded Admin oturumu da yoktur**.
+
+**Ve asıl olan burada:** ikame bir stack **UYDURULMADI**, ve §6.1a bunu bir eksiklik olarak değil bir
+**karar** olarak yazıyor. Gerekçe ölçülmüştür: Redis ve Postgres mevcut, MinIO ve daemon değil;
+*"yeterince yakın"* bir şey kurup probu ona karşı koşmak, yukarıdaki tablolardakilere **birebir
+benzeyen** ama **başka bir şey anlatan** sayılar üretirdi — çünkü farklı provision edilmiş bir stack
+sayfaların **ilk data render'ıyla farklı yarışır**, ve bu **K-5 ile K-7'nin koşudan koşuya
+oynamasının BELGELENMİŞ TEK sebebidir** (ADIM 44'ten beri kayıtlı: *"ilk koşu soğuktur ve eksik
+raporlar"*). Böyle bir sayı yayımlamak, **insan denetiminin hakemlik etmek için var olduğu iki
+gözlemi sessizce yeniden tanımlardı**. Sayılar bu yüzden **2026-08-12 provenance'ında bırakıldı**,
+stale-by-default, ve K-tablosunun reach sütunu *"as of 2026-08-12"* diye okunmak üzere işaretlendi.
+
+> **DERS — ve deponun mevcut derslerinin ÖLÇÜM TARAFINDAKİ İKİZİ.** Bu depo iki kez
+> *"yeşil exit code kanıt değildir"* (ADIM 74: entegrasyon suite'i Postgres'siz `exit 0` + 39
+> skipped) ve *"skip'li yeşil kanıt değildir"* (ADIM 94: container yeniden başlayınca Postgres
+> düşer, koşu `ss` + exit 0 verir) dersini yazdı. İkisi de **doğrulama** tarafındadır: *yeşil
+> görünen bir şey koşmamış olabilir*. §6.1a bunun **ölçüm** tarafıdır: *doğru biçimde görünen bir
+> sayı, sorulan sorunun cevabı olmayabilir*. **Yapılamayan bir ölçümün doğru çıktısı, yapılmış gibi
+> görünen bir sayı değil, yapılamadığının kaydıdır** — ve o kayıt, sayının kendisinden daha uzun
+> ömürlüdür, çünkü bir sonraki oturuma **neyi yeniden koşacağını** ve **neden** söyler.
+
+Ek olarak §6.1a, taze bir sayının **neyi çözmeyeceğini** de yazıyor: §1, §2 ya da §3'te hiçbir şeyi
+— reach sayısı her hâlükârda bir **DOM sayımıdır**, bir insanın ne duyduğu değil. Yalnız K-5 ile
+K-7'nin kümesinde bugün kaç rota olduğunu söyler. 2026-08-12'nin *"bu container Docker CDN'ine 403
+veriyor"* notu bu engelin **önceki şeklidir**; 2026-08-25'te iş oraya kadar bile gelmedi.
+
+### İKİNCİ DEĞER — §6.1b: kusuru kapatmadı, **KAPATILABİLİR HÂLE GETİRDİ** (ve bu artık kanıtlı)
+
+§6.1b, `frontend/e2e/specs/20-a11y-prechecks.spec.ts` içindeki **üç** advisory `note` dizesinin
+bayat olduğunu kaydetti — sayıları ve gating'i etkilemeyen, ama denetçinin `::warning::` çıktısında
+**okuduğu** metinler. En önemlisi K-5'inkiydi: ADIM 63'ün **retired ettiği** soruyu
+(*"h1→h2→h3, atlamasız"*) basmaya devam ediyordu. **Düzeltmedi, bilerek:** bu bir kaynak
+değişikliğidir, frontend kapıları o container'da koşmuyordu, ve dispozisyon insanındır.
+
+**Ve dört ay sonra değil, AYNI GÜN kapatıldı.** #822 (`32d2c96`) o üç note'u düzeltti ve
+**düzeltirken DÖRDÜNCÜSÜNÜ buldu** (`:243`, `<h1>`-yok / K-4); ADIM 108 (#823) bunu defterledi ve
+dördün **ikisinin bugün ULAŞILAMAZ** olduğunu (K-2 skip link + K-4 `<h1>`, ikisini de PR #685
+kapattı) ölçüp onları **silmek yerine REGRESYON TRIPWIRE'ı** olarak tuttu. Zincir tamdır:
+
+> **#820 açtı → #822 düzeltti → ADIM 108 defterledi → ADIM 109 (bu kayıt) #820'yi defterliyor.**
+
+Bu, bir *"düzeltmedim"* kararının nasıl **borç değil kaldıraç** olabileceğinin ölçülmüş örneğidir:
+bir kusuru **adlandırıp kaydetmek**, onu kapatmaya yetkisi olan bir sonraki slice için **tek adımlık**
+bir iş hâline getirir. #820 kapsamını genişletmedi ve kaldıracı kaybetmedi.
+
+### §6.1c — bir *bayat* iddiası ölçüldü ve **çürütüldü**
+
+Runbook'un kendi başlığı rota sayısını *"içindeki tek çürüyen sayı"* diye işaretler. #820 onu
+`frontend/e2e/utils/screenshotMatrix.ts::TARGET_PAGES`'ten **yeniden türetti**: **23 girdi**, doc
+numaraları 1–22 ve doc 19 iki rota katıyor (`/panel/management`, `/panel/logs`), **§1'in tablolarıyla
+aynı sırada**. §1, runbook §4 ve matris **satır satır uyuşuyor** → **değişiklik gerekmedi**. Bir
+*"muhtemelen bayattır"* uyarısını ölçüp **temiz** bulmak da bir sonuçtur; kayda öyle geçti.
+
+### ÖLÇÜLMÜŞ YÖNLENDİRME — bir sonraki oturumun ilk saatini değiştirir
+
+Donmuş beş-koşu kanıtında (`docs/releases/evidence/2026-08-12/a08_precheck_results_run5.json`) **`/`,
+heading-outline advisory'si yayMAYAN TEK rotadır**; diğer 22'sinin hepsi yayar. Üç sonucu var:
+
+1. **Rota 1, K-5'i KAPATAMAZ.** K-5 ancak **kendi kümesindeki** bir rotada kıpırdar; worksheet'in
+   işlenmiş örneği `/backtest/run` (`h1 "RUN & Backtest Results" → h3 "Composition"`). Rota 1'de
+   alınacak bir `PASS`, K-5 üzerinde **ilerleme olarak kaydedilmemelidir**.
+2. **Bir önceki oturumun A-3 sorusu orada VAR OLMAYAN bir atlamayı adlandırıyordu** — denetçiye
+   *"`h1 → h3` atlaması sizi yanılttı mı"* soruldu, ama `/` böyle bir atlama yaymıyor. O hücredeki
+   `—` **iki kere** haklıydı: hem soru retired'dı (ADIM 63), hem de o rotada konusuz.
+3. **K-6a yalnız `/` üzerinde problanır** → bir sonraki oturumun **ilk dakikasında** cevaplanabilir
+   (human-only). **K-7 ise bir Section B sorusudur** (B-3 / B-4 / B-6) — Section A onu **çözmez**,
+   ve 23 rotanın hepsini yürümek bile onu çözmez.
+
+Bu yönlendirme bağımsız olarak K-tablosunun *"artık yalnız `/` kümenin dışında"* satırını da
+doğruluyor — iki türetim aynı sonuca varıyor.
+
+### DEĞİŞMEYENLER — hepsi bu ağaçta yeniden ölçüldü
+
+- **A-08 HUMAN-BLOCKED ve İLERLEMEDİ, hiçbir hücre dolmadı:** Section A **2 / 184** · Section B
+  **0 / 10** · çıkış kriterleri **0 / 4** · **hiçbir çıkış kriteri işaretlenmedi**.
+- **#514 EL DEĞMEDİ:** GitHub API'den okundu — `state: open`, `state_reason: reopened`,
+  `updated_at: 2026-08-12T11:08:58Z`, `closed_by_pull_requests.total_count: 0`, `labels: [human-only]`.
+  Yani 2026-08-12'deki insan eliyle yeniden açılmasından bu yana **hiç kıpırdamamış**.
+- **Ürün ve test kodu DEĞİŞMEDİ** (iki `docs/` dosyası) · **migration yok** · alembic head
+  **`0043_i08_registry_strategy_fks`** · `ENGINE_VERSION`
+  **`backtest-engine-v18-percent-sizing-per-fill-commission`** (değişmedi) · **OpenAPI değişmedi**
+  (diff'te `docs/openapi.json` yok) · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+- **Kabul borcu tavanları OYNAMADI** — taze koşuldu, bir freeze'ten türetilmedi:
+  `acceptance_semantic_scan.py --report --check-generated --ratchet` → **exit 0**,
+  `55 partial / 7 uncovered` (tavan `55 / 7`), sınıflar **A=1 · B=23 · C=6 · D=32**, üretilmiş
+  artefaktlar taze.
+- **Donmuş kanıt (`docs/releases/evidence/`) DOKUNULMADI** — kayıttır, düzeltilmez (ADIM 108'in
+  aynı kararı).
+- **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### KICKOFF YOK — bir atlama değil, **ÖLÇÜLMÜŞ bir karar**
+
+`scripts/generate_repository_facts.py::check_classification` → `_check_live_kickoff_is_newest`
+numarayı **DOSYA ADINDAN** okur (`ADIM_KICKOFF_RE`, glob `docs/*KICKOFF*.md`), belgenin
+`doc-status` işaretinden **değil**. Sonuç: `docs/ADIM109_LANDED_KICKOFF.md` yaratılsaydı kapı onu
+`current` olmaya **zorlar**, `docs/ADIM108_LANDED_KICKOFF.md`'yi demote ettirirdi.
+
+**Ama bu yanlış olurdu.** ADIM 109, ADIM 108'in kaydettiği #822'den **ÖNCE** inmiş bir slice'ı
+kaydediyor; onun kickoff'unu **canlı devam tohumu** yapmak, bir sonraki oturuma **en yeni olmayan**
+durumu anlatmak demektir — oysa devam tohumunun tek işi **en yeni** durumu anlatmaktır.
+**ADIM 82 emsali uygulandı: geriye dönük kayıt için kickoff HİÇ YAZILMADI.**
+`docs/ADIM108_LANDED_KICKOFF.md` **canlı kaldı**, kapı **yeşil kaldı**.
+
+> **ADIM 86/90 ile karıştırma — fark ÖLÇÜLDÜ.** Onlar kickoff **yazdı** ve dosya `historical`
+> **doğdu**; yapabildiler çünkü numaraları canlı olandan **DÜŞÜKTÜ** (kapı yalnız *daha yüksek*
+> numaralı bir dosya varken kırmızı verir). ADIM 109 **daha yüksek** numaralıdır, yani aynı hamle
+> burada kapıyı **zorlardı**. **Kuralın iki yarısı ayrıdır** (ADIM 90'ın yazdığı gibi):
+> *"numaralar yeniden atanmaz"* **kaydı** korur; kickoff'un canlılığını `_check_live_kickoff_is_newest`
+> **dosya varlığından** okur. Geriye dönük bir kayıt için doğru hamle **dosya yaratmamaktır**.
+
+**Ritüelin md. 5'i de atlandı, bilerek:** yeni endpoint / tablo / sayfa / job yok → tazelenecek
+codemap yok.
+
+### KAPANIŞIN KENDİ MAYINI — `A08_COMPLETE` ve bu kaydın prozası
+
+Bu kayıt **baştan sona A-08 hakkındadır**, yani her cümlesi documentation-truth kuralının üstünde
+yürür:
+
+```
+A08_COMPLETE: A-08[^\n]{0,80}?(Complete|COMPLETE|PASS|Done|tamamlan|kapandı)
+```
+
+Kapsam `INVARIANT_GLOBS` — `CLAUDE.md`, `docs/STAGE2_HANDOFF.md`, README'ler, `docs/CODEMAPS/*.md`;
+`docs/PROJECT_HISTORY.md` ve kickoff'lar **kapsam dışıdır**. `NEGATION_RE` **"DEĞİŞMEDİ"yi
+olumsuzlama SAYMAZ** (yalnız `DEĞİL` ile eşleşir), yani *"A-08 DEĞİŞMEDİ … kapandı"* biçimindeki bir
+satır **muaf değildir**.
+
+**ADIM 108 tam olarak buna bastı** ve `Backend`'i **52 saniyede** kırmızıya çevirdi (48 dakikalık
+suite'e hiç gelmeden): `CLAUDE.md`'de *"yalnız A-08), BLOCKED"* ile *"§6.1b kapandı"* **21 karakter
+arayla** aynı satırdaydı. Bu kapanış aynı tuzağa **bir kez** düştü — taslakta
+*"hiçbir belge A-08'i tamamlanmış gösteremez"* cümlesi kuralı tetikliyordu — ve **push'tan önce
+yerel taramada yakalandı**.
+
+> **DÜZELTMENİN ŞEKLİ ÖNEMLİDİR: KURALI DEĞİL PROZAYI DÜZELT, ve KELİMEYİ DEĞİL SATIRI AYIR.**
+> Regex'i dolanan bir eşanlamlı seçmek (*"kapandı"* → *"kapalı"*) bir bulguyu **kalıcı sessizliğe**
+> çevirir: kural bir daha o cümleyi hiç görmez. Yapılan şey cümleyi **iki satıra bölmekti** —
+> `[^\n]{0,80}` yeni satırı geçemez — ve **kelimeler aynen korundu**. Kapı yerinde kaldı, iddia
+> yerinde kaldı.
+
+Yerel tarama (DB gerektirmez, saniyeler sürer; tam `--check` `backend/.venv` ister ve çıplak
+container'da `ModuleNotFoundError: entropia` verir):
+
+```
+python3 -c "import importlib.util; from pathlib import Path; \
+  spec=importlib.util.spec_from_file_location('g','scripts/generate_repository_facts.py'); \
+  m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); \
+  print([(r,n,i) for r,n,l in m._scan(Path('.'),m.INVARIANT_GLOBS) \
+    if not m.NEGATION_RE.search(l) for i,p,_ in m.INVARIANT_RULES if p.search(l)])"
+```
+
+### Doğrulama + DÜRÜST SINIRLAR
+
+**Koşulan kapılar (hepsi yerelde, DB'siz):** invariant taraması → **boş liste** ·
+`check_classification` → **NONE** · `acceptance_semantic_scan.py --report --check-generated
+--ratchet` → **exit 0**, tavan **55 / 7** ve sınıflar **A=1 B=23 C=6 D=32** sabit (bu slice hiçbir
+kriteri kapatmıyor, kapatmamalı da) · `git diff origin/main -- docs/ | grep '^-## '` → **boş**
+(kayıt silme yok) · `grep -c '^## ADIM' docs/PROJECT_HISTORY.md` → **101 → 102**.
+
+**KOŞULMAYANLAR, açıkça:** **ürün ve test kodunda sıfır satır olduğu için backend ve frontend
+suite'leri KOŞULMADI** ve bu kayıt hiçbir geçen/coverage sayısı **iddia etmiyor** — otorite **CI**.
+Postgres kurulmadı, `node_modules` kurulmadı, precheck spec'i koşulmadı (zaten #820'nin kendi
+bulgusu bunun bu ortamda **mümkün olmadığıdır**).
+
+**Bu kayıt #820'nin anlatısını UYDURMADI** (ADIM 97 ve ADIM 108 emsali). Commit gövdesi bir başlangıç
+noktası olarak okundu, sonra **diff'in kendisi** (`git show 99a7f30`), eklenen bölümlerin metni ve
+*"değişmedi"* iddialarının **hepsi** bu ağaçta yeniden ölçüldü. **#820 A-08'i ilerletmedi** ve bu
+kayıt hiçbir yerde ilerletilmiş gibi göstermiyor: değişen tek şey **devam edilebilirliktir** — bir
+sonraki denetçi artık nereden başlayacağını, hangi soruyu **sormayacağını** ve hangi sayının **hangi
+tarihe ait** olduğunu okuyabiliyor.
+
+**NUMARA — bir ANLIK GÖRÜNTÜ olarak alındı ve commit'ten hemen önce yeniden ölçüldü.** Dal
+`a7261de`'den kesildi; o an en yüksek `## ADIM` **108**, canlı kickoff `docs/ADIM108_LANDED_KICKOFF.md`,
+açık PR listesi **BOŞ** → numara **109**. ADIM 100 ve ADIM 103'ün yazdığı gibi **boş bir açık-PR
+listesi bir garanti değil, bir anlık görüntüdür**; main ilerlerse dal **rebase edilir**
+(*"Update branch"* düğmesi **kullanılmaz** — ADIM 93/94: sunucu tarafı merge bir docs PR'ında bir
+`PROJECT_HISTORY` kaydını **sessizce** düşürdü ve hiçbir CI kapısı görmedi) ve çakışma **başlıkta
+değil DOSYA YOLUNDA** ölçülür (ADIM 91). **Merge edilmiş ad kazanır, numaralar yeniden atanmaz.**
+
+Kickoff **YOK, bilerek** (yukarıdaki ölçülmüş karar). Codemap güncellemesi **gerekmedi**
+(kapanış ritüeli md. 5 atlandı, bilerek).

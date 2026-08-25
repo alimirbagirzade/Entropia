@@ -237,7 +237,30 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 108 (kayıtsız inen #822'nin ritüeli, a11y precheck advisory
+> `future_dev`. **Son dalga — ADIM 109 (kayıtsız inen #820'nin ritüeli, A-08 devam kartı):
+> DOCS-ONLY — iki dosya, +222/−14; ürün kodunda, testte, migration'da SIFIR satır. A-08
+> İLERLEMEDİ (Section A 2/184 · Section B 0/10 · çıkış kriterleri 0/4 · #514 el değmedi),
+> tavanlar OYNAMADI (55/7 · A1 B23 C6 D32). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> **ASIL DERS: YAPILAMAYAN BİR ÖLÇÜMÜN DOĞRU ÇIKTISI, YAPILMIŞ GİBİ GÖRÜNEN BİR SAYI DEĞİL,
+> YAPILAMADIĞININ KAYDIDIR** — §6.1a precheck tazelemesinin BAŞARISIZ olduğunu yazdı (Docker
+> daemon + minio yok) ve İKAME STACK UYDURMADI: farklı provision edilmiş bir stack ilk data
+> render'ıyla yarışır, ki bu K-5/K-7'nin koşudan koşuya oynamasının BELGELENMİŞ tek sebebidir →
+> sayılar 2026-08-12 provenance'ında BIRAKILDI. Deponun *"yeşil exit code kanıt değildir"*
+> dersinin **ölçüm tarafındaki ikizi**. **İKİNCİ DEĞER, ARTIK KANITLI: kusuru kendisi kapatmadı,
+> KAPATILABİLİR HÂLE GETİRDİ** — §6.1b'nin kaydettiği üç bayat note AYNI GÜN #822 ile düzeltildi
+> ve düzeltilirken DÖRDÜNCÜSÜ bulundu (#820 açtı → #822 düzeltti → ADIM 108 defterledi → bu kayıt
+> #820'yi defterliyor). §6.1c bir *"muhtemelen bayat"* uyarısını ölçüp TEMİZ buldu (23 rota).
+> **KICKOFF YOK, BİLEREK (ADIM 82 emsali):** `_check_live_kickoff_is_newest` numarayı DOSYA
+> ADINDAN okur → `ADIM109` dosyası yaratmak `ADIM108`'i demote ettirirdi, oysa 109 ondan ÖNCE
+> inmiş bir slice'ı kaydediyor; md. 5 de atlandı (yeni endpoint/tablo/sayfa/job yok).
+> **DÜRÜST SINIR:** ürün/test kodunda sıfır satır → suite'ler KOŞULMADI ve hiçbir geçen/coverage
+> sayısı iddia edilmiyor, otorite CI; #820'nin anlatısı UYDURULMADI, diff yeniden ölçüldü.
+> `PROJECT_HISTORY.md` §ADIM 109 · kickoff **YOK** (gerekçe yukarıda).
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 108 (kayıtsız inen #822'nin ritüeli, a11y precheck advisory
 > prozası): ÜRÜN KODU DEĞİŞTİ ama YALNIZ PROZA — üç dosya, dört satır, dördü de bir `note:`
 > değeri. Predicate/`observed`/sayım/reach/gating el DEĞMEDİ, hiçbir advisory SUSTURULMADI, kabul
 > borcu tavanları OYNAMADI, donmuş kanıt + A-08 sayaçları + #514 + K-tablosu el değmedi. Blocker

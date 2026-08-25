@@ -121,3 +121,54 @@ def test_test_plan_lists_each_dependency() -> None:
     manifest = _manifest(resolved_refs=[_TA_RSI, _TA_EMA])
     joined = " ".join(manifest.test_plan)
     assert "ta.rsi" in joined and "ta.ema" in joined
+
+
+# --- Engine-computability early diagnosis (audit 2026-08-25 §4) -----------------------
+#
+# Registration only requires a non-empty canonical key (``commands/esp.py``) and this
+# module only checked the ``ta.``/``cond.`` PREFIX, so a key the engine cannot execute
+# passed creation and was refused three steps later at Ready Check. These cases pin the
+# note that closes that distance -- and pin that it stays a NOTE.
+
+_TA_UNKNOWN = {
+    "canonical_key": "ta.macd",
+    "embedded_revision_id": "pkgrev_9",
+    "content_hash": "sha256:z",
+}
+_TA_ATR = {
+    "canonical_key": "ta.atr",
+    "embedded_revision_id": "pkgrev_8",
+    "content_hash": "sha256:y",
+}
+
+
+def test_a_key_the_engine_cannot_compute_is_named_in_the_uncertainty_notes() -> None:
+    manifest = _manifest(resolved_refs=[_TA_UNKNOWN])
+    flagged = [n for n in manifest.uncertainty if "ta.macd" in n]
+    assert flagged, manifest.uncertainty
+    # The note must point at the gate that will actually refuse it, otherwise the author
+    # is told "no compute" without being told what happens next.
+    assert "STRATEGY_INDICATOR_UNRESOLVED" in flagged[0]
+
+
+def test_the_note_does_not_refuse_the_candidate() -> None:
+    # Warning, not gate: generation still succeeds and the dependency survives into the
+    # manifest. ``ta.atr`` is registered on purpose and computes no directional series,
+    # so refusing uncomputable keys would break a legitimate, shipped resolver.
+    manifest = _manifest(resolved_refs=[_TA_ATR])
+    assert any("ta.atr" in note for note in manifest.uncertainty)
+    assert [r["canonical_key"] for r in manifest.resolved_dependencies] == ["ta.atr"]
+
+
+def test_computable_dependencies_draw_no_engine_note() -> None:
+    # Vacuity guard: the note must be ABSENT for the keys the engine really executes,
+    # or the assertion above would pass against a note emitted unconditionally.
+    manifest = _manifest(resolved_refs=[_TA_RSI, _TA_EMA, _COND])
+    assert not [n for n in manifest.uncertainty if "no compute" in n], manifest.uncertainty
+
+
+def test_only_the_uncomputable_key_is_named_when_mixed() -> None:
+    manifest = _manifest(resolved_refs=[_TA_RSI, _TA_UNKNOWN])
+    flagged = [n for n in manifest.uncertainty if "no compute" in n]
+    assert len(flagged) == 1
+    assert "ta.macd" in flagged[0] and "ta.rsi" not in flagged[0]

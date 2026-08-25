@@ -93,6 +93,15 @@ CONDITION_KEYS: frozenset[str] = frozenset(
 CROSS_CONDITION_KEYS: frozenset[str] = frozenset({_COND_CROSSES_ABOVE, _COND_CROSSES_BELOW})
 # The range primitive needs two bounds and is non-directional (gate/supporting only).
 RANGE_CONDITION_KEYS: frozenset[str] = frozenset({_COND_BETWEEN})
+# The keys a pinned package can carry that this engine turns into a usable block: a
+# directional signal (``DIRECTIONAL_KEYS``) or a condition gate (``CONDITION_KEYS``).
+# ``ta.atr`` is deliberately ABSENT — it is recognized (``RECOGNIZED_KEYS``) but yields
+# no directional series, so a block resting on it alone is honest-unresolved rather than
+# mis-computed. Consulted by surfaces that want to warn EARLY (Create Package) about a
+# key this engine cannot execute; it is a diagnostic set, never an admission gate, and
+# the authoritative refusal stays where it has always been — Ready Check's
+# ``STRATEGY_INDICATOR_UNRESOLVED`` blocker.
+ENGINE_COMPUTABLE_KEYS: frozenset[str] = DIRECTIONAL_KEYS | CONDITION_KEYS
 # Sources a condition may read (for its ``source`` AND its ``reference`` RHS). Price
 # fields come from the bar; the special ``indicator_output`` reads the PARENT block's
 # current indicator value (e.g. RSI 72).

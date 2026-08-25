@@ -237,7 +237,30 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 105 (kabul borcu batch 26, doc 06 Create Package BACKEND): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 106 (kabul borcu batch 27, doc 08 Package Library BACKEND): ÜRÜN
+> KODU DEĞİŞMEDİ, tek integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> `PL-07.c2` kapandı (paket→strateji düzleminde no-auto-repin: mekanizma sevk edilmişti —
+> `_extract_references` pinleri verbatim kenara çevirir — ama literal dizi pinle → head'i ilerlet →
+> geri oku hiç koşulmamıştı; garanti yalnız Trading Signal düzleminde assert'liydi) → son açık
+> clause'du, **`PL-07` covered, `debt_class` KALDIRILDI**. **ASIL DERS: VACUITY TUZAĞI YAZMADAN
+> ÖNCE ÖLÇÜLDÜ (ADIM 100'ün dersi proaktif)** — strateji fixture'ları PLACEHOLDER pinler
+> (`pkg_int`/`pkgrev_int`, hiçbir satırı adlandırmaz) ve `_assert_references_active` V1-lenient →
+> onların üstüne "hâlâ N" iddiası vacuous olurdu; GERÇEK bir ACTIVE INDICATOR paketi tohumlandı,
+> gerçek head N pinlendi, head N+1'e ilerletildi (atıf muhafızı `!= N`), kenar + saklanan config +
+> İKİNCİ Save'in çıkarımı (N+1 dünyasında koşar) ayrı eksenler olarak N'de pinli ölçüldü. **İKİ NC,
+> ikisi de ayırt edici VE ayırt edicilik tesadüf değil:** kusur bilerek yalnız ÇÖZÜLEBİLEN kökleri
+> etkiler → 24 testte yalnız yeni case kırmızı (NC-1 ikinci-Save kenarında, NC-2 son config
+> assertion'ında), 23 mevcut test yeşil — placeholder kökler hiç çözülmediği için; o yeşil kalma
+> clause'un açıklığının ölçümüdür. **Tavanlar İNDİ: `partial` 57 → 56, `debt_class.B` 25 → 24**;
+> açık borç **63** (A=1 · B=24 · C=6 · D=32). **Doc 08 = 19/2/0 — testle kapanabilir sınıf-B satır
+> KALMADI** (`PL-08` + `PL-20` sınıf D). **NUMARA: dal `680ba1e`'den kesildi, açık PR listesi
+> BOŞTU** (anlık görüntü, garanti değil); #818 oturum başında zaten merge edilmiş bulundu.
+> `PROJECT_HISTORY.md` §ADIM 106 · `docs/ADIM106_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 105 (kabul borcu batch 26, doc 06 Create Package BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, iki integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > İki kriter kapandı — **`CP-09.c2`** (Send'in idempotency replay'i: komut hep `run_idempotent` ile
 > sarılıydı ama hiçbir test ona iki kez anahtar geçirmemişti; yeni case yanıtın TAM sözlük eşitliğini

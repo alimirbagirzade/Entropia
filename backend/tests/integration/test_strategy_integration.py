@@ -22,11 +22,20 @@ import pytest
 from sqlalchemy import select
 
 from entropia.application.commands import mainboard as mb_cmd
+from entropia.application.commands import package_lifecycle as pkg_cmd
 from entropia.application.commands import strategy_draft as strat_cmd
 from entropia.application.queries import mainboard as mb_query
 from entropia.application.queries import strategy as strat_query
 from entropia.domain.identity import Actor
-from entropia.domain.lifecycle.enums import DeletionState, PrincipalType, Role
+from entropia.domain.lifecycle.enums import (
+    ApprovalState,
+    DeletionState,
+    PackageKind,
+    PrincipalType,
+    Role,
+    VisibilityScope,
+)
+from entropia.domain.package.enums import PackageValidationState
 from entropia.infrastructure.postgres.models import (
     AuditEvent,
     EntityRegistry,
@@ -39,6 +48,7 @@ from entropia.infrastructure.postgres.models import (
     WorkObjectRevision,
     WorkObjectRoot,
 )
+from entropia.infrastructure.postgres.repositories import packages as pkg_repo
 from entropia.infrastructure.postgres.repositories import strategy as strat_repo
 from entropia.shared.errors import (
     AccessDeniedError,
@@ -893,3 +903,118 @@ async def test_clear_leaves_a_prior_immutable_revision_untouched(session) -> Non
         .all()
     )
     assert trashed == []
+
+
+# --------------------------------------------------------------------------- #
+# Acceptance batch 27 — doc 08 §14 (PL-07.c2)                                 #
+#                                                                             #
+# PL-07.c2 a Strategy Draft that pinned Indicator revision N still names N    #
+#          after revision N+1 becomes the package head — and a plain re-Save  #
+#          is not the "explicit re-pin action" either.                        #
+# --------------------------------------------------------------------------- #
+
+
+async def test_pinned_indicator_revision_survives_package_head_advance(session) -> None:
+    """PL-07.c2 — no-auto-repin on the package→strategy plane.
+
+    The shipped strategy fixtures pin PLACEHOLDER ids (``pkg_int``/``pkgrev_int``)
+    that resolve to no row — ``_assert_references_active`` is V1-lenient, so a
+    "still names N" claim built on them would be vacuous: no head exists that the
+    pin COULD drift to. This test seeds a REAL INDICATOR package so the root
+    resolves, then advances its head and measures the axes separately:
+
+    the package head really is N+1 (attribution guard, ``!= N``), revision N
+    stays addressable as ``revision_no`` 1, the saved strategy revision's
+    ``entry_indicator`` edge still names N, the draft's STORED config still
+    names N — and a SECOND Save, whose reference extraction runs entirely in
+    the N+1 world, pins N again ("until an explicit re-pin action").
+    """
+    await _seed_principals(session)
+    pkg_root, _detail, _revision = await pkg_repo.create_package(
+        session,
+        owner_principal_id="user_1",
+        created_by_principal_id="user_1",
+        package_kind=PackageKind.INDICATOR,
+        input_contract={"name": "Pinned RSI"},
+        output_contract={"output_kinds": ["directional_signal"]},
+        dependency_snapshot={},
+        visibility_scope=VisibilityScope.PRIVATE,
+        validation_state=PackageValidationState.PASSED,
+        approval_state=ApprovalState.DRAFT,
+    )
+    await session.flush()
+    pkg_root_id = pkg_root.entity_id
+    pinned_revision_id = pkg_root.current_revision_id
+    assert pinned_revision_id is not None
+
+    payload = _valid_payload()
+    payload["position_entry_logic"]["indicator_blocks"][0]["package_ref"] = {
+        "package_root_id": pkg_root_id,
+        "package_revision_id": pinned_revision_id,
+        "package_content_hash": _PKG_HASH,
+    }
+    draft = await _new_draft(session, payload=payload)
+    draft_id = draft["draft_id"]
+    saved = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=draft_id, expected_draft_row_version=0
+    )
+    await session.flush()
+    strategy_revision_id = saved["strategy_revision_id"]
+
+    def _entry_indicator_pins(refs) -> list[tuple[str, str]]:
+        return [
+            (r.referenced_root_id, r.referenced_revision_id)
+            for r in refs
+            if str(r.dependency_role) == "entry_indicator"
+        ]
+
+    before = _entry_indicator_pins(await strat_repo.list_references(session, strategy_revision_id))
+    assert before == [(pkg_root_id, pinned_revision_id)]
+
+    advanced = await pkg_cmd.create_package_revision(
+        session,
+        USER1,
+        entity_id=pkg_root_id,
+        expected_head_revision_id=pinned_revision_id,
+        change_note="v2 tweak the strategy must NOT follow",
+    )
+    await session.flush()
+    new_head_revision_id = advanced["revision_id"]
+    session.expire_all()
+
+    # Attribution guard: N+1 really is the head now, and N is still addressable.
+    refreshed = await pkg_repo.get_package_root(session, pkg_root_id)
+    assert refreshed is not None
+    assert refreshed.current_revision_id == new_head_revision_id
+    assert refreshed.current_revision_id != pinned_revision_id
+    base = await pkg_repo.get_revision(session, pinned_revision_id)
+    assert base is not None and base.revision_no == 1
+
+    # The saved strategy revision's edge still names N — not the new head.
+    after = _entry_indicator_pins(await strat_repo.list_references(session, strategy_revision_id))
+    assert after == [(pkg_root_id, pinned_revision_id)]
+
+    # The draft's STORED config still names N.
+    stored = await strat_repo.get_strategy_draft(session, draft_id)
+    assert stored is not None
+    stored_ref = stored.payload["position_entry_logic"]["indicator_blocks"][0]["package_ref"]
+    assert stored_ref["package_revision_id"] == pinned_revision_id
+
+    # A second Save — extraction runs against the stored config while the head
+    # is N+1 — is NOT the "explicit re-pin action": revision 2 pins N again.
+    saved2 = await strat_cmd.save_strategy_revision(
+        session, USER1, draft_id=draft_id, expected_draft_row_version=1
+    )
+    await session.flush()
+    assert saved2["strategy_revision_id"] != strategy_revision_id
+    second = _entry_indicator_pins(
+        await strat_repo.list_references(session, saved2["strategy_revision_id"])
+    )
+    assert second == [(pkg_root_id, pinned_revision_id)]
+
+    # And that second Save did not rewrite the draft's stored pin to the head
+    # either — the config a THIRD Save would extract from still names N.
+    stored2 = await strat_repo.get_strategy_draft(session, draft_id)
+    assert stored2 is not None
+    ref2 = stored2.payload["position_entry_logic"]["indicator_blocks"][0]["package_ref"]
+    assert ref2["package_revision_id"] == pinned_revision_id

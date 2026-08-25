@@ -15471,3 +15471,178 @@ taşınmaz** (ADIM 93/98: eski freeze'i taşımak tavanı gerçek sayının üst
 sonsuza dek yeşil kalır — *kapı bunu yakalamaz, koşturan kişi yakalar*).
 
 `PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
+
+---
+
+## ADIM 112 — current-main delta forensics (PR #825) + `G8`/`G14` imza bloklarının açılması: BİR KAPALI ISSUE, DEĞİŞMEMİŞ BİR KODUN ÜSTÜNDE DURUYORSA BİR SONUÇ DEĞİL BİR SÜRÜKLENMEDİR
+
+**DOCS-ONLY.** Üç yeni dosya, `backend/src` ve `frontend/src`'te **sıfır satır**, migration yok,
+`ENGINE_VERSION` değişmedi, OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS` = `future_dev`
+(dosya diff'i **boş**). Kabul borcu tavanlarını **BU SLICE OYNATMADI**; taban
+`53ff7549`'da taze `--ratchet` ile ölçülen değer **55 partial / 7 uncovered · A1 B23 C6 D32**
+idi. **Bu bir "main şu an burada" iddiası DEĞİL, bu diff'in tavanlara dokunmadığının
+kaydıdır** — **#826 (ADIM 110) bu kayıt yazılırken İNDİ** ve tavanları **54 / 6 · B 21**'e
+çekti, yani yukarıdaki 55/7 artık **bu slice'ın tabanına ait tarihsel bir sayıdır**; güncel
+değerin otoritesi `acceptance_coverage_baseline.json`. Ayrım bilerek yazıldı: ADIM 93/98/100 üç kez,
+kendi tabanına karşı doğru ölçülmüş bir tavanın araya giren başka bir dal yüzünden **sessizce**
+yanlış taşındığını kaydetti. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+Merge: `53ff7549` (squash, #825).
+
+İnen üç dosya:
+`docs/audit/final_closure_delta_audit_2026-08-25.md` (958 satır) ·
+`docs/decisions/closure_g8_dst_fold_gap_2026-08-25.md` ·
+`docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md`.
+
+### Ne ölçüldü
+
+`e2fa521` (2026-08-13 kapanış tabanı) ↔ `a7261de`, **150 commit**. Önceki denetimler,
+`CLAUDE.md` ve issue CLOSED durumları **yanlışlanacak hipotez** olarak ele alındı; **üçü
+ayakta kalmadı**.
+
+**ORTAM TUZAĞI, ve önce o çözüldü:** container'ın clone'u **shallow**'du ve tabanı
+**içermiyordu** — ilk `git log e2fa521..origin/main` `fatal: bad object` verdi. Taban
+fetch edildi, clone `--unshallow` yapıldı, **ancak ondan sonra** tek bir diff okundu. Bu adımı
+atlayan bir denetçi sessizce **yanlış commit'ten başlayan** bir aralık ölçer.
+
+**BAŞLIK — paylaşımlı portföy `IMPLEMENTED-BUT-UNWIRED` → `IMPLEMENTED-BUT-CONTAINED`.**
+`C3` (#777, `2cda24f5`) gerçek bir `_EngineParticipant` sevk etti — reconciliation +
+sleeve-parity invariant'ları ve **on bir şekli** construction'da reddeden tablo. `C4` (#799,
+`39947256`) tick-sürümlü shared-clock kolunu item döngüsünün **yanına** bağladı: tick-strided
+cancel checkpoint (#3b) ve `create_result`'a kadar **tam persist yolu**. Containment ön
+koşulları yeniden ölçüldü: **2/22 → 8/22** (7, 8, 9, 10, 11, 12 yeşile döndü).
+Bayrak **kıpırdamadı**, yani hepsi yalnız testlerden erişilebilir.
+
+**ADLANDIRILMASI GEREKEN TUZAK:** `run_portfolio`'nun hâlâ **hiç** production caller'ı yok —
+worker `iter_portfolio`'yu çağırıyor. Yalnız birincisini grep'lemek *"bağlanmadı"* cevabını
+verir ve **yanıltır**; containment kapısı ikisini birden arar (`_LOOP_ENTRY_POINTS`).
+
+**FİNANSAL — #550/#551/#552 gerçekten kapandı, ve parayı oynattı.** Kanıt iddia değil ölçüm:
+`engine_golden_digests.json` **46 → 50 senaryo**, **46'nın 29'u değişti**. Ayrıca `C1`/`C2`/
+`C3`/`C4` digest'leri HEAD ile **bayt bayt aynı** → portföy işi hiçbir sayıyı yeniden
+fiyatlamadı; 29 oynayan digest **yalnız #720'ye** atfedilir. #551'in *"load-bearing"*
+cross-item sızıntısı yeniden ölçüldü ve **hiç üretilebilir değildi**:
+`engine.py::build_prior_intervals` pozitif olmayan `peak_notional`'ı, issue'nun işaret ettiği
+kapının **bir katman üstünde** zaten düşürüyor.
+
+**İKİ ISSUE-STATE-DRIFT.** #559 (DST fold/gap) ve #544 (NET) 2026-08-18'de **bir saniye
+arayla**, **sıfır yorum / sıfır closing PR / sıfır kod değişikliğiyle** kapatılmıştı. İkisi de
+containment lift'in kapısı (`G8`, `G14`). **Amber işaretlendi, YEŞİL SAYILMADI** — saymak
+tabloyu bir yazım uğruna 10/22'ye çıkarırdı. #514'ün tam tersi şekli: orada bir insan boş
+defterin üstünde duran CLOSED durumunu doğru şekilde geri açmıştı.
+
+**BİR REGRESYON, BULUNMUŞ VE ZATEN ONARILMIŞ.** #799'un shared-branch helper'ı containment
+tripwire'ının koruduğu döngü başlığını **ikiledi**; gerçek bağımsız item döngüsü silinse kapı
+**YEŞİL** kalıyordu — yani her bağımsız composite Result'ın sessiz yeniden fiyatlanması, ne
+bayrak ne `ENGINE_VERSION` bump'ı ne de bir okurun görebileceği bir iz bırakarak. main'de
+**~3s16d** yaşadı; #805 helper'ı `pinned`'e çevirdi ve assertion'ı `in` → `count(...) == 1`
+yaptı. Bu ağaçta doğrulandı: **sayı 1**.
+
+**İKİ DOCUMENTATION-DRIFT (`CLAUDE.md`).** (a) *"P-E2 merge EDİLMEDİ, iki Ready Check bacağı
+hâlâ canlı N+1, slope 1.0"* — oysa `bb1e76c6` (#712) inmiş, `query_budgets.json` ikisini de
+`per_item: 0` gösteriyor, **ve aynı dosya 450 satır yukarıda ADIM 62'yi indi diye kaydediyor**
+(kendi kendisiyle çelişki). (b) `Next: PR B` işaretçisi **inmiş işi** adlandırıyor.
+**Documentation-truth kapısı bunu yakalamaz** ve o da ölçüldü: kapı üretilmiş artefaktları ve
+belge sınıflandırmasını doğrular, **anlatı prozasını değil** (yerelde `--check` → exit 0).
+
+### İki karar belgesi — HİÇBİRİNDE KARAR VERİLMEDİ
+
+İki issue **ürün sahibinin talimatıyla yeniden AÇILDI** (her birine ölçümü adlandıran bir
+gerekçe yorumu yazıldı — gerekçesiz açmak, denetimin bulduğu kusurun aynısı olurdu). Ama
+**imzalanacak bir yerleri yoktu**; bu iki belge o yeri açar. `closure_g11` / `closure_g4` /
+`closure_g15` disipliniyle **imza blokları BOŞ**.
+
+**`G8` — beş ölçüm.** Erişilebilirlik #559'un ima ettiğinden **DAR**: motor tarafındaki her
+`parse_utc` çağrısı `source_zone=None` geçiyor ve orada naive değer **fail-closed** dönüyor →
+fold'a yalnız **ingest + funding** yüzeyi değiyor, o da yalnız `custom` mod + DST gözeten IANA
+zone'da. Blocker seçeneği **yeni sözcük dağarcığı GEREKTİRMEZ** (`MARKET_/RESEARCH_DATA_
+TIMEZONE_UNRESOLVED`, `TIME_POLICY_INVALID` sevk edilmiş; `TimestampParse` bayrağı zaten
+taşıyor). Geriye dönük denetimin **şekli de belli**: `queries/timezone_audit.py` (K-01),
+READ-ONLY, çünkü bir revision'ın gerçekten yanlış olup olmadığı **ham baytlarda** yaşar.
+**VE SEÇİMİN ŞEKLİNİ BELİRLEYEN ÖLÇÜM: hiçbir seçenek ikinci occurrence'ı geri getirmez** —
+offset'siz bir dize `fold=1`'i **ifade edemez**. Seçenekler *"veriyi kurtarma"* ekseninde
+değil, **kullanıcının bilgilendirilmesi** ekseninde ayrışır. Kaydedilen asimetri: fold'un
+savunulabilir bir cevabı **var**, gap'in **yok** → `A1+B2` tutarlı, `A2+B1` ölçülen **tek
+tutarsız** eşleşme.
+
+**`G14` — dört ölçüm.** #544'ün adlandırdığı üç yüzey de `e2fa521` ile **bayt bayt aynı**;
+issue'nun kendi *"safe to fix now"* metin düzeltmesi **hiç yapılmamış**. **YENİ, ve issue
+yazıldığında yoktu: tek değerin artık İKİ sevk edilmiş davranışı var** — sıralı motor NET'i
+downgrade ediyor (`engine.py::conflict_downgraded_from_net`), faz döngüsü **reddediyor**
+(`arbitration.py::NET_SUPPORT_STATUS = "undefined_in_canon"`) → sevk edilen bildirim
+eskisinden **DAHA** yanlış. Beş tanımsız semantik **zaten kaynakta sayılı**
+(`NET_UNDEFINED_SEMANTICS`), belge onları yeniden icat etmiyor, **adlandırıyor**. Ve
+*"sadece kaldır"* seçeneğinin şeklini değiştiren ölçüm: **KALDIRMAK BİR MIGRATION'DIR** —
+`portfolio_allocation_plan.conflict_policy` VARCHAR + CHECK (`allocation_conflict_policy`,
+`0035_portfolio_rules`), ve `'NET'` taşıyan mevcut satırlar yeni kısıtı **ihlal eder**; o
+satırların akıbeti kendi imza bloğunu hak ediyor (`BLOCK_OPPOSITE`'a sessizce yeniden yazmak
+deponun kendi silent-fallback yasağına takılır). **Belgede AÇIK UYARI: yalnız bildirimi
+düzeltmek `G14`'ü KAPATMAZ** — ön koşul 20 NET'in **anlamını** ister; *"halloldu"* diye
+işaretlemek bu belgelerin var olma sebebi olan hatanın aynısı olurdu.
+
+### DÜRÜST SINIRLAR
+
+**Bu container'da GERÇEKTEN koşan:** `uv sync --all-extras` (exit 0) · **123 passed / 0 failed
+/ 0 skipped** (9 unit dosyası, `--no-cov -p no:randomly`) · golden digest testleri **2 passed**
+· `generate_repository_facts.py --check` → *"documentation-truth gate OK"* · acceptance
+`--report` (306/55/7 · 383 kriter / 1175 clause) ve `--ratchet` (exit 0, tavan 55/7 sabit) ·
+iki karar belgesinde alıntılanan **her sembolün** ağaçta var olduğu. Exit code'lar stdout'tan
+**ayrı** okundu, hiçbiri `tail`'den geçirilmedi.
+
+**KOŞULMAYANLAR, açıkça:** backend integration / contract / e2e ve **coverage** (Postgres
+daemon yok; baştan sona `--no-cov`) · **tüm frontend kapıları** (`node_modules` yok). Bu
+suite'lerin geçen sayısı ve coverage yüzdesi **CI'ın otoritesinde** ve bu kayıt hiçbirini
+iddia etmiyor. Raporun kendisi de bunu banner'ında yazıyor ve **ölçtüğü anı dondurur**.
+
+**RAPOR YENİDEN YAZILMADI, NOT DÜŞÜLDÜ.** İki issue denetimden **sonra** açıldığı için §4
+C-4/C-5 bulguları bayatladı — ama donmuş bulgular **düzeltilmedi**: `a7261de`'de doğruydular
+ve `ISSUE-STATE-DRIFT` sınıflandırması o an doğruydu. Üstteki banner'a bir **post-measurement
+addendum** eklendi (`284d8a1e` emsali: *"record that #698 resolved DR-1 after this audit's
+base"*). **Değişen şey İZLEME, karar değil:** `G8`/`G14` hâlâ imzasız, iki kod yolu da hâlâ
+`e2fa521` ile bayt bayt aynı, **ön koşul 20/21 amber kaldı**. A-08 defterinin #514 için
+yazdığı cümle burada da geçerli: *"yeniden açmak, kapatmaktan daha fazla bir sonuç değildir."*
+
+### SÜREÇ — üç ölçülmüş kalem
+
+**(1) "Update branch" düğmesi kullanıldı ve BU SEFER TEMİZDİ.** Dal, ürün sahibinin
+düğmesiyle bir merge commit'i aldı (`f7206d78`). `CLAUDE.md` bunu belge PR'ında **yasaklıyor**
+çünkü emsalinde sunucu tarafı merge bir `PROJECT_HISTORY` kaydını **sessizce** düşürmüştü ve
+hiçbir kapı görmemişti. Varsayılmadı, **koşuldu**: `git show f7206d78 -- docs/ | grep '^-## '`
+→ **boş**, `docs/` içinde silinen satır **0**, `## ADIM` sayısı **101 → 102** (beklendiği
+gibi). Merge sonrası squash commit'i (`53ff7549`) için de aynı kontrol koşuldu: **0 silinen
+satır**. Kural değişmedi — sonraki main ilerlemeleri **rebase** ile alınır.
+
+**(2) CI bu dalgada DÖRT KEZ sıfırlandı** (`cb0fb400` iptal → `88d37d6d` iptal → `f7206d78`
+**success** → `03269040` **success**). Üçü push, biri düğme. Her sıfırlama ~50 dakikalık
+`Backend` işini baştan başlatıyor. **İki bağımsız yeşil koşu kaydedilmeye değer:** #2291
+(`f7206d78`, yalnız rapor + addendum) ve #2293 (`03269040`, + iki karar belgesi) — yani iki
+dosya kümesi **ayrı ayrı** doğrulandı. Son koşu: **17 passed / 5 skipped / 0 failure**,
+`mergeable_state: clean`.
+
+**(3) NUMARA: `110` DEĞİL, `111` DE DEĞİL — `112`; VE HER İKİ TAŞIMA DA ÖLÇÜLDÜ.** Kapanış yazılırken main'de en yüksek kayıt
+**109**, canlı kickoff `docs/ADIM108_LANDED_KICKOFF.md` idi — yani `110` boş **görünüyordu**.
+Açık PR listesi ölçüldü: **#826 açık** (`docs/stage-110-landed`, 12:01Z) ve
+**`docs/ADIM110_LANDED_KICKOFF.md` dosyasını EKLİYOR** + `ADIM108`'i demote ediyor. **Çakışma
+başlıkta değil DOSYA YOLUNDA ölçülür** (ADIM 91) ve **ayrılan numara güvenli numara değildir**
+(ADIM 92) → kayıt **111** olarak yazıldı.
+
+**Sonra 111 de gitti.** Bu kayıt PR #827 olarak açıkken, paralel bir oturum **#828**'i açtı
+(guard daraltması) ve o da **`docs/ADIM111_LANDED_KICKOFF.md`** dosyasını ekliyordu — yani
+**aynı kural ikinci kez işledi**. #827 ürün sahibinin talimatıyla **merge edilmeden kapatıldı**;
+bu kayıt **112**'dir ve #825 o pencerede **kayıtsız** kaldı. Boş görünen bir numara, boş bir
+açık-PR listesi gibi, bir **anlık görüntüdür** (ADIM 100/103) — ve bu slice onu **iki kez**
+yaşadı, ki depoda bu şeklin en uzun zinciri.
+
+**KAYDA DEĞER: kaybolan şey kayıttı, iş değil.** #825'in indirdiği üç belge
+(`final_closure_delta_audit_2026-08-25.md` + iki imza belgesi) `53ff7549`'da main'e indi ve
+hiç kıpırdamadı; eksik olan yalnız **ritüelin kendisiydi**. Bu, ADIM 82/86/90/108/109'un tek
+tek geri dönüp kapattığı *"kayıtsız inen slice"* borcunun **altıncı** örneğidir.
+
+**Kickoff YOK, bilerek — ADIM 82/109 emsali.** `_check_live_kickoff_is_newest` numarayı
+**dosya adından** okur: bir `ADIM112` dosyası yaratmak, #828'in `ADIM111`'ini demote
+etmeye çalışırdı ve iki dal aynı `current` işareti için yarışırdı — bu slice o yarışı
+zaten bir kez kaybetti. Üstelik bu slice'ın
+devamı **kod değil İMZADIR** — canlı devam tohumu olmaya aday değil. Ritüelin **md. 5'i de
+atlandı, bilerek**: yeni endpoint / tablo / sayfa / job yok.
+
+**Ratchet ve baseline dosyalarına DOKUNULMADI** (#826 onları indiriyor; iki dalın aynı
+sayıları oynatması ADIM 93/98/100'ün defalarca kaydettiği sessiz tavan hatasını üretirdi).

@@ -249,7 +249,7 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
           check: "contentinfo landmark",
           observed: "absent",
           wcag: "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
-          note: "checklist A-2 expects banner/navigation/main/contentinfo to be separately findable; the shell renders no <footer>. Whether V1 should have one is a product decision, so this is reported, not gated.",
+          note: "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision.",
         });
       }
       const first = rec.skipLinkFirstTabbable ?? "";
@@ -259,7 +259,7 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
           check: "skip link",
           observed: `first tabbable is ${rec.skipLinkFirstTabbable ?? "(none)"}`,
           wcag: "2.4.1 Bypass Blocks (A)",
-          note: "no in-page skip target precedes the primary nav, so a screen-reader user tabs the whole menu bar on every route. Adding one is a product change outside this preparation slice.",
+          note: "PR #685 shipped the skip link: Layout.tsx renders an a.skip-link to #main-content ahead of the primary nav, and the workspace <main> carries id=main-content with tabIndex -1. On a shipped route this branch no longer fires; it is kept as a regression tripwire — if it does fire, either the skip link is gone or something focusable was inserted ahead of it.",
         });
       }
       if (rec.headingSkips.length) {
@@ -268,7 +268,7 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
           check: "heading outline",
           observed: rec.headingSkips.join(" ; "),
           wcag: "1.3.1 Info and Relationships (A)",
-          note: "checklist A-3 asks for h1→h2→h3 with no skipped level; confirm by rotor during the audit.",
+          note: "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting.",
         });
       }
       if (rec.positiveTabindex > 0) {

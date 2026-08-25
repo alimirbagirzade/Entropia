@@ -102,16 +102,23 @@ is advice, not a re-plan:
 Leave everything else `—`. A half-filled worksheet is evidence; a guessed one is worse
 than an empty one.
 
-### One stale instruction to ignore while you work
+### One stale instruction — corrected in the source, still frozen in the evidence
 
-The precheck's own `::warning::` output still prints, next to every heading-outline
-advisory, the note *"checklist A-3 asks for h1→h2→h3 with no skipped level"*. **That is
-the superseded question.** A-3 was rewritten on 2026-08-13 precisely because counting
-skips is a machine measurement the precheck already produces — see the checklist's
-`§A-3 notu`. Two neighbouring notes in the same output are stale the same way (the
-`contentinfo` note still says A-2 expects four landmarks, which D-11 overturned; the
-skip-link note still describes a defect PR #685 fixed). The **counts** those advisories
-carry are unaffected — only the explanatory prose. Worksheet §6.1b records all three.
+**Fixed 2026-08-25.** The precheck's `::warning::` output used to print, next to every
+heading-outline advisory, the note *"checklist A-3 asks for h1→h2→h3 with no skipped
+level"* — **the superseded question.** A-3 was rewritten on 2026-08-13 precisely because
+counting skips is a machine measurement the precheck already produces (see the checklist's
+`§A-3 notu`), and two neighbouring notes were stale the same way (the `contentinfo` note
+said A-2 expects four landmarks, which D-11 overturned; the skip-link note described a
+defect PR #685 fixed). All three notes now read correctly in
+`frontend/e2e/specs/20-a11y-prechecks.spec.ts`; the **counts and the gating behaviour never
+changed** — only the prose. Worksheet §6.1b records the before and after.
+
+**Where the old wording survives, deliberately:** the frozen evidence JSONs
+(`docs/releases/evidence/2026-08-12/`, `2026-08-11/`) are a record of what the probe printed
+on those dates and are never edited. If you are reading a precheck report from an archived
+run rather than a fresh one, its A-3 note is the retired question — ignore it and use the
+checklist.
 
 ---
 

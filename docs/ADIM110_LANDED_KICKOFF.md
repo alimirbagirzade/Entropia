@@ -1,5 +1,5 @@
-<!-- doc-status: current -->
-> **CANLI KICKOFF.** Bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
+<!-- doc-status: historical -->
+> **TARİHSEL KICKOFF — ARTIK CANLI DEĞİL** (ADIM 111 ile demote edildi). Yazıldığı anda bu belge en yeni slice'ın handoff'udur. Bir sonraki slice inince
 > `historical`a demote edilir ve yerine yenisi geçer (`check_classification` CI'da doğrular:
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varken canlı işaret eski belgede duramaz).
 

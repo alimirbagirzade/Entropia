@@ -57,13 +57,18 @@ cleanup() { rm -rf "$FIXTURE"; }
 trap cleanup EXIT
 
 git init -q "$FIXTURE"
-mkdir -p "$FIXTURE/docs"
+mkdir -p "$FIXTURE/docs/audit"
 printf '## ADIM 1 - kayit\n\ngovde\n\n## ADIM 2 - kayit\n\ngovde\n' > "$FIXTURE/docs/PROJECT_HISTORY.md"
+# A GENERATED ledger: its section headings CARRY COUNTS, which is the whole
+# reason gate 1 had to learn the difference between a deleted record and a
+# modified heading (ADIM 111).
+printf '## Class B (23)\n\nsatir\n\n## Partial criteria (55)\n\nsatir\n' > "$FIXTURE/docs/audit/ledger.md"
 git -C "$FIXTURE" add -A
 git -C "$FIXTURE" -c user.email=proof@entropia -c user.name=proof commit -qm base
 
 failures=0
 passes=0
+blocks=0
 
 # probe <expected-exit> <guard> <payload> <description> [env assignments...]
 probe() {
@@ -74,6 +79,7 @@ probe() {
   code=$?
   if [ "$code" = "$want" ]; then
     passes=$((passes + 1))
+    [ "$want" = "2" ] && blocks=$((blocks + 1))
     printf '  ok    exit=%s  %s\n' "$code" "$name"
   else
     failures=$((failures + 1))
@@ -83,10 +89,20 @@ probe() {
 }
 
 stage_history() { printf '%s' "$1" > "$FIXTURE/docs/PROJECT_HISTORY.md"; git -C "$FIXTURE" add -A; }
+stage_ledger() { printf '%s' "$1" > "$FIXTURE/docs/audit/ledger.md"; git -C "$FIXTURE" add -A; }
 
 COMMIT='{"tool_input":{"command":"git commit -m wip"}}'
 KEEP=$'## ADIM 1 - kayit\n\ngovde\n\n## ADIM 2 - kayit\n\ngovde\n'
 DROP=$'## ADIM 1 - kayit\n\ngovde\n'
+# Same two records, second one RENUMBERED — a rename reads as a deletion and must
+# keep doing so (ADIM 61: rewriting a `## ` heading is how records get lost).
+RENUM=$'## ADIM 1 - kayit\n\ngovde\n\n## ADIM 3 - kayit\n\ngovde\n'
+LEDGER=$'## Class B (23)\n\nsatir\n\n## Partial criteria (55)\n\nsatir\n'
+LEDGER_DOWN=$'## Class B (21)\n\nsatir\n\n## Partial criteria (54)\n\nsatir\n'
+LEDGER_UP=$'## Class B (99)\n\nsatir\n\n## Partial criteria (77)\n\nsatir\n'
+# The cross-file leak: the record leaves PROJECT_HISTORY and a heading with the
+# SAME stem appears in another file. Per-file scoping is what catches this.
+LEDGER_STEALS=$'## Class B (23)\n\nsatir\n\n## Partial criteria (55)\n\nsatir\n\n## ADIM 2 - kayit\n\ngovde\n'
 
 echo "guard-git.sh — gate 1: a commit that deletes a docs record"
 stage_history "$DROP"
@@ -97,6 +113,29 @@ probe 0 "$GIT_GUARD" "$COMMIT" "ENTROPIA_HOOKS=off passes" ENTROPIA_HOOKS=off
 stage_history "${KEEP}"$'\n## ADIM 3 - yeni\n'
 probe 0 "$GIT_GUARD" "$COMMIT" "an ADDITIVE docs commit passes" IGNORE=1
 probe 0 "$GIT_GUARD" 'not json at all' "unparseable stdin passes (fail-open by design)" IGNORE=1
+
+# ADIM 111 — a count-bearing heading whose number MOVES is a modification, not a
+# deletion. Before this, every acceptance batch tripped gate 1 on exactly this
+# shape (measured on merged #821 and #826), and an alarm that fires on every
+# batch teaches people to silence it. Both directions are proven: DOWN is the
+# real-world case (debt shrinking), UP guards against a rule that only tolerated
+# improvement and would fire the day a ceiling legitimately rises.
+stage_history "$KEEP"
+stage_ledger "$LEDGER_DOWN"
+probe 0 "$GIT_GUARD" "$COMMIT" "a generated heading's count moving DOWN passes" IGNORE=1
+stage_ledger "$LEDGER_UP"
+probe 0 "$GIT_GUARD" "$COMMIT" "a generated heading's count moving UP passes too" IGNORE=1
+
+# ...and the narrowing must not become a hole. Two shapes that still block:
+stage_ledger "$LEDGER"
+stage_history "$RENUM"
+probe 2 "$GIT_GUARD" "$COMMIT" "RENUMBERING a record still blocks (stem differs)" IGNORE=1
+stage_history "$DROP"
+stage_ledger "$LEDGER_STEALS"
+probe 2 "$GIT_GUARD" "$COMMIT" \
+      "a record removed HERE and re-added in ANOTHER file still blocks (per-file scope)" IGNORE=1
+stage_history "$KEEP"
+stage_ledger "$LEDGER"
 
 echo "guard-git.sh — gate 2: self-merge"
 probe 2 "$GIT_GUARD" '{"tool_input":{"command":"gh pr merge 123 --squash"}}' "gh pr merge blocks" IGNORE=1
@@ -131,4 +170,4 @@ if [ "$failures" -ne 0 ]; then
   echo "hook guard proof: ${failures} expectation(s) missed out of $((passes + failures))" >&2
   exit 1
 fi
-echo "hook guard proof: ${passes}/${passes} expectations met (6 blocks, $((passes - 6)) pass-throughs) OK"
+echo "hook guard proof: ${passes}/${passes} expectations met (${blocks} blocks, $((passes - blocks)) pass-throughs) OK"

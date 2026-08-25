@@ -15646,3 +15646,187 @@ atlandı, bilerek**: yeni endpoint / tablo / sayfa / job yok.
 
 **Ratchet ve baseline dosyalarına DOKUNULMADI** (#826 onları indiriyor; iki dalın aynı
 sayıları oynatması ADIM 93/98/100'ün defalarca kaydettiği sessiz tavan hatasını üretirdi).
+
+---
+
+## ADIM 111 — docs kayıt-silme kapısı üretilmiş artefaktlar için DARALTILDI — HER SEFERİNDE ÇALAN BİR ALARM, KENDİSİNİ SUSTURMAYI ÖĞRETİR
+
+**Tarih:** 2026-08-25 · **Dal:** `docs/stage-111-landed` · **Taban:** ADIM 110 (#826)
+**ÜRÜN KODU DEĞİŞMEDİ** — `backend/src` ve `frontend/src`'te tek satır yok. Diff üç dosya:
+bir **agent guard betiği**, onun **davranış kapısı**, ve `CLAUDE.md` §Conventions.
+Migration yok · alembic head `0043_i08_registry_strategy_fks` · `ENGINE_VERSION` ve OpenAPI
+değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` · kabul borcu tavanları **OYNAMADI**
+(54 partial / 6 uncovered · A=1 B=21 C=6 D=32) · donmuş kanıt, A-08 sayaçları (2/184 · 0/10 ·
+0/4) ve #514 **el değmedi**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Kapatılan şey bir kusur değil, bir YANLIŞ POZİTİFTİ
+
+`plugins/entropia-maintenance/hooks/guard-git.sh`'in birinci kapısı (docs kayıt silen commit)
+şunu yapıyordu:
+
+```
+removed="$(git diff --cached -- docs/ | grep '^-## ' || true)"
+```
+
+Yani **tüm `docs/` diff'inde kaldırılmış her `## ` satırı** bir kayıt silmesiydi. Kapı
+#590 (211 satır) ve #604 (194 satır) regresyonlarından sonra yazılmıştı ve o iş için
+**doğruydu**. Ama üretilmiş defterlerin bölüm başlıkları **SAYI TAŞIR** —
+`## Class B (23)`, `## Partial criteria (55)`, `## Uncovered criteria (7)` — ve borç
+azaldığında o başlık **kaldırılıp yerine küçüğü eklenir**. Yani **her kabul borcu partisi**
+bu kapıya takılıyordu.
+
+**Ölçüldü, iddia edilmedi:** merge edilmiş **#821 (ADIM 107)** diff'i
+`-## Class B (24)` ve `-## Partial criteria (56)` taşıyor; **#826 (ADIM 110)** üç satır
+taşıyor (`Class B (23)`, `Partial criteria (55)`, `Uncovered criteria (7)`). İkisi de
+merge edildi, yani kapı her seferinde **elle aşıldı**.
+
+> **ASIL DERS: HER SEFERİNDE ÇALAN BİR ALARM, KENDİSİNİ SUSTURMAYI ÖĞRETİR.** Kapı "doğru"
+> tarafta hata yapıyordu (fail-closed) ve tek tek her yanlış pozitif zararsızdı. Zarar
+> **birikimlidir**: bir insanı her partide *"evet, onaylıyorum"* demeye alıştıran bir kapı,
+> gerçek regresyonu yakalayacağı gün de **aynı cevabı** alır. Bu daraltma bir **gevşetme
+> değildir** — alarmın anlamını geri kazanmasıdır. Kapının yakaladığı kusur sınıfı
+> (#590/#604) **birebir korundu**; ölçüldü, aşağıda.
+
+### Yeni kural — kök karşılaştırması, DOSYA BAŞINA
+
+Bir başlık ancak **kökü** (sondaki `(N)` sayacı atılmış hâli) **aynı dosyada** eklenen
+başlıkların kökleri arasında **yoksa** silinmiş sayılır:
+
+| Diff | Kök | Sonuç |
+|---|---|---|
+| `## Class B (23)` → `## Class B (21)` | aynı | **DEĞİŞİKLİK, geçer** |
+| `## ADIM 92 — foo` → (yok) | eklenen yok | **SİLME, bloklar** |
+| `## ADIM 92` → `## ADIM 93` | farklı | **SİLME, bloklar** |
+
+Üçüncü satır bilinçlidir: **ADIM 61** *"başlık yeniden adlandırması `docs-history-guard`'a
+kayıt silme gibi görünür; kapıyı kapatma"* diye yazmıştı — o davranış **korundu**.
+Karşılaştırma **dosya başınadır**: A dosyasından silinip B dosyasına eklenen bir başlık
+hâlâ bloklanır. Süzgeç diff'i `+++`/`---` başlıklarından ayrıştırır ve `+++ /dev/null`
+gelirse yolu `---` tarafından alır → **tamamen silinen bir docs dosyası da bloklanır**.
+
+> **PATH ALLOWLIST'İ BİLEREK SEÇİLMEDİ.** *"`docs/generated/*` ve `docs/audit/acceptance_*`
+> hariç tutulsun"* daha kısa bir yamaydı ve **iki kez** yanlış olurdu: (1) her yeni
+> üretilmiş dosya bir kod değişikliği ister — liste sessizce bayatlar, ki bu deponun en sık
+> tekrar eden kusur sınıfıdır; (2) o dosyaları **GERÇEK** silmelere karşı da körleştirir.
+> Kök karşılaştırması hem daha az kırılgan hem **daha dardır**.
+
+### Davranış kapısı: 19 → 23 beklenti
+
+`scripts/hook-guard-proof.sh`'in fixture'ına **ikinci bir docs dosyası** eklendi —
+`docs/audit/ledger.md`, sayı taşıyan üretilmiş bir defterin taklidi. Dört yeni beklenti:
+
+| Yeni beklenti | Tip |
+|---|---|
+| sayaç **aşağı** inen üretilmiş başlık geçer (gerçek dünya: borç azalıyor) | GEÇİŞ |
+| sayaç **yukarı** çıkan üretilmiş başlık da geçer | GEÇİŞ |
+| bir kaydı **yeniden numaralandırmak** hâlâ bloklar (kök farklı) | ENGELLEME |
+| burada silinip **başka dosyada** eklenen kayıt hâlâ bloklar (dosya başına kapsam) | ENGELLEME |
+
+İkinci satır tesadüf değil: yalnız *iyileşmeye* izin veren bir kural, bir tavan **meşru
+olarak yükseldiği** gün kapıyı çalardı — kural sayının **yönünü** değil, başlığın
+**kimliğini** ölçer.
+
+### ÜÇ NEGATİF KONTROL, üçü de ayırt edici
+
+Her biri tek noktalı, her biri **yamanın uygulandığı** ve **kusurlu betiğin hâlâ
+sözdizimsel olarak geçerli** olduğu assert edilerek koşuldu (yoksa kırmızı sözdizimine
+ait olurdu), her turdan sonra taban geri konup **23/23 ile doğrulandı**.
+
+| NC | Tek noktalı kusur | Kırmızıya dönen | Diğer beklentiler |
+|---|---|---|---|
+| **A** | Daraltmayı **geri al** (eski `grep '^-## '`) | **yalnız iki yeni GEÇİŞ** | **21 yeşil** |
+| **B** | `stem()` fazla geniş (`\s*\d+.*$`) | **yalnız** yeniden numaralandırma | 22 yeşil |
+| **C** | Dosya-başına kapsam kaldırıldı | **yalnız** çapraz-dosya | 22 yeşil |
+
+**NC-A iki şeyi birden ölçer** ve bu yüzden en önemlisidir: (1) yanlış pozitif **gerçekti**
+— eski kural altında iki yeni geçiş beklentisi kırmızıya dönüyor; (2) **daraltma bir bedel
+ödemedi** — `staged '## ' record removal blocks` beklentisi, yani #590/#604'ün kusur sınıfı,
+NC-A altında da yeni kural altında da **yeşil**.
+
+**UÇTAN UCA DOĞRULAMA:** fixture'a değil **gerçek diff'e** karşı — `git diff origin/main
+docs/stage-110-landed -- docs/` guard'ın süzgecinden geçirildi: yeni kural **BOŞ** döndü
+(geçer), eski kural **3 satır** bloklardı. Slice'ın kapattığı problem, kapattığı iddia
+edilen problemdir.
+
+### İKİNCİ DERS — bir kontrol harness'i tabanın COMMIT'Lİ olduğunu VARSAYAMAZ
+
+İlk negatif-kontrol betiği geri almayı `git checkout -- <guard>` ile yapıyordu ve **başta**
+çağırıyordu. Guard **henüz commit edilmemişti** → üç kontrol de çalışmayı **sildi** ve
+üçü de aynı `AssertionError: anchor count 0 != 1` ile patladı. Kırmızı **kusura ait
+değildi, harness'ın yıkımına aitti**.
+
+> **Geri alma yolunu, koruduğu şeyden BAĞIMSIZ kur.** Harness `git checkout` yerine dosyayı
+> **belleğe** okuyup (`BASELINE = GUARD.read_text()`) oradan geri yazacak şekilde yeniden
+> yazıldı. Bu, ADIM 100'ün *"`finally` SÜREÇ SIGTERM ALIRSA KOŞMAZ → her turdan sonra
+> `git status`"* dersinin kardeşidir: orada geri alma **çalışmadı**, burada **yanlış kaynağa**
+> bakıyordu. İkisinin ortak sonucu aynı: **bir sonraki kontrol kirli/eksik bir ağacı
+> sessizce ölçer.**
+
+### ÜÇÜNCÜ BULGU — elle yazılmış özet sayısı bayatlamıştı
+
+Kapının kendi son satırı `(6 blocks, $((passes - 6)) pass-throughs)` yazıyordu. `origin/main`
+sürümünde `probe 2` çağrıları sayıldı: **7**. Yani özet **bir eksikti** ve bunu kimse fark
+etmemişti, çünkü sayı **hiçbir şeyi kapılamıyordu** — yalnız basılıyordu. Artık `probe`
+içinde tutulan bir `blocks` sayacından **türetiliyor**.
+
+Bu, deponun aynı dersinin **üçüncü şeklidir**: ADIM 40 katman sayılarını (elle → üretilmiş),
+ADIM 60 test collection sayılarını (bayat → kapılı) düzeltmişti. **Elle yazılmış her sayı
+bayatlar; tek soru ne zaman fark edileceğidir.**
+
+`CLAUDE.md`'nin ADIM 58 girdisi ve `docs/ADIM58_LANDED_KICKOFF.md` hâlâ *"19 beklenti =
+6 engelleme + 13 GEÇİŞ"* yazar (yani **aynı yanlış bölmeyi** taşır) ve **BİLEREK
+DEĞİŞTİRİLMEDİ** — ölçtükleri anı donduran kayıtlardır (ADIM 65/76 emsali). Güncel gerçek
+`CLAUDE.md` §Conventions'ta yaşar, ve **oraya da sayı yazılmadı**: *"BURAYA BEKLENTİ SAYISI
+YAZMA — kapının kendi özet satırı sayıyı türetir."*
+
+### ÖLÇÜLMÜŞ SINIRLAR — kapatılmadı, kaydedildi
+
+- **Kapı hâlâ yalnız `## ` (h2) sayar.** `### ` altındaki bir kaydın silinmesi görünmez.
+  Bu **daraltmadan önce de böyleydi**; bu slice onu ne düzeltti ne kötüleştirdi.
+- **Kök kuralının kabul ettiği bir yazım var:** aynı dosyada `## Class B (23)` silinip
+  `## Class B (99)` eklenirse geçer. Herhangi bir okumaya göre bu bir **değişikliktir**,
+  ama bir insanın sayıyı kasten şişirmesini bu kapı görmez — o **`--ratchet`'in** işidir
+  ve o kapı yerinde.
+- **Gate 2/3 el değmedi:** `guard-git.sh` hâlâ komut dizesinin **tamamında** desen arar,
+  yani `feat/main-menu` de bu desenleri *içeren* bir heredoc de bloklanır (fail-closed,
+  bilinçli). Metni **Write ile dosyaya yaz, sonra dosyayı koştur.**
+- **Plugin hâlâ kurulu değil**; kapı `.claude/settings.json` kaydı sayesinde koşar (ADIM 58).
+
+### Doğrulama + DÜRÜST SINIRLAR
+
+**Yerelde gerçekten koşan kapılar:** `scripts/hook-guard-proof.sh` **23/23** (9 engelleme,
+14 geçiş) · `node scripts/agent-config-gate.mjs` **5 yapılandırma geçerli** ·
+`generate_repository_facts.py --check` **exit 0** · `check_classification` **NONE** ·
+documentation-truth invariant taraması **boş** · `acceptance_semantic_scan.py --report
+--check-generated --ratchet` **exit 0** (54/6 · A1 B21 C6 D32, **oynatılmadı**).
+
+**CANLI KANIT:** bu slice'ın kendi mühendislik commit'i yeni guard'dan **geçti** (docs/
+diff'i boş). Ve ADIM 110'un kapanış commit'i, daraltmadan **önce** aynı kapı tarafından
+bloklanmıştı — bu slice'ın var olma sebebi o bloktur.
+
+**KOŞULMAYANLAR, açıkça:** `backend/src` ve `frontend/src`'te **sıfır satır** → **ne backend
+ne frontend suite'i koşuldu**, Postgres kurulmadı ve hiçbir geçen/coverage sayısı iddia
+edilmiyor — otorite **CI**. Ritüelin **md. 5'i atlandı, bilerek**: yeni endpoint / tablo /
+sayfa / job yok.
+
+**NUMARA + SIRA: bu slice ADIM 110 (#826) AÇIKKEN yazıldı.** ADIM 105'in süreç dersi
+uygulandı — *"açık bir PR'ın dalı sonraki partinin çalışma alanı DEĞİLDİR"* — mühendislik işi
+`origin/main`'den kesilen ayrı bir dalda yapıldı, sonra `docs/stage-110-landed` üstüne
+**rebase** edildi (çakışma yok: ADIM 110 `CLAUDE.md`'nin §Current position'ına, bu slice
+§Conventions'ına dokunur). **#826 merge edilmeden bu slice merge EDİLEMEZ**; main ilerlerse
+yine **rebase** edilir, *"Update branch"* düğmesi **kullanılmaz** (ADIM 93/94).
+
+> **SONRADAN ÖLÇÜLDÜ — ADIM 112 BU KAYITTAN ÖNCE İNDİ, VE NUMARA YİNE DE TAŞINMADI.** #826
+> indikten sonra bu dal rebase edilip #828 olarak açıldı; o CI'dayken **#829** main'e indi ve
+> #825'in kayıtsız ritüelini **ADIM 112** olarak yazdı. Yani ağaçtaki kayıt sırası
+> **110 → 112 → 111**'dir. `111` bir **boşluk** olarak duruyordu (#829 onu almadı, `112`'yi aldı)
+> ve bu slice onu **doldurur** — kural değişmedi: *merge edilmiş ad kazanır, numaralar yeniden
+> atanmaz*, ve iniş sırasının numara sırasından farklı olması bu depoda **kayıtlı bir şekildir**
+> (ADIM 90: *"kayıt sırası 87 → 88 → 91 → 92 → 90"*). **İKİNCİ ÖLÇÜM, ve o bir DÜZELTMEDİR:**
+> #829 `CLAUDE.md` §Current position'daki kendi bloğunu **`Son dalga` yapmamış**, onu ADIM 110'un
+> **altına** koymuş ve bloğun **iki başlık satırını** (`alembic head` / `ENGINE_VERSION`)
+> düşürmüştü — blok cümle ortasından başlıyordu. Bu **rebase'in ürünü değil**, main'de zaten
+> öyleydi (`origin/main:CLAUDE.md` ölçüldü: `Son dalga` hâlâ ADIM 110). Bu kapanış **yalnız
+> yapıyı** onardı: iki başlık satırı geri kondu ve blok iniş sırasına (111 → 112 → 110) taşındı.
+> **#829'un hiçbir iddiasına, sayısına ya da prozasına dokunulmadı.**
+`PROJECT_HISTORY.md` §ADIM 111 · `docs/ADIM111_LANDED_KICKOFF.md`.

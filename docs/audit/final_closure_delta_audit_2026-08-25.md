@@ -9,6 +9,20 @@
 > as **hypotheses to falsify**, and three of them did not survive.
 >
 > **This document FREEZES the moment it measured.** Re-derive before trusting it.
+>
+> ### Post-measurement addendum — 2026-08-25, after this audit's base
+>
+> **§4 C-4 (#559) and §4 C-5 (#544) were acted on within hours of this audit, on the
+> owner's instruction: both issues were RE-OPENED** (`state_reason: reopened`), each with a
+> written reason recorded on the issue naming the measurement above.
+>
+> **The findings below are NOT rewritten.** They record what was true at `a7261de`, and the
+> ISSUE-STATE-DRIFT classification was correct then. What changed is the **tracking**, not
+> the decision: `G8` and `G14` are still unsigned, both code paths are still byte-identical
+> to the baseline, and preconditions 20/21 stay amber. This is the same distinction the
+> A-08 ledger draws about #514 — *"re-opening the issue is not a result any more than
+> closing it was"*. Recorded here, rather than edited into §4, following the precedent of
+> `284d8a1e` (*"record that #698 resolved DR-1 … after this audit's base"*).
 
 ---
 
@@ -493,7 +507,7 @@ written down.**
 | issue state | **CLOSED `completed` 2026-08-18T07:23:47Z** · **0 comments** (`get_comments` → `[]`) · **0 closing PRs** · milestone *"ADIM 16-20 — unified clock programme"* |
 | before | open; behaviour undecided; two characterization tests pinning it |
 | after | **closed**; behaviour **identical**; still undecided; signature block still empty |
-| classification | **ISSUE-STATE-DRIFT** |
+| classification | **ISSUE-STATE-DRIFT** (tracking resolved 2026-08-25 — see the addendum; the **decision** is still open) |
 | confidence | **HIGH** |
 
 The folded hour's second occurrence remains **unaddressable from a source file**: one
@@ -513,7 +527,7 @@ Discovered while verifying C-4 — the two were closed **one second apart**.
 | commit SHA | **none** — `git diff e2fa521..origin/main` over all three is **EMPTY** |
 | issue state | **CLOSED `completed` 2026-08-18T07:23:46Z** · **0 comments** · **0 closing PRs** · labels `product-decision`, `blocks-adim-19` |
 | before / after | NET undefined, disclosure counterfactual / **unchanged** |
-| classification | **ISSUE-STATE-DRIFT** |
+| classification | **ISSUE-STATE-DRIFT** (tracking resolved 2026-08-25 — see the addendum; the **decision** is still open) |
 | confidence | **HIGH** |
 
 Precondition 20 (`G14`) is therefore still open on the evidence, and the counterfactual
@@ -733,8 +747,8 @@ Re-measured against `a7261de`:
 | 17 | OD-2 mark policy flip | ❌ | ❌ | `provenance.py:80` = `"undefined_pending_od2"` |
 | 18 | `CONTENTION_SELECTION_STATUS` flip | ❌ | ❌ | `arbitration.py:195` = `"recommended_pending_approval"` |
 | 19 | R-1 allocation revision pin | ✅ | ✅ | `test_allocation_revision_pin.py` |
-| 20 | GH **#544** closed | ❌ open | ⚠️ **closed, undecided** | §5 C-5 — **ISSUE-STATE-DRIFT, not a green** |
-| 21 | GH **#559** closed | ❌ open | ⚠️ **closed, undecided** | §4 C-4 — **ISSUE-STATE-DRIFT, not a green** |
+| 20 | GH **#544** closed | ❌ open | ⚠️ **was closed-undecided; RE-OPENED 2026-08-25** | §5 C-5 + addendum — **still not a green** |
+| 21 | GH **#559** closed | ❌ open | ⚠️ **was closed-undecided; RE-OPENED 2026-08-25** | §4 C-4 + addendum — **still not a green** |
 | 22 | A15 bump + A16 manifest policy fields | ❌ | ❌ | manifest carries **none** of the four (`test_...containment_gate.py:374`) |
 
 **Count: 8 of 22 green (was 2).** Preconditions 20 and 21 are marked ⚠️ and **not
@@ -771,8 +785,8 @@ to 10 on a technicality and is exactly the substitution this audit was asked to 
 | **C-2** both bundles pin time policy | neither | both, via `_pin_member` | `69027104`, `f5b08c27` | RESOLVED-SINCE-BASELINE | HIGH |
 | **C-3** `bundle_hash` covers them | invariant under policy change | covered; `research-bundle-v2` | `69027104` | RESOLVED-SINCE-BASELINE | HIGH |
 | **C-3b** 2 of §9.2's names absent | absent | absent, signed class-D | — | DELIBERATE-FUTURE-DEV | HIGH |
-| **C-4** #559 DST | open, undecided | **closed**, code identical, 0 comments, 0 PRs | — | **ISSUE-STATE-DRIFT** | HIGH |
-| **C-5** #544 NET | open, counterfactual | **closed**, all 3 files identical, 0 comments | — | **ISSUE-STATE-DRIFT** | HIGH |
+| **C-4** #559 DST | open, undecided | **was closed**, code identical, 0 comments/PRs → **re-opened 2026-08-25** | — | **ISSUE-STATE-DRIFT** (tracking resolved; decision open) | HIGH |
+| **C-5** #544 NET | open, counterfactual | **was closed**, all 3 files identical → **re-opened 2026-08-25** | — | **ISSUE-STATE-DRIFT** (tracking resolved; decision open) | HIGH |
 | **D-1** signal + research legs | slope 1.0 each | **`per_item: 0`** both | `bb1e76c6` (#712) | RESOLVED-SINCE-BASELINE | HIGH |
 | **D-1b** leg 3 `_resolve_external` | per-item | **per-item**, gate G15 | — | PRODUCT-DECISION-REQUIRED | HIGH |
 | **D-2** budgets cover full path | per-leg only | whole-operation row added, `per_item: 1` | `e865b965` (#741) | PARTIAL | HIGH |
@@ -818,8 +832,10 @@ to 10 on a technicality and is exactly the substitution this audit was asked to 
 
 1. **A-08 human screen-reader audit** — 2/184 cells, 0/10 flows, SR-1 never started,
    **0/4** exit criteria. #514 correctly OPEN. **The sole RC blocker.**
-2. **#559 (G8)** — closed with no decision, no comment, no closing PR, no code change
-3. **#544 (G14)** — same shape; counterfactual NET disclosure still shipping
+2. **#559 (G8)** — **re-opened 2026-08-25** with the measurement recorded on the issue; the
+   DST fold/gap rule is still undecided and the code is still baseline-identical
+3. **#544 (G14)** — **re-opened 2026-08-25**, same treatment; NET still undefined and the
+   counterfactual disclosure still shipping
 4. **Commission BASE** (flat per-fill vs bps-on-notional) — Karar 1 unsigned
 5. **G11 / G12** — P2 and P8 admission blockers briefed but unsigned; **`C6` unbuilt**
 6. **G15** — Ready Check leg 3 `_resolve_external` N+1; batching it changes which
@@ -901,11 +917,13 @@ CI result.
 Ordered by *what unblocks what*, not by size. Items 1–3 are signatures, not code, and
 three of the four cost nothing but a decision.
 
-1. **Re-open #559 and #544, or record their decisions.** Two gates (`G8`, `G14`) that the
-   containment lift depends on are currently "satisfied" only by a closed issue over
-   unchanged code. Either write the decision into
-   `docs/decisions/` and leave them closed, or re-open them the way #514 was re-opened in
-   ADIM 51. **This is the cheapest item and the one most likely to be mistaken for done.**
+1. ~~**Re-open #559 and #544, or record their decisions.**~~ **The re-open half is DONE
+   (2026-08-25)** — both carry a written reason on the issue. **The decisions are still
+   owed:** write the DST fold/gap rule and the define-or-remove-NET answer into
+   `docs/decisions/` with a signature, the way Karar 2 was recorded for #558, then close
+   them again. Until that exists, `G8` and `G14` block the lift and preconditions 20/21
+   stay amber. **Still the cheapest item and the one most likely to be mistaken for done —
+   a re-opened issue is not a decision either.**
 2. **Sign `G11` + `G12`** (P2 deferred fills, P8 scaling). Both are briefed; the engine
    already refuses these shapes. The signature is the only thing standing between the
    refusal table and `C6`.

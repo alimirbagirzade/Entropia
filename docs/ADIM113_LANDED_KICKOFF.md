@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 113 landed — sınıf B tükendi; sıradaki slice bir PARTİ OLAMAZ
 

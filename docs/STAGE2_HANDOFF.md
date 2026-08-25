@@ -8526,7 +8526,81 @@ sayısı iddia edilmiyor, otorite CI; `CP-03.c4` için test **yazılmadı** ve n
 `PROJECT_HISTORY.md` §ADIM 113 · `docs/ADIM113_LANDED_KICKOFF.md`.
 
 
+## Stage 114 — Karar 1 imzalandı ve uygulandı; #550/#551/#552 doğrulandı, duplicate fix yazılmadı landed (PR #831)
+
+**ÜRÜN KODU DEĞİŞTİ (finansal), ama VARSAYILAN ALTINDA TEK BİR SAYI OYNAMADI.** 15 dosya,
++810/−30. `ENGINE_VERSION` **değişmedi** · **50 golden digest bayt bayt aynı** · OpenAPI
+**değişmedi** · migration yok · `SHARED_ALLOCATION_STATUS` = `future_dev`. Kabul borcu
+tavanlarına dokunulmadı. Blocker sayısı **DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+
+**Bölüm 1 — doğrulama.** Görevin tabanı (`e2fa521`) ~150 commit gerideydi; #550/#551/#552 üçü de
+**#720** ile inmişti. HARD RULE uygulandı, üçü de sevk edilen davranışa karşı yeniden ölçüldü ve
+**tek satır duplicate fix yazılmadı**: #550 → 100× fiyat süpürmesinde `peak_notional` sabit
+`1000.00` (issue'nun kendi kanon tablosu); #551 → dört pozitif-olmayan yolun dördünde de 0 trade
+/ 0 interval / tek `size_resolved_to_zero`; #552 → per-fill 21.00 / `final_equity` 9919.00.
+Kayıt: `docs/audit/financial_closure_evidence.md`.
+
+**Bölüm 2 — Karar 1, İKİ EKSEN olarak imzalandı.** Belgenin seçenek listesi #720'den bir gün
+önce yazılmıştı ve tek eksen varsayıyordu; ölçüldüğünde iki çıktı. **Dağılım** (`per_fill`) zaten
+sevk edilmişti → imza onu **onaylar**. **Taban** açık bir alan oldu: `commission_basis`
+(`flat|bps`), **varsayılan `flat`**. Tam bps reddedildi çünkü **#550'nin göç tuzağını** taşıyor
+(saklanan `7` mekanik olarak çevrilemez) ve kanıt durumu #550'den zayıf — UI ve v18 mockup
+Commission'ı **birimsiz** çiziyor, yani bps kullanıcıya hiç vaat edilmedi. Mod. 6 §6.2'nin
+istediği zaten birebir bu.
+
+`FillCosts.fee(notional)` **tek türetim**; **`fee()`'nin altı çağrı yeri de** ondan geçiyor, her
+biri kendi fill'inin notional'ıyla — **beşi ücret alır** (`booking` ikisi, `engine` üçü),
+altıncısı `participant::_closed_by` **aynalar** (#835 ilk yazımdaki *"üçü booking"* sayısını
+düzeltti). `COMMISSION_MODEL = "per_fill"` manifest'te yayımlanıyor (K1) —
+`execution_content` **DIŞINDA**, çünkü rider'ın gerekçesi (*"aksi halde iki run aynı kimliği
+paylaşır"*) **ölçümde çürüdü**: `_pinned_items` zaten `selected_revision_id`'yi hash'liyor.
+
+**Asıl ders — bir kusuru ararken kullandığın DESEN, kusurun bulunduğu yeri belirler.** İlk geçiş
+**ücret yerlerini** (equity mutasyonu) grep'ledi ve altısını doğru bağladı; yedinci tüketici o
+desene uymadığı için kaçtı: `participant.py::_closed_by` mutate etmez, **rapor eder**, ve oranı
+para olarak harcıyordu (`flat` 14.00 değişmedi ↔ `bps` 14.00 → **3.89**). **Hiçbir şey kırmızı
+olmadı**, çünkü mevcut her test varsayılan taban üzerinde koşuyor — orada yanlış alanı okumak
+görünmez.
+
+**Yedi negatif kontrol, yedisi de ayırt edici**; golden defter **bilerek** dışarıda bırakıldı
+(blanket bir digest her şeyi yakalar, hiçbirini adlandırmaz) → oracle-only koşuda her kırmızı
+kendi konu alanındaki hedefli assertion'a düştü.
+
+**Süreç:** PR sırada beklerken sunucu tarafı bir **"Update branch" merge commit'i** geldi ve tüm
+CI döngüsünü sıfırdan başlattı (~50 dk). Kayıt-silme yönünden **ölçüldü** (`grep '^-## '` boş,
+truth gate `exit 0`), **hasar yok** — ama ders değişmedi: main'i içeri almak **rebase** ile olur.
+
+**Dürüst sınır:** tam suite + coverage **koşulmadı** (otorite CI); integration/contract
+**koşulmadı** (bu container'da Postgres yok — `test_auth_mode_login_gate` yerelde DB'de düştü,
+**CI'da geçti**); frontend kapıları **koşulmadı**; frontend'e `commission_basis` seçici
+**eklenmedi, bilerek** (v18 mockup otoritedir, böyle bir alanı yok).
+
+`PROJECT_HISTORY.md` §ADIM 114 · `docs/ADIM114_LANDED_KICKOFF.md`.
+
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
+
+> **ADIM 114 GÜNCELLEMESİ (2026-08-25) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe ADIM 81/85/86/92/112 güncellemelerinde: `docs-history-guard` bir `## ` başlığının
+> **kökünü** karşılaştırır — ADIM 111'de daraltıldı ama **yeniden adlandırma hâlâ bloklanır**,
+> ADIM 61 emsali ve ADIM 85'te kapı **fiilen** kırmızı verdi.)
+>
+> **BAŞLIĞIN ÜÇ İMZASINDAN BİRİ İNDİ: `Karar 1` (komisyon tabanı) 2026-08-25'te İMZALANDI ve
+> uygulandı** (PR #831 = §ADIM 114). İmza `docs/decisions/closure_product_decisions_2026-08-13.md`
+> §Karar 1 İMZA SATIRI'nda; belgenin banner tablosu da uzlaştırıldı. **Kalan iki imza
+> DEĞİŞMEDİ: `G8` (#559) · `G14` (#544)** — ikisinin de imza bloğu hâlâ boş, ikisi de bu
+> başlığın altında duruyor.
+>
+> **Karar 1 iki eksene ayrılarak imzalandı** ve bu, başlığın *"komisyon tabanı"* ifadesinden
+> daha dardır: **dağılım** (`per_fill`) zaten #720 ile sevk edilmişti ve imza onu yalnız
+> **onayladı**; sevk edilen yeni şey **taban**dır — `commission_basis` (`flat|bps`), varsayılan
+> `flat`. Varsayılan altında **hiçbir sayı oynamadı** (50 golden digest sabit), o yüzden
+> `ENGINE_VERSION` bump'ı gerekmedi.
+>
+> **`C6` KIPIRDAMADI** ve bu slice ona yaklaşmadı: `G11`+`G12` hâlâ imzasız, `SHARED_ALLOCATION_STATUS`
+> `future_dev`, containment gate el değmemiş. Sıra ve gerekçe için
+> `docs/audit/final_closure_delta_audit_2026-08-25.md` §10.
+
 
 > **ADIM 112 (2026-08-25) BU BAŞLIĞI DEĞİŞTİRDİ, ve gerekçesi ölçüldü.** Önceki başlık
 > *"PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site"* idi ve **inmiş

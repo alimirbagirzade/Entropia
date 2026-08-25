@@ -303,7 +303,9 @@ eklenmelidir. Bu, model seçiminden bağımsız olarak `:7513`'ün istediği "ma
 `[x] C (bps on notional)` — **TABAN ekseni, ama AÇIK MOD olarak; varsayılan `flat`**
 `[ ] D (hiçbir şey yapma)`
 
-Zorunlu ek — `execution_content.commission_model` manifest alanı: `[x] evet` `[ ] hayır`
+Zorunlu ek — `commission_model` manifest alanı: `[x] evet`, **ama `execution_content` DIŞINDA**
+(ürün sahibi, 2026-08-25 — kutunun orijinal metni *"`execution_content.commission_model`"* diyordu;
+gerekçesi ölçümde çürüdüğü için yerleşim daraltıldı, gerekçe aşağıda §Yerleşim'de).
 
 karar veren: **ürün sahibi (alimirbagirzade)**  tarih: **2026-08-25**
 
@@ -360,6 +362,31 @@ satırı da (K1/K2/K3) aynı anda karşılanır — A/B/C'nin hiçbiri bunu tek 
    **bayt bayt aynı** kalmalıdır. Oynarlarsa varsayılan taşımıyor demektir.
 5. OpenAPI drift guard'ı tetiklenir → `docs/openapi.json` **yeniden üretilir**, elle
    düzenlenmez.
+
+#### Yerleşim — rider'ın GEREKÇESİ ölçümde çürüdü (2026-08-25)
+
+Zorunlu ek şöyle diyordu: alan `execution_key`'in **içinde** olmalı, *"aksi halde iki farklı
+ücret modeliyle üretilmiş iki run aynı reprodüksiyon kimliğini paylaşır"*. **Bu gerekçe
+yanlış** ve ölçüldü: model pinlenmiş strateji revizyonlarının bir fonksiyonudur,
+`_pinned_items` zaten `selected_revision_id`'yi hash'ler → iki run **farklı** anahtar alır
+(`worev_flat` → `a8d36214…`, `worev_bps` → `b7c4a61b…`). Ayrım **bir seviye altta** zaten var.
+
+Alanı `execution_content`'e koymak bu yüzden **hiçbir ayrım kazandırmaz**, ama **her**
+`execution_key`'i kaydırır — hiçbir sayı oynamadan, hiçbir sürüm bump'ı olmadan. Bu
+**beyan edilmemiş bir namespace kaymasıdır** ve `manifest.py`'deki `ENGINE_VERSION`
+yorumlarının tam olarak engellemek için var olduğu şeydir. Alan manifest'e, `execution_content`
+**dışına**, `mainboard_item_labels` emsaliyle kondu (o da aynı sebeple dışarıdadır).
+
+**Alan yalnız DAĞILIMI adlandırır (`"per_fill"`), TABANI değil.** §8'in istediği budur ve
+motor genelinde doğru olan yarı budur: `close_position` fill başına tek ücret alır, config
+anahtarı yoktur. **Taban item BAŞINA** config'dedir → manifest düzeyinde tek bir skaler,
+item'ları farklı tabanlar taşıyan bir kompozisyonu **yanlış beyan ederdi**; ayrıca
+`build_run_manifest` strateji config'i **hiç görmez** (yalnız revizyon id'leri), yani yeni bir
+plumbing olmadan hesaplayamazdı.
+
+Adjudication'ın iki yarısı da `tests/unit/test_karar1_manifest_commission_model.py` içinde
+pinli: alan literaliyle yayımlanıyor · hash'lenen içerikte **yok** · taban `execution_key`'e
+**pinlenmiş revizyon üzerinden** ulaşıyor.
 
 ---
 

@@ -196,7 +196,7 @@ for (const configFile of CONFIG_FILES) {
   }
 }
 
-// 5. Plugin ajan/skill'lerinin `.claude/` aynası taze mi.
+// 5. Plugin ajan/skill/komutlarının `.claude/` aynası taze mi.
 //
 // `enabledPlugins` bir plugin'i ADLANDIRIR ama KURMAZ: kurulum bir onay istemi
 // ister ve remote container etkileşimsizdir, o yüzden `installed_plugins.json`
@@ -211,9 +211,16 @@ for (const configFile of CONFIG_FILES) {
 // hiç yüklenmemiş olandan daha kötüdür: yüklenir ve YANLIŞ kuralı uygular.
 // Bu yüzden eşitlik bir kapıdır. Plugin'i düzenlediysen aynayı da güncelle
 // (`scripts/sync-agent-mirror.sh`), tersi de geçerli.
+//
+// Slash command'lar da aynalanır ve KOPYA olarak aynalanır, işaretçi dosya olarak
+// değil: `session-start.md` taze git durumunu `!` biçimiyle enjekte eder ve harness
+// o genişletmeyi YÜKLEDİĞİ dosyada yapar — "plugin'deki kopyayı oku" diyen bir dosya
+// hem o genişletmeyi hem `$ARGUMENTS` ikamesini kaybederdi. Davranışı koruyan şey
+// kopyalama, kopyayı dürüst tutan şey bu kapıdır.
 const MIRRORED = [
   ['plugins/entropia-maintenance/agents', '.claude/agents', (name) => name],
   ['plugins/entropia-maintenance/skills', '.claude/skills', (name) => path.join(name, 'SKILL.md')],
+  ['plugins/entropia-maintenance/commands', '.claude/commands', (name) => name],
 ]
 
 for (const [sourceDir, mirrorDir, toRelative] of MIRRORED) {
@@ -255,5 +262,5 @@ if (problems.length > 0) {
 
 process.stdout.write(
   `agent config gate: ${CONFIG_FILES.length} yapılandırma geçerli, hook betikleri yerinde, ` +
-    'MCP sürümleri pinli, enabledPlugins çözülüyor, plugin ajan/skill aynası taze ✓\n',
+    'MCP sürümleri pinli, enabledPlugins çözülüyor, plugin ajan/skill/komut aynası taze ✓\n',
 )

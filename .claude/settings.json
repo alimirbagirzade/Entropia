@@ -88,6 +88,25 @@
             "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/guard-generated.sh\"",
             "timeout": 10,
             "statusMessage": "generated-file guard"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/vendor-react-rules.sh\"",
+            "timeout": 10,
+            "statusMessage": "vendor React rules"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/post-edit-lint.sh\"",
+            "timeout": 60,
+            "statusMessage": "post-edit lint"
           }
         ]
       }
@@ -98,6 +117,17 @@
           {
             "type": "command",
             "command": "bash -c 'o=$(scripts/ultrareview-advisor.sh 2>&1); c=$?; [ $c -ne 1 ] && echo \"$o\"; exit 0'"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/plugins/entropia-maintenance/hooks/session-brief.sh\"",
+            "timeout": 10,
+            "statusMessage": "session brief"
           }
         ]
       }

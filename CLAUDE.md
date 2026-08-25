@@ -232,6 +232,25 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ınkidir** ve `check_classification` bunu CI'da doğrular: tek bir `current` yetmez,
 > daha yüksek numaralı bir `docs/ADIM<n>…KICKOFF.md` varsa kapı kırmızı verir.
 
+> **Araç yapılandırması — SLICE DEĞİL (2026-08-25):** plugin içeriğinin TAMAMI artık
+> kurulum istemeden ulaşılabilir. `scripts/sync-agent-mirror.sh` **command'ları da**
+> aynalıyor (`.claude/commands/` — `/session-start` `/verify` `/merge-check`
+> `/close-session`) ve `.claude/settings.json` kalan **üç** hook'u da doğrudan
+> kaydediyor (`vendor-react-rules.sh` · `post-edit-lint.sh` · `session-brief.sh`) →
+> **beş hook'un beşi de** remote'ta koşuyor. `agent-config-gate.mjs` aynayı
+> **komutlar için de** ölçüyor (dört negatif kontrol: eksik ayna · ayrışmış ayna ·
+> silinmiş betik · `chmod -x`). **ADIM 57'nin *"yalnız bloklayan ikisi ikilensin"*
+> gerekçesi GERİ ALINDI** — niteleme yanlıştı (`post-edit-lint.sh` exit 2 ile
+> **bloklar**) ve eksen yanlıştı (soru "ikilenmesi ne kazandırır" değil, "hiç
+> koşmaması ne kaybettirir"). **Command'lar İŞARETÇİ değil KOPYA, ölçüldü:**
+> `session-start.md` `` !`…` `` ile taze git durumu enjekte eder ve harness bunu
+> **yüklediği** dosyada genişletir → işaretçi hem onu hem `$ARGUMENTS` ikamesini
+> kaybederdi. **`.claude/README.md`'nin *"kopya bırakılmadı"* cümlesi `a5d9e4f`'ten
+> beri BAYATTI**, düzeltildi. **Ürün kodu, migration, `ENGINE_VERSION`, OpenAPI
+> değişmedi; blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08).** `PROJECT_HISTORY.md`
+> kaydı ve kickoff'u **YOK, bilerek** — bu bir ADIM slice'ı değil, araç
+> yapılandırması (PR #739 emsali).
+
 > **Araç yapılandırması — SLICE DEĞİL (PR #739, 2026-08-17):** `.claude/settings.json`
 > `permissions.allow` **18 → 42** girdi. Eklenenler: §Local verify'ın dört backend adımı,
 > üç frontend kapısı, iki `memory_index` kapısı (dokuzu da **tam biçim**) + 15 salt-okur MCP

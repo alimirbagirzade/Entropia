@@ -237,7 +237,35 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 109 (kayıtsız inen #820'nin ritüeli, A-08 devam kartı):
+> `future_dev`. **Son dalga — ADIM 110 (kabul borcu batch 29, doc 02 + doc 14 FRONTEND): ÜRÜN KODU
+> DEĞİŞMEDİ, üç yeni vitest case'i + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> İki kriter kapandı — **`AT-07`** (c1+c2) · **`RC-09.c3`** — ve **İKİ TAVAN BİRDEN İNDİ:
+> `partial` 55 → 54, `uncovered` 7 → 6, `debt_class.B` 23 → 21**; açık borç **60** (A=1 · B=21 ·
+> C=6 · D=32). **`uncovered` KRİTER tavanı ancak İKİNCİ kez oynadı** (ilki ADIM 88) — `AT-07`
+> sınıf-B'nin **tek `uncovered` satırıydı**. **ASIL DERS: BİR KUSURUN ALTINDA MEVCUT SUITE'İN YEŞİL
+> KALMASI, BOŞLUĞUN ÖLÇÜMÜDÜR** — `isReadyForRun`'a `state === "stale"` eklenince önceden var olan
+> `not_ready` RUN-kilidi testi YEŞİL kalıyor, yani bir `not_ready` case'i *"NOT_READY'den AYRI"*
+> clause'unu HİÇBİR ZAMAN kapatamazdı (NC-1'de ölçüldü). **İKİNCİ DERS: GÖLGEYİ KAYDETMEKLE YETİNME,
+> KALDIRMAYI DENE** (ADIM 101 kuralı, proaktif) — NC-4 bilerek `block_id`'yi DOĞRU bırakan bir kusur
+> kurar (silinen bloğun paketi survivor'a sızar) → kırmızı yalnız paket ekseninde, gölge kaldırıldı.
+> **BEŞ negatif kontrol, beşi de kendi assertion'ında kırmızı, beşinde de mevcut testler yeşil.**
+> `AT-07`'nin iki clause'u **iki AYRI kusur sınıfıdır** ve birbirini görmez: c1 RENDER (başlık +
+> erişilebilir adlar), c2 SERİLEŞTİRME (Apply'ın gönderdiği) → tek case'e sıkıştırılamaz.
+> **BULGU: `UM-15.c3` SEVK EDİLMEMİŞ** (`requestDelete` + `useSoftDeleteManualDocument` yalnız
+> `onSuccess` taşır → 409'da hiçbir invalidation yok, ADIM 87'nin ikizi); sınıf D görünüyor,
+> **TAŞINMADI** (B→D tavan yükseltir = adjudication). **`CP-03.c4` BELİRSİZ bulundu, alınmadı.**
+> **TUZAK: `getByRole("heading")` bir `<strong>`'u BULMAZ** — blok başlığı `<strong>`; düzeltilen
+> **kaynak değil ölçüm aracıydı**. **DÜRÜST SINIR:** frontend kapıları yeşil (**72 dosya / 739
+> passed**, lint + typecheck temiz); **backend'de sıfır satır → backend suite'i KOŞULMADI, Postgres
+> kurulmadı**, otorite CI. Üretilmiş olgular tazelendi (frontend call sites 726 → 729; üretici
+> **`backend/.venv` ister**). **NUMARA: açık #825 ölçüldü** — tek yeni audit dosyası, hiçbir
+> `ADIM<n>…KICKOFF.md` yoluna dokunmuyor → çakışma yok (ADIM 91).
+> `PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 109 (kayıtsız inen #820'nin ritüeli, A-08 devam kartı):
 > DOCS-ONLY — iki dosya, +222/−14; ürün kodunda, testte, migration'da SIFIR satır. A-08
 > İLERLEMEDİ (Section A 2/184 · Section B 0/10 · çıkış kriterleri 0/4 · #514 el değmedi),
 > tavanlar OYNAMADI (55/7 · A1 B23 C6 D32). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**

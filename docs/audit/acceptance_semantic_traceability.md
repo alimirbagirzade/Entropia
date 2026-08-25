@@ -51,7 +51,7 @@ for this map.
 | Doc | covered | partial | uncovered | deliberate_future_dev | not_applicable | product_decision_required | total |
 |---|---|---|---|---|---|---|---|
 | 01 | 27 | 3 | 0 | 0 | 0 | 0 | 30 |
-| 02 | 19 | 4 | 2 | 0 | 0 | 0 | 25 |
+| 02 | 20 | 4 | 1 | 0 | 0 | 0 | 25 |
 | 03 | 18 | 2 | 1 | 0 | 0 | 0 | 21 |
 | 04 | 18 | 3 | 0 | 0 | 0 | 0 | 21 |
 | 05 | 17 | 6 | 0 | 0 | 0 | 0 | 23 |
@@ -63,7 +63,7 @@ for this map.
 | 11 | 5 | 1 | 0 | 0 | 2 | 0 | 8 |
 | 12 | 9 | 6 | 0 | 0 | 0 | 0 | 15 |
 | 13 | 4 | 1 | 0 | 0 | 4 | 0 | 9 |
-| 14 | 17 | 1 | 0 | 0 | 0 | 0 | 18 |
+| 14 | 18 | 0 | 0 | 0 | 0 | 0 | 18 |
 | 15 | 7 | 1 | 0 | 1 | 0 | 0 | 9 |
 | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 16 |
 | 17 | 11 | 3 | 2 | 0 | 0 | 0 | 16 |
@@ -72,15 +72,15 @@ for this map.
 | 20 | 14 | 2 | 0 | 0 | 0 | 0 | 16 |
 | 21 | 15 | 3 | 0 | 0 | 0 | 0 | 18 |
 | 22 | 6 | 3 | 0 | 6 | 0 | 0 | 15 |
-| **all** | **306** | **55** | **7** | **8** | **7** | **0** | **383** |
+| **all** | **308** | **54** | **6** | **8** | **7** | **0** | **383** |
 
 ## Clause-level totals
 
 | Status | Clauses |
 |---|---|
-| covered | 1065 |
+| covered | 1068 |
 | partial | 4 |
-| uncovered | 67 |
+| uncovered | 64 |
 | deliberate_future_dev | 27 |
 | not_applicable | 12 |
 | product_decision_required | 0 |
@@ -94,19 +94,19 @@ for this map.
 | backend_integration | 325 |
 | backend_unit | 131 |
 | e2e | 16 |
-| frontend_component | 132 |
+| frontend_component | 134 |
 
 ## Open debt by class
 
 | Class | Criteria |
 |---|---|
 | A | 1 |
-| B | 23 |
+| B | 21 |
 | C | 6 |
 | D | 32 |
-| **open total** | **62** |
+| **open total** | **60** |
 
-## Partial criteria (55)
+## Partial criteria (54)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
@@ -150,7 +150,6 @@ for this map.
 | `RD-12` | B | The Analyze job survives a browser refresh and a duplicate Analyze under the same key spawns no second job. | Worth flagging for the same reason as RD-02/RD-03, though it is milder. The doc row says a "duplicate Analyze click same idempotency key ile second job yaratmaz", but the shipped client mints a FRESH Idempotency-Key per click — the frontend test's own title is "requests analysis with a fresh Idempotency-Key". So the server-side replay guard is real and proven (test_idempotent_analyze_returns_same_job), while the UI never actually exercises it: a double-click from the browser sends two different keys. The recovery clause (re-opening the UI shows the same job status/report) is untested on either plane. MEASURED 2026-08-17 (batch 05), RECORDED not acted on: ResearchData.tsx holds a useQueryClient but no job-status query — nothing on the page re-reads a job's status or its quality report, so "re-opening the UI shows the same job status" has no shipped surface to assert against. Like RD-13.c4 this reads class D rather than B, and was NOT reclassified for the same reason. |
 | `RD-13` | B | A second, stale write on the same draft/revision is refused; the first revision survives. | The refusal is proven on two independent mutating surfaces, and the soft-delete case also asserts the non-effect (deletion_state still ACTIVE, no Trash entry) — which is the "first revision is preserved" half. The recovery-affordance clause is untested: no frontend test drives a 409 on the revision append and asserts a reload/compare/new-revision path is offered. MEASURED 2026-08-17 (batch 05), RECORDED not acted on: the affordance this clause names is NOT SHIPPED. Grepping the whole frontend for ROW_VERSION_CONFLICT / STALE_REVISION / conflict finds the verbatim-error path on Trash, Market Data, Library and Mainboard, but nothing on the Research Data revision-append surface — neither ResearchData.tsx nor ResearchLifecycle.tsx renders a reload / compare / new-revision recovery path. So this reads class D (an implementation gap), not class B. It was NOT reclassified: B -> D RAISES the D ceiling, which is an adjudication rather than a test slice's call. |
 | `PE-06` | D | Trash is Admin-only, historical integrity holds, and an immutable artifact reference blocks purge. | Judged as behaviour. The Admin-only and historical-integrity halves are solidly asserted. The specific claim "immutable artifact reference purgeyi bloklar" is NOT asserted for an allocation plan or for a Result-pinned object: the only PURGE_NOT_ELIGIBLE branches in jobs/purge.py::_purge_preflight are the built-in manual baseline, a live Agent source task, and a work_object with an active run — and `_RESULT_ENTITY_TYPE` returns early (a Result is purgeable, the parent manifest being retained instead). So the closest proofs are analogous dependency blocks, not the allocation-plan case the row describes. |
-| `RC-09` | B | A dependency change stales the current report and an old fingerprint returns 409 COMPOSITION_STALE. | c3 has no asserting test. The frontend RUN-lock tests (mainboard.test.tsx "locks RUN until a current Ready Check passes", readyCheckShell.test.tsx "keeps RUN locked ... while the state is not ready") all drive state="not_ready"; readyCheck.test.tsx "flags a stale report with a re-run hint" renders the stale badge on a deep-linked report but asserts nothing about a RUN control. Add a case that feeds a STALE/is_current=false readiness projection to the Mainboard or RUN page and asserts the admit button is disabled. |
 | `BR-08` | C | The V18 prototype's local booleans, hard-coded metrics and DOM delete do not stand in for Production. | This row mixes two kinds of claim, so it is split. c1/c2 are real product behaviour and are asserted. c3 is a document-conformance statement about the V18 mockup file (docs/spec/index_guncellenmis_duzeltilmis_v18.html) not being the canonical Production spec — there is no product behaviour to assert, and CLAUDE.md records the Graphic View renderer as deliberately out of V1 scope, so no test could prove it without inventing a renderer. Rolled up to partial rather than covered because one clause carries no product assertion at all. |
 | `AM-11` | D | Total Stops and Max Stop Streak follow the trade root's terminal reason; a partial stop leg shows only in diagnostics. | The decisive clause is untested AND the implementation looks like it contradicts the criterion: `booking.py::close_position` increments `led.stops_hit` / `led.stop_streak` whenever `reason == "stop_loss"` regardless of `is_full`, while the TradeRow it appends is relabelled `partial_exit`. So a partial stop leg would appear to count toward Total Stops. `grep -rn partial_exit backend/tests` finds six hits, none of which asserts `total_stops` / `max_stop_streak`, so no test would catch it either way. This one deserves a product/engineering decision, not just a test. |
 | `AM-12` | D | When a selected code becomes future in the registry, historical revisions survive, the active profile shows a repair warning and Apply with the invalid code fails. | Only the "Apply with an invalid code never succeeds" clause has a test, and it tests a code that was ALWAYS future rather than one that DRIFTED after being selected. No test mutates a `metric_definition.availability_status` after a profile revision pinned that code, so neither the historical-revision-survives clause nor the repair warning has any evidence; grepping the registry/profile modules turns up no repair/warning concept to point at. |
@@ -166,12 +165,11 @@ for this map.
 | `FD-09` | D | WFA/Monte Carlo run as an Analysis Artifact recording method/split/seed/input refs, never writing an authoritative metric back onto an immutable Backtest Result. | Two real gaps, not just missing assertions. (1) c4 is a MODEL gap: the shipped AnalysisArtifact row records artifact_type, capability_key, input_manifest_refs, method_version, output_ref and owner — there is no split-definition and no random-seed column anywhere in commands/capability.py::create_analysis_artifact or the repository helper, so the criterion's "method/split/random seed" triple is only one third modelled and no test could assert the other two. (2) c5 repeats the FD-04/FD-05 non-mutation hole: no test re-reads the Backtest Result after artifact creation to prove no metric was back-written. Reproducibility of a WFA/MC run is exactly what a seed and split are for, so c4 is worth a schema follow-up rather than only a test. |
 | `FD-13` | D | A non-Admin lifecycle transition call is denied server-side with CAPABILITY_ACCESS_DENIED, no state transition and an audit-relevant denial. | c4 is NOT IMPLEMENTED. domain/identity/policy.py::require_capability_admin raises CapabilityAccessDeniedError immediately (policy.py:76) BEFORE commands/capability.py::transition_capability reaches any _audit_and_outbox call, so a refused transition writes no AuditEvent and no OutboxEvent row — the cited test's "zero activation events" assertion is consistent with that. There is also no route-level contract test for this endpoint (no capability file exists under backend/tests/contract/), so the 403 status code itself is inferred from the ForbiddenError base class rather than asserted over HTTP. Two follow-ups: persist a denial audit row, and add a contract test pinning 403 + CAPABILITY_ACCESS_DENIED on the transition route. |
 
-## Uncovered criteria (7)
+## Uncovered criteria (6)
 
 | ID | Class | Summary | Why |
 |---|---|---|---|
 | `AT-06` | D | A client-forged incompatible condition revision must produce a server-side compatibility blocker on Save. | No compatibility rule exists to test. `backend/src/entropia/domain/strategy/compiler.py` declares six blocker codes (SIZING_METHOD_NOT_EXCLUSIVE, TRIGGER_SOURCE_CONDITION_REQUIRED, ENTRY_REQUIRED_BLOCK_MISSING, SIGNAL_SUPPORTING_REQUIREMENT_UNMET, ENTRY_DIRECTION_INCOHERENT, RESTRICTION_MIN_COUNT_UNSATISFIABLE) and none of them compares a condition block's pinned revision against the indicator it conditions. The nearest server-side guard, `strategy_draft.py::_assert_references_active` (REFERENCE_NOT_ACTIVE), only rejects a soft-deleted dependency root and has no test of its own either. Mapping AT-05's condition-required tests here would be dishonest: they assert a MISSING condition, not an INCOMPATIBLE one. |
-| `AT-07` | B | Removing the first of two entry blocks renumbers the display order but preserves the survivor's original UUID. | No test in `frontend/src/test/strategyGraph.test.tsx` removes an entry block; the suite only extracts, seeds and round-trips blocks. `grep -rn display_order backend/tests` finds no strategy test asserting identity stability across a removal either. The dynamic-identity invariant (display number is derived, block_id is stable) is therefore unasserted on both lines. |
 | `AOS-02` | D | No default type is preselected, and continuing without a choice yields a specific UI message. | The literal message the spec demands does not exist anywhere in the codebase. The shipped chooser is built so that "continue without a choice" is unconstructible — each choice is itself the navigation action, so there is no separate Continue control and therefore no state in which the message could fire. That is a reasonable design, but the row states a product behaviour the spec asserts (a named string shown to a user), so the honest status is uncovered rather than not_applicable. Nothing asserts the absence of a default preselection either. |
 | `CP-16` | D | An Agent starts candidate generation with the same request schema and produces job/test/draft artifacts with no browser or DOM dependency. | Verified empirically rather than taken from the audit map. `domain/agent_lab/ tool_gateway.py::ToolName` has no create-package / pre-check / candidate member at all (the closest is `package.proposal.create`, which only mints a CANDIDATE hypothesis artifact and explicitly cannot approve or publish). Grepping `PrincipalType.AGENT` across the create-package tests returns exactly one hit — `contract/test_create_package_contract.py::test_agent_approve_rejected` — which is a DENIAL, the opposite of the parity this row claims, and is already cited under CP-13. `docs/audit/acceptance_id_map.md` §C.1 lists this contract file as CP-16's covering test; that attribution does not survive reading the test body. This is an implementation gap (§E.3-style) as much as a test gap. |
 | `PC-15` | D | An Agent runs Pre-Check through the Tool Gateway with the browser closed and the scan/audit/checkpoint provenance is stored. | Empirically re-checked, not inherited: `domain/agent_lab/tool_gateway.py::ToolName` enumerates task/data-bundle/proposal/backtest/result/artifact/followup/documentation/ view-dataset/allocation/trade-log/strategy/trading-signal families and contains no pre-check or create-package member; grepping the gateway for `precheck` / `create_package` returns nothing. No test drives `run_precheck` with an AGENT principal either. This is the doc 07 face of the §E.3 Tool Gateway gap — an implementation gap first, a test gap second. |

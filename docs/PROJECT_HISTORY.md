@@ -15285,3 +15285,189 @@ değil DOSYA YOLUNDA** ölçülür (ADIM 91). **Merge edilmiş ad kazanır, numa
 
 Kickoff **YOK, bilerek** (yukarıdaki ölçülmüş karar). Codemap güncellemesi **gerekmedi**
 (kapanış ritüeli md. 5 atlandı, bilerek).
+
+---
+
+## ADIM 110 — kabul borcu batch 29 (doc 02 Add Strategy + doc 14 Ready Check, FRONTEND): `AT-07` + `RC-09` kapandı — BİR KUSURUN ALTINDA MEVCUT SUITE'İN YEŞİL KALMASI BOŞLUĞUN KANITIDIR
+
+**Tarih:** 2026-08-25 · **Dal:** `docs/stage-110-landed` · **Taban:** `74db6ff` (ADIM 109 / #824)
+**ÜRÜN KODU DEĞİŞMEDİ** — `backend/src` ve `frontend/src`'in test dışı hiçbir dosyasında tek satır
+yok. Diff: **üç yeni vitest case'i** + defter + üretilmiş artefakt.
+
+### Ne kapandı
+
+| | önce | sonra |
+|---|---:|---:|
+| `partial` kriter | 55 | **54** |
+| `uncovered` kriter | 7 | **6** |
+| `debt_class.B` | 23 | **21** |
+| clause `covered` | 1065 | **1068** |
+
+Açık borç **60** (A=1 · B=21 · C=6 · D=32). **`uncovered` KRİTER tavanı bu depoda ancak İKİNCİ kez
+oynadı** — ilki ADIM 88'di (8 → 7), ve o dalgada tavanı indiren şey **sıfır test** olmuştu (kapsama
+zaten sevk edilmişti). Bu kez gerçek testle indi, çünkü **`AT-07` sınıf-B'nin tek `uncovered`
+satırıydı**. Migration yok, alembic head `0043_i08_registry_strategy_fks`, `ENGINE_VERSION` ve
+OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS` = `future_dev`, donmuş kanıt (`docs/releases/evidence/`)
+el değmedi, A-08 sayaçları (Section A **2/184** · Section B **0/10** · çıkış kriterleri **0/4**) ve
+**#514 el değmedi**. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Parti nasıl seçildi — ve İKİ ADAY NASIL ELENDİ
+
+ADIM 107 *"backend'de testle kapanabilir sınıf-B satır kalmadı, sıradaki parti FRONTEND
+bitiricileri (UM-15.c3 · RC-09.c3 · CP-03.c4 · AT-07)"* diye bırakmıştı. Dördü de **ölçüldü**
+(ADIM 54: *parti seçmeden ÖNCE ÖLÇ*) ve **ikisi elendi**:
+
+- **`UM-15.c3` SEVK EDİLMEMİŞ** → bulgu, aşağıda.
+- **`CP-03.c4` BELİRSİZ** → alınmadı, aşağıda.
+
+Önce ADIM 88'in kuralı koşuldu — **kriter id'sini test ağacında grep'le**: bir kriter, kendi id'sini
+taşıyan bir testle beş dalga borç görünebilir. `grep -rn 'AT-07\|CP-03' frontend/src/test backend/tests`
+**sıfır** döndü, `RC-09` yalnız backend düğümlerinde geçti → **bedava kapanış yoktu**, dört clause da
+gerçekten assert'sizdi.
+
+### `AT-07` (c1 + c2, doc 02 §12) — İKİ CLAUSE, İKİ AYRI KUSUR SINIFI
+
+Kriter: *"iki entry bloğun ilkini silmek görünen sırayı yeniden verir ama survivor'ın orijinal
+UUID'sini korur"*. **İki yarısı da sevk edilmişti ve ikisi de assert'sizdi:**
+
+- `components/StrategyGraphForm.tsx::BlockList` → `const remove = (i) => onChange(blocks.filter((_, idx) => idx !== i))`
+  — `filter` survivor'ın **nesne kimliğini** korur, ve kart başlığı `<strong>Indicator Block {index + 1}</strong>`
+  ile **pozisyondan** basılır (move/remove kontrollerinin `aria-label`'ları da aynı index'ten).
+- `lib/strategyGraph.ts::mergeBlock` → `out.block_id = b.block_id` (**verbatim**) ve
+  `out.display_order = index` (**yeniden türetilmiş**).
+
+**ASIL YAPISAL NOKTA: c1 ile c2 birbirini GÖRMEZ.** `c1` bir **RENDER** özelliğidir (başlık + bir
+klavye kullanıcısının gezindiği erişilebilir adlar), `c2` bir **SERİLEŞTİRME** özelliğidir (Apply'ın
+geri gönderdiği gövde). Doğru numaralayıp **taze UUID basan** bir bileşen c1'i geçer, c2'yi düşürür;
+id'yi koruyup **bayat numara** gösteren bunun tersini yapar. Bu yüzden tek case'e sıkıştırılmadı —
+**iki ayrı `it(...)`**.
+
+Fixture (`twoEntryBlocksPayload`) iki bloğu **okunan her eksende** ayrıştırır — `block_id`,
+`package_ref.package_root_id`, `timeframe` — çünkü yalnız `block_id`'de ayrışan bir payload'da
+*"yanlış survivor'ı tuttu"* kusuru kimlik assertion'ını **tesadüfen** geçebilirdi. Silmeden önce bir
+**vacuity muhafızı** iki bloğun da render olduğunu kanıtlar: **sıfır blok render eden** bir bileşen
+aksi hâlde aşağıdaki her assertion'ı hiçbir şey çizmeyerek geçerdi.
+
+### `RC-09.c3` (doc 14 §15) — BOŞLUK İDDİA EDİLMEDİ, ÖLÇÜLDÜ
+
+Clause'un **tüm içeriği** şudur: *"STALE bir rapor RUN affordance'ını kilitler — **NOT_READY'den
+AYRI olarak**"*. Sevk edilen kapı `lib/mainboard.ts::isReadyForRun`, ve yalnız
+`ready`/`ready_with_warnings` geçirir; `stale` de `not_ready` de kilitler. Mevcut
+`backtestRun.test.tsx` **yalnız o ikisini** sürüyordu (`ready_with_warnings` ve `not_ready`).
+
+**Ayrıklık iddiasının kendisi ölçüldü (NC-1):** `isReadyForRun`'a `state === "stale"` eklendiğinde
+önceden var olan `not_ready` RUN-kilidi testi **YEŞİL kalıyor** — yani bir `not_ready` case'i o
+clause'u **hiçbir zaman** kapatamazdı, kaç kez yazılırsa yazılsın. Yeni case **iki bağımsız ekseni**
+pinler:
+
+1. **Kilit** — `disabled` bir admit butonu ve tıklamada **sıfır** `POST /backtest-runs`
+   (sunucunun reddettiği bir tur değil, gerçekten devre dışı bir kontrol).
+2. **AYRIKLIK** — `READY_STATUS_TEXT.stale` (*"Changes detected. Run Backtest Ready Check again."*)
+   birebir render olur **ve** `"Backtest Ready: Not Ready"` satırı **yoktur**. Bu ikinci yarı
+   olmadan, runnable-olmayan her durumu tek etikete çökerten bir regresyon **geçerdi** — oysa doc 14
+   §15 onları tam da *"yeniden koş"* teklif edilebilsin diye ayırıyor.
+
+Case `report_id: "rr_1"` ile sürülür (null değil): **bayat bir rapor bir kez KOŞMUŞTUR**, lapse eden
+şey güncelliğidir — id'yi null bırakmak senaryoyu sessizce `not_checked` şekline kaydırırdı.
+
+### BEŞ NEGATİF KONTROL — ve dördüncüsü bir GÖLGEYİ KALDIRDI
+
+Beşi de tek noktalı, beşi de **yamanın uygulandığı assert edilerek** koşuldu (ADIM 88: *yeşil bir
+negatif kontrol çoğu zaman hiç uygulanmamış bir kontroldür*), her turdan sonra ağaç geri alınıp
+`git status` ile doğrulandı (ADIM 100: *`finally` SIGTERM'de koşmaz*).
+
+| NC | Tek noktalı kusur | Kırmızıya dönen assertion | Aynı dosyadaki mevcut testler |
+|---|---|---|---|
+| 1 | `isReadyForRun`'a `stale` eklendi | RC-09.c3 kilit | **4 passed** (`not_ready` YEŞİL) |
+| 2 | Başlık **saklanan** ordinal'i basar | AT-07.c1 render | 32 passed |
+| 3 | `remove` `block_id`'yi **pozisyona göre** yeniden atar | c2 `block_id` (`blk_first` ≠ `blk_survivor`) | 32 passed |
+| 4 | Silinen bloğun `package_ref`/`timeframe`'i survivor'a **sızar** | c2 `package_root_id` (`pkg_first` ≠ `pkg_survivor`) | 32 passed |
+| 5 | `display_order` **saklanan** değerden yazılır | c2 `display_order` (`1` ≠ `0`) | 32 passed |
+
+**NC-3 kriterin koruduğu kusurun ta kendisidir** — türetilmiş numarayla durabilir kimliği
+birbirine karıştırmak.
+
+> **ASIL DERS: GÖLGEYİ KAYDETMEKLE YETİNME, KALDIRMAYI DENE.** ADIM 100 bir gölgelenen assertion'ı
+> *"kendi ekseni sayılmadı"* diye deftere yazmakla yetinmiş, ADIM 101 ise **önce kaldırmayı dene**
+> demişti. Burada o kural **proaktif** uygulandı: c2'nin `package_root_id` assertion'ı, tek satırlık
+> her *sıradan* kusurda `block_id` assertion'ının gölgesinde kalıyor (ikisi birlikte düşüyor).
+> **NC-4 bilerek kimliği DOĞRU bırakan bir kusur kurar** — bu gerçek bir kusur sınıfıdır, silme
+> sırasında durum sızıntısı — ve kırmızı **yalnız paket ekseninde** olur. Gölge böylece
+> kaydedilmedi, **kaldırıldı**; assertion'ın taşıyıcı olduğu **ölçüldü**. NC-5 aynı şeyi
+> `display_order` ekseni için yapar.
+
+> **İKİNCİ DERS (yeni değil ama bu partide belirleyici oldu): BİR KUSURUN ALTINDA MEVCUT SUITE'İN
+> YEŞİL KALMASI, BOŞLUĞUN ÖLÇÜMÜDÜR.** Beş kontrolün beşinde de dosyanın önceden var olan testleri
+> yeşil kaldı. Bir kontrolün iki işi vardır: yeni assertion'ın **canlı** olduğunu göstermek ve
+> boşluğun **gerçek** olduğunu göstermek — ikincisi ancak mevcut suite o kusur altında **geçmeye
+> devam ederse** kanıtlanır (ADIM 105: *doğru sebep, yanlış kapsam* bir kontrolü REDDETTİRİR).
+
+### BULGU — `UM-15.c3` SEVK EDİLMEMİŞ, ve YENİDEN SINIFLANDIRILMADI
+
+Clause: *"After a MANUAL_STREAM_CONFLICT the UI rehydrates with the latest stream."* Ölçüldü:
+
+- `pages/UserManual.tsx::requestDelete` → `softDelete.mutate(..., { onSuccess: ... })` — **yalnız
+  `onSuccess`**.
+- `lib/manual.ts::useSoftDeleteManualDocument` → `onSuccess`'te `["manual"]`/`["trash"]`/`["audit"]`
+  invalidate eder — **hata yolunda hiçbir şey yok**.
+
+Yani bir 409 `MANUAL_STREAM_CONFLICT`'ten sonra `streamVersion` (`meta?.stream_version`) **bayat
+değerinde kalır** ve hiçbir şey yeniden okumaz. Bu **ADIM 87'nin `onSuccess` → `onSettled` şeklinin
+birebir ikizidir** — orada da bir *"reddedilen submit'ten sonra kutu boşalmıyor"* clause'u aynı
+mekanizmayla ölçülmüştü. **Sınıf D görünüyor; TAŞINMADI.** Kural değişmedi: **B → D taşımak D
+tavanını YÜKSELTİR**, yani bir **adjudication**'dır — bir test slice'ının kararı değil (ADIM 42/52/54).
+
+**İKİNCİ ELENEN — `CP-03.c4`, ve neden bir bulgu DEĞİL de BELİRSİZ sayıldığı.** Clause:
+*"After a use-denied refusal the UI clears the stale selection state."*
+`components/AddPackagePopover.tsx`'te seçim **zaten türetilmiş**
+(`const selected = rows.find((r) => r.entity_id === selectedId) ?? null`), yani kullanılamaz hâle
+gelen bir paket taze `rows`'tan düştüğünde seçim **kendiliğinden** düşer; ama `deriveFrom` yalnız
+`onSuccess` taşır ve red hâlinde `selectedId` **durur**. Clause'un *"clears"* fiilinin bu türetilmiş
+düşüşü mü yoksa **açık bir temizlemeyi** mi kastettiği **belirsizdir** → ne kapatıldı, ne bulgu
+olarak sınıflandırıldı, **sadece ölçülüp kaydedildi**. Bir sınıfı *"emin değilim"* ile değiştirmek de
+bir adjudication olurdu.
+
+### Doğrulama + DÜRÜST SINIRLAR
+
+**Yerelde gerçekten koşan kapılar:** `npm run lint` **exit 0** · `npm run typecheck` **exit 0** ·
+`npm run coverage` **exit 0 → 72 dosya / 739 passed**, coverage eşikleri geçti (taban ADIM 99'un
+ölçtüğü **736**'ydı; +3 bu partinin case'leri) · `acceptance_semantic_scan.py --report
+--check-generated --ratchet` **exit 0** (sıkılaştırılmış tavana karşı: 54/6 · A1 B21 C6 D32) ·
+`generate_repository_facts.py --check` **exit 0** · `check_classification` **NONE**.
+
+**Üretilmiş olgular tazelendi** — `docs/generated/repository_facts.{md,json}` + `README.md`'nin
+gömülü bloğu: frontend call sites **726 → 729**, kriter `covered` 306 → 308, `partial` 55 → 54,
+`uncovered` 7 → 6, clause `covered` 1065 → 1068, clause `uncovered` 67 → 64. **ADIM 60'ın dersi bu
+partide yine yaşandı** ve bir ek tuzak ölçüldü: **üretici `backend/.venv` İSTER** — çıplak
+container'da `ModuleNotFoundError: No module named 'entropia'` verir, önce `cd backend && uv sync
+--all-extras`.
+
+**KOŞULMAYANLAR, açıkça:** **backend'de sıfır satır → backend suite'i KOŞULMADI, Postgres
+kurulmadı** ve hiçbir backend geçen/coverage sayısı **iddia edilmiyor** — otorite **CI**. e2e/`@a11y`
+yazılmadı (bu partinin konusu değil). **A-08 İLERLEMEDİ** ve bu kayıt hiçbir yerde ilerletilmiş
+göstermiyor.
+
+**ARAÇ TUZAĞI (bu depoda ilk kez yazılıyor): `getByRole("heading")` bir `<strong>`'u BULMAZ.**
+`IndicatorBlockEditor`'ın blok başlığı `<strong>Indicator Block {index + 1}</strong>`'dir,
+`.detail-card-title` ise bir `<h4>` — yani sayfada heading rolü **var**, ama blok başlığında değil.
+İlk yazımda AT-07.c1 bu yüzden kırmızı verdi ve düzeltilen şey **kaynak değil ölçüm aracıydı**
+(`getByText`). Bir testi yeşile çevirmek için ürüne rol eklemek, testi kendi icat ettiği bir dünyaya
+uydurmak olurdu.
+
+**KICKOFF YAZILDI, ADIM 108 DEMOTE EDİLDİ** — ADIM 109 (geriye dönük kayıt) bilerek kickoff
+yazmamıştı, o yüzden canlı işaret `ADIM108`'de duruyordu; ADIM 110 **ileri bir slice** olduğu için
+`_check_live_kickoff_is_newest` artık `docs/ADIM110_LANDED_KICKOFF.md`'nin `current` olmasını
+**ister**. İkisi birlikte yapıldı. Ritüelin **md. 5'i atlandı, bilerek**: yeni endpoint / tablo /
+sayfa / job yok, tazelenecek codemap yok.
+
+**NUMARA + ÇAKIŞMA: dal `74db6ff`'ten kesildi; o an açık PR listesi BOŞ DEĞİLDİ.** **#825**
+(*"docs(audit): current-main delta forensics"*) açıktı ve **ölçüldü**: tek bir **yeni** dosya ekliyor
+(`docs/audit/final_closure_delta_audit_2026-08-25.md`), `PROJECT_HISTORY.md`'ye, `CLAUDE.md`'ye,
+handoff'a ya da herhangi bir `ADIM<n>…KICKOFF.md` yoluna **dokunmuyor** → numara çakışması yok
+(ADIM 91: **çakışma başlıkta değil DOSYA YOLUNDA ölçülür**). Yine de ADIM 100/103'ün kuralı geçerli:
+**açık PR listesi bir garanti değil, bir anlık görüntüdür**; main ilerlerse dal **rebase edilir**
+(*"Update branch"* düğmesi **kullanılmaz** — ADIM 93/94) ve **tavan merged ağaçta yeniden ölçülür,
+taşınmaz** (ADIM 93/98: eski freeze'i taşımak tavanı gerçek sayının üstünde bırakır ve `--ratchet`
+sonsuza dek yeşil kalır — *kapı bunu yakalamaz, koşturan kişi yakalar*).
+
+`PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.

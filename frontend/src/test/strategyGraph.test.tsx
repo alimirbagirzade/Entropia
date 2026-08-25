@@ -719,3 +719,105 @@ describe("restrictions min_true_count (Minimum N of M)", () => {
     expect(restrictions.min_true_count).toBe("3");
   });
 });
+
+// ---------------------------------------------------------------------------
+// AT-07 — dynamic block identity (doc 02 §12)
+// ---------------------------------------------------------------------------
+
+// Two entry blocks whose identities are DISTINGUISHABLE on every axis the
+// assertions read: the block_id itself, the pinned package and the timeframe.
+// A payload whose two blocks differ only by block_id would let "kept the wrong
+// survivor" pass the identity assertion by coincidence.
+function twoEntryBlocksPayload(): Record<string, unknown> {
+  const block = (id: string, pkg: string, timeframe: string, order: number) => ({
+    block_id: id,
+    display_order: order,
+    enabled: true,
+    package_ref: {
+      package_root_id: pkg,
+      package_revision_id: `rev_${pkg}`,
+      package_content_hash: `hash_${pkg}`,
+    },
+    trigger_source: "indicator_native_trigger_only",
+    direction: "long",
+    timeframe,
+    validity: "3_candles",
+    requirement: "required",
+  });
+  return {
+    strategy_root_id: "strat_at07",
+    position_entry_logic: {
+      direction_mode: "long",
+      signal_block: { rule: "all_required", min_supporting_count: null },
+      indicator_blocks: [
+        block("blk_first", "pkg_first", "15m", 0),
+        block("blk_survivor", "pkg_survivor", "1h", 1),
+      ],
+    },
+    untouched_future_key: "preserved",
+  };
+}
+
+describe("AT-07 — removing an entry block renumbers the display, not the identity", () => {
+  // doc 02 §12: the display number is DERIVED from position; the block_id is the
+  // durable identity. Removing the first of two blocks must renumber the
+  // survivor to 1 while it keeps the UUID it arrived with.
+  //
+  // The two clauses are separate defect classes and neither sees the other:
+  // renumbering is a RENDER property (heading + control names), identity is a
+  // SERIALIZATION property (what Apply sends back). A component that renumbered
+  // correctly while minting a fresh id, or preserved the id while showing a
+  // stale number, would each pass exactly one of them.
+  it("renumbers the surviving block to 1 (AT-07.c1)", () => {
+    stubApi({ "GET /library": LIBRARY_PAGE });
+    renderComponent(PositionEntryCard, twoEntryBlocksPayload());
+
+    // Vacuity guard: the removal has something to remove. Without this a
+    // component that rendered ZERO blocks would satisfy every assertion below
+    // by rendering nothing at all.
+    expect(screen.getByText("Indicator Block 1")).toBeTruthy();
+    expect(screen.getByText("Indicator Block 2")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove indicator block 1" }));
+
+    // One block left, and it is numbered 1 — not 2. Both halves matter: a
+    // component that kept the survivor's original number would still render
+    // exactly one block.
+    expect(screen.getByText("Indicator Block 1")).toBeTruthy();
+    expect(screen.queryByText("Indicator Block 2")).toBeNull();
+    // The controls renumber with it — the accessible names a keyboard user
+    // navigates by are derived from the same index, so a half-renumbered card
+    // (heading moved, control names stale) is caught here rather than by eye.
+    expect(screen.getByRole("button", { name: "Remove indicator block 1" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Remove indicator block 2" })).toBeNull();
+  });
+
+  it("keeps the survivor's original block_id across the renumbering (AT-07.c2)", () => {
+    stubApi({ "GET /library": LIBRARY_PAGE });
+    const onApply = renderComponent(PositionEntryCard, twoEntryBlocksPayload());
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove indicator block 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Position Entry changes" }));
+
+    expect(onApply).toHaveBeenCalledTimes(1);
+    const sent = onApply.mock.calls[0][0] as Record<string, unknown>;
+    const entry = sent.position_entry_logic as Record<string, unknown>;
+    const blocks = entry.indicator_blocks as Record<string, unknown>[];
+
+    expect(blocks).toHaveLength(1);
+    // The identity is the SECOND block's, verbatim — not the first block's id
+    // inherited by position, and not a freshly minted UUID.
+    expect(blocks[0].block_id).toBe("blk_survivor");
+    // Measured on an independent axis so "kept the wrong block but relabelled
+    // its id" cannot pass: the payload the survivor carries is its own.
+    expect((blocks[0].package_ref as Record<string, unknown>).package_root_id).toBe(
+      "pkg_survivor",
+    );
+    expect(blocks[0].timeframe).toBe("1h");
+    // display_order is re-derived from the new position — the criterion's other
+    // half, and the reason the id cannot be inferred from the ordinal.
+    expect(blocks[0].display_order).toBe(0);
+    // Sections the Entry card does not own are untouched by the removal.
+    expect(sent.untouched_future_key).toBe("preserved");
+  });
+});

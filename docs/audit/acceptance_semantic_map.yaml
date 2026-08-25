@@ -2265,18 +2265,26 @@ criteria:
   clauses:
   - id: AT-07.c1
     text: After deleting the first entry block the remaining block renders as display number 1.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - frontend/src/test/strategyGraph.test.tsx > AT-07 — removing an entry block renumbers the display, not the identity > renumbers the surviving block to 1 (AT-07.c1)
   - id: AT-07.c2
     text: The surviving block keeps its original block_id UUID across the renumbering.
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - frontend/src/test/strategyGraph.test.tsx > AT-07 — removing an entry block renumbers the display, not the identity > keeps the survivor's original block_id across the renumbering (AT-07.c2)
   production_paths:
+  - frontend/src/components/StrategyGraphForm.tsx
   - frontend/src/lib/strategyGraph.ts
   - backend/src/entropia/domain/strategy/config.py
-  test_evidence: []
-  evidence_type: []
-  positive: []
+  test_evidence:
+  - frontend/src/test/strategyGraph.test.tsx > AT-07 — removing an entry block renumbers the display, not the identity > renumbers the surviving block to 1 (AT-07.c1)
+  - frontend/src/test/strategyGraph.test.tsx > AT-07 — removing an entry block renumbers the display, not the identity > keeps the survivor's original block_id across the renumbering (AT-07.c2)
+  evidence_type:
+  - frontend_component
+  positive:
+  - frontend/src/test/strategyGraph.test.tsx > AT-07 — removing an entry block renumbers the display, not the identity > renumbers the surviving block to 1 (AT-07.c1)
+  - frontend/src/test/strategyGraph.test.tsx > AT-07 — removing an entry block renumbers the display, not the identity > keeps the survivor's original block_id across the renumbering (AT-07.c2)
   negative: []
   auth: []
   occ: []
@@ -2284,12 +2292,23 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: uncovered
-  debt_class: B
-  notes: No test in `frontend/src/test/strategyGraph.test.tsx` removes an entry block; the suite only
-    extracts, seeds and round-trips blocks. `grep -rn display_order backend/tests` finds no strategy
-    test asserting identity stability across a removal either. The dynamic-identity invariant (display
-    number is derived, block_id is stable) is therefore unasserted on both lines.
+  status: covered
+  notes: 'Closed by ADIM 110 (batch 29) — the last class-B `uncovered` criterion, so closing it lowered
+    the uncovered CRITERION ceiling as well as the class-B one. Both halves shipped and neither was
+    asserted: components/StrategyGraphForm.tsx::BlockList removes with `blocks.filter((_, idx) => idx
+    !== i)` (object identity survives) and the card renders `Indicator Block {index + 1}` from the new
+    position, while lib/strategyGraph.ts::mergeBlock writes `block_id` verbatim and re-derives
+    `display_order` from the index. The two clauses are DIFFERENT defect classes and neither sees the
+    other — c1 is a RENDER property (heading + the accessible names of the move/remove controls), c2 a
+    SERIALIZATION property (what Apply sends back) — which is why they are separate cases. Four
+    single-point negative controls, each red on its own assertion with the other 32 tests green:
+    rendering the STORED ordinal (c1); reassigning block_id BY POSITION on removal (c2, block_id — the
+    exact confusion the criterion guards); leaking the removed block''s package_ref/timeframe onto the
+    survivor (c2, package axis — constructed to REMOVE the shadow the block_id assertion would
+    otherwise cast over it); serializing the stale stored display_order (c2, order axis). The two-block
+    fixture differs on every axis the assertions read (id, pinned package, timeframe) so "kept the
+    wrong survivor" cannot pass by coincidence, and a vacuity guard proves both blocks rendered before
+    the removal.'
 - id: AT-08
   document: docs/spec/02_Entropia_V18_Add_Strategy_Strategy_Details_Page_Documentation_v1_1.md
   section: '12'
@@ -14951,8 +14970,9 @@ criteria:
     - backend/tests/integration/test_admission_audit_durability.py::test_stale_fingerprint_admission_rejection_records_both_fingerprints
   - id: RC-09.c3
     text: A STALE report locks the RUN affordance (as distinct from a NOT_READY report).
-    status: uncovered
-    test_evidence: []
+    status: covered
+    test_evidence:
+    - frontend/src/test/backtestRun.test.tsx > RUN & Backtest Results page > locks admission when the current report is STALE, distinctly from NOT_READY
   production_paths:
   - backend/src/entropia/application/queries/readiness_check.py
   - backend/src/entropia/application/commands/readiness_check.py
@@ -14964,13 +14984,16 @@ criteria:
   - backend/tests/integration/test_readiness_persistence.py::test_rc09_expected_fingerprint_mismatch_conflicts
   - backend/tests/integration/test_backtest_persistence.py::test_run_rejected_when_composition_stale
   - backend/tests/integration/test_admission_audit_durability.py::test_stale_fingerprint_admission_rejection_records_both_fingerprints
+  - frontend/src/test/backtestRun.test.tsx > RUN & Backtest Results page > locks admission when the current report is STALE, distinctly from NOT_READY
   evidence_type:
   - backend_integration
+  - frontend_component
   positive: []
   negative:
   - backend/tests/integration/test_readiness_persistence.py::test_rc09_expected_fingerprint_mismatch_conflicts
   - backend/tests/integration/test_backtest_persistence.py::test_run_rejected_when_composition_stale
   - backend/tests/integration/test_admission_audit_durability.py::test_stale_fingerprint_admission_rejection_records_both_fingerprints
+  - frontend/src/test/backtestRun.test.tsx > RUN & Backtest Results page > locks admission when the current report is STALE, distinctly from NOT_READY
   auth: []
   occ:
   - backend/tests/integration/test_readiness_persistence.py::test_rc09_expected_fingerprint_mismatch_conflicts
@@ -14979,14 +15002,16 @@ criteria:
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
-  notes: c3 has no asserting test. The frontend RUN-lock tests (mainboard.test.tsx "locks RUN until
-    a current Ready Check passes", readyCheckShell.test.tsx "keeps RUN locked ... while the state
-    is not ready") all drive state="not_ready"; readyCheck.test.tsx "flags a stale report with a re-run
-    hint" renders the stale badge on a deep-linked report but asserts nothing about a RUN control.
-    Add a case that feeds a STALE/is_current=false readiness projection to the Mainboard or RUN page
-    and asserts the admit button is disabled.
+  status: covered
+  notes: 'c3 closed by ADIM 110 (batch 29). The gap was real and was MEASURED, not asserted: with
+    `state === "stale"` added to lib/mainboard.ts::isReadyForRun the pre-existing not_ready RUN-lock
+    test stays GREEN and only the new case turns red — which is precisely why a not_ready case could
+    never settle a clause whose whole content is "as distinct from a NOT_READY report". The new case
+    drives ready_summary.state="stale" with a non-null report_id (a stale report HAS run once; what
+    lapsed is its currentness, so the case cannot drift into the not_checked shape) and pins two
+    independent axes: the lock (disabled admit button, no POST issued on click) and the DISTINCTNESS
+    (READY_STATUS_TEXT.stale renders verbatim while the NOT_READY line is absent). Collapsing every
+    non-runnable state onto one label would pass the lock half alone.'
 - id: RC-10
   document: docs/spec/14_Entropia_V18_Backtest_Ready_Check_Page_Documentation_v1_1.md
   section: '15'

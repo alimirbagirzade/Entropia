@@ -82,7 +82,7 @@ This repository is built **stage by stage** from a canonical specification (see
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
 | Backend tests **collected** (static, not a pass count) | 3745 in 355 files |
 | Backend `xfail` markers | 0 (0 strict) |
-| Frontend unit test **call sites** (static; `.each` expands at run time) | 726 in 72 files |
+| Frontend unit test **call sites** (static; `.each` expands at run time) | 729 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |
 | Acceptance criteria mapped | 383 |
 | Acceptance clauses mapped | 1175 |

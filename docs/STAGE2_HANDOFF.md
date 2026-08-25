@@ -8316,6 +8316,63 @@ invariant taraması (boş) · `check_classification` (NONE) · `acceptance_seman
 --check-generated --ratchet` (exit 0, tavan 55/7 sabit).
 `PROJECT_HISTORY.md` §ADIM 109 · kickoff **YOK** (yukarıdaki gerekçe).
 
+## Stage 110 — kabul borcu batch 29 (doc 02 Add Strategy + doc 14 Ready Check, FRONTEND): `AT-07` + `RC-09` kapandı landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** — `backend/src` ve `frontend/src`'in test dışı hiçbir dosyasında tek satır
+yok; diff **üç yeni vitest case'i** (`strategyGraph.test.tsx` +2, `backtestRun.test.tsx` +1) + defter
++ üretilmiş artefakt. Migration yok, alembic head `0043_i08_registry_strategy_fks`, `ENGINE_VERSION`
+ve OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS` = `future_dev`, donmuş kanıt el değmedi, A-08
+sayaçları (2/184 · 0/10 · 0/4) ve #514 **el değmedi**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+**İKİ TAVAN BİRDEN İNDİ: `partial` 55 → 54 · `uncovered` 7 → 6 · `debt_class.B` 23 → 21**; açık borç
+**60** (A=1 · B=21 · C=6 · D=32), clause `covered` 1065 → 1068. **`uncovered` KRİTER tavanı bu depoda
+ancak İKİNCİ kez oynadı** (ilki ADIM 88, 8 → 7) — çünkü `AT-07` sınıf-B'nin **tek `uncovered`
+satırıydı**. Tavanlar merged ağaçta **taze** ölçüldü, iki freeze'in farkından türetilmedi.
+
+**`AT-07` (c1 + c2, doc 02 §12) — iki clause, İKİ AYRI KUSUR SINIFI.** Kriter *"ilk entry bloğu
+silmek görünen numarayı yeniden verir ama survivor'ın UUID'sini korur"* der; **iki yarısı da sevk
+edilmişti, ikisi de assert'sizdi**: `StrategyGraphForm.tsx::BlockList` `blocks.filter((_, idx) =>
+idx !== i)` ile siler (nesne kimliği hayatta kalır) ve kart `Indicator Block {index + 1}` basar,
+`strategyGraph.ts::mergeBlock` ise `block_id`'yi **verbatim** yazıp `display_order`'ı index'ten
+**yeniden türetir**. **c1 bir RENDER özelliğidir** (başlık + move/remove kontrollerinin erişilebilir
+adları), **c2 bir SERİLEŞTİRME özelliğidir** (Apply'ın geri gönderdiği) — doğru numaralayıp taze UUID
+basan bir bileşen c1'i geçer c2'yi düşürür, tersi de doğrudur → **tek case'e sıkıştırılamazdı**.
+
+**`RC-09.c3` (doc 14 §15) — boşluk İDDİA EDİLMEDİ, ÖLÇÜLDÜ.** Clause'un tüm içeriği *"STALE rapor
+RUN affordance'ını kilitler, NOT_READY'den AYRI olarak"*. Mevcut suite yalnız `ready_with_warnings`
+(runnable) ve `not_ready` (kilitli) sürüyordu. `isReadyForRun`'a `state === "stale"` eklendiğinde
+**önceden var olan `not_ready` testi YEŞİL kalıyor** ve yalnız yeni case kırmızıya dönüyor — yani bir
+`not_ready` case'i o clause'u **hiçbir zaman** kapatamazdı. Yeni case iki bağımsız ekseni pinler:
+**kilit** (disabled buton + tıklamada sıfır POST) ve **AYRIKLIK** (`READY_STATUS_TEXT.stale` birebir
+render olur, NOT_READY satırı **yoktur**). Her runnable-olmayan durumu tek etikete çökertmek yalnız
+kilit yarısını geçerdi.
+
+**BEŞ negatif kontrol, beşi de kendi assertion'ında kırmızı, beşinde de dosyanın önceden var olan
+testleri YEŞİL.** En öğreticisi **NC-4**: `block_id`'yi doğru bırakıp silinen bloğun
+`package_ref`/`timeframe`'ini survivor'a **sızdırır** → kırmızı yalnız **paket ekseninde**. **ASIL
+DERS: GÖLGEYİ KAYDETMEKLE YETİNME, KALDIRMAYI DENE** (ADIM 101 kuralı, bu kez **proaktif**) — o
+assertion her *sıradan* kusurda `block_id` assertion'ının gölgesinde kalıyordu; gölge kaydedilmedi,
+**kaldırıldı**. Fixture (`twoEntryBlocksPayload`) iki bloğu **okunan her eksende** ayırır (id, pinli
+paket, timeframe) → *"yanlış survivor'ı tuttu"* tesadüfen geçemez; bir **vacuity muhafızı** silmeden
+önce iki bloğun da render olduğunu kanıtlar.
+
+**BİR BULGU KAYDEDİLDİ, YENİDEN SINIFLANDIRILMADI: `UM-15.c3` SEVK EDİLMEMİŞ.** *"409'dan sonra UI
+en güncel stream ile rehydrate eder"* — `UserManual.tsx::requestDelete` ve
+`manual.ts::useSoftDeleteManualDocument` **ikisi de yalnız `onSuccess`** taşır, yani 409 yolunda
+hiçbir invalidation yok, `streamVersion` bayat kalır ve hiçbir şey yeniden okumaz (ADIM 87'nin
+`onSuccess`/`onSettled` şeklinin ikizi). Sınıf D görünüyor; **B → D taşımak D tavanını YÜKSELTİR =
+adjudication**, bir test slice'ının kararı değil. İkinci aday **`CP-03.c4`** de ölçüldü ve
+**belirsiz** bulundu (seçim zaten `rows.find(...)` ile türetilmiş, ama red hâlinde `selectedId`
+duruyor) → **alınmadı**. **Parti seçmeden ÖNCE ÖLÇ** (ADIM 54) bu partide **iki adayı** eledi.
+
+**Doğrulama + DÜRÜST SINIR:** tam frontend kapıları yerelde **yeşil** — `npm run lint` ·
+`npm run typecheck` · `npm run coverage` → **72 dosya / 739 passed**, coverage eşikleri geçti.
+Üretilmiş olgular tazelendi (frontend call sites **726 → 729**; ADIM 60'ın dersi yine yaşandı) ve
+`generate_repository_facts.py --check` **yeşil**. **Backend'de sıfır satır → backend suite'i
+KOŞULMADI, Postgres kurulmadı ve hiçbir backend geçen/coverage sayısı iddia edilmiyor — otorite CI.**
+`PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 109 GÜNCELLEMESİ (2026-08-25) — BAŞLIK VE GÖVDE DEĞİŞMEDİ, ÇÜNKÜ DEĞİŞECEK BİR ŞEY YOK.**

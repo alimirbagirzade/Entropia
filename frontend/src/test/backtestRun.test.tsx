@@ -236,6 +236,55 @@ describe("RUN & Backtest Results page", () => {
     ).toBe(false);
   });
 
+  // RC-09.c3 (doc 14 §15): a STALE report locks the RUN affordance — and it is
+  // a DISTINCT lock from NOT_READY. The suite above already drives not_ready,
+  // but that case cannot settle this clause: both states are non-runnable, so a
+  // predicate that let STALE through would leave the not_ready test green.
+  // Both halves are therefore asserted on their own axis — the lock, and the
+  // fact that the reader is told CHANGES were detected rather than that the
+  // composition failed its check.
+  it("locks admission when the current report is STALE, distinctly from NOT_READY", async () => {
+    const fetchMock = stubApi({
+      "GET /mainboards/default": {
+        ...MAINBOARD,
+        // A stale report still HAS a report id — the check ran and passed once;
+        // what lapsed is its currentness. Pinning report_id here keeps the case
+        // away from the not_checked shape, where the id is null.
+        ready_summary: { state: "stale", report_id: "rr_1" },
+      },
+    });
+    renderPage();
+
+    // The staleness is surfaced in its own words (lib/mainboard.ts
+    // READY_STATUS_TEXT.stale) — the user is told to re-run, not that the
+    // composition is unready.
+    expect(
+      await screen.findByText("Changes detected. Run Backtest Ready Check again."),
+    ).toBeInTheDocument();
+    // The distinctness half: the NOT_READY line is NOT what this state renders.
+    // Without this, collapsing every non-runnable state onto one label would
+    // pass — and doc 14 §15 separates them precisely so a re-run is offered
+    // instead of a blocker hunt.
+    expect(screen.queryByText("Backtest Ready: Not Ready")).toBeNull();
+
+    // The lock itself: a genuinely disabled control, not a click that
+    // round-trips to a server rejection.
+    const admit = screen.getByRole("button", { name: "Request Backtest Run" });
+    expect(admit).toBeDisabled();
+    expect(
+      screen.getByText(/RUN is available only after a current Backtest Ready Check passes/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Backtest Ready Check" })).toBeInTheDocument();
+
+    fireEvent.click(admit);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes("/backtest-runs") && (init as RequestInit)?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
   it("deep-links an immutable result via ?result=", async () => {
     stubApi({
       // Route-aware order: most-specific fragment first. The artifacts URL

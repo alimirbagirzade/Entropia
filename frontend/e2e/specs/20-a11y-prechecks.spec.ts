@@ -240,7 +240,7 @@ test.describe("@a11y automated prechecks — NOT a screen-reader audit (A-08 pre
           check: "page has no <h1>",
           observed: `0 <h1>; heading outline starts at h${rec.headingOutline[0] ?? "?"}`,
           wcag: "1.3.1 Info and Relationships (A) / 2.4.6 Headings and Labels (AA)",
-          note: "the page names itself with a lower-level heading (see utils/pageTruth.ts:15). Checklist A-1 asks whether the page title is announced on load and A-3 whether the outline is unbroken — both are rotor questions this probe cannot settle.",
+          note: "K-4 (PR #685, 2026-08-12) gave the last route without one its <h1> — /user-manual was the single emitter, and the count went 1 to 0 — so on a shipped route this branch no longer fires; it is kept as a regression tripwire, and utils/pageTruth.ts::PageContract.level is where a future divergence has to be declared rather than discovered by a rotor. If it does fire: checklist A-1 asks whether the page title is announced on load, and A-3 (rewritten 2026-08-13) whether the outline misleads — not whether a level was skipped. Both are rotor questions this probe cannot settle.",
         });
       }
       if (rec.landmarks.contentinfo === 0) {

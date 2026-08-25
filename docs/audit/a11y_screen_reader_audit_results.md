@@ -410,8 +410,8 @@ small to have produced one.
 > notes (§6.1b). **It filled no cell, heard nothing, and is not a session in this
 > table's sense** — it is deliberately not given a row, because a row here means a
 > person wore headphones. A second non-audit slice followed on the same date (base
-> `42c6377`) and **corrected those three notes** (§6.1b); it changed advisory prose
-> only, filled no cell, and likewise gets no row.
+> `42c6377`) and **corrected those three notes plus a fourth it found** (§6.1b); it
+> changed advisory prose only, filled no cell, and likewise gets no row.
 
 **Where the next session picks up:** the runbook's **§0 card** is the one-page version
 of this paragraph — combination, route, cells, order — and it is what to hand the
@@ -622,19 +622,20 @@ count is a DOM count either way. It would tell the next auditor how many routes 
 currently in K-5's and K-7's sets. Until someone re-runs it on a real stack (**twice**,
 discarding the cold run), read the K-table's reach column as *"as of 2026-08-12"*.
 
-### 6.1b — the three stale advisory **notes** are CORRECTED (2026-08-25)
+### 6.1b — the stale advisory **notes** are CORRECTED (2026-08-25)
 
-**Status: closed.** The three `note` strings named below were rewritten in
+**Status: closed.** The `note` strings named below — the three this section originally
+logged, plus a **fourth found while fixing them** — were rewritten in
 `frontend/e2e/specs/20-a11y-prechecks.spec.ts`. **Nothing else moved:** every advisory
 still fires on exactly the same condition; the `observed` values, the per-route counts,
 the K-table reach figures and the blocking/advisory split are **untouched**. The source
-diff is **three changed lines, all of them `note:` values** — no predicate, no threshold,
+diff is **four changed lines, all of them `note:` values** — no predicate, no threshold,
 no `expect`. In particular the **K-3 `contentinfo` advisory is not
 silenced**: D-11 fixed that observation's *disposition*, never its measurement.
 
 Originally read statically on `45ecebc`; corrected on `42c6377`. Each advisory carries an
 explanatory `note` string printed in the `::warning::` output and written into
-`a11y-report/precheck-results.json`, and three of them described a world that three landed
+`a11y-report/precheck-results.json`, and **four** of them described a world that landed
 decisions had since changed:
 
 | Line | Advisory | Note **said** | Superseded by | Note now says |
@@ -642,8 +643,15 @@ decisions had since changed:
 | 271 | heading outline (**K-5**) | *"checklist A-3 asks for h1→h2→h3 with no skipped level"* | **A-3 was rewritten 2026-08-13** to ask whether the outline *misleads*; the checklist now says *"Sayı atlamasını burada SAYMA"* (`§A-3 notu`) | A-3 asks whether the outline **misleads** — a heading under one it does not belong to, a group read as missing. Counting skipped levels is **this probe's** job; *"there is a skip"* and *"I did not notice one"* are both named as non-answers. States explicitly that **the rewrite does not close K-5** and the advisory keeps counting |
 | 252 | `contentinfo` (**K-3**) | *"checklist A-2 expects banner/navigation/main/contentinfo"* | **D-11 (2026-08-13)** — A-2 expects **three** landmarks | A-2 expects **three** landmarks and deliberately **not** `contentinfo`; cites D-11 and that no WCAG SC requires a footer; states that D-11 fixed the **disposition, not the measurement**, so the absence is still reported and still counted, and that real footer content would be a **new** decision |
 | 262 | skip link (**K-2**) | *"no in-page skip target precedes the primary nav … Adding one is a product change outside this preparation slice"* | **PR #685** shipped it — `Layout.tsx:397` renders `<a class="skip-link" href="#main-content">`, `:465` carries `id="main-content" tabIndex={-1}` | The skip link **shipped**; on a shipped route this branch no longer fires, and it is kept as a **regression tripwire** — if it fires, either the link is gone or something focusable was inserted ahead of it |
+| 243 | page has no `<h1>` (**K-4**) | *"the page names itself with a lower-level heading … A-3 whether the outline is unbroken"* | **Not in this section's original three — found while fixing them.** Two decisions had overtaken it: **K-4 / PR #685 (2026-08-12)** gave `/user-manual` its `<h1>` (§6's K-table already records the count going **1 → 0**), and the same **A-3 rewrite** applies to its second clause | Records that K-4 closed the only emitter, so the branch is now a **regression tripwire**; points at `utils/pageTruth.ts::PageContract.level` (symbol, not a line number) as where a future divergence must be declared; keeps **A-1** verbatim — it still applies, the fix changed the level, not the announcement — and restates **A-3** as *misleads*, not *skipped* |
 
-**Why the first one mattered.** ADIM 63 rewrote A-3 because the old question asked a human
+**Two of the four are unreachable today, and that is recorded rather than deleted.** The
+skip-link branch (K-2) and the missing-`<h1>` branch (K-4) both had their defect shipped away
+— by PR #685, the same PR — so neither fires on a shipped route. The advisories are **kept as
+regression tripwires** and their notes now say so; deleting a branch because it currently
+passes would remove the only thing that would notice it coming back.
+
+**Why the A-3 one mattered.** ADIM 63 rewrote A-3 because the old question asked a human
 to repeat a machine measurement, which made the audit *structurally unable* to close K-5
 however many routes were walked. That fix landed in the **checklist** only. The precheck's
 own output — which the runbook §4 sends the auditor to as *"where to look first"* — went on
@@ -656,14 +664,19 @@ retired.** That path is now closed at both ends.
 record what the probe printed on those dates; they are a record and were **not** edited.
 An auditor reading those files gets the retired A-3 question — the runbook §0 card says so.
 
-**What was verified, and what was not.** The strings are pinned by no test — re-measured on
-this branch, each appeared exactly once under `frontend/` (the spec itself) plus the frozen
-evidence and the docs that quote it. `npm run lint` (eslint reaches `e2e/`, confirmed by
-running it on the file alone) and `npx tsc --noEmit -p e2e/tsconfig.json` are **green**, and
-the typecheck was **negative-controlled**: reverting one string to an unescaped form turns it
-red at that line, so the gate is not vacuous. **The precheck spec itself was not executed** —
-it needs the seeded stack, which this container cannot raise; that half is CI's authority, and
-because only prose changed there is no new assertion for it to exercise.
+**What was verified, and what was not.** None of the four strings is pinned by a test —
+re-measured on this branch, each appeared exactly once under `frontend/` (the spec itself),
+plus the frozen evidence and the docs that quote it. `npm run lint` (eslint reaches `e2e/`,
+confirmed by running it on the file alone) and `npx tsc --noEmit -p e2e/tsconfig.json` are
+**green** — note that `npm run typecheck` does **not** cover this file, since the frontend
+`tsconfig.json` includes only `src`. The e2e typecheck was **negative-controlled twice**,
+once per edited region: reverting a string to an unescaped form turns it red at exactly that
+line — `TS1005` at `:271` and at `:243`, measured against the committed numbering — so the
+gate is not vacuous.
+
+**The precheck spec itself was not executed.** It needs the seeded stack, which the container
+this was written in cannot raise; that half is **CI's authority**, and because only prose
+changed there is no new assertion for it to exercise.
 
 ### 6.1c — the route list was re-derived and is **not** stale
 

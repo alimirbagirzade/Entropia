@@ -108,11 +108,16 @@ than an empty one.
 heading-outline advisory, the note *"checklist A-3 asks for h1→h2→h3 with no skipped
 level"* — **the superseded question.** A-3 was rewritten on 2026-08-13 precisely because
 counting skips is a machine measurement the precheck already produces (see the checklist's
-`§A-3 notu`), and two neighbouring notes were stale the same way (the `contentinfo` note
-said A-2 expects four landmarks, which D-11 overturned; the skip-link note described a
-defect PR #685 fixed). All three notes now read correctly in
+`§A-3 notu`), and three neighbouring notes were stale the same way (the `contentinfo` note
+said A-2 expects four landmarks, which D-11 overturned; the skip-link note and the
+missing-`<h1>` note each described a defect PR #685 fixed — the latter also repeated the
+retired A-3 question). All four now read correctly in
 `frontend/e2e/specs/20-a11y-prechecks.spec.ts`; the **counts and the gating behaviour never
 changed** — only the prose. Worksheet §6.1b records the before and after.
+
+**Two of those four advisories cannot fire on a shipped route any more** (skip link, missing
+`<h1>` — both shipped away by PR #685). They are kept deliberately, as regression tripwires,
+and their notes now say so. If you ever see one in a fresh run, that is a real regression.
 
 **Where the old wording survives, deliberately:** the frozen evidence JSONs
 (`docs/releases/evidence/2026-08-12/`, `2026-08-11/`) are a record of what the probe printed

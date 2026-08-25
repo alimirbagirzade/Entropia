@@ -15986,8 +15986,13 @@ boşsa policy default değil, manifestte resolved default"* diyor — imzalanan 
   taşıyıcıdır** — kaldırmak göç tuzağını geri getirir.
 * `FillCosts.fee(notional)` **tek türetim** (`execution/costs.py`); `bps` altında
   `commission / 10_000 × |fill notional|`. `_cost_params` dördüncü üye olarak basis döner.
-* **Altı ücret yeri de** ondan geçiyor — üçü `booking` (close, `absorb_remainder`), üçü
-  `engine` (giriş, stacking, scale layer). Her biri **kendi fill'inin** notional'ını veriyor;
+* **`fee()`'nin ALTI çağrı yeri de** ondan geçiyor: **BEŞİ ücret alır** — `booking` **ikisi**
+  (close, `absorb_remainder`) + `engine` **üçü** (giriş, stacking, scale layer) — ve
+  **altıncısı** `participant::_closed_by` charged ücreti **aynalar**, kendisi almaz.
+  **DÜZELTME (#835):** bu satırın ilk yazımı *"altı ücret yeri — üçü `booking`, üçü `engine`"*
+  diyordu ve **iki kez yanlıştı**: `booking`'de üç değil **iki** yer var, ve *ücret alan*
+  toplam altı değil **beş**tir — altıncı çağrı aynadır. Sayı prozada bu depoda üç kez
+  bayatladı (katman sayıları, test collection, hook-guard özet satırı); **ADLARI say**. Her biri **kendi fill'inin** notional'ını veriyor;
   kopyalamak altı ayrı taban doğururdu — ki #552'nin kusuru **tam olarak** buydu (ücret fill
   sayısıyla değil partial CLOSE sayısıyla ölçekleniyordu).
 * `manifest.py::COMMISSION_MODEL = "per_fill"`, manifest'te yayımlanıyor (K1, Mod. 6 §8).

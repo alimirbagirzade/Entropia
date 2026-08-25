@@ -254,8 +254,11 @@ Before stopping a working session, produce **ALL** of the following:
 > edildi (**`execution_content` DIŞINDA** — rider'ın gerekçesi ölçümde çürüdü, `_pinned_items`
 > zaten `selected_revision_id`'yi hash'liyor); **TABANI** açık alan oldu
 > (`CostsModel.commission_basis`, `flat|bps`, **varsayılan `flat`** = göç tuzağı YOK). Ücretin
-> tek türetimi `FillCosts.fee(notional)`; **altı ücret yeri + rapor eden yedinci tüketici**
-> ondan geçer — yeni fill yüzeyinde **inline etme**. `#550/#551/#552` doğrulandı (hepsi #720 ile
+> tek türetimi `FillCosts.fee(notional)`; **`fee()`'nin ALTI çağrı yeri** ondan geçer — **beşi
+> ücret alır** (`booking`: close + `absorb_remainder` · `engine`: giriş + stacking + scale
+> layer), **altıncısı** `participant::_closed_by` **aynalar, ücret almaz**. Yeni fill
+> yüzeyinde **inline etme**. (Sayı DEĞİL, AD say: ilk yazım *"altı ücret yeri, üçü booking"*
+> diyordu — `booking`'de **iki** var; #835 kaynaktaki ikizini düzeltti.) `#550/#551/#552` doğrulandı (hepsi #720 ile
 > inmişti), **duplicate fix YAZILMADI** (`docs/audit/financial_closure_evidence.md`).
 > **ASIL DERS: bir kusuru ararken kullandığın DESEN, kusurun bulunduğu yeri belirler** — ücret
 > (equity-mutate eden) yerlerini grep'lemek altısını buldu, **rapor eden** yedinciyi kaçırdı

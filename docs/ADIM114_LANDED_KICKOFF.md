@@ -38,11 +38,21 @@ kayıt `docs/audit/financial_closure_evidence.md`.
 | Manifest testleri | `tests/unit/test_karar1_manifest_commission_model.py` (3 case) |
 | İmza | `docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1 İMZA SATIRI + §Yerleşim |
 
-**ALTI ÜCRET YERİ** — yeni bir fill yüzeyi eklersen **`FillCosts.fee()`'den geçir**, inline
-etme (bu, #552'nin kusurunun birebir şekliydi):
-`booking.py::close_position` · `booking.py::absorb_remainder` · `engine.py` giriş fill'i ·
-`engine.py` stacking · `engine.py` scale layer · ve **rapor eden yedinci tüketici**
-`participant.py::_closed_by`.
+**`fee()`'NİN ALTI ÇAĞRI YERİ — BEŞİ ÜCRET ALIR, BİRİ AYNALAR.** Yeni bir fill yüzeyi eklersen
+**`FillCosts.fee()`'den geçir**, inline etme (bu, #552'nin kusurunun birebir şekliydi):
+
+| çağrı yeri | ne yapar |
+|---|---|
+| `booking.py::close_position` | ücret alır (çıkış fill'i) |
+| `booking.py::absorb_remainder` | ücret alır |
+| `engine.py` giriş fill'i | ücret alır |
+| `engine.py` stacking | ücret alır |
+| `engine.py` scale layer | ücret alır |
+| `participant.py::_closed_by` | **aynalar** — charged ücreti havuza bildirir, kendisi almaz |
+
+**SAYIYI DEĞİL ADI SAY.** Bu bloğun ilk yazımı *"ALTI ÜCRET YERİ … üçü `engine`"* diyordu ve
+`booking`'i üç sanıyordu (iki var), ayrıca aynayı ücret yeri sayıyordu. #835 kaynaktaki ikizini
+düzeltti. Prozadaki elle sayı bu depoda üç kez bayatladı.
 
 ## Sıradaki oturum — SIRADAKİ HAMLE KOD DEĞİL, İMZA
 

@@ -8548,8 +8548,10 @@ sevk edilmişti → imza onu **onaylar**. **Taban** açık bir alan oldu: `commi
 Commission'ı **birimsiz** çiziyor, yani bps kullanıcıya hiç vaat edilmedi. Mod. 6 §6.2'nin
 istediği zaten birebir bu.
 
-`FillCosts.fee(notional)` **tek türetim**; **altı ücret yeri de** ondan geçiyor, her biri kendi
-fill'inin notional'ıyla. `COMMISSION_MODEL = "per_fill"` manifest'te yayımlanıyor (K1) —
+`FillCosts.fee(notional)` **tek türetim**; **`fee()`'nin altı çağrı yeri de** ondan geçiyor, her
+biri kendi fill'inin notional'ıyla — **beşi ücret alır** (`booking` ikisi, `engine` üçü),
+altıncısı `participant::_closed_by` **aynalar** (#835 ilk yazımdaki *"üçü booking"* sayısını
+düzeltti). `COMMISSION_MODEL = "per_fill"` manifest'te yayımlanıyor (K1) —
 `execution_content` **DIŞINDA**, çünkü rider'ın gerekçesi (*"aksi halde iki run aynı kimliği
 paylaşır"*) **ölçümde çürüdü**: `_pinned_items` zaten `selected_revision_id`'yi hash'liyor.
 

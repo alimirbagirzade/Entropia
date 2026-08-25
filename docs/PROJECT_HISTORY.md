@@ -15928,3 +15928,185 @@ bir davranış yok) ve **negatif kontrol koşulmadı** — bu slice hiçbir asse
 bir **anlık görüntüdür**, garanti değil (ADIM 100).
 
 `PROJECT_HISTORY.md` §ADIM 113 · `docs/ADIM113_LANDED_KICKOFF.md`.
+
+## ADIM 114 — Karar 1 İMZALANDI ve uygulandı; #550/#551/#552 doğrulandı, DUPLICATE FIX YAZILMADI — BİR KUSURU ARARKEN KULLANDIĞIN DESEN, KUSURUN BULUNDUĞU YERİ BELİRLER (PR #831)
+
+**ÜRÜN KODU DEĞİŞTİ (finansal), ama VARSAYILAN ALTINDA TEK BİR SAYI OYNAMADI.** 15 dosya,
++810/−30. `ENGINE_VERSION` **değişmedi** · **50 golden digest bayt bayt aynı** · OpenAPI
+**değişmedi** · alembic head `0043_i08_registry_strategy_fks` (migration yok) ·
+`SHARED_ALLOCATION_STATUS` = `future_dev`. Blocker sayısı **DEĞİŞMEDİ** (1 — yalnız A-08),
+**BLOCKED**. Kabul borcu tavanlarına **dokunulmadı**.
+
+### Bölüm 1 — #550/#551/#552: kapalıydılar, ve gerçekten kapalıydılar
+
+Görevin tabanı `e2fa521` (2026-08-13) **~150 commit gerideydi**; o tabanda üçü de canlıydı.
+Üçü de **#720** ile inmişti. HARD RULE (*"issue state kanıt değildir; current code zaten
+çözmüşse duplicate fix yazma"*) **iki yönde** uygulandı — kapalı olmaları düzeltildiklerini
+kanıtlamaz, ama kod ölçülünce gerçekten düzeltilmiş çıktılar. **Tek satır duplicate fix
+yazılmadı.**
+
+| # | ölçülen |
+|---|---|
+| **#550** | 100× fiyat süpürmesi: `peak_notional` 102 / 1 000 / 10 000'de **`1000.00`** sabit, birim sayısı 9.8039 → 1.00 → 0.10 değişiyor — issue #550'nin **kendi kanon tablosunun** birebir karşılığı. min/max aynı uzayda (%5 cap → 500, %20 floor → 2000, süpürme boyunca sabit). |
+| **#551** | Dört pozitif-olmayan yol (`0`, `-10`, `min>max`, `max=0`) → **0 trade, 0 interval**, dördünde de tek deterministik `size_resolved_to_zero`; pozitif kontrol hâlâ fill'e gidiyor. |
+| **#552** | Issue'nun kendi repro'su: per-fill **21.00 / `final_equity` 9919.00** (eski model 19.60 / 9920.40). |
+
+`engine_version` `execution_key`'e **giriyor** (`fb126e02…` ↔ `a939d001…`) ve saklanan sürümü
+güncel sabitle karşılaştıran **hiçbir eşitlik kapısı yok** (`grep` → sıfır) → tarihsel
+Result'lar kendi sürümleri altında **okunabilir** kalıyor. Kayıt:
+`docs/audit/financial_closure_evidence.md`.
+
+### Bölüm 2 — Karar 1: İKİ EKSEN olarak imzalandı
+
+Belgenin seçenek listesi 2026-08-13'te, **#720'den bir gün önce** yazıldı ve tek bir eksen
+varsayıyordu: *"commission modeli"*. Ölçüldüğünde eksen **İKİ** çıktı ve ikisi bağımsız:
+
+| eksen | imzalanan | durum |
+|---|---|---|
+| **DAĞILIM** | `per_fill` | **zaten sevk edilmişti** (#720) — imza onu **onaylar**, kod istemez |
+| **TABAN** | açık mod alanı, varsayılan `flat` | **yeni iş** — C'nin belgede geçen *"`commission_mode: flat\|bps` eklenir"* varyantı |
+
+**Tam C (bps'e çevirmek) NEDEN REDDEDİLDİ.** Kanonun tek somut örneği bps'tir (Mod. 4 §2.3),
+ama düz geçiş **#550'nin birebir şeklini** taşıyor: saklanan `commission: 7` bugün *7 para
+birimi*, tam C'den sonra *7 bps* demektir ve **mekanik olarak çevrilemez**. #550 bunu bir Ready
+Check blocker'ı ile çözmek zorunda kalmıştı; varsayılanı `flat` olan bir mod alanı göçü
+**gerektirmez**, çünkü kayıtlı her revizyon bugünkü anlamını korur.
+
+**VE KANIT DURUMU #550'DEN ZAYIF, ölçüldü.** #550'de kanon + doc 02 + v18 mockup + **sevk
+edilen UI** dördü birden `%` diyordu (4 kaynak ↔ 1 motor) — kullanıcıya *"bu bir yüzdedir"*
+**söylenmişti**. Burada öyle bir kaynak **yok**: `StrategyConfigForm.tsx:395` ve v18 mockup
+`:5621` Commission'ı **birimsiz** bir input olarak çiziyor (`base_position_size`'ın `unit="%"`i
+gibi bir işaret YOK). Yani bps kullanıcıya **hiç vaat edilmedi**; sessizce geçmek bir düzeltme
+değil **yeni bir yalan** olurdu. Mod. 6 §6.2 ise zaten *"birim konfigürasyonla açık olmalı;
+boşsa policy default değil, manifestte resolved default"* diyor — imzalanan **birebir budur**.
+
+### Sevk edilen
+
+* `CostsModel.commission_basis: Literal["flat","bps"] = "flat"` (`config.py`). **Varsayılan
+  taşıyıcıdır** — kaldırmak göç tuzağını geri getirir.
+* `FillCosts.fee(notional)` **tek türetim** (`execution/costs.py`); `bps` altında
+  `commission / 10_000 × |fill notional|`. `_cost_params` dördüncü üye olarak basis döner.
+* **Altı ücret yeri de** ondan geçiyor — üçü `booking` (close, `absorb_remainder`), üçü
+  `engine` (giriş, stacking, scale layer). Her biri **kendi fill'inin** notional'ını veriyor;
+  kopyalamak altı ayrı taban doğururdu — ki #552'nin kusuru **tam olarak** buydu (ücret fill
+  sayısıyla değil partial CLOSE sayısıyla ölçekleniyordu).
+* `manifest.py::COMMISSION_MODEL = "per_fill"`, manifest'te yayımlanıyor (K1, Mod. 6 §8).
+
+**ÖLÇÜLDÜ:** varsayılan altında komisyon fiyatlayan **iki golden senaryo bayt bayt aynı** →
+**`ENGINE_VERSION` bump'ı gerekmedi**, imzanın kabul kriteri karşılandı. `bps` kanonun
+formülünü hesaplıyor, elle doğrulandı: giriş notional 1000.00 → 0.70, çıkış 952.38 → 0.67,
+**toplam 1.37** (aynı büyüklük `flat` iken 14.00); oranda lineer (50 bps → 9.76).
+
+### ASIL DERS — BİR KUSURU ARARKEN KULLANDIĞIN DESEN, KUSURUN BULUNDUĞU YERİ BELİRLER
+
+İlk geçiş **ücret yerlerini** grep'ledi — yani `led.equity` mutasyonlarını — ve altısını da
+doğru bağladı. **Yedinci tüketici o desene uymuyordu ve kaçtı:**
+`participant.py::_closed_by` hiçbir şeyi mutate etmez, **rapor eder**
+(`MandatoryExit.commission` ve onun üzerinden `gross_pnl`). `fill_costs.commission`'ı okuyup
+**para olarak harcıyordu**.
+
+`flat` altında büyüklük == ücret olduğu için doğruydu; tabanı açık yapmak o denkliği kırdı.
+Ölçüldü, aynı fixture: `flat` 7 → `ledger.fees` **14.00** (öncesi de sonrası da, regresyon
+yok); `bps` 7 → **14.00** (oran, ikiye katlanmış) → **3.89** (gerçek fill'ler).
+
+**VE HİÇBİR ŞEY KIRMIZI OLMADI** — çünkü mevcut her test **varsayılan** taban üzerinde koşuyor,
+orada yanlış alanı okumak **görünmez**. Bu, "yeşil suite = doğru kod" varsayımının bu depodaki
+kaçıncı çürütülmesi olduğunun kaydıdır (ADIM 110'un *"bir kusurun altında suite'in yeşil
+kalması boşluğun ölçümüdür"* dersinin **arama-deseni tarafındaki ikizi**). Düzeltme kapanışın
+kullandığı **aynı fonksiyon ve aynı girdilerden** türetiyor: satırın `exit_price`'ı zaten
+`exit_eff`, üstünde partial close reddediliyor → `size` tam kapanan boyut.
+
+### İKİNCİ DERS — İMZALANAN BİR RIDER'IN GEREKÇESİ ÖLÇÜMDE ÇÜRÜYEBİLİR
+
+Zorunlu ek, `commission_model`'in **`execution_key` içinde** olmasını şu gerekçeyle istiyordu:
+*"aksi halde iki farklı ücret modeliyle üretilmiş iki run aynı reprodüksiyon kimliğini
+paylaşır."* **Gerekçe yanlış, ölçüldü:** model pinlenmiş strateji revizyonlarının bir
+fonksiyonudur, `_pinned_items` zaten `selected_revision_id`'yi hash'ler → iki run **farklı**
+anahtar alır (`worev_flat` → `a8d36214…`, `worev_bps` → `b7c4a61b…`). Ayrım **bir seviye
+altta** zaten var.
+
+Alanı `execution_content`'e koymak bu yüzden **hiçbir ayrım kazandırmaz**, ama **her**
+`execution_key`'i kaydırır — hiçbir sayı oynamadan, hiçbir sürüm bump'ı olmadan: **beyan
+edilmemiş bir namespace kayması**, ki `manifest.py`'deki `ENGINE_VERSION` yorumları tam olarak
+onu engellemek için var. Ürün sahibi **`execution_content` DIŞINI** seçti; alan
+`mainboard_item_labels`'ın yanına kondu (o da aynı sebeple dışarıda). Orijinal rider metni
+**silinmedi, alıntılandı** — daraltma bir karar olarak okunuyor.
+
+**Alan yalnız DAĞILIMI adlandırır, TABANI değil**, ve bu bir kolaylık değil **doğruluk**
+meselesi: taban **item başına** config'dedir → manifest düzeyinde tek bir skaler, item'ları
+farklı tabanlar taşıyan bir kompozisyonu **yanlış beyan ederdi**; ayrıca `build_run_manifest`
+strateji config'i **hiç görmez** (yalnız revizyon id'leri), yani yeni bir plumbing olmadan
+hesaplayamazdı. §8'in istediği de zaten dağılımdır.
+
+### Yedi negatif kontrol, yedisi de ayırt edici
+
+Her biri **bellekteki anlık görüntüden** geri yazıldı (`git checkout --` DEĞİL — ADIM 111'de
+commit edilmemiş çalışmayı silmişti; `finally` DEĞİL — SIGTERM'de koşmaz, ADIM 100); her turdan
+sonra `git status` boş.
+
+| kontrol | kırmızıya çevirdiği |
+|---|---|
+| varsayılan `bps`'e çevrilir | flat oracle'ları — **varsayılan taşıyıcı** |
+| `flat` notional ile ölçeklenir | flat oracle + mevcut cost oracle'ları — iki taban **ayrı** |
+| giriş yeri kendi tabanını inline eder | **yalnız** iki bps oracle'ı — flat ve golden **yeşil kalır** |
+| participant büyüklüğü okur | **yalnız** yeni participant oracle'ı |
+| `size <= _ZERO` guard'ı kaldırılır | `test_oracle_sizing` (#551 hâlâ pinli) |
+| per-fill komisyon geri alınır | `test_every_fill_pays_one_commission_entry_included` (#552 hâlâ pinli) |
+| `_percent_of_capital` geri alınır | `test_oracle_sizing` (#550 hâlâ pinli) |
+
+**Golden defter kontrollerden BİLEREK çıkarıldı:** blanket bir 50-digest testi **her** şeyi
+yakalar ve **hiçbirini adlandırmaz**. Oracle-only koşuda her kırmızı **kendi konu alanındaki
+hedefli** bir assertion'a düştü — yani korumalar yalnız digest'e değil, **adlandırılmış davranış
+testlerine** de bağlı.
+
+### SÜREÇ — SUNUCU TARAFI "Update branch" DÜĞMESİ YİNE KULLANILDI
+
+PR sırada beklerken ürün sahibi **18:48Z'de** sunucu tarafı bir merge commit'i attı
+(`2c9f639`, `Merge branch 'main' into claude/…`, parents `81959fb` + `46533a7`); main'in ADIM
+113'ünü içeri aldı ve **tüm CI döngüsünü sıfırdan başlattı** (~50 dk). CLAUDE.md ve
+`pr-drive-to-green` bu düğmeyi **bilerek yasaklar**: bir kez sessizce bir `PROJECT_HISTORY.md`
+kaydını düşürmüş ve **hiçbir CI kapısı görmemişti**.
+
+**Bu sefer varsayılmadı, ölçüldü:** `git show 2c9f639 -- docs/ | grep '^-## '` → **boş**;
+documentation-truth gate `exit 0` + literal OK satırı; dalın kendi değişiklikleri yerinde. Sonra
+kapılar **merge edilmiş head üzerinde yeniden koşuldu** (157 passed, 50 digest yine sabit).
+**Hasar yok — bedel yalnız yeniden koşu.** Ders değişmedi: main'i içeri almak gerekiyorsa
+**rebase**, o düğme değil.
+
+**Merge:** `Backend` 19:42:58'de yeşile döndü, auto-merge **4 saniye sonra** 19:43:02'de indirdi.
+22 check, 22 yeşil.
+
+### DÜRÜST SINIR
+
+* **Tam backend suite ve coverage kapısı KOŞULMADI** — alt küme koşuları `--no-cov` ile; geçen
+  sayı ve coverage yüzdesinin otoritesi **CI**. Yerelde koşan: ruff 0 · format 0 (816 dosya) ·
+  mypy 0 (400 dosya) · oracles+golden+manifest **157 passed** · geniş finansal yüzey **1211
+  passed** · openapi 0 · `repository_facts --check` 0.
+* **Integration/contract KOŞULMADI** — bu container'da **:5432'de hiçbir şey dinlemiyor**.
+  `test_auth_mode_login_gate` yerelde DB bağlantısında düştü; auth'a dokunuyor, bu diff
+  dokunmuyor → **CI'da geçti**, yani doğru atfedilmişti.
+* **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+* **Frontend'e `commission_basis` seçici EKLENMEDİ, bilerek** — v18 mockup görsel otoritedir ve
+  böyle bir alanı yok; eklemek bir sapma olurdu. bps bugün yalnız API'den ayarlanır; UI'a
+  çıkarmak önce bir mockup güncellemesi ister.
+* **Karar 3 (#559) ve Karar 6 (G12) hâlâ İMZASIZ** — dokunulmadı.
+* **MEMORY CHECKPOINT (ritüel md. 4) YAZILAMADI, ve bu bir borç DEĞİL.**
+  `node scripts/memory_index.mjs --sync --only adim-114-…` **exit 1** verdi:
+  `sh: 1: agentmemory-mcp: not found` → `initialize zaman aşımı`. `scripts/memory_server.sh`
+  *"zaten canlı (http://localhost:3111)"* diyor ama sync'in MCP istemcisinin spawn ettiği binary
+  bu container'da **kurulu değil**. ADIM 53'ün kararı tam olarak bunu öngörür: **tek doğruluk
+  kaynağı git'teki belgedir** (bu kayıt), agentmemory onun **aranabilir indeksidir**, rakibi
+  değil — efemer bir container'da kaybolması borç doğurmaz, argümansız `--sync` baştan üretir.
+  **CI'ın koştuğu kapı `--check` ve o YEŞİL:** *"memory index gate: 127 kayıt, id'ler tekil,
+  gövdeler dolu ✓"* (exit 0), yani bu kaydın da tekil bir id türettiği **doğrulandı**.
+  Yapılamayan bir ölçümün doğru çıktısı, yapılmış gibi görünen bir sayı değil,
+  **yapılamadığının kaydıdır** (ADIM 109).
+
+**NUMARA: 114, ve ölçülerek alındı.** Ağaçtaki en yüksek `docs/ADIM<n>…KICKOFF.md` **113**
+(`current`), `PROJECT_HISTORY`'de en yüksek kayıt **ADIM 113**, `grep 'ADIM 114'` → **0**. Üç
+açık PR (#830, #833, #834) **dosya yoluyla** ölçüldü — hiçbiri bir `ADIM<n>…KICKOFF.md` yoluna
+dokunmuyor (ADIM 91: çakışma başlıkta değil **yolda** ölçülür). Ölçüm bir **anlık görüntüdür**,
+garanti değil (ADIM 100).
+
+`docs/ADIM114_LANDED_KICKOFF.md` · `docs/audit/financial_closure_evidence.md` ·
+`docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1.

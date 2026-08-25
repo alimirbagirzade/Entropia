@@ -265,8 +265,15 @@ Paylaşımlı koşuda P8 **ikinci bir arbitraj turu** ister, ADR §8'de bir tane
 `docs/audit/closure_c1_phase_tail_scaling_separability_2026-08-17.md`.
 
 > **Golden digest sayısı 50'dir** (41 non-portfolio + 9 `portfolio.*`), 46 değil — #720
-> dört `costs.commission_*` senaryosu ekledi (ölçüm M-1). Buraya sayı yazarken
+> **dört** senaryo ekledi (ölçüm M-1). Buraya sayı yazarken `engine_digests.json` değil
 > `engine_golden_digests.json`'dan say.
+>
+> **DÜZELTME (ADIM 114, ölçüldü):** o dördün **yalnız İKİSİ** `costs.commission_*`
+> (`costs.commission_round_trip`, `costs.commission_scale_ladder`); `costs.` önekli diğer dört
+> senaryo `costs.funding_*`'tır ve #720'den ÖNCE vardı. Eski metin *"dört `costs.commission_*`
+> senaryosu"* diyordu — **dördü** doğru (46 → 50), **`costs.commission_*` olduğu** yanlıştı.
+> Komisyon ekseninin golden'daki tabanı bu yüzden **iki** senaryodur: ADIM 114 bunu
+> `commission_basis` varsayılanının hiçbir sayıyı oynatmadığını kanıtlamak için kullandı.
 
 ### Kapsama kapısının YEŞİLİ ters okunur
 

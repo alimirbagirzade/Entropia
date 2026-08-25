@@ -245,8 +245,35 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. **Son dalga — ADIM 114 (Karar 1 İMZALANDI + uygulandı, PR #831): ÜRÜN KODU
+> DEĞİŞTİ (finansal) ama VARSAYILAN ALTINDA TEK BİR SAYI OYNAMADI — 50 golden digest BAYT BAYT
+> AYNI, o yüzden `ENGINE_VERSION` bump'ı GEREKMEDİ. Tavanlar OYNAMADI (54/6 · A1 B21 C6 D32).
+> Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Komisyonun **DAĞILIMI** (`per_fill`) onaylandı + manifest'te `COMMISSION_MODEL` olarak beyan
+> edildi (**`execution_content` DIŞINDA** — rider'ın gerekçesi ölçümde çürüdü, `_pinned_items`
+> zaten `selected_revision_id`'yi hash'liyor); **TABANI** açık alan oldu
+> (`CostsModel.commission_basis`, `flat|bps`, **varsayılan `flat`** = göç tuzağı YOK). Ücretin
+> tek türetimi `FillCosts.fee(notional)`; **altı ücret yeri + rapor eden yedinci tüketici**
+> ondan geçer — yeni fill yüzeyinde **inline etme**. `#550/#551/#552` doğrulandı (hepsi #720 ile
+> inmişti), **duplicate fix YAZILMADI** (`docs/audit/financial_closure_evidence.md`).
+> **ASIL DERS: bir kusuru ararken kullandığın DESEN, kusurun bulunduğu yeri belirler** — ücret
+> (equity-mutate eden) yerlerini grep'lemek altısını buldu, **rapor eden** yedinciyi kaçırdı
+> (`participant.py::_closed_by` oranı para olarak harcıyordu; `bps` 14.00 → 3.89, `flat`
+> değişmedi) ve **hiçbir test kırmızı olmadı**, çünkü mevcut her test **varsayılan** taban
+> üzerinde koşuyor. Yedi negatif kontrol, yedisi de ayırt edici; **golden bilerek dışarıda**
+> (blanket digest her şeyi yakalar, hiçbirini adlandırmaz).
+> **DÜRÜST SINIR:** tam suite + coverage KOŞULMADI (otorite CI) · integration/contract KOŞULMADI
+> (bu container'da Postgres yok; `test_auth_mode_login_gate` yerelde düştü, **CI'da geçti**) ·
+> frontend kapıları KOŞULMADI · **frontend'e `commission_basis` seçici EKLENMEDİ, bilerek**
+> (v18 mockup otoritedir, böyle bir alanı yok → önce mockup güncellemesi).
+> **SIRADAKİ HAMLE KOD DEĞİL, İMZA: `G8` (#559) · `G14` (#544) hâlâ KARARSIZ.**
+> `PROJECT_HISTORY.md` §ADIM 114 · `docs/ADIM114_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 113 (SINIF B TÜKENDİ): DOCS-ONLY — map'in ALTI `notes` alanı
+> `future_dev`. Öncesinde **ADIM 113 (SINIF B TÜKENDİ): DOCS-ONLY — map'in ALTI `notes` alanı
 > + ondan üretilen iki artefakt; ürün/test kodunda SIFIR satır. Tavanlar OYNAMADI (54/6 · A1 B21
 > C6 D32), `acceptance_coverage_baseline.json` el değmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), BLOCKED.**

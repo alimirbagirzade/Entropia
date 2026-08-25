@@ -263,6 +263,32 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
 >
 >
+> `future_dev`. Öncesinde **ADIM 111 (current-main delta forensics, PR #825): DOCS-ONLY —
+> üç yeni dosya, ürün/test kodunda SIFIR satır; tavanlar OYNAMADI (55/7 · A1 B23 C6 D32).
+> Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `e2fa521..a7261de` (150 commit)
+> ölçüldü: paylaşımlı portföy **UNWIRED → CONTAINED** (`C3` #777 + `C4` #799; ön koşullar
+> **2/22 → 8/22**; bayrak kıpırdamadı). **TUZAK: `run_portfolio`'nun hâlâ caller'ı YOK —
+> worker `iter_portfolio` çağırır**, yalnız birincisini grep'lemek yanıltır. #550/#551/#552
+> kapandı ve parayı oynattı (**golden 46 → 50, 46'nın 29'u değişti**; `C1`–`C4` digest'leri
+> HEAD ile aynı → portföy işi hiçbir şeyi yeniden fiyatlamadı). **İKİ ISSUE-STATE-DRIFT:
+> #559 + #544 bir saniye arayla, sıfır yorum/PR/kod ile kapatılmıştı → ürün sahibinin
+> talimatıyla YENİDEN AÇILDI ve imza blokları açıldı** (`docs/decisions/closure_g8_*`,
+> `closure_g14_*` — **ikisinde de KARAR YOK**); ön koşul 20/21 **amber**, yeşil sayılmadı.
+> `G14`'te ölçülmüş iki şey: tek değerin artık **İKİ** sevk edilmiş davranışı var (sıralı
+> downgrade ↔ faz döngüsü **reddediyor**), ve **NET'i kaldırmak bir MIGRATION'dır**
+> (`portfolio_allocation_plan.conflict_policy` VARCHAR + CHECK). `G8`'de: **hiçbir seçenek
+> folded saatin ikinci occurrence'ını geri getirmez** — seçim *"kullanıcıya söylenip
+> söylenmediği"* eksenindedir. **BİR REGRESYON, zaten onarılmış:** #799 tripwire'ın döngü
+> başlığını ikiledi → gerçek döngü silinse kapı YEŞİL kalıyordu (~3s16d), #805 `count(...)
+> == 1` ile onardı. **`CLAUDE.md`'de İKİ DRIFT bulundu ve bu dalgada DÜZELTİLDİ** — P-E2
+> iddiası (kendi içinde çelişiyordu) ve bayat `Next: PR B`. **DÜRÜST SINIR:** yerelde 123
+> unit + 2 golden + üç kapı koştu; **integration/contract/e2e ve TÜM frontend kapıları
+> KOŞULMADI** (Postgres/`node_modules` yok) → geçen sayı ve coverage **CI'ın otoritesinde**.
+> **NUMARA: `110` boş GÖRÜNÜYORDU ama #826 onu dosya yoluyla almış** (`ADIM110…KICKOFF.md`)
+> → bu kayıt **111**; kickoff **YOK, bilerek** (ADIM 82/109). Ratchet/baseline'a dokunulmadı.
+> `PROJECT_HISTORY.md` §ADIM 111 · kickoff **YOK**.
+>
+>
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 109 (kayıtsız inen #820'nin ritüeli, A-08 devam kartı):
@@ -1866,21 +1892,30 @@ Before stopping a working session, produce **ALL** of the following:
 > ile kapattı (**bu satır "açık kaldı" derken bayattı**, P-B/§6.2). **Tuzak:** GitHub #617'nin
 > closing PR'ı olarak **#619**'u gösterir, o **ölçüm** PR'ıdır — onarım `6da8a95` = **#681**,
 > ki #618'i de o onardı (bu yüzden #618'in hiç linkli PR'ı yok). **Linkage ≠ provenance.**
-> #514/#558/#559 **açık kaldı** · **Ready Check'in kalan İKİ N+1 bacağı hâlâ canlı**
-> (`readiness_check.py:554` sinyal, `:749` research; ölçülen slope **1.0**) — P-E2 **merge
-> EDİLMEDİ** ve ikisi için **hiç issue açılmadı** ·
+> ~~#514/#558/#559 **açık kaldı**~~ → **#514 AÇIK, #558 kapandı (yazılı kararla, 2026-08-17),
+> #559 kapandı AMA KARARSIZ → 2026-08-25'te YENİDEN AÇILDI** (ADIM 111) ·
+> ~~**Ready Check'in kalan İKİ N+1 bacağı hâlâ canlı** (`readiness_check.py:554` sinyal,
+> `:749` research; ölçülen slope **1.0**) — P-E2 **merge EDİLMEDİ**~~ → **BU SATIR BAYATTI ve
+> kendi dosyasıyla çelişiyordu** (§ADIM 62 P-E2'yi indi diye kaydediyor): `bb1e76c6` (#712)
+> **merge EDİLDİ**, `query_budgets.json` ikisini de **`per_item: 0`** gösterir, satır
+> numaraları da artık o okumaları göstermiyor (ADIM 111'de ölçüldü). **Kalan tek N+1 leg 3**
+> — `_resolve_external`, bilerek, kapı **`G15`** ·
 > **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde) ·
 > ~~**`ci.yml` concurrency kusuru**~~ **ONARILMIŞ** (ADIM 34'te doğrulandı): `ci.yml:9–14`
 > artık `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` — main'de iptal KAPALI.
 > Tarihsel kayıt sabit kalır: `e8d1d48` (#633) ve `bc59dae` (#634) 0 job ile cancelled olmuş,
 > CI'ları HİÇ koşmamıştı. Yeni bir job eklerken **gerçekten koştuğunu job log'undan** doğrula.
-> **Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site.
-> ADIM 35 **(c)**'yi (projeksiyon), **ADIM 58 (a)'yı** kapattı: faz-bölünmüş bar
-> `_ItemStepper` (`engine.py:756`) olarak **sevk edilmiş**, `E(t)` girişi
-> `_phase_entry(bar, *, equity)` (`engine.py:2448`). **Kalan tek engel (b):** üç faz
-> **book eder**, `ItemParticipant` arbitrasyon öncesi **tarif** ister — bu `run_engine`'in
-> bar gövdesine dokunur → **ADR §16 insan kapısı + ADR amendment'ı** gerekir, o kapıdan
-> geçmeden başlama. Ölçüm ve seam sıralaması:
+> ~~**Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call
+> site~~ → **PR B İNDİ, bu işaretçi bayattı** (ADIM 111'de ölçüldü): adaptör **`2cda24f5`
+> (#777)**, call site **`39947256` (#799)** + **`3f557c72` (#805)**. Engel **(b)** de kapandı
+> — `C1` (#735) describe/book ayrımını, `C3` (#777) `_EngineParticipant`'ı sevk etti; ADR §16
+> kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
+> `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
+> `_prepare_strategy` içinde, seam'le ilgisiz.
+> **GERÇEK Next: KOD DEĞİL, İMZA** — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon TABANI) ·
+> `G11`+`G12` (→ `C6`) · `G15` (leg 3) · `G10` **hiç talep edilmedi**; sonra `C6`, ön koşul
+> 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
+> `docs/audit/final_closure_delta_audit_2026-08-25.md` §10. Eski ölçüm:
 > `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden
 > quantize edilmez, dondurulmuş `derived_amounts`'tan **kopyalanır**; iki yuvarlama sabiti de

@@ -8373,7 +8373,48 @@ duruyor) → **alınmadı**. **Parti seçmeden ÖNCE ÖLÇ** (ADIM 54) bu partid
 KOŞULMADI, Postgres kurulmadı ve hiçbir backend geçen/coverage sayısı iddia edilmiyor — otorite CI.**
 `PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
 
-## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+## Stage 111 — current-main delta forensics (PR #825) + `G8`/`G14` imza bloklarının açılması landed
+
+**DOCS-ONLY.** Üç yeni dosya, `backend/src`/`frontend/src`'te **sıfır satır**, migration yok,
+`ENGINE_VERSION`/OpenAPI/`SHARED_ALLOCATION_STATUS` değişmedi. Kabul borcu tavanları
+**OYNAMADI** (55/7 · A1 B23 C6 D32). **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+Merge `53ff7549` (squash). Ratchet/baseline dosyalarına **dokunulmadı** (#826 onları indiriyor).
+
+**İnen dosyalar:** `docs/audit/final_closure_delta_audit_2026-08-25.md` (958 satır) ·
+`docs/decisions/closure_g8_dst_fold_gap_2026-08-25.md` ·
+`docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md` (son ikisinde **imza blokları BOŞ**).
+
+**Ölçüm:** `e2fa521..a7261de`, 150 commit. Clone **shallow** başladı ve tabanı içermiyordu
+(`fatal: bad object`) — fetch + `--unshallow` **diff okunmadan önce** yapıldı. Paylaşımlı portföy
+**UNWIRED → CONTAINED** (`C3` #777, `C4` #799; ön koşullar **2/22 → 8/22**; bayrak kıpırdamadı).
+**`run_portfolio`'nun hâlâ caller'ı YOK** — worker `iter_portfolio` çağırır. #550/#551/#552
+kapandı ve parayı oynattı (golden **46 → 50**, 46'nın **29'u** değişti; `C1`–`C4` digest'leri
+HEAD ile aynı). **İki ISSUE-STATE-DRIFT** (#559, #544 — bir saniye arayla, sıfır yorum/PR/kod ile
+kapatılmış) → **yeniden açıldı**, imza yerleri açıldı, ön koşul 20/21 **amber**. **Bir regresyon,
+zaten onarılmış** (#799 tripwire'ı ikiledi → #805 `count(...) == 1`). **İki `CLAUDE.md` drift'i
+bulundu ve bu dalgada düzeltildi** (P-E2 iddiası + bayat `Next: PR B`).
+
+**Dürüst sınır:** yerelde **123 unit + 2 golden** passed, üç kapı temiz; **integration/contract/e2e
+ve TÜM frontend kapıları KOŞULMADI** (Postgres/`node_modules` yok) → geçen sayı ve coverage
+**CI'ın otoritesinde**. CI iki bağımsız yeşil koşu verdi: **#2291** (`f7206d78`) ve **#2293**
+(`03269040`, 17 passed / 5 skipped / 0 failure).
+
+**Numara:** `110` boş **görünüyordu**; açık **#826** onu **dosya yoluyla** almış
+(`docs/ADIM110_LANDED_KICKOFF.md`) → bu kayıt **111**. Kickoff **YOK, bilerek** (ADIM 82/109:
+`_check_live_kickoff_is_newest` numarayı dosya adından okur, ve bu slice'ın devamı **kod değil
+imzadır**). Ritüel md. 5 atlandı (yeni endpoint/tablo/sayfa/job yok).
+`PROJECT_HISTORY.md` §ADIM 111.
+
+## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
+
+> **ADIM 111 (2026-08-25) BU BAŞLIĞI DEĞİŞTİRDİ, ve gerekçesi ölçüldü.** Önceki başlık
+> *"PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site"* idi ve **inmiş
+> işi adlandırıyordu**: adaptör `2cda24f5` (#777), call site `39947256` (#799) + `3f557c72`
+> (#805); engel (b) `C1` (#735) + `C3` (#777) ile kapandı ve ADR §16 kapısı iki imzalı kararla
+> geçildi. Kritik yol artık **kodla değil imzayla** başlıyor — sırası ve gerekçesi
+> `docs/audit/final_closure_delta_audit_2026-08-25.md` §10'da: `G8`/`G14`/Karar 1 (üçü de
+> yalnız karar), `G11`+`G12` → `C6` (kod), `G15` (leg 3), `G10` **hiç talep edilmedi**, ön koşul
+> 15–18 ve 22, **en son `C9`** (lift). A-08 kendi hattında ve RC verdict'ini bağımsız blokluyor.
 
 > **ADIM 109 GÜNCELLEMESİ (2026-08-25) — BAŞLIK VE GÖVDE DEĞİŞMEDİ, ÇÜNKÜ DEĞİŞECEK BİR ŞEY YOK.**
 > ADIM 109 **geriye dönük bir defterdir**: kaydettiği slice (#820, `99a7f30`) ADIM 108'in kaydettiği

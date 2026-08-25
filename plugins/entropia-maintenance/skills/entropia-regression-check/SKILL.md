@@ -69,10 +69,20 @@ gh run list --branch main --limit 5
 gh run view <id>   # 0 job => koşmadı, "yesil" DEĞİL
 ```
 
+> **`gh` HER ORTAMDA YOK — ölçüldü (2026-08-25, remote container: `command -v gh` boş).**
+> Aşağıdaki `gh` komutları **yerel** oturumun yoludur. `gh` yoksa aynı bilgiyi GitHub
+> MCP araçlarından al (bunlar `.claude/settings.json` `permissions.allow`'da salt-okur
+> olarak zaten kayıtlı): PR listesi `mcp__github__list_pull_requests` · PR ayrıntısı,
+> diff'i ve check'leri `mcp__github__pull_request_read` · koşu listesi
+> `mcp__github__actions_list` · koşu ayrıntısı `mcp__github__actions_get` · job log'u
+> `mcp__github__get_job_logs` · PR açma `mcp__github__create_pull_request`.
+> **Kanıt sorusu değişmez, aracı değişir.**
+
 ## 4. Belgeler bayat-varsayılandır
 
 - **Handoff / önceki oturum özeti / yerel branch güvenilmez.** Oturum başında:
-  `git fetch`, `git log --oneline origin/main -6`, `gh pr list --state all`.
+  `git fetch`, `git log --oneline origin/main -6`, `gh pr list --state all`
+  (`gh` yoksa `mcp__github__list_pull_requests`).
 - `CLAUDE.md` §Current position **elle** yazılır; içindeki **HEAD sha'sı yapısal
   olarak bayattır** (kapanış commit'inin kendisi onu değiştirir).
 - Bir belgenin güncel mi tarihsel mi olduğunu ilk satırındaki
@@ -120,6 +130,6 @@ işaretle.
 [ ] git fetch + origin/main taze mi
 [ ] docs PR ise: git show <sha> -- docs/ | grep '^-## '  → bos
 [ ] openapi --check ve repository_facts --check yesil
-[ ] gh run view <id> → job sayisi > 0
+[ ] gh run view <id> (gh yoksa mcp__github__actions_get) → job sayisi > 0
 [ ] "landed/closed" iddialarinin kaniti var
 ```

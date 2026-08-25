@@ -1,7 +1,7 @@
 ---
 description: Entropia kapanış ritüeli — handoff, kickoff+resume prompt, PROJECT_HISTORY, memory checkpoint, codemap, PR
 argument-hint: "<slice adı, ör. ADIM 31 — ItemParticipant>"
-allowed-tools: Bash(git:*), Bash(gh:*), Read, Edit, Write, Glob, Grep
+allowed-tools: Bash(git:*), Bash(gh:*), mcp__github__list_pull_requests, mcp__github__pull_request_read, mcp__github__actions_list, mcp__github__actions_get, mcp__github__get_job_logs, mcp__github__create_pull_request, Read, Edit, Write, Glob, Grep
 ---
 
 Kapanan slice: **$ARGUMENTS**
@@ -56,6 +56,9 @@ ilgili haritayı güncelle (veya `ecc:update-codemaps`).
 - Branch: `docs/stage-<x>-landed`
 - Commit: `<type>(stage-<x>): <subject>` — **AI attribution YOK**
 - `gh pr create` → `gh pr checks <n> --watch`
+  — **`gh` yoksa** (remote container: yok): `mcp__github__create_pull_request`
+    (draft) + `mcp__github__pull_request_read`. PR'a abone ol:
+    `subscribe_pr_activity`; CI olayları oturuma **kendiliğinden** düşer.
 - **Self-merge bloklu → merge'ü kullanıcıdan iste**, kendin merge etme.
 
 ## Kapanmadan önce — iki tuzak

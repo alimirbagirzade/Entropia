@@ -106,4 +106,5 @@ Sayısal otorite: CI job log'u ve `docs/generated/repository_facts.md`
 (**collection** sayıları). `CLAUDE.md` §Current position elle yazılır ve
 bayatlayabilir.
 
-Doğrula: `gh run list --branch main --limit 1` → job log.
+Doğrula: `gh run list --branch main --limit 1` → job log. **`gh` yoksa** (remote
+container: yok): `mcp__github__actions_list` → `mcp__github__get_job_logs`.

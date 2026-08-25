@@ -35,7 +35,8 @@ bir talep gelirse teşhisi ver ve `entropia-scoped-fix`'e devret.
 
 - **Handoff/özet BAYAT KABUL EDİLİR.** Bir iddiayı (`X landed`, `Y kapalı`)
   belge söylüyor diye kabul etme; `git log --oneline origin/main -6`,
-  `gh pr list --state all`, dosyanın kendisi ile doğrula.
+  `gh pr list --state all` (`gh` yoksa `mcp__github__list_pull_requests`),
+  dosyanın kendisi ile doğrula.
 - **Sayısal otorite** `docs/generated/repository_facts.md` (üretilmiş: alembic
   head, tablo/FK, HTTP operation, route, `ENGINE_VERSION`, test collection).
   CLAUDE.md §Current position elle yazılır ve içindeki HEAD sha'sı yapısal

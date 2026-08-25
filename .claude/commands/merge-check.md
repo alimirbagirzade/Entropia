@@ -1,7 +1,7 @@
 ---
 description: Merge öncesi regresyon kapısı — docs kayıt silme, üretilmiş dosya drift'i, 0-job'lı sahte yeşil CI
 argument-hint: "<PR numarası veya commit sha>"
-allowed-tools: Bash(git:*), Bash(gh:*), Read, Grep
+allowed-tools: Bash(git:*), Bash(gh:*), mcp__github__list_pull_requests, mcp__github__pull_request_read, mcp__github__actions_list, mcp__github__actions_get, mcp__github__get_job_logs, Read, Grep
 ---
 
 Hedef: **$1**
@@ -24,8 +24,9 @@ PASS/FAIL yaz.
 git show $1 -- docs/ | grep '^-## ' || echo "kayit silinmemis"
 ```
 
-PR numarası verildiyse önce sha'ya çevir (`gh pr view $1 --json headRefOid`) ya da
-diff'i doğrudan al (`gh pr diff $1 -- docs/`). Çıktı **boş değilse merge ETME** —
+PR numarası verildiyse önce sha'ya çevir (`gh pr view $1 --json headRefOid`; `gh`
+yoksa `mcp__github__pull_request_read`) ya da diff'i doğrudan al (`gh pr diff $1 --
+docs/`; `gh` yoksa aynı aracın diff/files kipi). Çıktı **boş değilse merge ETME** —
 base bayat, kayıt geri konmalı.
 
 ### 2. Base tazeliği
@@ -52,6 +53,17 @@ gh pr checks $1
 gh run list --limit 5
 gh run view <id>     # job sayısı 0 ise "yeşil" DEĞİLDİR
 ```
+
+> **`gh` HER ORTAMDA YOK — ölçüldü (2026-08-25, remote container: `command -v gh` boş).**
+> Aşağıdaki `gh` komutları **yerel** oturumun yoludur. `gh` yoksa aynı bilgiyi GitHub
+> MCP araçlarından al (bunlar `.claude/settings.json` `permissions.allow`'da salt-okur
+> olarak zaten kayıtlı): PR listesi `mcp__github__list_pull_requests` · PR ayrıntısı,
+> diff'i ve check'leri `mcp__github__pull_request_read` · koşu listesi
+> `mcp__github__actions_list` · koşu ayrıntısı `mcp__github__actions_get` · job log'u
+> `mcp__github__get_job_logs` · PR açma `mcp__github__create_pull_request`.
+> **Kanıt sorusu değişmez, aracı değişir.**
+> Burada 0-job tuzağını gören alan `mcp__github__actions_get` çıktısındaki **job
+> sayısıdır**; `conclusion: success` tek başına kanıt değildir.
 
 ### 5. "Landed / closed" iddialarının kanıtı
 

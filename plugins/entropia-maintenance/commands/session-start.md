@@ -1,6 +1,6 @@
 ---
 description: Entropia oturum başlangıç protokolü — bayat belge doğrulaması + otorite sırasıyla okuma
-allowed-tools: Bash(git fetch:*), Bash(git log:*), Bash(git status:*), Bash(gh pr list:*), Read, Glob, Grep
+allowed-tools: Bash(git fetch:*), Bash(git log:*), Bash(git status:*), Bash(gh pr list:*), mcp__github__list_pull_requests, mcp__github__pull_request_read, mcp__github__actions_list, mcp__github__actions_get, mcp__github__get_job_logs, Read, Glob, Grep
 ---
 
 ## Taze durum (bu blok komut çağrılırken koşturuldu)
@@ -9,7 +9,7 @@ allowed-tools: Bash(git fetch:*), Bash(git log:*), Bash(git status:*), Bash(gh p
 - origin/main son 6: !`git log --oneline origin/main -6 2>&1 || echo "origin/main yok"`
 - Yerel HEAD: !`git log --oneline -3`
 - Çalışma ağacı: !`git status --porcelain`
-- PR'lar: !`gh pr list --state all --limit 8 2>&1 || echo "gh yok/yetkisiz"`
+- PR'lar: !`gh pr list --state all --limit 8 2>&1 || echo "gh YOK (remote container: normal) -> mcp__github__list_pull_requests kullan"`
 
 ## Görevin
 

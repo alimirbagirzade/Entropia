@@ -8376,8 +8376,10 @@ KOŞULMADI, Postgres kurulmadı ve hiçbir backend geçen/coverage sayısı iddi
 ## Stage 111 — current-main delta forensics (PR #825) + `G8`/`G14` imza bloklarının açılması landed
 
 **DOCS-ONLY.** Üç yeni dosya, `backend/src`/`frontend/src`'te **sıfır satır**, migration yok,
-`ENGINE_VERSION`/OpenAPI/`SHARED_ALLOCATION_STATUS` değişmedi. Kabul borcu tavanları
-**OYNAMADI** (55/7 · A1 B23 C6 D32). **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+`ENGINE_VERSION`/OpenAPI/`SHARED_ALLOCATION_STATUS` değişmedi. Tavanlara **bu slice
+dokunmadı** (kendi tabanı `53ff7549`'da 55/7 · A1 B23 C6 D32 idi; **ADIM 110 / #826 onları
+54/6 · B21'e İNDİRDİ** → o sayı bu slice'ın tabanına ait, güncel değerin otoritesi
+`acceptance_coverage_baseline.json`). **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 Merge `53ff7549` (squash). Ratchet/baseline dosyalarına **dokunulmadı** (#826 onları indiriyor).
 
 **İnen dosyalar:** `docs/audit/final_closure_delta_audit_2026-08-25.md` (958 satır) ·

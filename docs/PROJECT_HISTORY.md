@@ -15478,9 +15478,15 @@ sonsuza dek yeşil kalır — *kapı bunu yakalamaz, koşturan kişi yakalar*).
 
 **DOCS-ONLY.** Üç yeni dosya, `backend/src` ve `frontend/src`'te **sıfır satır**, migration yok,
 `ENGINE_VERSION` değişmedi, OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS` = `future_dev`
-(dosya diff'i **boş**). Kabul borcu tavanları **OYNAMADI** (55 partial / 7 uncovered ·
-A1 B23 C6 D32 — bu dalda taze `--ratchet` ile doğrulandı). **Blocker sayısı DEĞİŞMEDİ
-(1 — yalnız A-08), BLOCKED.** Merge: `53ff7549` (squash, #825).
+(dosya diff'i **boş**). Kabul borcu tavanlarını **BU SLICE OYNATMADI**; taban
+`53ff7549`'da taze `--ratchet` ile ölçülen değer **55 partial / 7 uncovered · A1 B23 C6 D32**
+idi. **Bu bir "main şu an burada" iddiası DEĞİL, bu diff'in tavanlara dokunmadığının
+kaydıdır** — **#826 (ADIM 110) bu kayıt yazılırken İNDİ** ve tavanları **54 / 6 · B 21**'e
+çekti, yani yukarıdaki 55/7 artık **bu slice'ın tabanına ait tarihsel bir sayıdır**; güncel
+değerin otoritesi `acceptance_coverage_baseline.json`. Ayrım bilerek yazıldı: ADIM 93/98/100 üç kez,
+kendi tabanına karşı doğru ölçülmüş bir tavanın araya giren başka bir dal yüzünden **sessizce**
+yanlış taşındığını kaydetti. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+Merge: `53ff7549` (squash, #825).
 
 İnen üç dosya:
 `docs/audit/final_closure_delta_audit_2026-08-25.md` (958 satır) ·

@@ -264,7 +264,9 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > `future_dev`. Öncesinde **ADIM 111 (current-main delta forensics, PR #825): DOCS-ONLY —
-> üç yeni dosya, ürün/test kodunda SIFIR satır; tavanlar OYNAMADI (55/7 · A1 B23 C6 D32).
+> üç yeni dosya, ürün/test kodunda SIFIR satır; **tavanlara BU SLICE DOKUNMADI** (kendi tabanı
+> `53ff7549`'da 55/7 · A1 B23 C6 D32 idi; **ADIM 110 onları 54/6 · B21'e İNDİRDİ** — güncel
+> değerin otoritesi `acceptance_coverage_baseline.json`).
 > Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** `e2fa521..a7261de` (150 commit)
 > ölçüldü: paylaşımlı portföy **UNWIRED → CONTAINED** (`C3` #777 + `C4` #799; ön koşullar
 > **2/22 → 8/22**; bayrak kıpırdamadı). **TUZAK: `run_portfolio`'nun hâlâ caller'ı YOK —

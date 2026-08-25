@@ -70,6 +70,12 @@ secretGroup = 1
 [allowlist]
 description = "Committed template of local-only defaults + one documentation false positive"
 paths = ['''^\.env\.example$''']
+# `regexTarget = "line"` ZORUNLUDUR ve unutulması bu allowlist'i SESSİZCE ETKİSİZ
+# kılar: gitleaks'in allowlist regex'leri öntanımlı olarak SECRET'a bakar, satıra
+# değil. Aşağıdaki desen bir SATIR şeklini tarif ediyor, o yüzden hedef satır olmalı.
+# Bu satır olmadan ilk deneme CI'da aynı bulguyla kırmızı kaldı (da971b0) — hata
+# yerelde indirilen gitleaks 8.28.0 ile birebir üretilip düzeltildi.
+regexTarget = "line"
 regexes = [
   # gitleaks' `curl-auth-user` rule reads `-u <value>` as curl's credential flag.
   # `sqlmap -u <URL>` uses the SAME flag for the target URL, so a documentation

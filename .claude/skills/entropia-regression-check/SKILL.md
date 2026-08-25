@@ -78,6 +78,27 @@ gh run view <id>   # 0 job => koşmadı, "yesil" DEĞİL
 > `mcp__github__get_job_logs` · PR açma `mcp__github__create_pull_request`.
 > **Kanıt sorusu değişmez, aracı değişir.**
 
+## 3b. Sır taraması YERELDE koşturulabilir (Docker gerekmez)
+
+`Secret scan (gitleaks)` CI'da Docker imajıyla koşar ve bu container'da **Docker
+daemon yoktur** — ama bu "yerelde doğrulanamaz" demek DEĞİLDİR: gitleaks statik tek
+bir binary olarak yayımlanır.
+
+```bash
+curl -sSL -o gl.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz
+tar xzf gl.tar.gz && ./gitleaks detect --source . --no-git --config .gitleaks.toml --redact -v
+```
+
+**Allowlist eklerken iki tuzak, ikisi de yaşandı:**
+
+1. **`regexTarget = "line"` yazmayı unutma.** Allowlist regex'leri öntanımlı olarak
+   **secret**'a bakar, satıra değil; satır şekli tarif eden bir desen sessizce
+   etkisiz kalır ve kapı aynı bulguyla kırmızı kalmaya devam eder.
+2. **Negatif kontrolü PRISTINE config ile karşılaştır.** Sahte bir kimlik satırı
+   ekleyip "yakalanmadı" görmek tek başına *allowlist çok geniş* demek değildir —
+   kural o şekli hiç tanımıyor da olabilir. Aynı probe'u eski konfigle koştur:
+   fark yoksa probe kusurlu, fark varsa allowlist geniş.
+
 ## 4. Belgeler bayat-varsayılandır
 
 - **Handoff / önceki oturum özeti / yerel branch güvenilmez.** Oturum başında:

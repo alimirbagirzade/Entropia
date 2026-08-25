@@ -251,3 +251,76 @@ def test_an_empty_schedule_is_the_funding_free_run() -> None:
         oracle_config(direction="long", protection={}), _HELD_LONG, funding=_schedule()
     )
     assert out.summary["final_equity"] == Decimal("10100.00")
+
+
+# --------------------------------------------------------------------------- #
+# Karar 1 (GH #552, signed 2026-08-25) — the commission BASIS                  #
+# --------------------------------------------------------------------------- #
+def _basis_run(basis: str, commission: str) -> EngineOutput:
+    """One entry fill + one exit fill, nothing scaling or stacking into it.
+
+    Sizing is stated as a PERCENT so the notional is known without reading a price:
+    10% of 10 000 = 1000 at entry. That makes the bps arithmetic hand-computable,
+    which is the whole point — a bps fee that is only compared against itself proves
+    nothing about the formula.
+    """
+    return run_oracle(
+        oracle_config(
+            direction="long",
+            protection={},
+            costs={
+                "slippage_mode": "percentage_slippage",
+                "slippage_value": "0",
+                "commission": commission,
+                "commission_basis": basis,
+            },
+            sizing={"method": "base_position_size", "base_position_size": "10"},
+        ),
+        [
+            *flat_run(),
+            bar(21, "100", "105", "100", "105"),
+            bar(22, "105", "105", "100", "100"),
+        ],
+    )
+
+
+def test_the_default_basis_is_flat_and_charges_the_amount_verbatim() -> None:
+    """`flat` is the SHIPPED reading and Karar 1 keeps it as the default.
+
+    Two fills at 7 = 14.00, whatever the notional is. This is the assertion that makes
+    the default load-bearing: if `flat` ever started scaling with notional, every saved
+    revision would silently re-price and this test is what stops it.
+    """
+    zero = Decimal(str(_basis_run("flat", "0").summary["final_equity"]))
+    flat = Decimal(str(_basis_run("flat", "7").summary["final_equity"]))
+    assert zero - flat == Decimal("14.00")
+
+
+def test_bps_charges_the_rate_against_each_fills_own_notional() -> None:
+    """`bps` is Master Ref Modul 4 §2.3: fee = rate / 10 000 x |fill notional|.
+
+    Hand-computed, per FILL — not per position, which is the distinction the six charge
+    sites exist to preserve:
+      * entry fill: notional 1000.00 (10% of 10 000) -> 7 / 10000 * 1000.00 = 0.70
+      * exit  fill: the position is 1000/105 units and exits at 100, so its notional is
+        952.38 -> 7 / 10000 * 952.38 = 0.6667 -> 0.67 quantized
+    Total 1.37, against 14.00 for the same magnitude read as `flat` — the two bases are
+    not a rounding apart, they are a different quantity.
+    """
+    zero = Decimal(str(_basis_run("bps", "0").summary["final_equity"]))
+    bps = Decimal(str(_basis_run("bps", "7").summary["final_equity"]))
+    assert zero - bps == Decimal("1.37")
+
+
+def test_the_bps_fee_is_linear_in_the_rate() -> None:
+    """A rate is a rate: 50 bps costs what 7 bps costs, scaled by 50/7.
+
+    Pinned because a basis that is merely "smaller than flat" would pass the test above
+    while being any arbitrary function of notional.
+    """
+    zero = Decimal(str(_basis_run("bps", "0").summary["final_equity"]))
+    seven = zero - Decimal(str(_basis_run("bps", "7").summary["final_equity"]))
+    fifty = zero - Decimal(str(_basis_run("bps", "50").summary["final_equity"]))
+    # 0.70 + 0.67 vs 5.00 + 4.76 — exact, not approximate.
+    assert seven == Decimal("1.37")
+    assert fifty == Decimal("9.76")

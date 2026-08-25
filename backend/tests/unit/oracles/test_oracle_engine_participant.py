@@ -639,3 +639,32 @@ def test_the_axis_is_the_merged_clock_and_the_item_ledgers_are_not_the_curve() -
     assert len(run.ticks) == FLAT_BARS + 2
     assert list(run.instants) == sorted(run.instants)
     assert run.ledger.equity == _POOL + sum((_item_delta(p) for p in participants), Decimal("0"))
+
+
+def test_the_mirrored_exit_commission_is_the_fee_charged_not_the_configured_rate() -> None:
+    """Karar 1 (GH #552): ``MandatoryExit.commission`` must be MONEY, on either basis.
+
+    ``_closed_by`` states the exit fill's commission to the pool, and the pool books it on
+    its ``fees`` line. It used to read ``fill_costs.commission`` — correct only while that
+    field WAS the fee. Once the basis became explicit, ``bps`` made it a RATE, and spending
+    a rate as money reported 7.00 per item where the engine had charged well under one.
+
+    Measured, both directions:
+      * ``flat`` 7 -> 14.00 across the two items, unchanged from before the basis existed;
+      * ``bps``  7 -> 3.89, the two exit fills' own notionals at 7 bps.
+
+    The literals are pinned rather than recomputed through ``fee()``: deriving the expected
+    value with the same function the fix calls would pass no matter what that function did.
+    The `flat` half is the regression guard — it is the number every pre-Karar-1 run booked.
+    """
+    costs = {
+        "slippage_mode": "percentage_slippage",
+        "slippage_value": "0",
+        "commission": "7",
+        "commission_basis": "bps",
+    }
+    run = _run(_two_items(config_a=_config(costs=costs), config_b=_config(costs=costs)))
+
+    assert run.ledger.fees == Decimal("3.89")
+    # The defect this pins: reading the magnitude would have made these equal.
+    assert run.ledger.fees != Decimal("7") * 2

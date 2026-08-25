@@ -143,6 +143,25 @@ from entropia.shared.manifest import manifest_hash
 # (``STRATEGY_SIZING_SEMANTICS_UNCONFIRMED``); nothing is converted automatically, because
 # the stored number does not say which reading its author meant.
 ENGINE_VERSION = "backtest-engine-v18-percent-sizing-per-fill-commission"
+
+# K1 (Master Ref Modul 6 §8: "komisyon dagilimi engine manifestinde acik olmalidir"),
+# satisfied by Karar 1's mandatory rider (GH #552, signed 2026-08-25). Until now the
+# manifest said NOTHING about commission: the cost config lived inside the pinned
+# strategy revision as a hash, and a hash is not an explanation.
+#
+# This names the DISTRIBUTION — how a fee is split across a position's fills — which is
+# what §8 asks for and which is engine-wide: `booking.close_position` charges one fee per
+# fill unconditionally, with no config switch. It deliberately does NOT name the BASIS
+# (`commission_basis`, flat|bps). The basis is PER-ITEM config, so one scalar here would
+# misstate a composition whose items carry different bases, and it is already pinned
+# transitively — a config change mints a new strategy revision and `_pinned_items` hashes
+# `selected_revision_id` into `execution_key` (measured 2026-08-25).
+#
+# Update this string only in the commit that changes what `booking` actually does; the
+# shipped distribution is pinned behaviourally by
+# `test_oracle_position_lifecycle.py::test_every_fill_pays_one_commission_entry_included`.
+COMMISSION_MODEL = "per_fill"
+
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
 
@@ -274,6 +293,18 @@ def build_run_manifest(
         # these onto each ``ItemRun`` so the immutable Result can name its per-item and
         # leave-one-out rows without ever joining the live composition.
         "mainboard_item_labels": pinned_item_labels(item_manifest),
+        # Karar 1's K1 rider. Placed HERE — in the manifest, outside ``execution_content``
+        # — on the ``mainboard_item_labels`` precedent directly above.
+        #
+        # The rider as signed asked for it INSIDE ``execution_key``, reasoning that two runs
+        # priced by different fee models would otherwise share a reproduction identity. That
+        # reasoning was measured and does not hold: the model is a function of the pinned
+        # strategy revisions, and ``_pinned_items`` already hashes ``selected_revision_id``,
+        # so the two runs' keys differ regardless. Adding it to ``execution_content`` would
+        # therefore buy no discrimination while shifting EVERY execution_key — an undeclared
+        # namespace shift with no version bump behind it, which is precisely what the
+        # ``ENGINE_VERSION`` comments above exist to prevent. Adjudicated 2026-08-25.
+        "commission_model": COMMISSION_MODEL,
         "strategy_package_context": strategy_package_context,
         "external_object_context": external_object_context,
         "data_time_context": data_time_context,
@@ -291,6 +322,7 @@ def build_run_manifest(
 
 
 __all__ = [
+    "COMMISSION_MODEL",
     "ENGINE_VERSION",
     "METRIC_SET_VERSION",
     "OUTPUT_ARTIFACT_PROFILE",

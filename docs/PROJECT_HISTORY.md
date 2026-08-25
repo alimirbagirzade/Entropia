@@ -15014,5 +15014,35 @@ next-session card, refresh attempt recorded, no session run"*) `PROJECT_HISTORY.
 slice'ın kapattığı bulguyu **açan** — odur. Kaydını **sahibi yazmalıdır** (ADIM 97 emsali: *"bu slice
 o kaydı UYDURMADI"*). Ölçüldü, kaydedildi, üzerine gidilmedi.
 
+### KAPANIŞIN KENDİ KIRMIZISI — ritüel metni `A08_COMPLETE` kapısını tetikledi
+
+Bu kapanışın **ilk push'u `Backend`'i 52 saniyede kırmızıya çevirdi** (48 dakikalık suite'e hiç
+gelmeden, `documentation-truth gate FAILED (1 finding)`), ve **suçlu kapı değil bu kaydın kendi
+prozasıydı**: `CLAUDE.md:244` bir satırda önce *"yalnız A-08), BLOCKED"* sonra *"§6.1b kapandı"*
+yazıyordu, ve kural
+`A-08[^\n]{0,80}?(Complete|COMPLETE|PASS|Done|tamamlan|kapandı)` ikisini **21 karakter arayla**
+gördü → *"A-08 kapandı"* okudu. **İddia yanlış değildi, YAKINLIK yanlıştı.**
+
+**Düzeltme PROZAYA yapıldı, KAPIYA DEĞİL** — ve bu ayrım burada pazarlıksızdır: `A08_COMPLETE`
+tam olarak bu deponun *"A-08 tamamlandı"* diyen bir cümleyi asla sevk etmemesi için var; onu
+gevşetmek ya da regex'i dolanan bir eşanlamlı seçmek (`kapandı` → `kapalı`) bir bulguyu **kalıcı
+sessizliğe** çevirirdi. İki satır **ayrıldı**, kelimeler korundu.
+
+**İKİ negatif kontrol, ikisi de kırmızı, ağaç `finally`'de geri yazıldı:** **NC-1** cümleyi
+*gerçek* bir iddiaya çevirdi (*"A-08 denetimi tamamlandı"*) → kapı **hâlâ yakalıyor**, yani
+**zayıflamadı**; **NC-2** iki satırı geri birleştirdi → **aynı** kırmızı, yani düzeltme
+**vacuous değil**. Sonrasında `git status` ile ağacın temiz olduğu doğrulandı, tam tarama **0**.
+
+**KALICI TUZAK — ritüel yazan her oturum için:** `INVARIANT_GLOBS` **`CLAUDE.md` ve
+`docs/STAGE2_HANDOFF.md`'yi kapsar** (`PROJECT_HISTORY.md` ve kickoff'lar **kapsam dışı**), kural
+**satır bazlıdır** ve `NEGATION_RE` *"DEĞİŞMEDİ"*yi bir olumsuzlama **saymaz** (`DEĞİL` ile
+eşleşmez). Yani kapanış özetinin **her zaman** taşıdığı *"Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+A-08)"* cümlesi, aynı satırda bir *"… kapandı"* ile buluşursa **her seferinde** kırmızı verir.
+**A-08'i ve bir `kapandı`yı aynı satıra yazma; blockquote'u yeniden akıtırken de birleştirme.**
+Yerel ön kontrol (DB gerektirmez, saniyeler sürer) `_scan` + `INVARIANT_RULES`'ü doğrudan koşar —
+tam `--check` `backend/.venv` ister ve bu container'da `ModuleNotFoundError: entropia` verir, o
+yüzden **kapanış öncesi bu iki fonksiyonu elle koştur**; yoksa hatayı 52 saniyelik bir CI turunda
+öğrenirsin.
+
 Codemap güncellemesi **gerekmedi** (yeni endpoint / tablo / sayfa / job yok → kapanış ritüeli md. 5
 atlandı, bilerek). `docs/ADIM108_LANDED_KICKOFF.md`.

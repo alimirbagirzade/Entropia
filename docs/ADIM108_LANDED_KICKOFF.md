@@ -64,6 +64,17 @@
    koştu: `:271` ve `:243`). Yeşil bir kapı, koştuğunu kanıtlamadıkça kanıt değildir.
 8. **KOŞAMADIĞIN SUITE'E ASSERTION YAZMA, SINIRI YAZ.** Precheck spec'i seeded stack ister; yerelde
    koşulmadı, otorite CI (head `87f51ed`: **18 success / 4 skipped / 0 failure**).
+9. **KAPANIŞ METNİNİN KENDİSİ `documentation-truth` KAPISINI TETİKLEYEBİLİR — ve bu slice'ta
+   ETTİ.** `A08_COMPLETE` kuralı `A-08[^\n]{0,80}?(…|kapandı)`; bu kapanışın ilk push'unda
+   `CLAUDE.md`'de *"yalnız A-08), BLOCKED"* ile *"§6.1b kapandı"* **21 karakter arayla aynı
+   satırdaydı** → `Backend` **52 saniyede** kırmızı (48 dk'lık suite'e hiç gelmeden).
+   **Düzeltme PROZAYA yapılır, KAPIYA DEĞİL** — regex'i dolanan bir eşanlamlı seçmek
+   (`kapandı` → `kapalı`) bulguyu kalıcı sessizliğe çevirirdi; **satırları ayır, kelimeleri koru.**
+   Kapsam: `INVARIANT_GLOBS` = `CLAUDE.md` + `docs/STAGE2_HANDOFF.md` (+ README'ler, codemap'ler);
+   `PROJECT_HISTORY.md` ve kickoff'lar **kapsam dışı**. `NEGATION_RE` **`DEĞİŞMEDİ`yi olumsuzlama
+   SAYMAZ** (`DEĞİL` ile eşleşmez) → kapanış özetinin her zaman taşıdığı *"Blocker sayısı
+   DEĞİŞMEDİ (1 — yalnız A-08)"* cümlesi bir `kapandı` ile aynı satıra düşerse **her seferinde**
+   kırmızı verir.
 
 ## Sıradaki iş — ölçülmüş adaylar (yine de kendin ölç)
 
@@ -124,6 +135,20 @@ NEGATİF KONTROL — proza değişikliğinde bile:
   Kapının kendisine karşı koş (metni kaçışsız biçime döndür), DÜZENLENEN BÖLGE BAŞINA bir kez,
   ve KIRMIZININ HANGİ SATIRDA olduğunu OKU. Yeşil kontrol = yama uygulanmadı VEYA kapı vacuous.
   Koşamadığın suite'e (E2E/A11Y/seeded stack) assertion YAZMA — sınırı yaz, otorite CI.
+
+PUSH ETMEDEN ÖNCE — DOKÜMANTASYON-GERÇEK KAPISINI YERELDE KOŞ (ADIM 108 bunu 52 sn'lik bir
+  CI turunda öğrendi). Tam `--check` backend/.venv ister ve çıplak container'da
+  `ModuleNotFoundError: entropia` verir; proza kuralları DB'siz koşar:
+    python3 -c "import importlib.util; from pathlib import Path; \
+      spec=importlib.util.spec_from_file_location('g','scripts/generate_repository_facts.py'); \
+      m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); \
+      print([(r,n,i) for r,n,l in m._scan(Path('.'),m.INVARIANT_GLOBS) \
+        if not m.NEGATION_RE.search(l) for i,p,_ in m.INVARIANT_RULES if p.search(l)])"
+  BOŞ liste bekle. Kırmızıysa PROZANI düzelt, KURALI DEĞİL: A08_COMPLETE
+  (A-08 + Complete/PASS/Done/tamamlan/kapandı, 80 karakter, TEK SATIRDA) ve WCAG_CONFORMANCE
+  bilerek konmuş kapılardır. "Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08)" cümleni bir
+  "… kapandı" ile AYNI SATIRA yazma; blockquote'u yeniden akıtırken de birleştirme.
+  Ayrıca check_classification + acceptance --report --check-generated --ratchet koş.
 
 KAPANIŞ: CLAUDE.md §Session CLOSING 6 madde (yeni endpoint/tablo/sayfa/job yoksa md. 5 atlanır).
   Kickoff ÇİFTİ birlikte: yeni `current` + öncekini `historical`. Numarayı commit'ten HEMEN ÖNCE

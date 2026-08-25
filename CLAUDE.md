@@ -241,7 +241,8 @@ Before stopping a working session, produce **ALL** of the following:
 > prozası): ÜRÜN KODU DEĞİŞTİ ama YALNIZ PROZA — üç dosya, dört satır, dördü de bir `note:`
 > değeri. Predicate/`observed`/sayım/reach/gating el DEĞMEDİ, hiçbir advisory SUSTURULMADI, kabul
 > borcu tavanları OYNAMADI, donmuş kanıt + A-08 sayaçları + #514 + K-tablosu el değmedi. Blocker
-> sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** §6.1b kapandı: ÜÇ bayat note aranırken DÖRDÜNCÜSÜ
+> sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Worksheet §6.1b kapandı: ÜÇ bayat note aranırken DÖRDÜNCÜSÜ
 > bulundu (`:243`, K-4) ve dördün İKİSİ bugün ULAŞILAMAZ (K-2 + K-4, ikisini de PR #685 kapattı) →
 > **silinmediler, REGRESYON TRIPWIRE'ı olarak tutuldular**. **ASIL DERS: BİR CHECKLIST'İ DÜZELTMEK,
 > ONU ALINTILAYAN MAKİNE ÇIKTISINI DÜZELTMEZ** (ADIM 63 A-3'ü yeniden yazdı — yalnız checklist'te;

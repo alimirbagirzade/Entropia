@@ -263,7 +263,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
 >
 >
-> `future_dev`. Öncesinde **ADIM 111 (current-main delta forensics, PR #825): DOCS-ONLY —
+> `future_dev`. Öncesinde **ADIM 112 (current-main delta forensics, PR #825): DOCS-ONLY —
 > üç yeni dosya, ürün/test kodunda SIFIR satır; **tavanlara BU SLICE DOKUNMADI** (kendi tabanı
 > `53ff7549`'da 55/7 · A1 B23 C6 D32 idi; **ADIM 110 onları 54/6 · B21'e İNDİRDİ** — güncel
 > değerin otoritesi `acceptance_coverage_baseline.json`).
@@ -286,9 +286,12 @@ Before stopping a working session, produce **ALL** of the following:
 > iddiası (kendi içinde çelişiyordu) ve bayat `Next: PR B`. **DÜRÜST SINIR:** yerelde 123
 > unit + 2 golden + üç kapı koştu; **integration/contract/e2e ve TÜM frontend kapıları
 > KOŞULMADI** (Postgres/`node_modules` yok) → geçen sayı ve coverage **CI'ın otoritesinde**.
-> **NUMARA: `110` boş GÖRÜNÜYORDU ama #826 onu dosya yoluyla almış** (`ADIM110…KICKOFF.md`)
-> → bu kayıt **111**; kickoff **YOK, bilerek** (ADIM 82/109). Ratchet/baseline'a dokunulmadı.
-> `PROJECT_HISTORY.md` §ADIM 111 · kickoff **YOK**.
+> **NUMARA İKİ KEZ TAŞINDI, İKİSİ DE DOSYA YOLUYLA ÖLÇÜLDÜ:** `110` boş görünüyordu ama #826
+> onu `ADIM110…KICKOFF.md` ile aldı → `111` yazıldı; **o da #828 tarafından** (guard daraltması,
+> `ADIM111…KICKOFF.md`) alındı → bu kayıt **112**. İlk PR (#827) bu yüzden **merge edilmeden
+> kapatıldı** ve #825 bir süre **kayıtsız** kaldı; bu kayıt o borcu kapatır.
+> Kickoff **YOK, bilerek** (ADIM 82/109). Ratchet/baseline'a dokunulmadı.
+> `PROJECT_HISTORY.md` §ADIM 112 · kickoff **YOK**.
 >
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
@@ -1895,12 +1898,12 @@ Before stopping a working session, produce **ALL** of the following:
 > closing PR'ı olarak **#619**'u gösterir, o **ölçüm** PR'ıdır — onarım `6da8a95` = **#681**,
 > ki #618'i de o onardı (bu yüzden #618'in hiç linkli PR'ı yok). **Linkage ≠ provenance.**
 > ~~#514/#558/#559 **açık kaldı**~~ → **#514 AÇIK, #558 kapandı (yazılı kararla, 2026-08-17),
-> #559 kapandı AMA KARARSIZ → 2026-08-25'te YENİDEN AÇILDI** (ADIM 111) ·
+> #559 kapandı AMA KARARSIZ → 2026-08-25'te YENİDEN AÇILDI** (ADIM 112) ·
 > ~~**Ready Check'in kalan İKİ N+1 bacağı hâlâ canlı** (`readiness_check.py:554` sinyal,
 > `:749` research; ölçülen slope **1.0**) — P-E2 **merge EDİLMEDİ**~~ → **BU SATIR BAYATTI ve
 > kendi dosyasıyla çelişiyordu** (§ADIM 62 P-E2'yi indi diye kaydediyor): `bb1e76c6` (#712)
 > **merge EDİLDİ**, `query_budgets.json` ikisini de **`per_item: 0`** gösterir, satır
-> numaraları da artık o okumaları göstermiyor (ADIM 111'de ölçüldü). **Kalan tek N+1 leg 3**
+> numaraları da artık o okumaları göstermiyor (ADIM 112'de ölçüldü). **Kalan tek N+1 leg 3**
 > — `_resolve_external`, bilerek, kapı **`G15`** ·
 > **P1..P13 tanımı REPODA DEĞİL** (yalnız sohbet transkriptinde) ·
 > ~~**`ci.yml` concurrency kusuru**~~ **ONARILMIŞ** (ADIM 34'te doğrulandı): `ci.yml:9–14`
@@ -1908,7 +1911,7 @@ Before stopping a working session, produce **ALL** of the following:
 > Tarihsel kayıt sabit kalır: `e8d1d48` (#633) ve `bc59dae` (#634) 0 job ile cancelled olmuş,
 > CI'ları HİÇ koşmamıştı. Yeni bir job eklerken **gerçekten koştuğunu job log'undan** doğrula.
 > ~~**Next:** **PR B** — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call
-> site~~ → **PR B İNDİ, bu işaretçi bayattı** (ADIM 111'de ölçüldü): adaptör **`2cda24f5`
+> site~~ → **PR B İNDİ, bu işaretçi bayattı** (ADIM 112'de ölçüldü): adaptör **`2cda24f5`
 > (#777)**, call site **`39947256` (#799)** + **`3f557c72` (#805)**. Engel **(b)** de kapandı
 > — `C1` (#735) describe/book ayrımını, `C3` (#777) `_EngineParticipant`'ı sevk etti; ADR §16
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,

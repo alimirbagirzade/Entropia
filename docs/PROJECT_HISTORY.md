@@ -15474,7 +15474,7 @@ sonsuza dek yeşil kalır — *kapı bunu yakalamaz, koşturan kişi yakalar*).
 
 ---
 
-## ADIM 111 — current-main delta forensics (PR #825) + `G8`/`G14` imza bloklarının açılması: BİR KAPALI ISSUE, DEĞİŞMEMİŞ BİR KODUN ÜSTÜNDE DURUYORSA BİR SONUÇ DEĞİL BİR SÜRÜKLENMEDİR
+## ADIM 112 — current-main delta forensics (PR #825) + `G8`/`G14` imza bloklarının açılması: BİR KAPALI ISSUE, DEĞİŞMEMİŞ BİR KODUN ÜSTÜNDE DURUYORSA BİR SONUÇ DEĞİL BİR SÜRÜKLENMEDİR
 
 **DOCS-ONLY.** Üç yeni dosya, `backend/src` ve `frontend/src`'te **sıfır satır**, migration yok,
 `ENGINE_VERSION` değişmedi, OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS` = `future_dev`
@@ -15618,17 +15618,29 @@ satır**. Kural değişmedi — sonraki main ilerlemeleri **rebase** ile alını
 dosya kümesi **ayrı ayrı** doğrulandı. Son koşu: **17 passed / 5 skipped / 0 failure**,
 `mergeable_state: clean`.
 
-**(3) NUMARA: `110` DEĞİL `111`, VE BU ÖLÇÜLDÜ.** Kapanış yazılırken main'de en yüksek kayıt
+**(3) NUMARA: `110` DEĞİL, `111` DE DEĞİL — `112`; VE HER İKİ TAŞIMA DA ÖLÇÜLDÜ.** Kapanış yazılırken main'de en yüksek kayıt
 **109**, canlı kickoff `docs/ADIM108_LANDED_KICKOFF.md` idi — yani `110` boş **görünüyordu**.
 Açık PR listesi ölçüldü: **#826 açık** (`docs/stage-110-landed`, 12:01Z) ve
 **`docs/ADIM110_LANDED_KICKOFF.md` dosyasını EKLİYOR** + `ADIM108`'i demote ediyor. **Çakışma
 başlıkta değil DOSYA YOLUNDA ölçülür** (ADIM 91) ve **ayrılan numara güvenli numara değildir**
-(ADIM 92) → bu kayıt **111**. Boş görünen bir numara, boş bir açık-PR listesi gibi, bir
-**anlık görüntüdür** (ADIM 100/103).
+(ADIM 92) → kayıt **111** olarak yazıldı.
+
+**Sonra 111 de gitti.** Bu kayıt PR #827 olarak açıkken, paralel bir oturum **#828**'i açtı
+(guard daraltması) ve o da **`docs/ADIM111_LANDED_KICKOFF.md`** dosyasını ekliyordu — yani
+**aynı kural ikinci kez işledi**. #827 ürün sahibinin talimatıyla **merge edilmeden kapatıldı**;
+bu kayıt **112**'dir ve #825 o pencerede **kayıtsız** kaldı. Boş görünen bir numara, boş bir
+açık-PR listesi gibi, bir **anlık görüntüdür** (ADIM 100/103) — ve bu slice onu **iki kez**
+yaşadı, ki depoda bu şeklin en uzun zinciri.
+
+**KAYDA DEĞER: kaybolan şey kayıttı, iş değil.** #825'in indirdiği üç belge
+(`final_closure_delta_audit_2026-08-25.md` + iki imza belgesi) `53ff7549`'da main'e indi ve
+hiç kıpırdamadı; eksik olan yalnız **ritüelin kendisiydi**. Bu, ADIM 82/86/90/108/109'un tek
+tek geri dönüp kapattığı *"kayıtsız inen slice"* borcunun **altıncı** örneğidir.
 
 **Kickoff YOK, bilerek — ADIM 82/109 emsali.** `_check_live_kickoff_is_newest` numarayı
-**dosya adından** okur: `ADIM111` dosyası yaratmak, henüz inmemiş #826'nın `ADIM110`'unu
-demote etmeye çalışırdı ve iki dal aynı `current` işareti için yarışırdı. Üstelik bu slice'ın
+**dosya adından** okur: bir `ADIM112` dosyası yaratmak, #828'in `ADIM111`'ini demote
+etmeye çalışırdı ve iki dal aynı `current` işareti için yarışırdı — bu slice o yarışı
+zaten bir kez kaybetti. Üstelik bu slice'ın
 devamı **kod değil İMZADIR** — canlı devam tohumu olmaya aday değil. Ritüelin **md. 5'i de
 atlandı, bilerek**: yeni endpoint / tablo / sayfa / job yok.
 

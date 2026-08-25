@@ -8373,7 +8373,7 @@ duruyor) → **alınmadı**. **Parti seçmeden ÖNCE ÖLÇ** (ADIM 54) bu partid
 KOŞULMADI, Postgres kurulmadı ve hiçbir backend geçen/coverage sayısı iddia edilmiyor — otorite CI.**
 `PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
 
-## Stage 111 — current-main delta forensics (PR #825) + `G8`/`G14` imza bloklarının açılması landed
+## Stage 112 — current-main delta forensics (PR #825) + `G8`/`G14` imza bloklarının açılması landed
 
 **DOCS-ONLY.** Üç yeni dosya, `backend/src`/`frontend/src`'te **sıfır satır**, migration yok,
 `ENGINE_VERSION`/OpenAPI/`SHARED_ALLOCATION_STATUS` değişmedi. Tavanlara **bu slice
@@ -8402,14 +8402,16 @@ ve TÜM frontend kapıları KOŞULMADI** (Postgres/`node_modules` yok) → geçe
 (`03269040`, 17 passed / 5 skipped / 0 failure).
 
 **Numara:** `110` boş **görünüyordu**; açık **#826** onu **dosya yoluyla** almış
-(`docs/ADIM110_LANDED_KICKOFF.md`) → bu kayıt **111**. Kickoff **YOK, bilerek** (ADIM 82/109:
+(`docs/ADIM110_LANDED_KICKOFF.md`) → **111** yazıldı; **o da #828 tarafından alındı**
+(`docs/ADIM111_LANDED_KICKOFF.md`, guard daraltması) ve ilk PR (#827) merge edilmeden
+kapatıldı → bu kayıt **112**. Kickoff **YOK, bilerek** (ADIM 82/109:
 `_check_live_kickoff_is_newest` numarayı dosya adından okur, ve bu slice'ın devamı **kod değil
 imzadır**). Ritüel md. 5 atlandı (yeni endpoint/tablo/sayfa/job yok).
-`PROJECT_HISTORY.md` §ADIM 111.
+`PROJECT_HISTORY.md` §ADIM 112.
 
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
-> **ADIM 111 (2026-08-25) BU BAŞLIĞI DEĞİŞTİRDİ, ve gerekçesi ölçüldü.** Önceki başlık
+> **ADIM 112 (2026-08-25) BU BAŞLIĞI DEĞİŞTİRDİ, ve gerekçesi ölçüldü.** Önceki başlık
 > *"PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site"* idi ve **inmiş
 > işi adlandırıyordu**: adaptör `2cda24f5` (#777), call site `39947256` (#799) + `3f557c72`
 > (#805); engel (b) `C1` (#735) + `C3` (#777) ile kapandı ve ADR §16 kapısı iki imzalı kararla

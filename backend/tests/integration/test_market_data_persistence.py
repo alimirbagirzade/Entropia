@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from entropia.application.commands import market_data as md_cmd
 from entropia.application.commands.deletion import restore_entity, soft_delete_entity
 from entropia.application.queries.market_data import (
+    get_market_dataset_detail,
     resolve_approved_market_data_bundle,
 )
 from entropia.domain.identity import Actor
@@ -317,7 +318,7 @@ async def test_resolve_bundle_only_returns_approved_active(session) -> None:
 
     # Draft head -> no bundle.
     with pytest.raises(NotFoundError):
-        await resolve_approved_market_data_bundle(session, entity_id=root.entity_id)
+        await resolve_approved_market_data_bundle(session, ADMIN, entity_id=root.entity_id)
 
     revision = await _verify_head(session, root.entity_id)
     await md_cmd.approve_market_dataset_revision(
@@ -325,7 +326,7 @@ async def test_resolve_bundle_only_returns_approved_active(session) -> None:
     )
     await session.commit()
 
-    bundle = await resolve_approved_market_data_bundle(session, entity_id=root.entity_id)
+    bundle = await resolve_approved_market_data_bundle(session, ADMIN, entity_id=root.entity_id)
     assert bundle["revision_id"] == revision.revision_id
     assert bundle["revision_state"] == "approved"
 
@@ -333,7 +334,72 @@ async def test_resolve_bundle_only_returns_approved_active(session) -> None:
     await soft_delete_entity(session, ADMIN, entity_id=root.entity_id)
     await session.commit()
     with pytest.raises(NotFoundError):
-        await resolve_approved_market_data_bundle(session, entity_id=root.entity_id)
+        await resolve_approved_market_data_bundle(session, ADMIN, entity_id=root.entity_id)
+
+
+async def test_approved_bundle_agrees_with_detail_on_who_may_read(session) -> None:
+    """The bundle surface must never answer a reader that its guarded sibling refuses.
+
+    ``resolve_approved_market_data_bundle`` was, before this test, the only
+    id-addressed surface in the backend that never received the actor. It looked
+    harmless because for every root it can return, ``get_market_dataset_detail``
+    would also grant access: approval sets ``lifecycle_state = "active"``,
+    ``_visibility_of`` maps that to ``published``, and ``can_view`` grants
+    ``published`` to everyone before it ever asks whether the caller is
+    authenticated.
+
+    That is a coincidence of two conditions lining up, not an invariant — so
+    asserting it is worthless. This test asserts the DIVERGENCE instead: it
+    constructs the one state where the two conditions come apart (the root's
+    ``lifecycle_state`` no longer ``active`` while its current revision is still
+    APPROVED and the row still ACTIVE) and requires both surfaces to refuse the
+    same stranger. The state is built directly rather than through a command
+    precisely because no command produces it today; a future one might, and this
+    test is what would notice.
+    """
+    await _seed_principals(session)
+    session.add(Principal(principal_id="user_2", principal_type=PrincipalType.HUMAN))
+    stranger = Actor(principal_id="user_2", principal_type=PrincipalType.HUMAN, role=Role.USER)
+
+    root, _ = await md_cmd.create_market_dataset(
+        session, OWNER, market_data_type=MarketDataType.OHLCV, payload={"v": 1}
+    )
+    await session.commit()
+    revision = await _verify_head(session, root.entity_id)
+    await md_cmd.approve_market_dataset_revision(
+        session, ADMIN, entity_id=root.entity_id, revision_id=revision.revision_id
+    )
+    await session.commit()
+
+    # Positive control: the fixture really is cross-owner, and while the root is
+    # published BOTH surfaces answer the stranger. If this half ever fails the
+    # test below proves nothing.
+    assert root.owner_principal_id != stranger.principal_id
+    detail = await get_market_dataset_detail(session, stranger, entity_id=root.entity_id)
+    bundle = await resolve_approved_market_data_bundle(session, stranger, entity_id=root.entity_id)
+    assert detail["entity_id"] == root.entity_id
+    assert bundle["revision_id"] == revision.revision_id
+
+    # The divergence state: still ACTIVE, still APPROVED, no longer published.
+    root.lifecycle_state = "deprecated"
+    await session.flush()
+    assert root.deletion_state == DeletionState.ACTIVE
+    assert revision.revision_state == MarketRevisionState.APPROVED
+
+    with pytest.raises(AccessDeniedError):
+        await get_market_dataset_detail(session, stranger, entity_id=root.entity_id)
+    with pytest.raises(AccessDeniedError):
+        await resolve_approved_market_data_bundle(session, stranger, entity_id=root.entity_id)
+
+    # ...and the owner and an Admin still read it through BOTH surfaces, so the
+    # gate narrowed access by ownership rather than switching the endpoint off.
+    for reader in (OWNER, ADMIN):
+        assert (
+            await resolve_approved_market_data_bundle(session, reader, entity_id=root.entity_id)
+        )["revision_id"] == revision.revision_id
+        assert (await get_market_dataset_detail(session, reader, entity_id=root.entity_id))[
+            "entity_id"
+        ] == root.entity_id
 
 
 async def test_idempotent_approve_replay_returns_cached_no_duplicate(session) -> None:

@@ -159,7 +159,7 @@ async def get_market_dataset_detail(
 
 
 async def resolve_approved_market_data_bundle(
-    session: AsyncSession, *, entity_id: str
+    session: AsyncSession, actor: Actor, *, entity_id: str
 ) -> dict[str, Any]:
     """Resolve the exact APPROVED revision a Run/Agent must consume.
 
@@ -167,10 +167,30 @@ async def resolve_approved_market_data_bundle(
     exact revision id + content/manifest hashes so the consumer pins the precise
     bytes (AT #15 — manifest pins exact revision). Raises NotFound otherwise so
     consumers never silently bind to an unapproved/deleted dataset.
+
+    ``actor`` is REQUIRED and the view check below is deliberately redundant
+    TODAY: this function only returns roots whose current revision is APPROVED,
+    approval sets ``lifecycle_state = "active"``, and ``_visibility_of`` maps
+    that to ``published`` — which ``can_view`` grants to everyone, anonymous
+    included. So the gate changes no answer at present.
+
+    It is here because that agreement was a COINCIDENCE of two conditions lining
+    up, not an invariant. Before this parameter existed, this was the only
+    id-addressed endpoint in the backend that never received the actor: had
+    ``_visibility_of`` or the approve transition drifted, this surface would have
+    started disclosing exactly what its guarded sibling
+    ``get_market_dataset_detail`` refuses, and nothing would have failed. The two
+    surfaces now agree by construction. The divergence — not the coincidence — is
+    pinned by ``test_approved_bundle_agrees_with_detail_on_who_may_read``.
     """
     root = await md_repo.get_dataset_root(session, entity_id)
     if root is None or root.deletion_state != DeletionState.ACTIVE:
         raise NotFoundError(f"No approved market dataset '{entity_id}'.")
+    md_policy.ensure_can_view(
+        actor,
+        owner_principal_id=root.owner_principal_id,
+        visibility=_visibility_of(root),
+    )
     revision = await md_repo.get_revision(session, root.current_revision_id or "")
     if revision is None or revision.revision_state != MarketRevisionState.APPROVED:
         raise NotFoundError(f"Market dataset '{entity_id}' has no ACTIVE+APPROVED revision.")

@@ -308,4 +308,6 @@ async def resolve_bundle(
     entity_id: str,
     ctx: RequestContext = Depends(request_context),
 ) -> dict[str, Any]:
-    return await md_query.resolve_approved_market_data_bundle(ctx.session, entity_id=entity_id)
+    return await md_query.resolve_approved_market_data_bundle(
+        ctx.session, ctx.actor, entity_id=entity_id
+    )

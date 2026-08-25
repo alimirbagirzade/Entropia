@@ -14832,3 +14832,81 @@ görüntüdür, garanti değil — ADIM 100/101 kuralı); son kayıt `ADIM 105`'
 
 Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
 `docs/ADIM106_LANDED_KICKOFF.md`.
+
+## ADIM 107 — kabul borcu batch 28 (doc 11 Market Data, backend): `MKD-02` kapandı — DOC 11'İN SINIF-B BORCU BİTTİ
+
+**Tarih:** 2026-08-25 · **PR:** #821 (`claude/entropia-v18-kabul-borcu-batch-28`) · **Taban:** `45ecebc` (ADIM 106 / #819)
+
+**ÜRÜN KODU DEĞİŞMEDİ** (`backend/src` altında sıfır satır). Migration yok, OpenAPI değişmedi,
+alembic head `0043_i08_registry_strategy_fks`, `ENGINE_VERSION` değişmedi,
+`SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+Diff: bir yeni test dosyası (`backend/tests/integration/test_market_data_type_boundary.py`,
+iki case) + defter/artefakt tazelemesi.
+
+### Kapanan: `MKD-02.c1` (son açık clause → kriter covered, `debt_class` KALDIRILDI)
+
+Doc 11 §13: Market Data kanonik şeması YALNIZ `ohlcv / tick_trades / spread_execution` kabul
+eder; funding / OI / liquidation / order-book **dışarıda** kalır ve Research Data düzleminde
+yaşar. Sınır kaynakta gerçekti (`MarketDataType` tam üç üye; dört dışlanan ad
+`ResearchCategory`'de) ve Research yarısı kanıtlıydı (c2, `test_funding_resolution.py`), ama
+**Market yarısını hiçbir şey assert etmiyordu**: ne enum üyeliği pinliydi, ne de funding-tipli
+bir market revizyonu herhangi bir wire yüzeyine sürülüp reddi okunmuştu (`grep -rn MKD-02
+backend/tests frontend/src` → 0; `funding_rate` test ağacında yalnız research düzleminde).
+
+**İKİ BİLEREK AYRI EKSEN — çünkü iki ayrı kusur sınıfı var ve her birini yalnız bir eksen görür:**
+
+1. **Enum üyeliği LİTERAL pinlendi** — doc 11'in üç adı elle yazıldı (üretim sabitinden
+   türetilmedi), set **EŞİTLİĞİ** kullanıldı (eklenen üye de silinen kadar kırmızı); artı dört
+   dışlanan ad `ResearchCategory` üyesi olarak pinlendi — "sınır tutuyor" iddiasının öbür
+   yarısı (evi olmayan bir dışlama eksik özellik okunurdu).
+2. **Wire reddi gerçek ASGI route'larında** — İKİ mutating tipli yüzeyde birden (dataset
+   create VE revision append) `market_data_type: "funding_rate"` sürüldü; her yüzeyde kanonik
+   **422 `VALIDATION_ERROR`** zarfı + `field_path == "body.market_data_type"`, **sıfır satır
+   yazıldı** (root + revizyon sayıları `session.expire_all()` SONRASI geri okundu), reddedilen
+   append head'i ve `row_version`'ı kıpırdatmadı, ve **yüzey başına pozitif kontrol** aynı
+   harness'ın kabul edilen tiple gerçekten yazdığını kanıtladı (yoksa "hiçbir şey yazılmadı"
+   yazamayan bir harness için de geçerdi).
+
+### ÜÇ negatif kontrol — üçü de ayırt edici, üçünde de 19 mevcut market-data testi YEŞİL
+
+- **NC-1** (`MarketDataType`'a `FUNDING_RATE` üyesi eklendi): üyelik set-eşitliği kırmızı VE
+  wire reddi **201 Created**'a döndü — iki eksen de önceden söylenen assertion'ında düştü
+  (`FF...................`: 21 testte yalnız iki yeni case).
+- **NC-2** (`CreateDatasetRequest.market_data_type` → `str`): üyelik ekseni **YEŞİL KALDI**
+  (route tiplemesini göremez — o körlük 2. eksenin varlık sebebi), yalnız wire testi kırmızı,
+  create yüzeyinde (`.F...................`).
+- **NC-3** (`CreateRevisionRequest` → `str`): kırmızı yalnız `refused_append` assertion'ına
+  taşındı — append ekseni kendi başına bir ölçüm (create eksenleri geçti).
+
+**ÖLÇÜLMÜŞ İKİNCİ SAVUNMA HATTI (defter notuna yazıldı):** route modeli gevşetilince DB enum
+kolonu `funding_rate`'i flush'ta yine reddediyor (`StatementError`, satır inmiyor) — yani wire
+testinin pinlediği şey salt kalıcılık-yokluğu değil, şema sınırındaki **422 SÖZLEŞMESİ**:
+gevşek dünyada red 500'e dönüşür ve sözleşme kaybolur.
+
+### Tavanlar (merged değil, dal ağacında taze `--report`'tan; kural: taşınmaz, yeniden ölçülür)
+
+**`partial` 56 → 55, `debt_class.B` 24 → 23**; açık borç **63 → 62** (A=1 · B=23 · C=6 · D=32).
+Clause defteri: covered 1065 / uncovered 67. **Doc 11 = 8 covered / 1 partial — testle
+kapanabilir sınıf-B satır KALMADI** (kalan `MKD-04` sınıf D: Agent gateway'de market-data
+create/revise aracı yok). `--report --check-generated --ratchet` sıkılaştırılmış tavanda yeşil.
+
+### Ortam ve dürüst sınır
+
+Container YARI çıplak başladı: `16/main` cluster'ı vardı ama düşüktü, `entropia` rolü/DB'leri
+yoktu → başlatıldı + oluşturuldu; `.venv` yoktu (`uv sync --all-extras`); `alembic upgrade
+head` **`LC_ALL=C.UTF-8 PYTHONUTF8=1`** ile koştu. Yeni dosya + `test_market_data_persistence.py`
+birlikte **21 passed / 0 skip** (exit code çıktı dosyasından ayrı okundu, `tail`'den değil);
+`ruff check` + `ruff format --check` backend genelinde temiz; `repository_facts` + README
+gömülü bloğu yeniden üretildi (`--check` yeşil — test collection sayısı oynadı, ADIM 60 kuralı).
+**Frontend'e sıfır satır → hiçbir frontend kapısı koşulmadı; tam backend suite uçtan uca
+koşulmadı → geçen sayı ve coverage CI'ın otoritesinde.**
+
+**NUMARA:** dal `45ecebc`'den kesildi; açık PR listesi hem oturum başında hem parti seçiminden
+hemen sonra **BOŞ** ölçüldü (anlık görüntü, garanti değil — ADIM 100/103 kuralı); kapanış
+push'undan hemen önceki ÜÇÜNCÜ ölçüm **#820**'yi açık buldu (a11y runbook, docs-only — hiçbir
+`docs/ADIM<n>` dosyası eklemiyor ve bu slice'ın dosyalarına dokunmuyor → numara etkilenmez;
+"boş liste anlık görüntüdür" kuralının bu oturumdaki canlı örneği). Son kayıt `ADIM 106` →
+bu kayıt **ADIM 107 / batch 28**.
+
+Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
+`docs/ADIM107_LANDED_KICKOFF.md`.

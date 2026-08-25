@@ -237,7 +237,33 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 106 (kabul borcu batch 27, doc 08 Package Library BACKEND): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 107 (kabul borcu batch 28, doc 11 Market Data BACKEND): ÜRÜN
+> KODU DEĞİŞMEDİ, bir yeni test dosyası (iki integration case) + defter. Blocker sayısı DEĞİŞMEDİ
+> (1 — yalnız A-08), BLOCKED.**
+> `MKD-02.c1` kapandı (kanonik-şema sınırı: `MarketDataType` yalnız
+> ohlcv/tick_trades/spread_execution; funding/OI/liquidation/order-book `ResearchCategory`'de —
+> sınır kaynakta gerçekti, Research yarısı kanıtlıydı, Market yarısını hiçbir şey assert
+> etmiyordu) → son açık clause'du, **`MKD-02` covered, `debt_class` KALDIRILDI**. **ASIL DERS: BİR
+> SINIR İDDİASININ İKİ KUSUR SINIFI VARSA İKİ EKSEN GEREKİR** — enum'u genişleten kusuru yalnız
+> LİTERAL üyelik eşitliği görür, route tiplemesini gevşeten kusuru yalnız gerçek-ASGI wire testi
+> görür (NC-2'de üyelik ekseni YEŞİL kaldı — o körlük ikinci eksenin varlık sebebi). Wire testi
+> iki tipli yüzeyi de sürer (create + append): 422 `VALIDATION_ERROR` + `field_path
+> body.market_data_type`, `expire_all()` sonrası sıfır-satır sayımı, yüzey başına pozitif kontrol.
+> **ÜÇ NC, üçü de ayırt edici, üçünde 19 mevcut test YEŞİL** (NC-1 enum'a üye ekler → iki eksen de
+> kırmızı, 422→201; NC-2/NC-3 yüzey başına `str` gevşetmesi → yalnız kendi yüzeyinin wire
+> assertion'ı). **Ölçülmüş ikinci savunma hattı deftere yazıldı:** gevşek route'ta DB enum kolonu
+> flush'ta yine reddeder (satır inmez ama red 500 olur) → pinlenen şey 422 SÖZLEŞMESİ, salt
+> kalıcılık-yokluğu değil. **Tavanlar İNDİ: `partial` 56 → 55, `debt_class.B` 24 → 23**; açık borç
+> **62** (A=1 · B=23 · C=6 · D=32). **Doc 11 = 8/1/0 — testle kapanabilir sınıf-B satır KALMADI**
+> (`MKD-04` sınıf D) ve **BACKEND'DE testle kapanabilir sınıf-B satır KALMADI — sıradaki parti
+> FRONTEND bitiricileri** (UM-15.c3 · RC-09.c3 · CP-03.c4 · AT-07). **NUMARA: dal `45ecebc`'den
+> kesildi, açık PR listesi İKİ ölçümde de BOŞTU** (anlık görüntü, garanti değil).
+> `PROJECT_HISTORY.md` §ADIM 107 · `docs/ADIM107_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 106 (kabul borcu batch 27, doc 08 Package Library BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, tek integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
 > `PL-07.c2` kapandı (paket→strateji düzleminde no-auto-repin: mekanizma sevk edilmişti —
 > `_extract_references` pinleri verbatim kenara çevirir — ama literal dizi pinle → head'i ilerlet →

@@ -12585,7 +12585,10 @@ criteria:
   - id: MKD-02.c1
     text: The Market Data canonical schema admits only ohlcv / tick_trades / spread_execution — no
       funding, OI, liquidation or order-book type.
-    status: uncovered
+    status: covered
+    test_evidence:
+    - backend/tests/integration/test_market_data_type_boundary.py::test_market_data_type_membership_is_exactly_the_three_market_shapes
+    - backend/tests/integration/test_market_data_type_boundary.py::test_funding_typed_market_revision_is_refused_on_the_wire_and_writes_nothing
   - id: MKD-02.c2
     text: Funding data is resolved from an APPROVED Research Data revision of the funding category,
       and a wrong-category revision fails closed.
@@ -12600,26 +12603,43 @@ criteria:
   test_evidence:
   - backend/tests/integration/test_funding_resolution.py::test_resolves_an_approved_funding_revision_into_a_sorted_schedule
   - backend/tests/integration/test_funding_resolution.py::test_wrong_category_fails_closed
+  - backend/tests/integration/test_market_data_type_boundary.py::test_market_data_type_membership_is_exactly_the_three_market_shapes
+  - backend/tests/integration/test_market_data_type_boundary.py::test_funding_typed_market_revision_is_refused_on_the_wire_and_writes_nothing
   evidence_type:
   - backend_integration
   positive:
   - backend/tests/integration/test_funding_resolution.py::test_resolves_an_approved_funding_revision_into_a_sorted_schedule
+  - backend/tests/integration/test_market_data_type_boundary.py::test_market_data_type_membership_is_exactly_the_three_market_shapes
   negative:
   - backend/tests/integration/test_funding_resolution.py::test_wrong_category_fails_closed
+  - backend/tests/integration/test_market_data_type_boundary.py::test_funding_typed_market_revision_is_refused_on_the_wire_and_writes_nothing
   auth: []
   occ: []
   idempotency: []
   async_recovery: []
   historical_integrity: []
   agent_parity: []
-  status: partial
-  debt_class: B
+  status: covered
   notes: 'This row is NOT pure document conformance — it asserts a real schema boundary, so I judged
-    it as behaviour. `MarketDataType` really does carry only the three shapes and `open_interest /
-    funding_rate / liquidations / order_book` live in `ResearchDataType`, but no test asserts the
-    Market Data enum''s membership (or that a funding-typed market revision is refused), so c1 has
-    no asserting test. The Research side of the boundary is genuinely proven: the funding schedule
-    is resolved through a Research revision with an Approved + category + content-hash gate.'
+    it as behaviour. c2 (the Research side) was proven first: the funding schedule is resolved
+    through a Research revision with an Approved + category + content-hash gate. c1 CLOSED by
+    acceptance batch 28 (test_market_data_type_boundary.py) on TWO deliberately separate axes,
+    because two distinct defect classes exist and each is visible to only one axis (measured with
+    three negative controls, 19 pre-existing market-data tests green under every one of them).
+    AXIS 1 — enum membership pinned LITERALLY (doc 11''s three names written out, set equality so
+    an ADDED member is as red as a removed one) plus the four excluded names pinned as members of
+    `ResearchCategory` — the boundary''s other half. NC-1 (a FUNDING_RATE member added to
+    `MarketDataType`) turned exactly this assertion red AND flipped the wire refusal to 201.
+    AXIS 2 — the wire refusal, driven through the real ASGI routes on BOTH mutating typed
+    surfaces (dataset create and revision append), each asserting the canonical 422
+    VALIDATION_ERROR envelope with field_path body.market_data_type, zero rows written (counts
+    re-read after expire_all), head/row_version untouched by the refused append, and a
+    positive-control write per surface proving the same harness DOES write under an admitted
+    type. NC-2/NC-3 (route model loosened to `str` per surface) are invisible to the membership
+    axis and turned only the wire test red, each at its own surface''s assertion — note the
+    measured second line of defense: with the route loosened the DB enum column still refuses at
+    flush (StatementError, no row lands), so what the wire test pins is the 422 CONTRACT at the
+    schema boundary, not mere non-persistence.'
 - id: MKD-03
   document: docs/spec/11_Entropia_V18_Market_Data_Page_Documentation_v1_1.md
   section: '13'

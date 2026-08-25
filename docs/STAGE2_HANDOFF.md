@@ -8179,6 +8179,28 @@ testle kapanabilir sınıf-B satır KALMADI** (kalan `PL-08` + `PL-20`, ikisi de
 **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
 `PROJECT_HISTORY.md` §ADIM 106 · `docs/ADIM106_LANDED_KICKOFF.md`.
 
+## Stage 107 — kabul borcu batch 28 (doc 11 Market Data, backend): MKD-02 kapandı landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** — bir yeni test dosyası (iki integration case) + defter + üretilmiş
+artefaktlar. **`MKD-02.c1`:** doc 11 §13'ün kanonik-şema sınırı ("yalnız ohlcv / tick_trades /
+spread_execution; funding/OI/liquidation/order-book Research düzleminde kalır") kaynakta
+gerçekti ve Research yarısı kanıtlıydı (c2), ama Market yarısını hiçbir şey assert etmiyordu —
+ne enum üyeliği ne de funding-tipli bir market revizyonunun wire reddi. **İKİ BİLEREK AYRI
+EKSEN:** (1) üyelik LİTERAL pinlendi (doc 11'in üç adı elle, set EŞİTLİĞİ — eklenen üye de
+kırmızı) + dört dışlanan ad `ResearchCategory` üyesi olarak pinlendi; (2) gerçek ASGI
+route'larında İKİ tipli mutating yüzey (create + append) `funding_rate` ile sürüldü — kanonik
+422 `VALIDATION_ERROR` + `field_path body.market_data_type`, sıfır satır (`expire_all()`
+sonrası sayım), head/row_version kıpırdamadı, yüzey başına pozitif kontrol. **ÜÇ negatif
+kontrol, üçü de ayırt edici, üçünde 19 mevcut test YEŞİL:** NC-1 (enum'a üye ekle) iki ekseni
+de düşürdü (üyelik eşitliği + 422→201); NC-2/NC-3 (route modeli `str`'a gevşet, yüzey başına)
+üyelik eksenine GÖRÜNMEZ ve yalnız kendi yüzeyinin wire assertion'ını düşürdü. **Ölçülmüş
+ikinci savunma hattı:** gevşek route'ta DB enum kolonu flush'ta yine reddediyor (satır inmez
+ama red 500 olur) → testin pinlediği şey 422 SÖZLEŞMESİ, salt kalıcılık-yokluğu değil.
+**Tavanlar İNDİ: `partial` 56 → 55, `debt_class.B` 24 → 23** (açık borç 62). **Doc 11 = 8/1/0 —
+testle kapanabilir sınıf-B satır KALMADI** (kalan `MKD-04` sınıf D). **Blocker sayısı
+DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
+`PROJECT_HISTORY.md` §ADIM 107 · `docs/ADIM107_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**

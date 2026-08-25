@@ -237,7 +237,27 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 107 (kabul borcu batch 28, doc 11 Market Data BACKEND): ÜRÜN
+> `future_dev`. **Son dalga — ADIM 108 (kayıtsız inen #822'nin ritüeli, a11y precheck advisory
+> prozası): ÜRÜN KODU DEĞİŞTİ ama YALNIZ PROZA — üç dosya, dört satır, dördü de bir `note:`
+> değeri. Predicate/`observed`/sayım/reach/gating el DEĞMEDİ, hiçbir advisory SUSTURULMADI, kabul
+> borcu tavanları OYNAMADI, donmuş kanıt + A-08 sayaçları + #514 + K-tablosu el değmedi. Blocker
+> sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> Worksheet §6.1b kapandı: ÜÇ bayat note aranırken DÖRDÜNCÜSÜ
+> bulundu (`:243`, K-4) ve dördün İKİSİ bugün ULAŞILAMAZ (K-2 + K-4, ikisini de PR #685 kapattı) →
+> **silinmediler, REGRESYON TRIPWIRE'ı olarak tutuldular**. **ASIL DERS: BİR CHECKLIST'İ DÜZELTMEK,
+> ONU ALINTILAYAN MAKİNE ÇIKTISINI DÜZELTMEZ** (ADIM 63 A-3'ü yeniden yazdı — yalnız checklist'te;
+> precheck retired soruyu basmaya devam etti, runbook §4 denetçiyi oraya yolluyordu). **İKİNCİ DERS:
+> bayat bir işaretçiyi düzeltmek yenisini doğurur** — runbook §0'ın "bu note'u yoksay" bloğu note
+> düzelince kendisi bayatladı. **TUZAK: `npm run typecheck` `frontend/e2e/`'yi KAPSAMAZ** (tsconfig
+> yalnız `src`); gerçek kapı `npx tsc --noEmit -p e2e/tsconfig.json`. **DÜRÜST SINIR:** precheck
+> spec'i yerelde koşulmadı (seeded stack) → otorite CI (head `87f51ed`: 18 success / 4 skipped /
+> 0 failure, `A11Y — axe-core scan` yeşil); **#820 hâlâ kayıtsız ve kaydı UYDURULMADI** (ADIM 97).
+> `PROJECT_HISTORY.md` §ADIM 108 · `docs/ADIM108_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 107 (kabul borcu batch 28, doc 11 Market Data BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, bir yeni test dosyası (iki integration case) + defter. Blocker sayısı DEĞİŞMEDİ
 > (1 — yalnız A-08), BLOCKED.**
 > `MKD-02.c1` kapandı (kanonik-şema sınırı: `MarketDataType` yalnız

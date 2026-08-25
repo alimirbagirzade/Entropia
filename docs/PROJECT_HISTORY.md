@@ -14910,3 +14910,139 @@ bu kayıt **ADIM 107 / batch 28**.
 
 Codemap güncellemesi gerekmedi (yeni endpoint / tablo / sayfa / job yok).
 `docs/ADIM107_LANDED_KICKOFF.md`.
+
+## ADIM 108 — kayıtsız inen #822'nin ritüeli: dört bayat precheck advisory `note`'u düzeltildi — BİR CHECKLIST'İ DÜZELTMEK ONU ALINTILAYAN MAKİNE ÇIKTISINI DÜZELTMEZ
+
+**Tarih:** 2026-08-25 · **PR:** #822 (main'e `32d2c96` olarak squash edildi) · **Taban:** `42c6377`
+(ADIM 107 / #821) · **Bu kayıt:** kapanış ritüeli, kaydettiği slice kendi ritüelini yazmadan inmişti
+(`grep -c '#822' docs/PROJECT_HISTORY.md` → **0**, ölçüldü).
+
+**ÜRÜN KODU DEĞİŞTİ ama YALNIZ PROZA:** üç dosya, `frontend/e2e/specs/20-a11y-prechecks.spec.ts`
+içinde **dört satır ve dördü de bir `note:` değeri** (`:243`, `:252`, `:262`, `:271`). Migration yok,
+OpenAPI değişmedi, alembic head `0043_i08_registry_strategy_fks`, `ENGINE_VERSION` değişmedi,
+`SHARED_ALLOCATION_STATUS` = `future_dev`. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+### Değişmeyenler — bu listenin tamamı ölçüldü, iddia edilmedi
+
+Her advisory **tam olarak aynı koşulda** ateşleniyor: predicate, eşik, `observed` değeri, per-route
+sayım, K-tablosunun reach sütunu ve bloklayıcı/advisory ayrımı **el değmedi**. **Hiçbir advisory
+SUSTURULMADI** — özellikle K-3 `contentinfo`: D-11 o gözlemin *dispozisyonunu* sabitledi, **ölçümünü
+değil**, ve yokluk hâlâ raporlanıp hâlâ sayılıyor. Kabul borcu tavanları **OYNAMADI**
+(`partial` 55 · `uncovered` 7 · A=1 B=23 C=6 D=32 — ADIM 107'den beri aynı, baseline dosyasına en son
+`42c6377` dokundu). Donmuş kanıt (`docs/releases/evidence/2026-08-12/`, `2026-08-11/`) eski prozayı
+taşımaya **devam ediyor ve DOKUNULMADI** — o bir kayıttır, düzeltilmez. A-08 sayaçları
+(**2/184** hücre, **0/10** akış, çıkış kriterleri **0/4**), **#514** ve §6'nın K-tablosu el değmedi.
+
+### Kapanan: worksheet §6.1b (üç bayat note diye açılmıştı, DÖRT olarak kapandı)
+
+Dört `note` metni de inmiş kararların değiştirdiği bir dünyayı anlatıyordu:
+
+| Satır | Advisory | Bayatlığın kaynağı |
+|---:|---|---|
+| `:271` | heading outline (**K-5**) | A-3 **2026-08-13'te (ADIM 63) yeniden yazıldı** — artık "atlamasız sıra" değil, atlamanın **yanıltıp yanıltmadığı** soruluyor |
+| `:252` | `contentinfo` (**K-3**) | **D-11 (2026-08-13)** — A-2 artık **ÜÇ** landmark bekliyor (banner/navigation/main), contentinfo bilerek dışarıda |
+| `:262` | skip link (**K-2**) | **PR #685** skip link'i sevk etti (`src/app/Layout.tsx:397` `a.skip-link` → `#main-content`, `:465` `id="main-content" tabIndex={-1}` — **doğrulandı**) |
+| `:243` | `<h1>` yok (**K-4**) | **§6.1b'nin orijinal üçünde YOKTU — diğerlerini düzeltirken bulundu** |
+
+### BULGU 1 — dördüncü note İKİ bayatlık birden taşıyordu
+
+`:243` hem aynı retired A-3 ifadesini (*"A-3 whether the outline is unbroken"*) hem de **tek
+yayıcısının kapanmış olmasını** taşıyordu: bu advisory'nin tek emitter'ı `/user-manual`'dı ve
+**K-4 / PR #685 (2026-08-12)** ona `<h1>`'ini verdi. Bu ikinci yarı **uydurulmadı, üç yerden
+doğrulandı**: §6'nın K-tablosu sayının **1 → 0** olduğunu zaten kaydediyor (`| no <h1> (K-4) | 1 |
+**0** | fixed |`), donmuş kanıtta tek bir satır olarak duruyor, ve
+`frontend/e2e/utils/pageTruth.ts` yorumu *"All 23 routes use h1 since K-4 (2026-08-12)"* diyor.
+Yeni metin `utils/pageTruth.ts::PageContract.level`'i **sembolle** gösteriyor (satır numarasıyla
+değil — §Conventions), **A-1 clause'unu AYNEN koruyor** (hâlâ geçerli: K-4 seviyeyi değiştirdi,
+duyuruyu değil) ve A-3'ü *"atlandı mı"* değil *"yanıltıyor mu"* olarak yeniden kuruyor.
+
+### BULGU 2 — DÖRDÜN İKİSİ bugün ULAŞILAMAZ, ve bu SİLİNME sebebi değil TUTULMA sebebi
+
+Skip-link (K-2) ve `<h1>`-yok (K-4) dallarının **kusuru sevk edilerek yok edildi — ikisi de aynı
+PR tarafından, #685**; sevk edilmiş hiçbir rotada artık ateşlenmiyorlar. **Silinmediler:**
+**regresyon tripwire'ı** olarak tutuldular ve notları bunu **açıkça yazıyor** (*"if it does fire,
+either the skip link is gone or something focusable was inserted ahead of it"*). Bugün geçtiği için
+bir dalı silmek, **geri gelişini fark edecek tek şeyi** silerdi.
+
+### BULGU 3 — `npm run typecheck` `frontend/e2e/`'yi KAPSAMAZ
+
+Ölçüldü: `frontend/tsconfig.json` `"include": ["src"]` (project reference yok, `typecheck` =
+`tsc -b --noEmit`) → o spec dosyası **hiçbir zaman** bu kapıdan geçmez. Gerçek kapısı
+**`npx tsc --noEmit -p e2e/tsconfig.json`** (`"include": ["**/*.ts"]`, `strict: true`).
+**Bunu deftere yazan sebep:** `e2e/` düzenleyen bir sonraki slice, yeşil bir `npm run typecheck`
+gördüğünde dosyasının kapsandığını sanabilir. Sanmasın.
+
+### ASIL DERS — BİR CHECKLIST'İ DÜZELTMEK, ONU ALINTILAYAN MAKİNE ÇIKTISINI DÜZELTMEZ
+
+ADIM 63 A-3'ü tam olarak *"insandan bir makine ölçümünü tekrarlamasını istiyor"* diye yeniden
+yazmıştı — o kusur, denetim kaç rota gezerse gezsin K-5'i **yapısal olarak kapatılamaz** yapıyordu.
+**Ama o düzeltme yalnız checklist'e indi.** Precheck'in kendi `::warning::` çıktısı **22 heading-outline
+advisory'sinin yanına** retired soruyu basmaya devam etti, ve runbook §4 denetçiyi *"önce buraya bak"*
+diye tam oraya yolluyordu. **Checklist'i okuyan denetçi doğru soruyu, uyarıyı okuyan denetçi ADIM 63'ün
+emekliye ayırdığı soruyu alıyordu.** Yol artık **iki ucundan da** kapalı.
+
+### İKİNCİ DERS — bayat bir işaretçiyi düzeltmek YENİSİNİ DOĞURUR
+
+Runbook §0'da *"çalışırken yoksayacağın bayat talimat"* diye bir blok vardı; note düzelince
+**o blok kendisi bayatladı**. Aynı PR'da düzeltildi (artık *"kaynakta düzeltildi, kanıtta donmuş
+duruyor"* diyor ve ikiden **üçe/dörde** güncellendi). Bir bayatlığı düzeltirken **ona işaret eden
+her şeyi** ölç — düzeltme, işaretçiyi bayatlatan şeydir.
+
+### Doğrulama — ve dürüst sınır
+
+Yerelde `npm run lint` (eslint `e2e/`'ye ulaşıyor; dosyanın kendisinde ayrıca koşuldu) ve
+**`npx tsc --noEmit -p e2e/tsconfig.json`** yeşil. **Typecheck kapısı negatif kontrolden İKİ KEZ
+geçti — düzenlenen bölge başına bir kez:** bir metni kaçışsız biçime döndürmek tam o satırda kırmızı
+veriyor (**`TS1005` `:271`** ve **`:243`**, commit edilmiş numaralandırmaya karşı ölçüldü) → kapı
+**vacuous değil**. Metinlerin hiçbiri bir testle pinli değil (yeniden ölçüldü: `frontend/` altında her
+biri yalnız spec'in kendisinde geçiyor, artı donmuş kanıt ve onu alıntılayan belgeler).
+
+**Precheck spec'i YERELDE KOŞULMADI** — seeded stack ister, bu container onu kaldıramaz; o yarının
+otoritesi **CI**'dır ve yeni assertion olmadığı için sürülecek yeni davranış da yok.
+**CI head `87f51ed`: 22 check → 18 success, 4 skipped (nightly), 0 failure**; içlerinde
+**`A11Y — axe-core scan vs. the seeded stack (R2-14)` = success** (bu kapanışta yeniden ölçüldü).
+
+### Numara ve ikinci bir kayıtsız slice
+
+Dal `32d2c96`'dan kesildi; `git fetch` sonrası main = `32d2c96`, `PROJECT_HISTORY.md`'deki en yüksek
+kayıt **107**, canlı kickoff `docs/ADIM107_LANDED_KICKOFF.md`, **açık PR listesi BOŞ** → bu kayıt
+**ADIM 108**. Boş liste bir **anlık görüntüdür, garanti değil** (ADIM 100/103 kuralı).
+
+**DÜRÜST SINIR — #820 DA KAYITSIZ İNDİ ve bu kapanış onu YAZMADI.** `99a7f30` (#820, *"docs(a08):
+next-session card, refresh attempt recorded, no session run"*) `PROJECT_HISTORY.md`'de **yalnız ADIM
+107'nin numara ölçümü notunda** anılıyor, kendi `## ADIM` kaydı **yok**. §6.1b'yi ilk yazan — yani bu
+slice'ın kapattığı bulguyu **açan** — odur. Kaydını **sahibi yazmalıdır** (ADIM 97 emsali: *"bu slice
+o kaydı UYDURMADI"*). Ölçüldü, kaydedildi, üzerine gidilmedi.
+
+### KAPANIŞIN KENDİ KIRMIZISI — ritüel metni `A08_COMPLETE` kapısını tetikledi
+
+Bu kapanışın **ilk push'u `Backend`'i 52 saniyede kırmızıya çevirdi** (48 dakikalık suite'e hiç
+gelmeden, `documentation-truth gate FAILED (1 finding)`), ve **suçlu kapı değil bu kaydın kendi
+prozasıydı**: `CLAUDE.md:244` bir satırda önce *"yalnız A-08), BLOCKED"* sonra *"§6.1b kapandı"*
+yazıyordu, ve kural
+`A-08[^\n]{0,80}?(Complete|COMPLETE|PASS|Done|tamamlan|kapandı)` ikisini **21 karakter arayla**
+gördü → *"A-08 kapandı"* okudu. **İddia yanlış değildi, YAKINLIK yanlıştı.**
+
+**Düzeltme PROZAYA yapıldı, KAPIYA DEĞİL** — ve bu ayrım burada pazarlıksızdır: `A08_COMPLETE`
+tam olarak bu deponun *"A-08 tamamlandı"* diyen bir cümleyi asla sevk etmemesi için var; onu
+gevşetmek ya da regex'i dolanan bir eşanlamlı seçmek (`kapandı` → `kapalı`) bir bulguyu **kalıcı
+sessizliğe** çevirirdi. İki satır **ayrıldı**, kelimeler korundu.
+
+**İKİ negatif kontrol, ikisi de kırmızı, ağaç `finally`'de geri yazıldı:** **NC-1** cümleyi
+*gerçek* bir iddiaya çevirdi (*"A-08 denetimi tamamlandı"*) → kapı **hâlâ yakalıyor**, yani
+**zayıflamadı**; **NC-2** iki satırı geri birleştirdi → **aynı** kırmızı, yani düzeltme
+**vacuous değil**. Sonrasında `git status` ile ağacın temiz olduğu doğrulandı, tam tarama **0**.
+
+**KALICI TUZAK — ritüel yazan her oturum için:** `INVARIANT_GLOBS` **`CLAUDE.md` ve
+`docs/STAGE2_HANDOFF.md`'yi kapsar** (`PROJECT_HISTORY.md` ve kickoff'lar **kapsam dışı**), kural
+**satır bazlıdır** ve `NEGATION_RE` *"DEĞİŞMEDİ"*yi bir olumsuzlama **saymaz** (`DEĞİL` ile
+eşleşmez). Yani kapanış özetinin **her zaman** taşıdığı *"Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+A-08)"* cümlesi, aynı satırda bir *"… kapandı"* ile buluşursa **her seferinde** kırmızı verir.
+**A-08'i ve bir `kapandı`yı aynı satıra yazma; blockquote'u yeniden akıtırken de birleştirme.**
+Yerel ön kontrol (DB gerektirmez, saniyeler sürer) `_scan` + `INVARIANT_RULES`'ü doğrudan koşar —
+tam `--check` `backend/.venv` ister ve bu container'da `ModuleNotFoundError: entropia` verir, o
+yüzden **kapanış öncesi bu iki fonksiyonu elle koştur**; yoksa hatayı 52 saniyelik bir CI turunda
+öğrenirsin.
+
+Codemap güncellemesi **gerekmedi** (yeni endpoint / tablo / sayfa / job yok → kapanış ritüeli md. 5
+atlandı, bilerek). `docs/ADIM108_LANDED_KICKOFF.md`.

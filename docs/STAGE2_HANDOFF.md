@@ -8201,6 +8201,46 @@ testle kapanabilir sınıf-B satır KALMADI** (kalan `MKD-04` sınıf D). **Bloc
 DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** Codemap güncellemesi gerekmedi.
 `PROJECT_HISTORY.md` §ADIM 107 · `docs/ADIM107_LANDED_KICKOFF.md`.
 
+## Stage 108 — kayıtsız inen #822'nin ritüeli: dört bayat precheck advisory `note`'u düzeltildi (§6.1b kapandı) landed
+
+**Bu kayıt bir DEFTER; kaydettiği slice (#822, main'e `32d2c96`) kendi ritüelini yazmadan inmişti**
+(`grep -c '#822'` → 0, ölçüldü). **ÜRÜN KODU DEĞİŞTİ ama YALNIZ PROZA:** üç dosya,
+`frontend/e2e/specs/20-a11y-prechecks.spec.ts`'te **dört satır ve dördü de bir `note:` değeri**
+(`:243` K-4 · `:252` K-3 · `:262` K-2 · `:271` K-5), artı `a11y_screen_reader_audit_results.md`
+§6.1b ("kapandı" olarak yeniden yazıldı) ve runbook §0. **Predicate, eşik, `observed`, per-route
+sayım, K-tablosu reach'i ve gating el DEĞMEDİ; hiçbir advisory SUSTURULMADI** — özellikle K-3
+`contentinfo`: D-11 o gözlemin *dispozisyonunu* sabitledi, **ölçümünü değil**. Migration yok,
+alembic head `0043_i08_registry_strategy_fks`, `ENGINE_VERSION` ve OpenAPI değişmedi, kabul borcu
+tavanları **OYNAMADI** (`partial` 55 · A=1 B=23 C=6 D=32), donmuş kanıt (`docs/releases/evidence/`)
+**DOKUNULMADI** (kayıttır, düzeltilmez), A-08 sayaçları (2/184, 0/4) · #514 · K-tablosu el değmedi.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+**ÜÇ BULGU.** (1) §6.1b **üç** bayat note listeliyordu; düzeltirken **DÖRDÜNCÜSÜ** bulundu (`:243`,
+`<h1>`-yok / K-4) ve o **iki bayatlık birden** taşıyordu: aynı retired A-3 ifadesi **VE** tek
+yayıcısının kapanmış olması (`/user-manual`; K-4 / PR #685 `<h1>`'ini verdi — §6'nın K-tablosu
+sayının **1 → 0** olduğunu zaten kaydediyor, `pageTruth.ts` yorumu da doğruluyor). (2) **Dördün
+İKİSİ bugün ULAŞILAMAZ** (K-2 skip link, K-4 `<h1>` — ikisini de **aynı PR**, #685, kapattı):
+**silinmediler, REGRESYON TRIPWIRE'ı olarak tutuldular** ve notları bunu yazıyor — bugün geçtiği
+için bir dalı silmek geri gelişini fark edecek tek şeyi silerdi. (3) **`npm run typecheck`
+`frontend/e2e/`'yi KAPSAMAZ** (`frontend/tsconfig.json` `"include": ["src"]`); o dosyanın gerçek
+kapısı **`npx tsc --noEmit -p e2e/tsconfig.json`**.
+
+**ASIL DERS: BİR CHECKLIST'İ DÜZELTMEK, ONU ALINTILAYAN MAKİNE ÇIKTISINI DÜZELTMEZ.** ADIM 63 A-3'ü
+*"insandan bir makine ölçümünü tekrarlamasını istiyor"* diye yeniden yazdı — ama **yalnız
+checklist'te**; precheck 22 heading-outline advisory'sinin yanına retired soruyu basmaya devam etti
+ve runbook §4 denetçiyi *"önce buraya bak"* diye tam oraya yolluyordu. **İKİNCİ DERS: bayat bir
+işaretçiyi düzeltmek yenisini doğurur** — runbook §0'ın *"bu bayat note'u yoksay"* bloğu, note
+düzelince kendisi bayatladı; aynı PR'da düzeltildi.
+
+**Doğrulama + dürüst sınır:** yerelde `npm run lint` + eslint(dosya) + `npx tsc --noEmit -p
+e2e/tsconfig.json` yeşil; **typecheck negatif kontrolden İKİ KEZ geçti, düzenlenen bölge başına bir
+kez** (`TS1005` `:271` ve `:243`, commit edilmiş numaralandırmaya karşı) → kapı vacuous değil.
+**Precheck spec'i yerelde KOŞULMADI** (seeded stack) — o yarının otoritesi CI: head `87f51ed`,
+**22 check → 18 success, 4 skipped (nightly), 0 failure**, `A11Y — axe-core scan` **success**.
+**#820 da kayıtsız indi** (§6.1b'yi ilk yazan slice) ve bu kapanış onun kaydını **UYDURMADI** —
+sahibi yazmalı (ADIM 97 emsali). Codemap gerekmedi (yeni endpoint/tablo/sayfa/job yok).
+`PROJECT_HISTORY.md` §ADIM 108 · `docs/ADIM108_LANDED_KICKOFF.md`.
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -8513,3 +8553,28 @@ gerçekleşti** ve ADIM 29'un kaydettiği ayrışma **ADIM 48'de kapandı**; kan
 seçilmedi). **A-08 için
 hiçbir belgeye `Complete`/`PASS`/`Done` yazma** — ama artık "açık issue #514'te
 izleniyor" **yazılabilir**, çünkü doğrudur.
+
+> **ADIM 108 GÜNCELLEMESİ (2026-08-25) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe ADIM 81/85/86/92 güncellemelerinde: `docs-history-guard` `^-## ` desenine bakar, bir
+> `## ` başlığını yeniden yazmak ona **kayıt silme** gibi görünür — ADIM 61 emsali, ADIM 85'te
+> kapı **fiilen** kırmızı verdi. Kural artık ölçülmüş: *başlığa dokunma, düzeltmeyi gövdeye yaz.*)
+>
+> **BU BAŞLIĞIN İKİ İŞİ DE İNMİŞ DURUMDA VE ADIM 108 ONU İLERLETMEDİ** — bu slice bir **defterdir**
+> (kayıtsız inen #822'nin ritüeli, a11y precheck advisory prozası). `C`-hattına, motora, containment'a
+> **hiç dokunmadı**: `SHARED_ALLOCATION_STATUS` `future_dev`, `ENGINE_VERSION` sabit, `backend/src`'te
+> sıfır satır. **Bu başlık altında yeni bir dal AÇILMAMALIDIR** (ADIM 92'nin kaydı geçerli).
+>
+> **`C6`'nın ön koşulları DEĞİŞMEDİ: `G11` (P2) ve `G12` (P8), ikisi de İMZASIZ.** Brifingli ≠ imzalı.
+> **İmzasız bir kapının arkasındaki slice'a BAŞLAMA.**
+>
+> **ADIM 108'in devrettiği iki ölçülmüş kalem — ikisi de KOD DEĞİL, birer TUZAK:**
+> (1) **`npm run typecheck` `frontend/e2e/`'yi kapsamaz** (`frontend/tsconfig.json` `"include": ["src"]`);
+> o ağacın gerçek kapısı `npx tsc --noEmit -p e2e/tsconfig.json` — `e2e/` düzenleyen bir sonraki slice
+> yeşil bir `typecheck` gördüğünde dosyasının kapsandığını **sanmasın**.
+> (2) **`20-a11y-prechecks.spec.ts`'te İKİ advisory dalı bugün ULAŞILAMAZ** (skip link / K-2 ve
+> `<h1>`-yok / K-4 — ikisini de PR #685 kapattı). **Bilerek tutuluyorlar, REGRESYON TRIPWIRE'ı olarak**;
+> notları bunu yazıyor. Geçtikleri için silme — geri gelişlerini fark edecek tek şey onlar.
+>
+> **KAYITSIZ İNEN SLICE SAYIMI: #820 hâlâ kayıtsız.** ADIM 108 onun kaydını **uydurmadı** (ADIM 97
+> emsali); §6.1b'yi ilk yazan — yani ADIM 108'in kapattığı bulguyu **açan** — odur ve kaydını
+> **sahibi** yazmalıdır. Bu hattın diğer kayıtsız satırlarını **present-tense okuma, ÖLÇ.**

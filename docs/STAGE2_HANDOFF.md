@@ -8241,7 +8241,88 @@ kez** (`TS1005` `:271` ve `:243`, commit edilmiş numaralandırmaya karşı) →
 sahibi yazmalı (ADIM 97 emsali). Codemap gerekmedi (yeni endpoint/tablo/sayfa/job yok).
 `PROJECT_HISTORY.md` §ADIM 108 · `docs/ADIM108_LANDED_KICKOFF.md`.
 
+## Stage 109 — kayıtsız inen #820'nin ritüeli: A-08 devam kartı + ölçülemeyen bir tazelemenin kaydı landed
+
+**Bu kayıt bir DEFTER; kaydettiği slice (#820, main'e `99a7f30`, 2026-08-25) kendi ritüelini
+yazmadan inmişti** (`grep -c "^## ADIM.*#820"` → **0**, ölçüldü). **DOCS-ONLY: iki dosya, +222/−14**
+(`git show --numstat`: runbook +116/−9 · worksheet +106/−5) — **ürün kodunda, testte, migration'da
+SIFIR satır** (`git show --name-only` iki `docs/` yolu döndürür, başka hiçbir şey). Migration yok,
+alembic head `0043_i08_registry_strategy_fks`, `ENGINE_VERSION` ve OpenAPI değişmedi, kabul borcu
+tavanları **OYNAMADI** (bu ağaçta taze ölçüldü: `partial` 55 / `uncovered` 7 · A=1 B=23 C=6 D=32),
+donmuş kanıt (`docs/releases/evidence/`) **DOKUNULMADI**. **A-08 İLERLEMEDİ — hiçbir hücre dolmadı:**
+Section A **2/184** · Section B **0/10** · çıkış kriterleri **0/4** · hiçbir çıkış kriteri
+işaretlenmedi · **#514 EL DEĞMEDİ** (`updated_at` hâlâ `2026-08-12T11:08:58Z`, `state: open`,
+`state_reason: reopened` — API'den ölçüldü). **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+**NE YAPTI.** Runbook'a **YENİ §0** — bir sayfalık *next-session card*: SR-2 devam eder (SR-1'in
+hâlâ ne makinesi ne denetçisi var), rota 1 `/`, hücre sırası **A-3 → A-4..A-8**, sonra rota 2–23,
+sonra §2'nin on akışı; kart, *tek bir kombinasyonun ilerlemesinin* çıkış kriteri 1'i **1/2**'de ve
+kriter 2'yi **23/46** rotada bıraktığını denetçinin okuduğu yerde tekrarlar. Runbook §4/§6.4'te üç
+bayat ifade düzeltildi (K-2/K-3/K-4/K-6b çözülmüş · *"21 pages"* → **22** · K-6 → **K-6a**).
+Worksheet'e üç yeni bölüm: **§6.1a** (tazeleme denemesi **BAŞARISIZ**, aşağıda) · **§6.1b**
+(precheck'teki üç bayat advisory `note`'u **kaydedildi**, düzeltilmedi — kaynak değişikliği,
+frontend kapıları o container'da koşmuyordu, dispozisyon insanın) · **§6.1c** (rota listesi
+`screenshotMatrix.ts::TARGET_PAGES`'ten **yeniden türetildi**: 23 girdi, §1 ile satır satır uyuşuyor,
+**bayat DEĞİL**).
+
+**ÖLÇÜLMÜŞ YÖNLENDİRME — ve bu, bir sonraki oturumun ilk saatini değiştirir.** Donmuş 2026-08-12
+beş-koşu kanıtında (`a08_precheck_results_run5.json`) **`/`, heading-outline advisory'si yayMAYAN
+TEK rotadır**; diğer 22'sinin hepsi yayar. İki sonucu var: **rota 1 K-5'i KAPATAMAZ** (K-5 ancak
+kendi kümesindeki bir rotada kıpırdar, worksheet'in işlenmiş örneği `/backtest/run`), ve **bir
+önceki oturumun A-3 sorusu orada VAR OLMAYAN bir atlamayı adlandırıyordu** — yani o hücredeki `—`
+iki kere haklıydı. Ayrıca **K-6a yalnız `/` üzerinde problanır** (ilk dakikada cevaplanır,
+human-only) ve **K-7 bir Section B sorusudur** (B-3/B-4/B-6), Section A onu çözmez.
+
+**ASIL DEĞER: #820 BİR ÖLÇÜM YAPAMADIĞINI KAYDETTİ VE YERİNE UYDURMADI.** §6.1a'nın ürünü bir sayı
+değil, bir **REDDİR**. Container'da `docker` ikilisi var ama **daemon yok**
+(`dial unix /var/run/docker.sock: no such file`) ve **`minio` yok**; `a11y-audit-stack.sh`
+compose tabanlı → stack kalkmıyor → `specs/20-a11y-prechecks.spec.ts`'in yürüyeceği seeded Admin
+oturumu yok. **İkame bir stack UYDURULMADI:** farklı provision edilmiş bir stack sayfaların ilk data
+render'ıyla farklı yarışır, ve bu **K-5 ile K-7'nin koşudan koşuya oynamasının BELGELENMİŞ TEK
+sebebidir** — oradan gelen bir sayı yukarıdaki tablolardakilere **birebir benzer** ama başka bir şey
+anlatır, yani insan denetiminin hakemlik etmek için var olduğu iki gözlemi **sessizce yeniden
+tanımlardı**. Sayılar bu yüzden **2026-08-12 provenance'ında bırakıldı**, stale-by-default. Bu,
+deponun *"yeşil exit code kanıt değildir"* / *"skip'li yeşil kanıt değildir"* dersinin **ölçüm
+tarafındaki ikizidir**: yapılamayan bir ölçümün doğru çıktısı, yapılmış gibi görünen bir sayı değil,
+yapılamadığının kaydıdır.
+
+**İKİNCİ DEĞER — ve bu ARTIK KANITLI: #820 kusuru kendisi kapatmadı, KAPATILABİLİR HÂLE GETİRDİ.**
+§6.1b'de kaydettiği üç bayat note, dört ay sonra değil **AYNI GÜN** düzeltildi — ve düzeltilirken
+**DÖRDÜNCÜSÜ** bulundu (`:243`, `<h1>`-yok / K-4). Zincir tam olarak şudur: **#820 açtı →
+#822 (`32d2c96`) düzeltti → ADIM 108 (#823) defterledi → bu kayıt #820'yi defterliyor.** ADIM 108
+kaydının §*"DÜRÜST SINIR — #820 DA KAYITSIZ İNDİ"* paragrafı bu zincirin öteki ucudur ve
+*"kaydını sahibi yazmalıdır"* diyordu — bu kayıt odur; ADIM 108'in ölçtüklerini **tekrarlamaz,
+atıf yapar**.
+
+**KICKOFF YOK, BİLEREK — ve bu bir atlama değil, ÖLÇÜLMÜŞ bir karar.** `check_classification` →
+`_check_live_kickoff_is_newest` numarayı **DOSYA ADINDAN** okur (`ADIM_KICKOFF_RE`, glob
+`docs/*KICKOFF*.md`), `doc-status` işaretinden değil. `docs/ADIM109_LANDED_KICKOFF.md` yaratılsaydı
+kapı onu `current` olmaya **zorlar** ve `docs/ADIM108_LANDED_KICKOFF.md`'yi demote ettirirdi — oysa
+ADIM 109, ADIM 108'den **ÖNCE** inmiş bir slice'ı kaydediyor; onun kickoff'unu canlı devam tohumu
+yapmak yanlış olurdu, çünkü devam tohumu **en yeni** durumu anlatmalıdır. ADIM 82 emsali uygulandı:
+geriye dönük kayıt için kickoff **hiç yazılmadı**, ADIM 108'inki canlı kaldı, kapı yeşil kaldı.
+(ADIM 86/90 kickoff **yazdı** ama `historical` doğdu — onlar canlıdan **düşük** numaralıydı; bu
+değil, bu **yüksek** numaralı, o yüzden dosya yaratmak kapıyı zorlardı.) Ritüelin **md. 5 de
+atlandı, bilerek**: yeni endpoint / tablo / sayfa / job yok, tazelenecek codemap yok.
+
+**DÜRÜST SINIR.** Bu kayıt #820'nin anlatısını **UYDURMADI** — commit gövdesine körü körüne
+güvenilmedi, diff (`git show 99a7f30`), eklenen bölümler ve *"değişmedi"* iddialarının hepsi bu
+ağaçta **yeniden ölçüldü**; ölçülemeyen hiçbir şey iddia edilmedi. **Ürün ve test kodunda sıfır
+satır → backend ve frontend suite'leri KOŞULMADI ve hiçbir geçen/coverage sayısı iddia edilmiyor;
+otorite CI.** #820 A-08'i **ilerletmedi**: değişen tek şey **devam edilebilirliktir**. Hiçbir belge
+bu denetimi
+**tamamlanmış** gösteremez ve hiçbir çıkış kriteri işaretlenmedi. Yerelde koşan üç kapı:
+invariant taraması (boş) · `check_classification` (NONE) · `acceptance_semantic_scan.py --report
+--check-generated --ratchet` (exit 0, tavan 55/7 sabit).
+`PROJECT_HISTORY.md` §ADIM 109 · kickoff **YOK** (yukarıdaki gerekçe).
+
 ## Next: **PR B — `ItemParticipant` adaptörü + `jobs/backtest_engine.py:299` call site**
+
+> **ADIM 109 GÜNCELLEMESİ (2026-08-25) — BAŞLIK VE GÖVDE DEĞİŞMEDİ, ÇÜNKÜ DEĞİŞECEK BİR ŞEY YOK.**
+> ADIM 109 **geriye dönük bir defterdir**: kaydettiği slice (#820, `99a7f30`) ADIM 108'in kaydettiği
+> #822'den **ÖNCE** inmişti ve DOCS-ONLY'dir — mühendislik hattına (`C6`, `F2`, `F3`, `C9` ve imzasız
+> kapılar) **tek satır dokunmaz**. Bu blok yalnız "Next kıpırdamadı"yı yazılı hâle getirmek için var;
+> aşağıdaki güncellemeler ve slice girdileri **bilerek el değmemiştir**.
 
 > **ADIM 92 GÜNCELLEMESİ (2026-08-19) — BAŞLIK YİNE DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe ADIM 81/85/86 güncellemelerinde: `docs-history-guard` `^-## ` desenine bakar, bir

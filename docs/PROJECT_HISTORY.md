@@ -15830,3 +15830,101 @@ yine **rebase** edilir, *"Update branch"* düğmesi **kullanılmaz** (ADIM 93/94
 > yapıyı** onardı: iki başlık satırı geri kondu ve blok iniş sırasına (111 → 112 → 110) taşındı.
 > **#829'un hiçbir iddiasına, sayısına ya da prozasına dokunulmadı.**
 `PROJECT_HISTORY.md` §ADIM 111 · `docs/ADIM111_LANDED_KICKOFF.md`.
+
+## ADIM 113 — sınıf B TÜKENDİ: 21 satırın 21'i de bulgu, ve DEFTER BUNU SÖYLEMİYORDU — BİR ÖLÇÜM ARACININ KENDİ KULLANICISINI YANILTMASI
+
+**DOCS-ONLY.** Üç dosya: `docs/audit/acceptance_semantic_map.yaml` (yalnız **altı** `notes`
+alanı) + ondan **üretilen** iki artefakt. `backend/src`, `frontend/src`, test, migration:
+**sıfır satır**. `ENGINE_VERSION`, OpenAPI, alembic head **değişmedi**.
+**Kabul borcu tavanları OYNAMADI — 54 partial / 6 uncovered · A1 B21 C6 D32**; hiçbir kriterin
+`status`'ü, `debt_class`'ı ya da clause sayısı değişmedi. Blocker sayısı **DEĞİŞMEDİ**
+(1 — yalnız A-08), **BLOCKED**.
+
+### Bu slice bir parti DEĞİL, bir partinin kurulamadığının kaydı
+
+ADIM 113 *"sıradaki kabul borcu partisi"* olarak başladı. Kurulamadı, ve **kurulamama sebebi
+bulgunun kendisidir**: açık 21 sınıf-B satırın **21'inin de** kayıtlı bir bulgusu var. Sınıf B'nin
+tanımı *"davranış sevk edilmiş, eksik olan assertion"* — yani **bir test slice'ının sahip olduğu
+tek sınıf**. Bugün o tanıma uyan **tek satır yok**.
+
+Yörünge zaten bunu söylüyordu ve kimse toplamı almamıştı: ADIM 107 *"BACKEND'DE testle kapanabilir
+sınıf-B satır KALMADI"* dedi, ADIM 110 frontend bitiricilerini (`AT-07`, `RC-09.c3`) kapattı.
+Kalan 21 satır o iki cümlenin **artığıdır**.
+
+### ASIL DERS: BİR ÖLÇÜM ARACI, ÖLÇTÜĞÜ ŞEYİ YANLIŞ GÖSTEREBİLİR — VE KANIT BU OTURUMUN KENDİSİDİR
+
+Bulgular **iki düzlemde** yaşıyor ve düzlemler **ayrışmıştı**:
+
+| Düzlem | Ne | Kaç satır |
+|---|---|---|
+| `acceptance_semantic_map.yaml` → `notes` | makine tarafından okunur, **defterin `Why` sütununu üretir** | **15** |
+| `CLAUDE.md` + `PROJECT_HISTORY.md` prozası | insan tarafından okunur, **defter onu görmez** | **6** |
+
+O altı satır — **`CP-03` · `MB-22` · `RF-08` · `TL-01` · `TR-07` · `UM-15`** — defterde
+**tertemiz** görünüyordu. Yani defteri açıp *"sıradaki partiyi seç"* diyen biri, kapatılamaz altı
+satırı **aday** olarak görüyordu.
+
+**Bu bir iddia değil, bu oturumda ÖLÇÜLDÜ — çünkü beni yanılttı.** Parti seçerken `notes`
+taramasıyla *"7 temiz aday"* çıkardım ve `CP-03`'ü *"tek gerçek aday"* diye seçtim. Yalnız
+`CLAUDE.md`'yi çapraz okuyunca altısının da kayıtlı bulgu olduğu görüldü. **Aracın yanılttığının
+kanıtı, aracı kullanan kişinin yanılmasıdır** — ADIM 108'in *"bir checklist'i düzeltmek onu
+alıntılayan makine çıktısını düzeltmez"* dersinin **tersten** hâli: burada makine çıktısı
+düzeltildi ki proza ile aynı şeyi söylesin.
+
+### Düzeltme — ve NEDEN BAŞA yazıldığı
+
+Altı bulgu `notes` düzlemine **yazıldı**; kaynakları (`ADIM 48/52`, `94`, `97`, `103`, `110`)
+birebir korunarak, orijinal not `ORIGINAL NOTE:` ekiyle **arkada bırakılarak**. Sonuç: `notes`'unda
+bulgu işareti taşıyan satır **15 → 21**, hâlâ "temiz" görünen **0**.
+
+**İlk deneme metni SONA ekledi ve DEFTERDE GÖRÜNMEDİ.** Sebep ölçüldü: defterin `Why` sütunu
+`notes`'u **keser** (belgenin kendi cümlesi: *"the criterion's own `notes` field, truncated"*), yani
+sona eklenen bir bulgu tam da onu okuyacak kişiye **ulaşmıyor**. Metin başa taşındı; altı satırın
+altısı da defterde artık `FINDING (ADIM …)` ile **başlıyor**. **Düzeltmenin doğru yeri, kusurun
+görüldüğü yer değil, OKUNDUĞU yerdir.**
+
+**Yapısal muhafız:** yazıcı betik YAML'ı yükleyip `notes` **dışındaki** her şeyin bire bir aynı
+kaldığını assert etmeden dosyayı yazmıyor (`strip_notes(before) == strip_notes(after)`) — ilk koşu
+zaten iki satırı bulamayıp **yazmadan** durdu (`RF-08` ve `UM-15` tırnaksız çok satırlı skaler
+kullanıyor, ötekiler tek tırnaklı). Kapı bir varsayımı yakaladı.
+
+### `CP-03.c4` ARTIK BELİRSİZ DEĞİL — SEVK EDİLMEMİŞ, ve yanında GERÇEK bir kusur var
+
+ADIM 110 bunu *"BELİRSİZ bulundu, alınmadı"* diye bırakmıştı. Bu slice ölçtü, **iki düzlemde**:
+
+- `components/AddPackagePopover.tsx:127` → `derive.mutate(…, { onSuccess })` — **`onError` YOK**
+- `lib/strategy.ts:371::useDeriveStrategyDraftFromPackage` → mutation'ın kendisinde de **yalnız
+  `onSuccess`**
+
+Yani red geldiğinde `selectedId` **duruyor** ve hiçbir şey onu temizlemiyor → *"UI bayat seçimi
+temizler"* **sevk edilmemiş**. `UM-15.c3`'ün ikizi ve bu `onSuccess`-only şeklinin **üçüncü**
+örneği (ADIM 87 → ADIM 110 → burası).
+
+**Yanında ölçülmüş, kaydedilmiş, KAPATILMAMIŞ bir kusur — kriterin AYNA GÖRÜNTÜSÜ:** mutation hiç
+`reset()` edilmiyor ve satırın `onClick`'i yalnız `setSelectedId` çağırıyor (`:189`), oysa
+`deriveError = derive.isError ? derive.error : null` (`:210`). Sonuç: reddedilen bir derive'dan
+sonra **başka, kullanılabilir** bir paket seçince önceki reddin `role="alert"`'ü **yeni seçimin
+altında** görünmeye devam ediyor. Kriter *bayat SEÇİMİN* temizlenmesini istiyor; sevk edilen kusur
+*bayat HATANIN* sızmasıdır. **Düzeltilmedi** — ürün kodu değişikliği ve presentation-only sınırının
+dışında; kaydedildi.
+
+### Yeniden sınıflandırma YAPILMADI, bilerek
+
+Altısı da sınıf D ya da A şekli gösteriyor. **`B → D` D tavanını YÜKSELTİR** — bu bir
+adjudication'dır, bir ölçüm slice'ının kararı değil (ADIM 42'den beri geçerli kural, ADIM 52/68/94/
+104/110'da tekrar tekrar uygulandı). Tavan bu yüzden **54/6 · A1 B21 C6 D32** olarak **sabit
+bırakıldı** ve `acceptance_coverage_baseline.json`'a **dokunulmadı**. Bu slice defterin **doğruluğunu**
+artırdı, **borcunu** değil.
+
+### Dürüst sınır
+
+Ürün/test kodunda sıfır satır → **backend ve frontend suite'lerinin ikisi de KOŞULMADI** ve hiçbir
+geçen/coverage sayısı iddia edilmiyor; otorite **CI**. `CP-03.c4` için **test yazılmadı** (yazılacak
+bir davranış yok) ve **negatif kontrol koşulmadı** — bu slice hiçbir assertion eklemiyor. A-08
+**İLERLEMEDİ** (2/184 hücre · 0/10 akış · 0/4), #514 ve donmuş kanıt **el değmedi**.
+
+**NUMARA:** en yüksek `## ADIM` **112**, canlı kickoff `ADIM111`; iki açık PR (**#830**, **#831**)
+ölçüldü ve **hiçbiri `docs/ADIM<n>…KICKOFF.md` yoluna dokunmuyor** → çakışma yok (ADIM 91). Ölçüm
+bir **anlık görüntüdür**, garanti değil (ADIM 100).
+
+`PROJECT_HISTORY.md` §ADIM 113 · `docs/ADIM113_LANDED_KICKOFF.md`.

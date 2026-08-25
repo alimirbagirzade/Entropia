@@ -8475,6 +8475,57 @@ otorite CI. Ritüel md. 5 atlandı (yeni endpoint/tablo/sayfa/job yok).
 **#826 merge edilmeden merge EDİLEMEZ**.
 `PROJECT_HISTORY.md` §ADIM 111 · `docs/ADIM111_LANDED_KICKOFF.md`.
 
+## Stage 113 — sınıf B tükendi: 21 satırın 21'i de bulgu, ve defter bunu söylemiyordu landed
+
+**DOCS-ONLY.** Üç dosya — `docs/audit/acceptance_semantic_map.yaml` (yalnız **altı** `notes`
+alanı) + ondan üretilen iki artefakt (`acceptance_semantic_traceability.md`,
+`acceptance_coverage_debt_ledger.md`). `backend/src`, `frontend/src`, test, migration: **sıfır
+satır**. `ENGINE_VERSION` / OpenAPI / alembic head **değişmedi**. Tavanlar **OYNAMADI** —
+**54 partial / 6 uncovered · A1 B21 C6 D32**; hiçbir `status`/`debt_class` değişmedi,
+`acceptance_coverage_baseline.json` **el değmedi**. Blocker sayısı **DEĞİŞMEDİ** (1 — yalnız
+A-08), **BLOCKED**.
+
+**Parti olarak başladı, kurulamadı, ve kurulamaması bulgunun kendisi.** Açık **21** sınıf-B
+satırın **21'inin de** kayıtlı bir bulgusu var. Sınıf B = *"davranış sevk edilmiş, eksik olan
+assertion"*, yani bir test slice'ının sahip olduğu **tek** sınıf — bugün o tanıma uyan **tek satır
+yok**. ADIM 107 (backend) ve ADIM 110 (frontend bitiricileri) bunu zaten söylemişti; bu slice
+toplamı alıyor.
+
+**Asıl ders — bir ölçüm aracı ölçtüğü şeyi yanlış gösterebilir.** Bulgular iki düzlemde yaşıyordu
+ve düzlemler ayrışmıştı: **15**'i `notes`'ta (defterin `Why` sütununu üreten, makine tarafı),
+**6**'sı yalnız `CLAUDE.md`/`PROJECT_HISTORY` prozasında (defterin **görmediği** taraf). O altı
+satır — `CP-03` · `MB-22` · `RF-08` · `TL-01` · `TR-07` · `UM-15` — defterde **temiz** görünüyordu.
+**Kanıt bu oturumun kendisi:** parti seçerken `notes` taraması *"7 temiz aday"* verdi ve `CP-03`
+*"tek gerçek aday"* diye seçildi; ancak prozayı çapraz okuyunca altısının da kayıtlı olduğu
+görüldü.
+
+**Düzeltme ve neden başa yazıldığı.** Altı bulgu kaynaklarıyla (`ADIM 48/52`, `94`, `97`, `103`,
+`110`) `notes`'a yazıldı, orijinal not `ORIGINAL NOTE:` ekiyle arkada bırakıldı → bulgu işareti
+taşıyan satır **15 → 21**, "temiz" görünen **0**. **İlk deneme sona ekledi ve defterde
+GÖRÜNMEDİ** — `Why` sütunu `notes`'u **keser**; metin başa taşındı, altısı da artık `FINDING (ADIM
+…)` ile başlıyor. **Düzeltmenin yeri kusurun görüldüğü değil, OKUNDUĞU yerdir.** Yazıcı betik,
+`notes` dışındaki her şeyin aynı kaldığını assert etmeden dosyayı yazmıyor; ilk koşu iki satırı
+bulamayıp **yazmadan** durdu (`RF-08`/`UM-15` tırnaksız skaler).
+
+**`CP-03.c4` artık belirsiz değil — sevk edilmemiş.** İki düzlemde ölçüldü:
+`AddPackagePopover.tsx:127` ve `lib/strategy.ts:371::useDeriveStrategyDraftFromPackage`, ikisinde
+de **yalnız `onSuccess`, `onError` yok** → red gelince `selectedId` duruyor. `UM-15.c3`'ün ikizi,
+bu şeklin **üçüncü** örneği (ADIM 87 → 110 → burası). **Yanında ölçülmüş, kapatılmamış gerçek bir
+kusur — kriterin ayna görüntüsü:** mutation hiç `reset()` edilmiyor (`:189` yalnız `setSelectedId`,
+`:210` `derive.isError`) → reddedilen bir derive'dan sonra **başka, kullanılabilir** bir paket
+seçince önceki reddin `role="alert"`'ü yeni seçimin altında kalıyor. Kriter bayat **seçimin**
+temizlenmesini ister; sevk edilen kusur bayat **hatanın** sızmasıdır.
+
+**Yeniden sınıflandırma YAPILMADI, bilerek** — `B → D` D tavanını yükseltir = adjudication (ADIM
+42 kuralı). Bu slice defterin **doğruluğunu** artırdı, **borcunu** değil.
+
+**Dürüst sınır:** ürün/test kodunda sıfır satır → iki suite de **koşulmadı**, hiçbir geçen/coverage
+sayısı iddia edilmiyor, otorite CI; `CP-03.c4` için test **yazılmadı** ve negatif kontrol
+**koşulmadı** (eklenen assertion yok). A-08 sayaçları, #514 ve donmuş kanıt **el değmedi**.
+
+`PROJECT_HISTORY.md` §ADIM 113 · `docs/ADIM113_LANDED_KICKOFF.md`.
+
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
 > **ADIM 112 (2026-08-25) BU BAŞLIĞI DEĞİŞTİRDİ, ve gerekçesi ölçüldü.** Önceki başlık

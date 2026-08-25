@@ -246,7 +246,49 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> `future_dev`. **Son dalga — ADIM 111 (docs kayıt-silme kapısı üretilmiş artefaktlar için
+> `future_dev`. **Son dalga — ADIM 113 (SINIF B TÜKENDİ): DOCS-ONLY — map'in ALTI `notes` alanı
+> + ondan üretilen iki artefakt; ürün/test kodunda SIFIR satır. Tavanlar OYNAMADI (54/6 · A1 B21
+> C6 D32), `acceptance_coverage_baseline.json` el değmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.**
+> **Parti olarak başladı, KURULAMADI, ve kurulamaması bulgunun kendisi:** açık **21** sınıf-B
+> satırın **21'inin de** kayıtlı bulgusu var. Sınıf B = *"davranış sevk edilmiş, eksik olan
+> assertion"* → bir test slice'ının sahip olduğu **tek** sınıf; bugün o tanıma uyan **tek satır
+> yok** (ADIM 107 backend'i, ADIM 110 frontend bitiricilerini bitirmişti — bu toplamı alıyor).
+> **ASIL DERS: BİR ÖLÇÜM ARACI, ÖLÇTÜĞÜ ŞEYİ YANLIŞ GÖSTEREBİLİR.** Bulgular iki düzlemdeydi ve
+> AYRIŞMIŞTI: **15**'i `notes`'ta (defterin `Why` sütununu üretir), **6**'sı yalnız
+> `CLAUDE.md`/`PROJECT_HISTORY` prozasında (defter onu **görmez**) → `CP-03` · `MB-22` · `RF-08` ·
+> `TL-01` · `TR-07` · `UM-15` defterde **tertemiz** görünüyordu. **KANIT BU OTURUMUN KENDİSİ:**
+> `notes` taraması *"7 temiz aday"* verdi, `CP-03` *"tek gerçek aday"* diye seçildi, ve yalnız
+> prozayı çapraz okuyunca altısının da kayıtlı olduğu görüldü. ADIM 108'in dersinin **tersi**
+> (orada checklist düzeltilip makine çıktısı bayat kalmıştı; burada makine çıktısı düzeltildi).
+> **İKİNCİ DERS: DÜZELTMENİN YERİ, KUSURUN GÖRÜLDÜĞÜ DEĞİL OKUNDUĞU YERDİR** — ilk deneme metni
+> `notes`'un SONUNA ekledi ve defterde **görünmedi**, çünkü `Why` sütunu `notes`'u **keser**; metin
+> başa taşındı → altısı da artık `FINDING (ADIM …)` ile **başlıyor**, orijinal not `ORIGINAL NOTE:`
+> ekiyle arkada duruyor. Bulgu işareti taşıyan satır **15 → 21**, "temiz" görünen **0**.
+> **YAPISAL MUHAFIZ:** yazıcı betik `notes` DIŞINDAKİ her şeyin aynı kaldığını assert etmeden
+> dosyayı yazmıyor; ilk koşu iki satırı bulamayıp **yazmadan** durdu (`RF-08`/`UM-15` tırnaksız
+> çok satırlı skaler, ötekiler tek tırnaklı).
+> **`CP-03.c4` ARTIK BELİRSİZ DEĞİL — SEVK EDİLMEMİŞ** (ADIM 110 onu *"BELİRSİZ, alınmadı"*
+> bırakmıştı): `AddPackagePopover.tsx:127` ve `lib/strategy.ts:371` — **ikisinde de yalnız
+> `onSuccess`, `onError` YOK** → red gelince `selectedId` duruyor. `UM-15.c3`'ün ikizi, bu şeklin
+> **ÜÇÜNCÜ** örneği (ADIM 87 → 110 → burası). **Yanında ölçülmüş, KAPATILMAMIŞ gerçek kusur —
+> kriterin AYNA GÖRÜNTÜSÜ:** mutation hiç `reset()` edilmiyor (`:189` yalnız `setSelectedId`) →
+> reddedilen bir derive'dan sonra **başka, kullanılabilir** paket seçince önceki reddin
+> `role="alert"`'ü yeni seçimin altında kalıyor; kriter bayat **SEÇİMİN** temizlenmesini ister,
+> sevk edilen kusur bayat **HATANIN** sızmasıdır.
+> **YENİDEN SINIFLANDIRMA YAPILMADI, bilerek** — `B → D` D tavanını YÜKSELTİR = adjudication (ADIM
+> 42 kuralı). Bu slice defterin **DOĞRULUĞUNU** artırdı, **BORCUNU** değil.
+> **DÜRÜST SINIR:** ürün/test kodunda sıfır satır → iki suite de KOŞULMADI, hiçbir geçen/coverage
+> sayısı iddia edilmiyor, otorite CI; `CP-03.c4` için test YAZILMADI ve negatif kontrol KOŞULMADI
+> (eklenen assertion yok). A-08 sayaçları (2/184 · 0/10 · 0/4), #514 ve donmuş kanıt **el değmedi**.
+> **NUMARA: iki açık PR (#830, #831) ölçüldü, hiçbiri `docs/ADIM<n>…KICKOFF.md` yoluna dokunmuyor**
+> → çakışma yok (ADIM 91); ölçüm bir anlık görüntüdür, garanti değil (ADIM 100).
+> `PROJECT_HISTORY.md` §ADIM 113 · `docs/ADIM113_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev`. Öncesinde **ADIM 111 (docs kayıt-silme kapısı üretilmiş artefaktlar için
 > DARALTILDI): ÜRÜN KODU DEĞİŞMEDİ — üç dosya, biri agent guard'ı, biri onun davranış kapısı,
 > biri §Conventions. Kabul borcu tavanları OYNAMADI (54/6 · A1 B21 C6 D32). Blocker sayısı
 > DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**

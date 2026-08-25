@@ -1409,12 +1409,16 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'Identity, head pointer, owner, audit, OCC and the conflict-resolution path for "where valid"
-    are all directly asserted. The last clause is not: no test restores a Strategy that was part of
-    a checked composition and then asserts the prior Ready report is stale / a rerun is required.
-    Staleness is fingerprint-driven, so it is likely true, but nothing in the suite states it for
-    the restore path — the cited tests exercise generic entity/manual/market roots, not a re-attached
-    Mainboard item.'
+  notes: 'FINDING (ADIM 94), recorded in CLAUDE.md and PROJECT_HISTORY but NOT here until ADIM 113: the
+    OPPOSITE of c4''s claim is shipped. Restore puts the same (root, revision) back, the fingerprint returns
+    byte-for-byte to its original (02edaff5 to 9e72b8a1 and back to 02edaff5, measured with a probe) and the
+    report reads ready/current again - so the report is unusable after a restore does not describe shipped
+    behaviour. Class D shape; NOT reclassified. ORIGINAL NOTE: Identity, head pointer, owner, audit, OCC and
+    the conflict-resolution path for "where valid" are all directly asserted. The last clause is not: no
+    test restores a Strategy that was part of a checked composition and then asserts the prior Ready report
+    is stale / a rerun is required. Staleness is fingerprint-driven, so it is likely true, but nothing in
+    the suite states it for the restore path — the cited tests exercise generic entity/manual/market roots,
+    not a re-attached Mainboard item.'
 - id: MB-23
   document: docs/spec/01_Entropia_V18_Mainboard_Page_Documentation_v1_1.md
   section: '15'
@@ -5912,11 +5916,15 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The write-side boundary is proven from both directions (PackageKind rejects trade_log; the
-    Mainboard kind guard rejects the legacy trade_log_package label). The read-side half of the row
-    — "GET /packages returns Trade Log as package ... server omits it" — has no asserting test: no
-    test lists the package catalogue and asserts a Trade Log row is absent. Structurally a Trade Log
-    is a WorkObjectRevision and never a package row, but that is an argument, not an assertion.'
+  notes: 'FINDING (ADIM 48, re-stated ADIM 52), recorded in CLAUDE.md and PROJECT_HISTORY but NOT here until
+    ADIM 113: c4 is a ROUTE DIVERGENCE - the criterion names GET /packages, the shipped surface is GET
+    /library. This is a class A or D shape (behaviour under a different name), not a missing assertion. NOT
+    reclassified: moving it would raise another class''s ceiling, which is an adjudication. ORIGINAL NOTE:
+    The write-side boundary is proven from both directions (PackageKind rejects trade_log; the Mainboard
+    kind guard rejects the legacy trade_log_package label). The read-side half of the row — "GET /packages
+    returns Trade Log as package ... server omits it" — has no asserting test: no test lists the package
+    catalogue and asserts a Trade Log row is absent. Structurally a Trade Log is a WorkObjectRevision and
+    never a package row, but that is an argument, not an assertion.'
 - id: TL-02
   document: docs/spec/05_Entropia_V18_Trade_Log_Page_Documentation_v1_1.md
   section: '16'
@@ -7298,12 +7306,21 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The server-side half is fully proven: can_view/can_use are independent in the projection
-    and the derive command refuses both the unusable-but-visible revision (PackageNotDerivableError)
-    and the foreign private one (AccessDeniedError). What is NOT asserted anywhere is the row''s second
-    sentence — that the UI clears stale selection state after such a denial. The mainboard test proves
-    the picker disables an ineligible row up-front, which is a different assertion from clearing an
-    already made selection once the server refuses it.'
+  notes: 'FINDING (ADIM 113), MEASURED in this slice rather than inherited: c4 is NOT SHIPPED and is no
+    longer ambiguous. frontend/src/components/AddPackagePopover.tsx calls derive.mutate(...) with an
+    onSuccess callback ONLY - there is no onError - so selectedId survives a refusal and nothing clears it.
+    That is the twin of UM-15.c3 and the third instance of the same onSuccess-only shape (ADIM 87, ADIM
+    110). Measured beside it, a real defect that is the MIRROR IMAGE of the clause: the mutation is never
+    reset() and the row onClick only calls setSelectedId, so after a denied derive, selecting a DIFFERENT,
+    usable package still renders the previous refusal''s role=alert beneath the new selection - stale ERROR
+    leaks across selections, where the criterion asks for stale SELECTION to be cleared. Class D shape; NOT
+    reclassified (B to D raises the D ceiling = adjudication). ADIM 110 recorded this as BELIRSIZ bulundu,
+    alinmadi. ORIGINAL NOTE: The server-side half is fully proven: can_view/can_use are independent in the
+    projection and the derive command refuses both the unusable-but-visible revision
+    (PackageNotDerivableError) and the foreign private one (AccessDeniedError). What is NOT asserted
+    anywhere is the row''s second sentence — that the UI clears stale selection state after such a denial.
+    The mainboard test proves the picker disables an ineligible row up-front, which is a different assertion
+    from clearing an already made selection once the server refuses it.'
 - id: CP-04
   document: docs/spec/06_Entropia_V18_Add_Package_Create_Package_Page_Documentation_v1_1.md
   section: '15'
@@ -12073,10 +12090,16 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: Only the typed refusal is asserted. Nothing in the backend or frontend suite asserts the
-    three recovery affordances the criterion names (restore the deleted family, rename it, or pick
-    a different name) — no test inspects the error's remediation / suggested_action for this code,
-    and the Rationale Families page tests do not render a reserved-name recovery path.
+  notes: 'FINDING (ADIM 97), recorded in CLAUDE.md and PROJECT_HISTORY but NOT here until ADIM 113: doc 10
+    section 10.1 gives the recovery text verbatim, but RationaleFamilyNameReserved declares only code and
+    message and its single raise site is bare, so the 409 carries no remediation at all. Distinguished from
+    TL-16.c4 by measurement: that one asks the envelope to be WIDENED, this asks for nothing new (twenty
+    sibling classes in the same file already declare it) - a one-line fix using the text the spec already
+    writes. NOT shipped and NOT reclassified. ORIGINAL NOTE: Only the typed refusal is asserted. Nothing in
+    the backend or frontend suite asserts the three recovery affordances the criterion names (restore the
+    deleted family, rename it, or pick a different name) — no test inspects the error''s remediation /
+    suggested_action for this code, and the Rationale Families page tests do not render a reserved-name
+    recovery path.'
 - id: RF-09
   document: docs/spec/10_Entropia_V18_Rationale_Families_Page_Documentation_v1_1.md
   section: '14'
@@ -19632,12 +19655,14 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: 'The blocker and the no-dangling-state half are directly asserted (entry count unchanged
-    plus the family absent from the listing). The "repair plan required" half is not: nothing inspects
-    the raised RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and
-    no test walks the sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for
-    restore and for assigning to a soft-deleted family, but none of them completes this row''s repair
-    loop, so none is cited here.'
+  notes: 'FINDING (ADIM 103), recorded in CLAUDE.md and PROJECT_HISTORY but NOT here until ADIM 113: when
+    TR-08 closed, doc 20''s closable backend debt was declared finished with TR-07 explicitly listed as a
+    FINDING (and TR-12 as class C). No test slice owns this row. NOT reclassified. ORIGINAL NOTE: The
+    blocker and the no-dangling-state half are directly asserted (entry count unchanged plus the family
+    absent from the listing). The "repair plan required" half is not: nothing inspects the raised
+    RationaleFamilyInUseError for a remediation / field_path / repair-plan payload, and no test walks the
+    sequence unassign -> delete-now-succeeds. Adjacent rationale tests exist for restore and for assigning
+    to a soft-deleted family, but none of them completes this row''s repair loop, so none is cited here.'
 - id: TR-08
   document: docs/spec/20_Entropia_V18_Trash_Page_Documentation_v1_1.md
   section: '15'
@@ -21006,13 +21031,17 @@ criteria:
   agent_parity: []
   status: partial
   debt_class: B
-  notes: The server-side half is solid; the client RECOVERY half is unproven. frontend/src/lib/ manual.ts:273
-    documents "Stale snapshot -> 409 MANUAL_STREAM_CONFLICT verbatim (UM-15)" and UserManual.tsx:806
-    renders the conflict explanation, but no frontend test drives a 409 MANUAL_STREAM_CONFLICT response
-    and asserts that the stream query is refetched and the composer re-armed with the new version.
-    The three stale-anchor tests prove the analogous refetch-and-retry loop for UM-18, so the harness
-    to do this already exists. Note also that no test pins the literal string "MANUAL_STREAM_CONFLICT"
-    — c1 rests on the typed ManualStreamConflictError whose code is set at shared/errors.py:2155.
+  notes: 'FINDING (ADIM 110), recorded in CLAUDE.md and PROJECT_HISTORY but NOT here until ADIM 113: c3 is
+    NOT SHIPPED. requestDelete and useSoftDeleteManualDocument carry onSuccess ONLY, so a 409 triggers no
+    invalidation whatsoever - the twin of ADIM 87''s finding and the sibling of CP-03.c4. Class D shape; NOT
+    reclassified (B to D raises the D ceiling = adjudication). ORIGINAL NOTE: The server-side half is solid;
+    the client RECOVERY half is unproven. frontend/src/lib/ manual.ts:273 documents "Stale snapshot -> 409
+    MANUAL_STREAM_CONFLICT verbatim (UM-15)" and UserManual.tsx:806 renders the conflict explanation, but no
+    frontend test drives a 409 MANUAL_STREAM_CONFLICT response and asserts that the stream query is
+    refetched and the composer re-armed with the new version. The three stale-anchor tests prove the
+    analogous refetch-and-retry loop for UM-18, so the harness to do this already exists. Note also that no
+    test pins the literal string "MANUAL_STREAM_CONFLICT" — c1 rests on the typed ManualStreamConflictError
+    whose code is set at shared/errors.py:2155.'
 - id: UM-16
   document: docs/spec/21_Entropia_V18_User_Manual_Page_Documentation_v1_1.md
   section: '15'

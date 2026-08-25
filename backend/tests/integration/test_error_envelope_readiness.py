@@ -20,6 +20,7 @@ from starlette.requests import Request
 
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.apps.api.main import create_app
+from entropia.domain.backtest.indicators import ENGINE_COMPUTABLE_KEYS
 from entropia.shared.errors import AppError, ErrorCategory, ReadinessBlockedError
 
 # Reuse the Stage 5a seeding helpers rather than re-deriving a ready composition.
@@ -65,6 +66,15 @@ async def test_readiness_blocker_remediation_reaches_the_http_envelope(session) 
     assert error["field_path"] == "position_entry_logic.indicator_blocks"
     assert error["remediation"] is not None
     assert "re-run the check" in error["remediation"]
+    # The remedy must name what this engine can actually execute. Telling the author to
+    # "pin a package whose dependencies resolve" without saying WHICH keys resolve leaves
+    # them guessing at the one gate that refused them. Derived from the engine's own set,
+    # so a newly supported resolver cannot leave this text behind.
+    for key in ENGINE_COMPUTABLE_KEYS:
+        assert key in error["remediation"], key
+    # ta.atr is recognized but computes no directional series: naming it here would send
+    # the author to a pin that fails this very check again.
+    assert "ta.atr" not in error["remediation"]
 
     # ``details`` still carries every issue, and each one now keeps its remediation
     # instead of having it stripped on the way out.

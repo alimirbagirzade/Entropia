@@ -42,6 +42,7 @@ from entropia.domain.allocation.rules import (
 from entropia.domain.backtest.execution.fills import (
     tick_data_required,
 )
+from entropia.domain.backtest.indicators import ENGINE_COMPUTABLE_KEYS
 from entropia.domain.identity import Actor
 from entropia.domain.identity.policy import ensure_can_view, require_authenticated
 from entropia.domain.lifecycle.enums import DeletionState
@@ -95,6 +96,12 @@ _WORKSPACE_TARGET = "mainboard_workspace"
 _ACCESS_DENIED_EVENT = "readiness.access_denied"
 _SUCCEEDED = "succeeded"
 _EXTERNAL_KINDS = frozenset({MainboardItemKind.TRADING_SIGNAL, MainboardItemKind.TRADE_LOG})
+
+
+# Rendered once from the engine's own set, never hand-listed: a literal here would drift
+# the moment a resolver is added and would then teach the reader a wrong remedy. Sorted so
+# the remediation string is stable across processes.
+_SUPPORTED_KEYS_TEXT = ", ".join(sorted(ENGINE_COMPUTABLE_KEYS))
 
 
 async def run_readiness_check(
@@ -731,7 +738,9 @@ async def _resolve_strategy_indicator_issues(
                     ),
                     remediation=(
                         "Pin an approved indicator package whose dependencies resolve (or fix "
-                        "the unresolved block), then re-run the check."
+                        "the unresolved block), then re-run the check. This engine computes "
+                        f"{_SUPPORTED_KEYS_TEXT}; a pin naming anything else resolves to no "
+                        "signal."
                     ),
                     field_path="position_entry_logic.indicator_blocks",
                     scope_id=item.item_id,

@@ -8409,6 +8409,72 @@ kapatıldı → bu kayıt **112**. Kickoff **YOK, bilerek** (ADIM 82/109:
 imzadır**). Ritüel md. 5 atlandı (yeni endpoint/tablo/sayfa/job yok).
 `PROJECT_HISTORY.md` §ADIM 112.
 
+## Stage 111 — docs kayıt-silme kapısı üretilmiş artefaktlar için DARALTILDI landed
+
+**ÜRÜN KODU DEĞİŞMEDİ** — `backend/src` ve `frontend/src`'te tek satır yok; diff üç dosya: bir
+agent guard betiği (`plugins/entropia-maintenance/hooks/guard-git.sh`), onun davranış kapısı
+(`scripts/hook-guard-proof.sh`) ve `CLAUDE.md` §Conventions. Migration yok, alembic head
+`0043_i08_registry_strategy_fks`, `ENGINE_VERSION` ve OpenAPI değişmedi, kabul borcu tavanları
+**OYNAMADI** (54 partial / 6 uncovered · A=1 B=21 C=6 D=32), donmuş kanıt + A-08 sayaçları + #514
+el değmedi. **Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+**Kapatılan şey bir kusur değil, bir YANLIŞ POZİTİFTİ.** Kapı düz bir `grep '^-## '` yapıyordu ve
+üretilmiş defterlerin bölüm başlıkları **sayı taşıdığı** için (`## Class B (23)`,
+`## Partial criteria (55)`) **her kabul borcu partisinde** çalıyordu. Ölçüldü: merge edilmiş
+**#821 (ADIM 107)** ve **#826 (ADIM 110)** birebir aynı şekli taşıyor — yani kapı her seferinde
+elle aşıldı. **ASIL DERS: HER SEFERİNDE ÇALAN BİR ALARM, KENDİSİNİ SUSTURMAYI ÖĞRETİR** — tek tek
+her yanlış pozitif zararsızdır, zarar birikimlidir: bir insanı her partide *"onaylıyorum"* demeye
+alıştıran kapı, gerçek regresyonu yakalayacağı gün de aynı cevabı alır. Bu bir **gevşetme değil**,
+alarmın anlamını geri kazanmasıdır.
+
+**Yeni kural: kök karşılaştırması, DOSYA BAŞINA.** Bir başlık ancak kökü (sondaki `(N)` sayacı
+atılmış hâli) **aynı dosyada** eklenenlerin kökleri arasında yoksa silinmiş sayılır →
+`## Class B (23)` → `(21)` **geçer**; bir kaydın **silinmesi** de **yeniden adlandırılması**
+(`## ADIM 92` → `## ADIM 93`, ADIM 61'in bilerek koruduğu davranış) de **bloklanır**; A'dan silinip
+B'ye eklenen başlık **geçmez**. **Path allowlist'i BİLEREK seçilmedi** — yeni bir üretilmiş dosya
+her seferinde kod değişikliği isterdi (bu deponun en sık tekrar eden kusur sınıfı) **ve** o
+dosyaları gerçek silmelere karşı körleştirirdi.
+
+**Davranış kapısı 19 → 23 beklenti** (fixture'a sayı taşıyan üretilmiş bir defter taklidi eklendi):
+iki yeni GEÇİŞ (sayaç aşağı **ve yukarı** — yalnız iyileşmeye izin veren bir kural, bir tavan
+meşru olarak yükseldiği gün çalardı) + iki yeni ENGELLEME (yeniden numaralandırma, çapraz-dosya).
+
+**ÜÇ negatif kontrol, üçü de ayırt edici, üçünde de taban 23/23 ile geri döndü.** **NC-A iki şeyi
+birden ölçer:** daraltmayı geri alınca **yalnız iki yeni GEÇİŞ** kırmızıya döner (yanlış pozitif
+**gerçekti**) **ve** `staged '## ' record removal blocks` — yani #590/#604'ün kusur sınıfı — **yeşil
+kalır** (daraltma bedel ödemedi). NC-B stem'i genişletir → yalnız yeniden numaralandırma; NC-C
+dosya-başına kapsamı kaldırır → yalnız çapraz-dosya. **UÇTAN UCA:** fixture'a değil **gerçek**
+diff'e karşı — ADIM 110'un `docs/` diff'i yeni kuralda **BOŞ** döner, eski kural **3 satır**
+bloklardı.
+
+**İKİNCİ DERS: BİR KONTROL HARNESS'İ TABANIN COMMIT'Lİ OLDUĞUNU VARSAYAMAZ.** İlk NC betiği geri
+almayı `git checkout -- <guard>` ile yapıyordu; guard **henüz commit edilmemişti** ve üç kontrol de
+çalışmayı **sildi** (üçü de `anchor count 0 != 1` ile patladı — kırmızı kusura değil **harness'ın
+yıkımına** aitti). Geri alma **bellekteki anlık görüntüye** çevrildi. ADIM 100'ün *"`finally`
+SIGTERM'de koşmaz"* dersinin kardeşi: **geri alma yolunu, koruduğu şeyden bağımsız kur.**
+
+**ÜÇÜNCÜ BULGU: elle yazılmış özet sayısı bayatlamıştı** — kapının son satırı *"6 blocks"* diyordu,
+`origin/main`'de `probe 2` sayıldı: **7**. Kimse fark etmemişti çünkü sayı hiçbir şeyi
+kapılamıyordu. Artık `blocks` sayacından **türetiliyor**. Aynı dersin üçüncü şekli (ADIM 40 katman
+sayıları, ADIM 60 test collection). **ADIM 58'in tarihsel blokları aynı yanlış bölmeyi taşımaya
+devam ediyor ve BİLEREK değiştirilmedi** (ADIM 65/76 emsali); güncel gerçek §Conventions'ta ve
+**oraya da sayı yazılmadı**.
+
+**ÖLÇÜLMÜŞ SINIRLAR, kapatılmadı:** kapı hâlâ yalnız `## ` (h2) sayar (daraltmadan önce de öyleydi)
+· aynı dosyada `## Class B (23)` → `(99)` geçer (bir değişikliktir; sayıyı şişirmeyi `--ratchet`
+yakalar) · gate 2/3 el değmedi, hâlâ komut dizesinin tamamında desen arar · plugin hâlâ kurulu
+değil.
+
+**Doğrulama + dürüst sınır:** `hook-guard-proof` **23/23** · `agent-config-gate` **5/5** ·
+`repository_facts --check` **exit 0** · `check_classification` **NONE** · invariant taraması **boş**
+· ratchet **exit 0** (oynatılmadı). **CANLI KANIT:** bu slice'ın kendi mühendislik commit'i yeni
+guard'dan geçti; ADIM 110'un kapanış commit'i daraltmadan önce aynı kapı tarafından bloklanmıştı.
+**Backend ve frontend'de sıfır satır → iki suite de KOŞULMADI**, hiçbir sayı iddia edilmiyor,
+otorite CI. Ritüel md. 5 atlandı (yeni endpoint/tablo/sayfa/job yok).
+**SIRA: bu slice ADIM 110 (#826) AÇIKKEN yazıldı** (ADIM 105'in dersi: ayrı dal, sonra rebase) →
+**#826 merge edilmeden merge EDİLEMEZ**.
+`PROJECT_HISTORY.md` §ADIM 111 · `docs/ADIM111_LANDED_KICKOFF.md`.
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
 > **ADIM 112 (2026-08-25) BU BAŞLIĞI DEĞİŞTİRDİ, ve gerekçesi ölçüldü.** Önceki başlık

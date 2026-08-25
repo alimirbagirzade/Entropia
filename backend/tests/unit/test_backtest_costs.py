@@ -55,10 +55,14 @@ def _due(records, *, day: int, direction: str | None, start: int = 0, mapping: b
 # _cost_params / _effective_fill                                               #
 # --------------------------------------------------------------------------- #
 def test_cost_params_halves_the_spread_and_scales_slippage_to_a_fraction() -> None:
-    half_spread, slippage, commission = _cost_params(_config())
+    half_spread, slippage, commission, basis = _cost_params(_config())
     assert half_spread == Decimal("0")
     assert slippage == Decimal("0")  # slippage_value "0" percent
     assert commission == Decimal("0")
+    # Karar 1 (GH #552): the tuple gained a fourth member saying what `commission`
+    # MEASURES. A config that does not mention it resolves to `flat`, which is the
+    # shipped reading — that default is what keeps every saved revision's meaning.
+    assert basis == "flat"
 
 
 def test_effective_fill_is_adverse_on_both_sides() -> None:

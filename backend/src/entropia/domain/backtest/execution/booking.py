@@ -108,7 +108,9 @@ def close_position(
     )
     sign = Decimal("1") if is_long else Decimal("-1")
     gross = (exit_eff - pos.entry_price) * close_size * sign
-    commission_lot = costs.commission
+    # Karar 1: the fee is derived from THIS fill's notional (exit price x closed size),
+    # never inlined. Under `flat` this returns the configured amount unchanged.
+    commission_lot = costs.fee(exit_eff * close_size)
     pnl = (gross - commission_lot).quantize(_MONEY)
     equity_before = led.equity
     led.equity = (led.equity + pnl).quantize(_MONEY)
@@ -236,8 +238,9 @@ def absorb_remainder(
     pos.size = new_size
     pos.entry_notional = (new_basis * new_size).quantize(_MONEY)
     pos.peak_notional = max(pos.peak_notional, pos.entry_notional)
-    if costs.commission > _ZERO:
-        led.equity = (led.equity - costs.commission).quantize(_MONEY)
+    fill_fee = costs.fee(fill_eff * add_size)
+    if fill_fee > _ZERO:
+        led.equity = (led.equity - fill_fee).quantize(_MONEY)
     led.partial_fills += 1
     emit_event(
         led,

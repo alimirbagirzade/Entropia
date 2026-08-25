@@ -277,7 +277,21 @@ class _EngineParticipant:
                 "its position at one mandatory event; the phase loop models one FULL close "
                 "per event and releases the whole position's capital."
             )
-        commission = self.stepper.ctx.fill_costs.commission
+        # Karar 1 (GH #552): the amount ``close_position`` actually CHARGED for this exit
+        # fill, not the configured magnitude. Under ``flat`` the two are the same number,
+        # which is why reading ``.commission`` was correct until the basis became explicit;
+        # under ``bps`` that field is a RATE and spending it as money would state 7.00 where
+        # the engine charged 0.67, inflating the pool's ``fees`` line and, through
+        # ``gross_pnl``, its attribution.
+        #
+        # Derived from the SAME function and the SAME inputs the close used
+        # (``fee(exit_eff * close_size)``): the row's ``exit_price`` IS ``exit_eff``
+        # (``booking.close_position``), and a partial close is refused above, so ``size`` is
+        # the whole closed size. That makes this reproduce the close's single rounding
+        # exactly, which is what the split documented above depends on.
+        commission = self.stepper.ctx.fill_costs.fee(
+            self.stepper.ledger.trades[-1].exit_price * size
+        )
         return MandatoryExit(
             decision=ItemDecision(
                 kind="exit", direction=direction, reason=self.stepper.ledger.trades[-1].exit_reason

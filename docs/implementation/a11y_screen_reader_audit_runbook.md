@@ -24,6 +24,97 @@ worksheet is evidence; an empty one is not.
 
 ---
 
+## 0. Next session — start here (the one-page card)
+
+> **Prepared 2026-08-25 against `45ecebc`.** Everything in this card is derived from
+> the worksheet's §5 session log and from the **frozen** precheck evidence
+> `docs/releases/evidence/2026-08-12/a08_precheck_results_run5.json`. **No precheck was
+> re-run for it** — the container it was written in has no Docker daemon, so
+> `a11y-audit-stack.sh up` could not be brought up (worksheet §6.1a records the
+> attempt). Re-run the prechecks yourself if you want a fresh reach count; §4's
+> run-it-twice rule still applies.
+
+**Combination: SR-2 — VoiceOver / Safari / macOS. Continue it; do not start SR-1.**
+
+Not because SR-2 matters more — because SR-1 has no machine and no auditor yet. SR-1
+needs a Windows box with NVDA and a person assigned to it; that is a scheduling step,
+not a session. SR-2 already has both, and 2 of its cells are filled.
+
+> **Say this out loud before you start, so nobody misreads the result afterwards:**
+> finishing SR-2 *entirely* — all 23 routes and all 10 flows — still leaves exit
+> criterion 1 at **1 / 2** and criterion 2 at **23 / 46** routes. A-08 does not get
+> closer to done by one combination getting further. It gets closer when the *second*
+> combination starts. Worksheet §5 states this; it is repeated here because this card
+> is what the next auditor actually reads.
+
+### Where you pick up
+
+| | |
+|---|---|
+| **Route** | **1 — `/` (Mainboard)** — it is the only route with any cells at all, and it is 6 cells short of being the first *complete* row in the worksheet |
+| **Cells, in this order** | **A-3**, then **A-4, A-5, A-6, A-7, A-8** |
+| **Already filled — do not redo** | **A-1** `PASS` · **A-2** `PASS` (three landmarks; `contentinfo` is not expected — D-11) |
+| **Then** | routes **2 → 23** in §4's order, all eight cells each |
+| **After Section A** | §2's ten flows, B-1 → B-10 |
+
+### The three things worth knowing before you touch route 1
+
+**1. Route 1 cannot settle K-5, and the last session's question about it was
+unanswerable there.** The A-3 cell was left `—` after the auditor was asked whether
+*"the `h1 → h3` jump"* misled them. **There is no such jump on `/`.** Measured, not
+inferred: in the frozen five-run evidence, `/` is the **only one of the 23 routes that
+emits no `heading outline` advisory at all** — every other route emits one. So route 1's
+A-3 is a question about an outline that is already unbroken, and a `PASS` there is a
+statement about `/` and about nothing else.
+
+> **What this means for the cell:** answer A-3 on route 1 on its own merits — does the
+> Mainboard's heading list show you the page's real structure? — and expect that answer
+> to be `PASS` and to be *uninformative about K-5*. **K-5 is settled on a route inside
+> its set**, and the worksheet's own worked example is `/backtest/run`
+> (`h1 "RUN & Backtest Results" → h3 "Composition"`). Do not record a route-1 `PASS` as
+> progress on K-5.
+
+**2. K-6a — *"can you see where focus is?"* — is answerable on route 1, in about a
+minute, and only a human can answer it.** The computed-style probe that raised it
+sampled exactly one element, on exactly this route (`/` is the only route emitting a
+`focus indicator` advisory), and a probe cannot see a UA default ring. Tab through the
+shell with your eyes on the screen and write down whether you can always tell where
+focus is. **This is not a Section A cell** — record it against K-6a in worksheet §6, and
+open a finding if the answer is no.
+
+**3. K-7 is not a Section A question and you will not settle it in Section A.** *"No
+live region in the initial DOM"* is about what gets **announced when something
+happens**, which is flows **B-3** (Ready Check verdict), **B-4** (RUN
+`queued → running → completed`) and **B-6** (409 conflict). Keep the Speech Viewer /
+VoiceOver caption panel open when you get to Section B and watch whether *anything*
+arrives on the state change.
+
+### If you only have half an hour
+
+Not the recorded order — the recorded order is route 1 → 23 → flows, and that is what
+§4 says. This is what to spend a short session on if you cannot finish route 1, and it
+is advice, not a re-plan:
+
+1. **K-6a on route 1** (~1 min, human-only, unblocks a product decision)
+2. **A-4 … A-8 on route 1** (~15 min, makes `/` the first complete row: 8 / 8)
+3. **A-3 on one K-5-set route** — `/backtest/run` — (~10 min, the only way K-5 moves)
+
+Leave everything else `—`. A half-filled worksheet is evidence; a guessed one is worse
+than an empty one.
+
+### One stale instruction to ignore while you work
+
+The precheck's own `::warning::` output still prints, next to every heading-outline
+advisory, the note *"checklist A-3 asks for h1→h2→h3 with no skipped level"*. **That is
+the superseded question.** A-3 was rewritten on 2026-08-13 precisely because counting
+skips is a machine measurement the precheck already produces — see the checklist's
+`§A-3 notu`. Two neighbouring notes in the same output are stale the same way (the
+`contentinfo` note still says A-2 expects four landmarks, which D-11 overturned; the
+skip-link note still describes a defect PR #685 fixed). The **counts** those advisories
+carry are unaffected — only the explanatory prose. Worksheet §6.1b records all three.
+
+---
+
 ## 1. Before you start (5 minutes)
 
 You need **both** combinations. One is not enough and never becomes enough:
@@ -157,13 +248,26 @@ envelope (`code` / `message` / `remediation`) · **B-6** OCC conflict (409) · *
 file upload + rejected file type · **B-8** Trash restore/purge confirmation · **B-9**
 long tables · **B-10** Login.
 
-**Where to look first.** The preparation already measured six structural observations
-(K-2…K-7) in the worksheet's *"Already-known observations"* table. They are **not**
+**Where to look first.** The preparation measured seven structural observations
+(K-1…K-7) in the worksheet's *"Already-known observations"* table. They are **not**
 findings — nobody has heard them. They are the highest-yield places to point a screen
-reader. Three of them can only be settled by you, and product decisions are waiting on
-your answer: **K-5** (does the `h1 → h3` jump actually mislead rotor navigation?),
-**K-6** (can you see where focus is?) and **K-7** (do the Ready Check verdict, the RUN
-state change and a 409 conflict get announced at all?).
+reader. **Four have since been resolved and are not your problem:** K-2 and K-4 were
+fixed in code (PR #685), K-6b was fixed in one CSS declaration (PR #688), and K-3 was
+adjudicated without code by PO-signed **D-11** — three landmarks are what this product
+has and what checklist A-2 now asks for.
+
+**Three remain open, and all three are waiting on you** — each has a product decision
+behind it that nobody will take until a person has listened:
+
+* **K-5** — does the `h1 → h3` outline actually *mislead* rotor navigation? (Note the
+  question: not *"is there a skip"* — the precheck already counts those, **22 / 23
+  routes**. See §0 and the checklist's `§A-3 notu`.)
+* **K-6a** — can you *see* where focus is? A computed-style probe cannot answer this;
+  only an eye can. **A-08 settles this one and nothing else does.**
+* **K-7** — do the Ready Check verdict, the RUN state change and a 409 conflict get
+  announced at all? This is Section **B** (B-3 / B-4 / B-6), not Section A.
+
+**K-1 you leave alone** — see §6.2.
 
 **If you re-run the prechecks yourself, run them twice and use the second result.** The
 probe races the pages' first data render, so the first run after `up` under-reports —
@@ -204,9 +308,12 @@ An axe-core violation is not a screen-reader finding — file those as ordinary 
    resolved the earlier closure/evidence divergence. Closing it again is a
    product-owner decision and belongs after the four exit criteria are `☑`, never
    before; an agent may neither close nor re-open it.
-4. **Do not fix K-2…K-6 on the way past.** Each one's remedy is a product decision
-   (add a footer? re-cut 21 pages' heading outlines?) and K-5/K-6 are precisely what
-   your session is meant to answer first.
+4. **Do not fix K-5, K-6a or K-7 on the way past.** Each one's remedy is a product
+   decision — re-cut **22** pages' heading outlines? mount a persistent status region?
+   — and K-5 / K-6a are precisely what your session is meant to answer first. The
+   measured cost of the K-5 remedy alone is **204 headings across 42 files plus six
+   tag-scoped CSS rules**; it is not a change anyone makes in passing. (K-2, K-3, K-4
+   and K-6b are already resolved — see §4.)
 
 ## 7. When you stop
 

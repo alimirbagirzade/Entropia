@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from entropia.domain.backtest.indicators import ENGINE_COMPUTABLE_KEYS
 from entropia.domain.create_package.enums import SourceKind
 from entropia.domain.revision.hashing import content_hash
 from entropia.shared.errors import OutputContractInvalid
@@ -148,25 +147,5 @@ def _uncertainty(source_kind: SourceKind, resolved: list[dict[str, Any]]) -> lis
         notes.append(
             "No declared dependencies resolved; the candidate declares no indicator "
             "or condition primitives."
-        )
-    # Early diagnosis, NOT a gate. A dependency may resolve against the ESP registry and
-    # still be one this engine cannot turn into a block, because registration only
-    # requires a non-empty canonical key. Without this note the author learns that at
-    # Ready Check -- after creating, validating and pinning the package. Warning rather
-    # than refusing is deliberate: ``ta.atr`` is registered on purpose and computes no
-    # directional series, so an uncomputable key is a legitimate state, not an error.
-    uncomputable = sorted(
-        {
-            key
-            for ref in resolved
-            if (key := str(ref.get("canonical_key", ""))) and key not in ENGINE_COMPUTABLE_KEYS
-        }
-    )
-    if uncomputable:
-        notes.append(
-            "The backtest engine has no compute for "
-            f"{', '.join(uncomputable)}; a block resting only on "
-            "these resolves to no signal and Ready Check will report "
-            "STRATEGY_INDICATOR_UNRESOLVED."
         )
     return notes

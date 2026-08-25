@@ -97,6 +97,15 @@ Before stopping a working session, produce **ALL** of the following:
   bu desenleri yalnızca İÇEREN bir heredoc/döngü Bash çağrını bloklar** — eşleşme komut
   dizesinin tamamındadır (fail-closed, bilinçli). Böyle bir metni **Write ile dosyaya yaz,
   sonra dosyayı koştur.** Davranış kapısı `scripts/hook-guard-proof.sh` (`Frontend` job'ında).
+  **Üçüncü kapı — docs kayıt silme — ADIM 111'de DARALTILDI.** Artık düz bir `grep '^-## '`
+  değil: bir başlık ancak **kökü** (sondaki `(N)` sayacı atılmış hâli) **aynı dosyada** eklenen
+  başlıkların kökleri arasında yoksa silinmiş sayılır. Yani `## Class B (23)` → `## Class B (21)`
+  bir **değişikliktir ve geçer**, ama bir kaydın **silinmesi** de **yeniden adlandırılması**
+  (`## ADIM 92` → `## ADIM 93`, ADIM 61) de **bloklanır** ve karşılaştırma **dosya başınadır**
+  (A'dan silinip B'ye eklenen başlık geçmez). **Path allowlist'i BİLEREK seçilmedi** — yeni bir
+  üretilmiş dosya her seferinde kod değişikliği isterdi ve o dosyaları gerçek silmelere karşı da
+  körleştirirdi. **BURAYA BEKLENTİ SAYISI YAZMA** — kapının kendi özet satırı sayıyı `probe`
+  sonuçlarından **türetir** (elle yazılmış eski sayı bir eksikti, ADIM 111'de ölçüldü).
 - **Local verify (backend):** `cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q`
   — `addopts` artık `--cov-fail-under=90` taşıyor, yani **tam suite** koşusu CI'daki coverage
   kapısını da doğruluyor. **BURAYA SAYI YAZMA.** Toplanan (collected) sayıların tek otoritesi

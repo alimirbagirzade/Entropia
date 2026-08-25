@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from entropia.apps.runner.admit import admit_and_dispatch, admit_run
+from entropia.apps.runner import admit as admit_mod
 from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.infrastructure.postgres.models import BacktestRun, HumanUser, Job, Principal
 from entropia.shared.errors import ReadinessBlockedError, UnauthenticatedError
@@ -58,7 +58,7 @@ async def test_a_ready_composition_is_admitted_without_any_http(session) -> None
     await _seed_resolvable_user(session)
     composition_id, _root, _rev = await _ready_composition(session, USER1)
 
-    result = await admit_run(
+    result = await admit_mod.admit_run(
         session,
         principal_id="user_1",
         composition_id=composition_id,
@@ -80,7 +80,7 @@ async def test_a_principal_the_database_does_not_know_cannot_admit(session) -> N
     composition_id, _root, _rev = await _ready_composition(session, USER1)
 
     with pytest.raises(UnauthenticatedError):
-        await admit_run(
+        await admit_mod.admit_run(
             session,
             principal_id="user_does_not_exist",
             composition_id=composition_id,
@@ -97,13 +97,13 @@ async def test_the_runner_inherits_ready_checks_refusal(session) -> None:
     composition_id = await _empty_composition(session, USER1)
 
     with pytest.raises(ReadinessBlockedError):
-        await admit_run(session, principal_id="user_1", composition_id=composition_id)
+        await admit_mod.admit_run(session, principal_id="user_1", composition_id=composition_id)
     await session.rollback()
     assert await _count(session, BacktestRun) == 0
     assert await _count(session, Job) == 0
 
 
-async def test_the_job_is_enqueued_only_after_the_transaction_commits(session) -> None:
+async def test_the_job_is_enqueued_only_after_the_transaction_commits(session, monkeypatch) -> None:
     """Ordering, not merely "it enqueued".
 
     A dispatch inside the transaction would let the worker open the job before the
@@ -142,25 +142,19 @@ async def test_the_job_is_enqueued_only_after_the_transaction_commits(session) -
         events.append("send_job")
         sent.append(job_id)
 
-    import entropia.apps.runner.admit as admit_mod
-
-    original = admit_mod.send_job
-    admit_mod.send_job = _fake_send  # type: ignore[assignment]
-    try:
-        result = await admit_and_dispatch(
-            principal_id="user_1",
-            composition_id=composition_id,
-            idempotency_key="b1-order-1",
-            session_factory=lambda: _RecordingSession(session),
-        )
-    finally:
-        admit_mod.send_job = original  # type: ignore[assignment]
+    monkeypatch.setattr(admit_mod, "send_job", _fake_send)
+    result = await admit_mod.admit_and_dispatch(
+        principal_id="user_1",
+        composition_id=composition_id,
+        idempotency_key="b1-order-1",
+        session_factory=lambda: _RecordingSession(session),
+    )
 
     assert events == ["commit", "send_job"], events
     assert sent == [str(result["job_id"])]
 
 
-async def test_no_dispatch_admits_the_run_and_enqueues_nothing(session) -> None:
+async def test_no_dispatch_admits_the_run_and_enqueues_nothing(session, monkeypatch) -> None:
     # The escape hatch must not silently enqueue: an operator staging thousands of runs
     # before starting workers depends on this being real absence, not a delayed send.
     await _seed_resolvable_user(session)
@@ -168,20 +162,14 @@ async def test_no_dispatch_admits_the_run_and_enqueues_nothing(session) -> None:
     await session.commit()
 
     sent: list[str] = []
-    import entropia.apps.runner.admit as admit_mod
-
-    original = admit_mod.send_job
-    admit_mod.send_job = lambda _a, job_id: sent.append(job_id)  # type: ignore[assignment]
-    try:
-        result = await admit_and_dispatch(
-            principal_id="user_1",
-            composition_id=composition_id,
-            idempotency_key="b1-nodispatch-1",
-            dispatch=False,
-            session_factory=lambda: _Passthrough(session),
-        )
-    finally:
-        admit_mod.send_job = original  # type: ignore[assignment]
+    monkeypatch.setattr(admit_mod, "send_job", lambda _a, job_id: sent.append(job_id))
+    result = await admit_mod.admit_and_dispatch(
+        principal_id="user_1",
+        composition_id=composition_id,
+        idempotency_key="b1-nodispatch-1",
+        dispatch=False,
+        session_factory=lambda: _Passthrough(session),
+    )
 
     assert result.get("job_id")
     assert sent == []

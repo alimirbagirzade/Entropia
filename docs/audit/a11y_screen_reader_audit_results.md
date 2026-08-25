@@ -403,10 +403,33 @@ small to have produced one.
 |---|---|---|---|---|---|
 | 1 | **SR-2** — VoiceOver / Safari / macOS 15.3 | 2026-08-12 | Ali Mirbagirzade (product owner, `neither`) | Route 1 `/` — A-1, A-2 only | 2 / 184 Section A cells; 0 findings; **K-5 not settled** (A-3 left `—`) |
 
-**Where the next session picks up:** route 1's **A-3** (the `h1 → h3` heading
-question, K-5 — read the note under §1's SR-2 table for exactly what was asked
-and why the answer did not count), then A-4…A-8, then routes 2–23, then §2's ten
-flows. After that, the entire SR-1 combination.
+> **No audit session has run since. The table above has one row and it is still
+> session 1.** A **preparation** session ran on 2026-08-25 (base `45ecebc`): it wrote
+> the runbook's §0 next-session card, re-derived the route list (§6.1c), recorded why
+> the precheck counts could not be refreshed (§6.1a) and logged three stale advisory
+> notes (§6.1b). **It filled no cell, heard nothing, and is not a session in this
+> table's sense** — it is deliberately not given a row, because a row here means a
+> person wore headphones.
+
+**Where the next session picks up:** the runbook's **§0 card** is the one-page version
+of this paragraph — combination, route, cells, order — and it is what to hand the
+auditor. In short: continue **SR-2** (SR-1 still has no machine and no auditor), route
+1 `/`, cell **A-3** first, then A-4…A-8, then routes 2–23, then §2's ten flows. After
+that, the entire SR-1 combination.
+
+> **One correction the card carries, measured 2026-08-25 and worth having here too:
+> route 1 cannot settle K-5, and last session's A-3 question was unanswerable on that
+> route.** The auditor was asked whether *"the `h1 → h3` jump"* misled them — **`/` has
+> no such jump.** In the frozen five-run evidence
+> (`docs/releases/evidence/2026-08-12/a08_precheck_results_run5.json`) `/` is the
+> **only one of the 23 routes emitting no `heading outline` advisory at all**; every
+> other route emits one. That independently confirms the K-table's *"only `/` is now
+> outside the set"* — and it means the `—` in that cell was doubly right. Answer route
+> 1's A-3 on the rewritten question (*does this outline mislead?*), expect `PASS`, and
+> **do not record it as progress on K-5**: K-5 moves only on a route inside its set,
+> e.g. `/backtest/run`. Two further placements follow from the same evidence — **K-6a**
+> is probed on `/` alone, so it is answerable in the next session's first minute, and
+> **K-7** is a Section **B** question (B-3 / B-4 / B-6) that Section A will not settle.
 
 Until all four are `☑`, **no document may show A-08 as `Complete` or `PASS`** —
 including this one.
@@ -424,7 +447,8 @@ STATUS banner above.
 
 `npm run a11y` in `frontend/e2e` runs three things against this same seeded
 stack. **None of them is a screen-reader result**, and none may be copied into
-§1 or §2:
+§1 or §2. **Before trusting any reach number below, read §6.1a: the 2026-08-25 refresh
+attempt failed and the counts here still carry their 2026-08-12 provenance.**
 
 | Artifact | What it proves | What it does NOT prove |
 |---|---|---|
@@ -558,4 +582,81 @@ the same commit.
 
 **None of this is a screen-reader result.** A count that varies by cache warmth is
 still a DOM count.
+
+---
+
+### 6.1a — the 2026-08-25 refresh attempt: **the counts above were NOT refreshed**
+
+A preparation session on **2026-08-25** (base `45ecebc`) was asked to re-run the
+prechecks and refresh the reach numbers, **twice**, per the cold-run rule above. **It
+could not, and no number in §6 was touched.** What was measured is the obstacle:
+
+| Probe | Result |
+|---|---|
+| `docker` binary | present (`/usr/bin/docker`) |
+| Docker **daemon** | **absent** — `dial unix /var/run/docker.sock: no such file or directory` |
+| `minio` binary | **absent** |
+| `redis-server`, `psql`, `node`, Playwright Chromium | present |
+| `frontend/node_modules` | absent |
+
+`scripts/a11y-audit-stack.sh` is compose-based and the compose file declares
+`postgres`, `redis`, `minio`, `migrate`, `provision`, `api` and five workers. **With no
+daemon there is no stack**, and therefore no seeded Admin session for
+`specs/20-a11y-prechecks.spec.ts` to walk.
+
+> **Why no substitute stack was improvised, and why that is the honest answer.** Redis
+> and Postgres are here; MinIO and the daemon are not. Assembling something *close
+> enough* to run the probe against would have produced numbers that look exactly like
+> the ones in the tables above and mean something different — a differently-provisioned
+> stack races the pages' first data render differently, which is the **one** documented
+> reason K-5 and K-7 move between runs. Publishing such a figure would silently
+> redefine the two observations the human audit exists to adjudicate. **The counts above
+> are therefore left at their 2026-08-12 provenance, stale-by-default, exactly as
+> recorded.** The 2026-08-12 note that this container answers `403` to the Docker CDN
+> was the *previous* shape of this obstacle; on 2026-08-25 it did not get that far.
+
+**What a fresh count would and would not settle.** Nothing in §1, §2 or §3 — a reach
+count is a DOM count either way. It would tell the next auditor how many routes are
+currently in K-5's and K-7's sets. Until someone re-runs it on a real stack (**twice**,
+discarding the cold run), read the K-table's reach column as *"as of 2026-08-12"*.
+
+### 6.1b — three advisory **notes** in the precheck are stale (the counts are not)
+
+Read statically from `frontend/e2e/specs/20-a11y-prechecks.spec.ts` on `45ecebc`. Each
+advisory carries an explanatory `note` string that is printed in the `::warning::`
+output and written into `a11y-report/precheck-results.json`. **Three of them describe a
+world that three landed decisions have since changed.** The `observed` values, the
+counts, the reach figures and the gating behaviour are **unaffected** — only the prose.
+
+| Line | Advisory | Note still says | Superseded by |
+|---:|---|---|---|
+| 271 | heading outline (**K-5**) | *"checklist A-3 asks for h1→h2→h3 with no skipped level"* | **A-3 was rewritten 2026-08-13** to ask whether the outline *misleads*; the checklist now says *"Sayı atlamasını burada SAYMA"* (`§A-3 notu`) |
+| 252 | `contentinfo` (**K-3**) | *"checklist A-2 expects banner/navigation/main/contentinfo"* | **D-11 (2026-08-13)** — A-2 expects **three** landmarks |
+| 262 | skip link (**K-2**) | *"no in-page skip target precedes the primary nav … Adding one is a product change outside this preparation slice"* | **PR #685** shipped it — `Layout.tsx:397` renders `<a class="skip-link" href="#main-content">`, `:465` carries `id="main-content" tabIndex={-1}`. The branch no longer fires, so the note is unreachable as well as stale |
+
+**The first one is the one that matters, and it matters for a specific reason.** ADIM 63
+rewrote A-3 because the old question asked a human to repeat a machine measurement,
+which made the audit *structurally unable* to close K-5 however many routes were walked.
+That fix landed in the **checklist**. The precheck's own output — which the runbook §4
+sends the auditor to as *"where to look first"* — still prints the superseded question
+next to all 22 heading-outline advisories. **An auditor who reads the warning rather
+than the checklist gets pointed back at the question ADIM 63 retired.** The runbook's
+§0 card now warns about this at the point of use.
+
+**Not fixed here, deliberately.** The strings are not pinned by any test (verified: they
+appear only in the spec itself and in the frozen `2026-08-12` evidence JSON, which is a
+record and must not be edited), so the correction is one line each and low-risk — but
+this was a docs-and-preparation session that changed no source, could not run the
+frontend suite (`node_modules` absent, and the gates need the stack anyway), and
+**"verified low-risk" is not the same as verified.** Disposition is a human's:
+correcting the three notes is a source change, and re-baselining the advisory prose is
+its own small slice.
+
+### 6.1c — the route list was re-derived and is **not** stale
+
+The runbook's own header warns that the route count is the one number in it that rots.
+Re-derived 2026-08-25 from `frontend/e2e/utils/screenshotMatrix.ts::TARGET_PAGES`:
+**23 entries**, doc numbers 1–22 with doc 19 contributing two (`/panel/management`,
+`/panel/logs`), in the same order as §1's tables. §1, §4 of the runbook and the matrix
+agree row for row. **No change needed.**
 

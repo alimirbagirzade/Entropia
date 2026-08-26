@@ -16115,3 +16115,163 @@ garanti değil (ADIM 100).
 
 `docs/ADIM114_LANDED_KICKOFF.md` · `docs/audit/financial_closure_evidence.md` ·
 `docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1.
+
+
+## ADIM 115 — worker'ın paylaşımlı saatinin ARBİTRAJI ilk kez sürüldü: BİR DALIN KOŞTUĞUNU KANITLAMAK, O DALIN VAR OLMA SEBEBİNİ KANITLAMAZ
+
+**ÜRÜN KODU DEĞİŞMEDİ** — `backend/src`'te **sıfır satır**. Üç dosya: bir integration test
+modülü (+7 case, +4 fixture), containment gate'in docstring'i, ve üretilmiş olgular
+(`repository_facts` collection **3758 → 3765**, +7 = tam yeni case sayısı). `ENGINE_VERSION`
+**değişmedi** · OpenAPI **değişmedi** · alembic head `0043_i08_registry_strategy_fks`
+(migration yok) · `SHARED_ALLOCATION_STATUS` = **`future_dev` (DEĞİŞMEDİ, kaldırılMADI)** ·
+kabul borcu tavanlarına **dokunulmadı**. Blocker sayısı **DEĞİŞMEDİ** (1 — yalnız A-08),
+**BLOCKED**.
+
+### Bölüm 0 — Görev "wiring" diyordu; wiring İNMİŞTİ, ve bu ölçüldü
+
+Görev metni (27B) *"worker → `run_portfolio` production wiring"* istiyordu ve bir taban
+sapması gösteriyordu:
+
+```
+for prepared in prepared_items:
+    _replay_strategy(...)
+...
+combine_item_runs(...)
+```
+
+**O taban bayattı.** Güncel `main`'de (`a57e552`) `application/jobs/backtest_engine.py:367`
+zaten şu dalı taşıyor:
+
+```
+if len(prepared_items) > 1 and _use_unified_clock(capital_execution):
+    unified = await _replay_shared_clock(...)
+```
+
+ve `_replay_shared_clock` **gerçek** `_EngineParticipant`'ları
+(`participant.build_engine_participant`), **birleşik saati** (`iter_portfolio`), **tick-strided
+iptali** (checkpoint #3b) ve `project_portfolio_run` → `PortfolioRun` projeksiyonunu sürüyor.
+Adaptör `C3` = **#777** (`2cda24f5`), call site `C4`/E5 = **#799** (`39947256`) + **#805**
+(`3f557c72`). Containment gate'in `callers == []` iddiası **zaten** `_AUTHORISED_LOOP_CALLERS`
+ile değiştirilmişti. Yani görevin GOAL'ü ve ACCEPTANCE'ının iki maddesi (*"production source
+contains a real caller"*, *"containment gate replaced with the new truthful invariant"*)
+**inmiş işti** — HARD RULE (*"current code zaten çözmüşse duplicate fix yazma"*) uygulandı ve
+**tek satır ürün kodu yazılmadı**.
+
+**ACCEPTANCE'IN LİTERAL YAZIMI KENDİ CANCELLATION MADDESİYLE ÇELİŞİYOR, ve bu bir kusur
+değil.** Görev hem *"a real `run_portfolio` caller"* hem *"cancellation must be checked inside
+the merged timeline"* istiyor. `run_portfolio` **`iter_portfolio`'nun tüketilmiş hâlidir**
+(`portfolio_engine.py:717`, kendi docstring'i bunu söylüyor: *"a caller that DOES need to
+interleave work between ticks — the worker, whose cancellation check is `async` and cannot run
+from inside a synchronous loop — drives the generator instead"*). Worker'ı `run_portfolio`'ya
+çevirmek **checkpoint #3b'yi silerdi** — yani ikinci maddeyi ihlal ederdi. Wire'lanan doğru
+giriş noktası `iter_portfolio`'dur; containment gate **ikisini birden** grepler
+(`_LOOP_ENTRY_POINTS`), ve `test_every_public_loop_driver_is_named_in_the_caller_scan` üçüncü
+bir giriş noktası eklenirse kırmızı verir. **Yalnız `run_portfolio`'yu grep'lemek yanıltır** —
+`CLAUDE.md`'nin ADIM 112 bloğu bunu "TUZAK" olarak zaten kaydediyordu.
+
+### Bölüm 1 — Gerçek boşluk: dal koşuyordu, ARBİTRAJI hiç okunmamıştı
+
+`C4` dört olgu pinlemişti: bağımsız çok-item'lı bir koşu döngüye **ulaşmaz** · yalnız bayrağı
+kaldırmak da onu yönlendirmez · bayrak + paylaşımlı sermaye ile dal **gerçekten** koşar ve
+zaman-sıralı bir Result üretir · tick-strided iptal **ulaşılabilir**. Dördü de dalın
+**koştuğunu** söyler. Hiçbiri, birleşik eksenin **var olma sebebini** okumaz: aynı anda karar
+veren iki item'ın **tek donmuş `PortfolioSnapshot`** gördüğü, pin sırasının hiçbirini
+**ayrıcalıklı kılmadığı**, engellenen bir item'ın kapasitesinin kardeşine **geçmediği**, ve
+koşunun **yalnız kendi pinlerinin** fonksiyonu olduğu.
+
+**Ve durum zaten oluşuyordu, kimse okumuyordu (ölçüldü).** Sevk edilen fixture'da iki item
+`2024-02-21T00:00:00Z`'de **aynı `t_ms`'te** giriyor (ikisi de `admitted`, ikisi de
+`granted_notional: 250.00`, ikisi de `reference_price: 103`), ve `2024-02-22`'de **aynı
+tick'te** iki zorunlu stop (P3) + iki rakip ters giriş (P4) birden düşüyor. Bu modüldeki her
+paylaşımlı koşu bunu üretiyordu; **hiçbir assertion'ı yoktu**.
+
+### Bölüm 2 — Sevk edilen yedi case (hepsi gerçek `run_backtest` üzerinden)
+
+| case | ne pinliyor |
+|---|---|
+| `..._priced_against_one_frozen_pool` | aynı `t_ms` · ayrık `pin_ordinal` · **tek** `reference_price` · **eşit** `granted_notional` · ikisi de `admitted`, `counterparty_item_id` yok · her sleeve = payı × havuz, sleeve toplamı = havuz (**gizli pay transferi yok**) |
+| `..._land_on_one_tick_in_phase_order` | bir anda **her iki item'ın** zorunlu stop'u (P3, `stop_loss`) + **her iki item'ın** rakip girişi (P4), ve `max(seq of P3) < min(seq of P4)` |
+| `..._when_the_prepared_items_arrive_reversed` | `_shared_clock_inputs`'a **ters** liste → **aynı** artefaktlar (**pin öncelik yok**, sıra okunamaz) |
+| `..._twice_produces_identical_artifacts` | aynı kompozisyon iki kez → aynı artefaktlar (ADR §14 **A18**) |
+| `..._walks_the_union_of_both_axes` | **ayrık** iki kadans (1D@06:00 22 bar · 12h@00:00 43 bar) → `tick_count == 65 == |birleşim|`, iki uç nokta da kapsanıyor, bileşik özet **tek bir timeframe adlandırmayı reddediyor** |
+| `..._stays_on_the_byte_identical_lone_strategy_path` | tek item **`v1_bar_replay`** — `!= UNIFIED_KIND` **değil**, isimle; ve sleeve **çözülmüş** (P0 = 50 000, kendi 10 000'i değil) |
+| `..._is_byte_identical_when_the_flag_is_lifted` | bağımsız çok-item'lı koşu, bayrak kalkıkken **satır satır aynı** — etiket değil **satırlar** |
+
+**KİMLİK ARACI ÖLÇÜLEREK SEÇİLDİ.** Saklanan `result_artifact_checksum` beş artefakt taşır;
+**dördü** kullanıldı. `diagnostics` **bilerek dışarıda**: onun projeksiyonu satırı **her
+materialization'da taze basılan `diagnostic_id` ULID'i ile birlikte** hash'liyor
+(`result_artifacts.project_row`), yani bayt bayt aynı iki koşuda bile **yapı gereği** ayrışır
+(ölçüldü: dört content checksum'ı üç koşuda da aynı, `diagnostics` üçünde de farklı). Onu
+listeye koymak her kimlik iddiasını **kalıcı olarak tatmin edilemez** yapardı. Diagnostics'in
+**içeriği** ayrıca ve doğrudan karşılaştırılıyor (`execution_key`, per-item attribution,
+policy versions taşır) → hiçbir şey düşmüyor, yalnız **kararlı olduğu yerden** okunuyor.
+
+### Bölüm 3 — YEDİ NEGATİF KONTROL, ve hepsinde SEVK EDİLEN YEDİ CASE YEŞİL KALDI
+
+Bu, boşluğun **iddiası** değil **ölçümüdür**. Her kontrolde hangi testlerin kırmızıya döndüğü
+**okundu** (ADIM 79 kuralı):
+
+| kontrol | kırmızı olan |
+|---|---|
+| `_ordered()` sıralamayı bırakır (çağıranın listesine güvenir) | **yalnız** ters-liste case'i |
+| iz, bir tick içinde P4'ü P3'ten önce raporlar | **yalnız** faz-sırası case'i |
+| saat yalnız **ilk pinlenen** item'ın eksenini yürür | üç birleşik-eksen case'i |
+| tek Strategy **tek satırlık bileşik** olarak fold'lanır | **yalnız** tek-item case'i |
+| sıralı fold, koşunun kendi planı yerine **capability bayrağını** okur | **yalnız** bağımsız bayt-kimliği case'i |
+| tick'in birikmiş taahhüdü item cap'ini bağlar (**ilk gelen alır**) | **yalnız** iki arbitraj case'i |
+| projeksiyonda modül düzeyi sayaç equity eğrisine sızar | **yalnız** iki paylaşımlı kimlik case'i |
+
+**İKİ TANESİ ÖĞRETİCİ VE İKİSİ DE BU PARTİNİN VARLIK SEBEBİ:**
+
+* **tek Strategy'yi bileşik olarak fold'lamak** — sevk edilen
+  `test_a_single_strategy_shared_composition_stays_on_run_engine` `!= UNIFIED_KIND` assert
+  ediyor, ve bileşik fold **onu da tatmin eder** → o test **YEŞİL KALDI** ve tek item sessizce
+  **yeniden fiyatlandı**. *"Birleşik değil"* ile *"hangisi"* farklı iddialardır.
+* **fold'un bayrağı okuması** — sevk edilen
+  `test_a_lifted_flag_alone_does_not_route_an_independent_multi_item_run` `engine_kind`
+  okuyor, yani **etiketi**; kusur satırları oynattı, etiketi oynatmadı → o test **YEŞİL
+  KALDI**. Bağımsız bileşik Result'lar birinci sınıf bir moddur (doc 13 §1.1) ve `C9` inince
+  korunması gereken şey etiket değil **satırlardır**.
+
+Yedincisi (modül düzeyi sayaç) ayrıca **aracın canlı olduğunu** kanıtlar: checksum
+karşılaştırması her zaman geçen bir karşılaştırma **değildir**.
+
+**HARNESS DERSİ (ADIM 111'in kardeşi):** kontrol betiği yamayı **bellekteki anlık
+görüntüden** geri alır, `git checkout --` ile **değil** — ağaç commit edilmemiş iş taşıyor
+olabilir ve checkout onu siler. Her turdan sonra `git status` okundu; yedisinde de temiz.
+
+### Bölüm 4 — ÖLÇÜLMÜŞ, KAPATILMAYAN SINIR (kurulamadı, ve sebebi containment'ın kendisi)
+
+A14'ün **en güçlü** okuması — *aynı kompozisyon bayrak kalkıkken ve kalkmamışken AYNI baytları
+üretir* — tek-item için **bu ağaçtan kurulamıyor**: paylaşımlı sermayeli bir kompozisyon
+sevk edilen dünyada **admission'da reddediliyor** (`ReadinessBlockedError`), yani
+karşılaştırılacak **ikinci dünya yok**. Denendi, ve testin ilk yazımı tam da bunun üstünde
+düştü. `C9`'un borçlu olduğu karşılaştırma *birleşik eksenin tek item'a indirgenmesidir* ve o,
+`len(prepared_items) > 1` sayaç kapısının kaldırılmasını ister — **kaynak düzeyi bir literal**
+ve bir `C9` kararı. Case bunun yerine kurulabilen ve sevk edilenden **daha güçlü** olan iddiaya
+daraltıldı (yol **adıyla**: `v1_bar_replay`), ve sınır docstring'e **yazıldı**.
+
+### Dürüst sınır
+
+* **Ürün kodunda sıfır satır** → hiçbir finansal sayı oynamadı, `ENGINE_VERSION` bump'ı
+  gerekmedi, golden'lara dokunulmadı.
+* **Frontend'de sıfır satır** → frontend kapıları **koşulmadı**; otorite CI.
+* Bu container'da Postgres 16 kuruldu ve **integration testleri gerçekten koştu**: hedef modül
+  **7 → 14 passed**, containment ailesi (worker branch + oracle gate + predicate + two-world +
+  containment integration) **44 passed / exit 0**. Tam suite koşusu ve coverage yüzdesi için
+  **otorite CI'dır** — buraya sayı yazılmadı.
+* `SHARED_ALLOCATION_STATUS` **kaldırılMADI** (görevin DO NOT listesi), `combine_item_runs`
+  **paylaşımlı sonuç olarak kullanılmadı**, sıralı okuyucu **silinmedi**, tarihsel Result'lar
+  **yeniden yazılmadı**, tek-item bağımsız semantiği **değişmedi** — dördü de yeni bir
+  assertion ile ayrıca **pinlendi**.
+* Görevin TESTS listesindeki dokuz kalemin **dokuzu da** artık worker düzeyinde karşılığını
+  taşıyor; ikisi (*"two real Strategies"*, *"cancellation during merged timeline"*) `C4`'ten
+  devralındı, yedisi bu partide yazıldı.
+
+**NUMARA: 115, ölçülerek alındı.** Ağaçtaki en yüksek `docs/ADIM<n>…KICKOFF.md` **114**
+(`current`), `PROJECT_HISTORY`'de en yüksek kayıt **ADIM 114**, `grep 'ADIM 115'` → **0**.
+Açık PR listesi **boştu** — ADIM 100'ün kaydettiği gibi bu bir **anlık görüntüdür**, garanti
+değil.
+
+`docs/ADIM115_LANDED_KICKOFF.md` · `tests/integration/test_shared_clock_worker_branch.py` ·
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py`.

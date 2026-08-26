@@ -8578,7 +8578,78 @@ truth gate `exit 0`), **hasar yok** — ama ders değişmedi: main'i içeri alma
 `PROJECT_HISTORY.md` §ADIM 114 · `docs/ADIM114_LANDED_KICKOFF.md`.
 
 
+## Stage ADIM 115 — worker'ın paylaşımlı saatinin ARBİTRAJI ilk kez sürüldü (kayıtsız PR yok)
+
+**ÜRÜN KODU DEĞİŞMEDİ** — `backend/src`'te sıfır satır. Üç dosya: bir integration test modülü
+(+7 case, +4 fixture), containment gate'in docstring'i, üretilmiş olgular (collection
+**3758 → 3765**, +7 = tam yeni case sayısı). Migration **YOK** · `ENGINE_VERSION`
+**değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = **`future_dev`
+(kaldırılMADI)** · kabul borcu tavanları **el değmedi** (54/6 · A1 B21 C6 D32). Blocker
+sayısı **DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+
+**Görev "wiring" istedi; wiring İNMİŞTİ.** Görevin gösterdiği taban sapması
+(`for prepared in prepared_items:` + `combine_item_runs(...)`) **bayattı**: güncel `main`
+`backtest_engine.py:367`'de `if len(prepared_items) > 1 and _use_unified_clock(...)` dalını,
+gerçek `_EngineParticipant`'ları, `iter_portfolio`'yu, checkpoint #3b'yi ve
+`project_portfolio_run`'ı zaten taşıyor (`C3` = #777, `C4`/E5 = #799 + #805). Containment
+gate'in `callers == []` iddiası da **zaten** `_AUTHORISED_LOOP_CALLERS` ile değiştirilmişti.
+HARD RULE uygulandı: **duplicate fix yazılmadı.**
+
+**ACCEPTANCE'ın literal yazımı kendi CANCELLATION maddesiyle çelişiyor, ve bu bir kusur
+değil.** `run_portfolio` = `iter_portfolio`'nun tüketilmiş hâli; worker'ı ona çevirmek
+tick-strided iptali (checkpoint #3b) **silerdi**. Doğru giriş noktası `iter_portfolio`'dur ve
+containment gate **ikisini birden** grepler (`_LOOP_ENTRY_POINTS`).
+
+**Kapatılan gerçek boşluk:** `C4` dalın **koştuğunu** pinlemişti; birleşik eksenin **var olma
+sebebini** hiçbir şey okumuyordu. Yedi case: aynı tick'te giren iki item **tek**
+`reference_price`'a karşı fiyatlanıyor ve **eşit** kapasite alıyor (pin öncelik yok, gizli pay
+transferi yok) · bir anda düşen zorunlu stop + rakip giriş **faz sırasında** izleniyor · ters
+sıralı `prepared_items` **aynı** artefaktları veriyor · aynı kompozisyon iki kez **aynı**
+artefaktları veriyor · **ayrık** iki kadans birleşimi yürüyor (`tick_count == 65`) · tek
+Strategy yolu **adıyla** (`v1_bar_replay`) pinli · bağımsız çok-item'lı koşu bayrak kalkıkken
+**satır satır aynı**.
+
+**YEDİ NEGATİF KONTROL, ve yedisinde de sevk edilen yedi case YEŞİL KALDI.** İkisi öğretici:
+tek Strategy'yi **bileşik fold**'a yollamak sevk edilen `!= UNIFIED_KIND` assertion'ını **yeşil
+bırakıyor** (Result sessizce yeniden fiyatlanıyor), ve sıralı fold'un **capability bayrağını**
+okuması sevk edilen `engine_kind` assertion'ını **yeşil bırakıyor** (satırlar oynuyor, etiket
+oynamıyor). Yedincisi (projeksiyonda modül düzeyi sayaç) checksum aracının **canlı** olduğunu
+kanıtlar.
+
+**KİMLİK ARACI:** saklanan `result_artifact_checksum`'ın **dördü**; `diagnostics` **bilerek
+dışarıda** — projeksiyonu satırı taze `diagnostic_id` ULID'i ile hash'ler, yani bayt bayt aynı
+iki koşuda bile **yapı gereği** ayrışır (ölçüldü). İçeriği **doğrudan** karşılaştırılıyor.
+
+**ÖLÇÜLMÜŞ, KAPATILMAYAN SINIR:** A14'ün en güçlü okuması (aynı kompozisyon iki dünyada aynı
+baytlar) tek-item için **kurulamıyor** — paylaşımlı kompozisyon sevk edilen dünyada
+**admission'da reddediliyor**, ikinci dünya yok. `C9`'un borcu.
+
+**DÜRÜST SINIR:** ürün ve frontend kodunda sıfır satır → frontend kapıları **koşulmadı**;
+integration testleri **gerçekten koştu** (hedef modül **7 → 14 passed**, containment ailesi
+**44 passed / exit 0**), ama tam suite ve coverage yüzdesi için **otorite CI'dır**.
+
+`PROJECT_HISTORY.md` §ADIM 115 · `docs/ADIM115_LANDED_KICKOFF.md`.
+
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
+
+> **ADIM 115 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe ADIM 81/85/86/92/112/114 güncellemelerinde: `docs-history-guard` bir `## ` başlığının
+> **kökünü** karşılaştırır ve **yeniden adlandırma bloklanır**.)
+>
+> **BAŞLIKTAN HİÇBİR İMZA DÜŞMEDİ.** `G8` (#559) ve `G14` (#544) hâlâ **imzasız**; `Karar 1`
+> ADIM 114'te inmişti ve o güncelleme yukarıda duruyor. ADIM 115 **hiçbir ürün sorusunu karara
+> bağlamadı, hiçbir issue durumunu değiştirmedi, hiçbir bayrağı kıpırdatmadı** — kapattığı şey
+> bir kapı değil, **sevk edilmiş bir davranışın okunmamış olmasıydı**.
+>
+> **`C9` İÇİN İKİ ŞEY DEĞİŞTİ, ve ikisi de borç değil KREDİ:** birleşik eksenin arbitrajı
+> (tek donmuş snapshot · pin önceliği yok · gizli pay transferi yok · determinizm) artık
+> worker düzeyinde **assert'li**, ve bağımsız çok-item'lı Result'ların bayrak kalkıkken
+> **satır satır** değişmediği ilk kez pinlendi — `C9` inince korunması gereken şey etiket
+> değil o satırlardır.
+>
+> **`C6` KIPIRDAMADI:** `G11`+`G12` hâlâ imzasız, containment gate el değmemiş (yalnız
+> docstring'ine bir çapraz atıf eklendi).
 
 > **ADIM 114 GÜNCELLEMESİ (2026-08-25) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe ADIM 81/85/86/92/112 güncellemelerinde: `docs-history-guard` bir `## ` başlığının

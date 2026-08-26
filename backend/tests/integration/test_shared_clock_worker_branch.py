@@ -19,6 +19,31 @@ The four facts, and why each is separate:
 * the tick-strided cancellation checkpoint (ADR §14 A21) is genuinely reachable, and a cancel
   observed there produces NO Result (doc 15 §16).
 
+**Sections (3) and (4) were added afterwards, and what they add is the ARBITRATION.** The four
+facts above prove the branch is reached and that it terminates; none of them reads the property
+the merged axis exists FOR — that two items deciding at ONE instant see one frozen
+``PortfolioSnapshot``, that neither is privileged by its pin ordinal, that no blocked item's
+capacity is handed to a sibling, and that the run is a function of its pins and nothing else.
+The shipped fixture already produced simultaneous entries and a same-tick mandatory-exit /
+competing-entry pair on every run in this module; nothing read either.
+
+**Seven negative controls were run, one per axis, and each was read for WHICH tests it turned
+red.** In all seven the SEVEN pre-existing cases above stayed green, which is the measurement
+that the gap was real rather than the claim that it was:
+
+* ``_ordered()`` stops sorting -> only the reversed-list case;
+* the trace reports P4 before P3 within a tick -> only the phase-order case;
+* the clock walks only the first-pinned item's axis -> the three merged-axis cases;
+* the lone Strategy is folded as a one-row composite -> only the lone-item case, while the
+  shipped ``!= UNIFIED_KIND`` assertion stayed GREEN over a silently re-priced Result;
+* the sequential fold reads the capability flag instead of the run's own plan -> only the
+  independent byte-identity case, while the shipped engine-KIND assertion stayed green;
+* the tick's running commitment binds the item cap (first come, first served) -> only the two
+  arbitration cases, while the shipped wiring proof stayed green;
+* a module-level counter in the projection leaks into the equity curve -> only the two shared
+  identity cases, which is also what proves the checksum instrument is live rather than a
+  comparison that always passes.
+
 **The lift fixture is test-owned and production cannot reach it.** It patches
 ``capability.SHARED_ALLOCATION_STATUS`` for the duration of a block;
 ``tests/unit/test_shared_allocation_two_world_gate.py`` asserts structurally that there is no

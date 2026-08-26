@@ -14,7 +14,7 @@
 > |---|---|---|---|
 > | 1 — commission modeli (#552) | — | **İMZALI** (2026-08-25: dağılım=per-fill onaylandı + taban=açık mod, varsayılan `flat`) | **bu belge**, §Karar 1 İMZA SATIRI |
 > | 2 — research bundle shape (#558) | — | **İMZALI** (A1+A2, 2026-08-14) | **bu belge**, §Karar 2 imza satırı |
-> | 3 — DST fold/gap (#559) | — | **İMZASIZ** | — |
+> | 3 — DST fold/gap (#559) | — | **KONUSU İMZALANDI** (2026-08-26: `A1+B2+C1`, PR #847 — imza bu belgede DEĞİL) | `closure_g8_dst_fold_gap_2026-08-25.md` |
 > | 4 — ADR §6/§8 amendment | **G9** | **İMZALI** (APPROVED as stated, 2026-08-17) | **ADR-0002 §13.2** |
 > | 5 — P10 equity noktası | **G13** | **İMZALI** (FOLD, 2026-08-17) | **ADR-0002 §13.2** |
 > | 6 — paylaşımlı koşuda scaling | **G12** | **İMZALI** (2026-08-26: A — admission'da blokla; ret "ikisi de": Ready Check + admission) | **bu belge**, §Karar 6 İMZA SATIRI |
@@ -24,7 +24,7 @@
 > kaydında zaten yazıyor. ~~Hâlâ imza bekleyen **İKİ** kapı **G12 (Karar 6)** ve **Karar 3**'tür~~
 > **GÜNCELLEME (2026-08-26): Karar 6 (G12) imzalandı** (aynı gün `G11` de kendi belgesinde
 > imzalandı) — bu belgede imza bekleyen tek kapı **Karar 3 (#559 / DST)** kaldı ve o `C9`'u
-> tutar; DST hattı ayrıca açık **PR #847**'de sürülüyor. **Karar 1 2026-08-25'te imzalandı**
+> tutar. ~~DST hattı ayrıca açık **PR #847**'de sürülüyor~~ **GÜNCELLEME (aynı gün, rebase'te ölçüldü): #847 MERGE OLDU ve G8'i `closure_g8_dst_fold_gap_2026-08-25.md`'de imzaladı (`A1+B2+C1`)** — bu belgenin §Karar 3 bloğu tarihsel kaldı, oraya ikinci bir imza atılmaz. **Karar 1 2026-08-25'te imzalandı**
 > (yukarıdaki tablo ve §Karar 1 İMZA SATIRI); `F3` artık bir imzayı değil, imzanın istediği
 > **uygulamayı** bekler.
 

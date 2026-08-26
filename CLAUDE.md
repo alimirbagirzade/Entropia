@@ -2126,7 +2126,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `_prepare_strategy` içinde, seam'le ilgisiz.
 > **GERÇEK Next (ADIM 117'de güncellendi): `C6` — KOD.** ~~`G11`+`G12` imza~~ → **ikisi de
 > 2026-08-26'da imzalandı** (G11 = (a), G12 = A; `PROJECT_HISTORY.md` §ADIM 117); Karar 1'in TABANI
-> ADIM 114'te imzalanmıştı. Hâlâ imzasız: `G8` (#559 — açık PR #847'de sürülüyor) · `G14` (#544) ·
+> ADIM 114'te imzalanmıştı. Hâlâ imzasız: ~~`G8`~~ (**#847 ile İMZALANDI**, `A1+B2+C1`, 2026-08-26) · `G14` (#544) ·
 > `G15` (leg 3) · `G10` **hiç talep edilmedi**. Sıra: `C6`, sonra `G15`, ön koşul 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
 > `docs/audit/final_closure_delta_audit_2026-08-25.md` §10. Eski ölçüm:
 > `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.

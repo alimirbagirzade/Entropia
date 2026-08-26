@@ -16498,7 +16498,12 @@ sunuldu (4 ana + 4 alt soru); ajan yalnız G12'de belgenin KENDİ önerisini (A)
 
 ### İki doğrulama, ikisi de görev promptunu düzeltti
 
-- Prompt *"PR #847 (G8/DST) muhtemelen inmiştir"* diyordu → **ölçüldü: #847 hâlâ AÇIK** (main HEAD `bda4aba8`).
+- Prompt *"PR #847 (G8/DST) muhtemelen inmiştir"* diyordu → **ölçüldü: #847 o an hâlâ AÇIKTI** (main HEAD
+  `bda4aba8`). **REBASE NOTU (aynı gün):** bu PR'ın CI'ı koşarken #847 (ve #848) merge oldu → dal
+  `ae18f46b` üzerine rebase edildi (çakışma sıfır — #847 hiçbir ritüel/karar dosyama dokunmuyor),
+  canlı belgelerdeki "#847 açık / G8 imzasız" cümleleri düzeltildi. #847 `G8`'i **imzalayarak** indi
+  (`A1+B2+C1`, `closure_g8_dst_fold_gap_2026-08-25.md`) ama **kendi ADIM kaydını yazmadı** — o borç
+  sahibinin (ADIM 97/109 emsali), bu kayıt onu uydurmaz.
 - Prompt `docs/audit/closure_c9_containment_lift_verdict_2026-08-26.md`'yi bağlam gösteriyordu → **o dosya bu
   ağaçta YOK**; #847'nin dalında yaşıyor (`git log` ile ölçüldü: `97e98c91` onu historical işaretliyor) —
   27D/12-yeşil sayıları o belge indiğinde okunmalı, buradan alıntılanmadı.

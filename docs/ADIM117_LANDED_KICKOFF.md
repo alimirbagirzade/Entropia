@@ -16,7 +16,9 @@
 - **`C6`'nın tüm ön koşulları tamam:** plan §6 `C6 = C4 + G11 + G12`; `C4` inmişti
   (#777/#799/#805). `SHARED_ALLOCATION_STATUS = future_dev` KALDI; `ENGINE_VERSION`,
   OpenAPI, migration: değişmedi. Blocker 1 (yalnız A-08), BLOCKED.
-- **#847 (G8/DST) hâlâ AÇIK** — C9 verdict belgesi o dalda; bu ağaçta yok.
+- **#847 (G8/DST) bu slice'ın CI'ı koşarken MERGE OLDU** ve `G8`'i imzaladı (`A1+B2+C1`,
+  `closure_g8_dst_fold_gap_2026-08-25.md`); C9 verdict belgesi artık ağaçta, `historical`
+  işaretli. #847 kendi ADIM kaydını yazmadı — kaydı sahibinin borcu (ADIM 97/109 emsali).
 
 ## Sıradaki slice: C6 — iki imzanın uygulaması (TEK slice, birlikte)
 

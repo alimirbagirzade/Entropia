@@ -64,13 +64,21 @@ class FillCosts:
     def fee(self, notional: Decimal) -> Decimal:
         """The commission this ONE fill pays, given its own notional.
 
-        The single derivation of the fee. There are six charge sites (three in
-        ``booking``, three in ``engine`` — entry, stacking, scale layer) and under
-        ``bps`` each of them owes a DIFFERENT amount, because each fill has a
-        different notional. Inlining the arithmetic at any of them would create a
-        second basis that drifts silently, which is the shape GH #552 already had
-        once: the fee scaled with the number of partial CLOSES rather than fills
-        because one site computed its own.
+        The single derivation of the fee. Every charge site routes through it —
+        ``booking`` (close, ``absorb_remainder``) and ``engine`` (entry, stacking,
+        scale layer) — plus ``participant``, which MIRRORS the charged fee rather
+        than charging one. Under ``bps`` each site owes a DIFFERENT amount, because
+        each fill has a different notional. Inlining the arithmetic at any of them
+        would create a second basis that drifts silently, which is the shape GH #552
+        already had once: the fee scaled with the number of partial CLOSES rather
+        than fills because one site computed its own.
+
+        The sites are NAMED rather than counted on purpose: the previous wording
+        said "six charge sites (three in ``booking``, three in ``engine``)" and
+        ``booking`` has two, so the total counted the ``participant`` mirror as a
+        charge. A hand-written count in prose has gone stale in this repo three
+        times (layer counts, test collection, the hook-guard summary line); a name
+        list goes stale only when a site is actually added or removed.
 
         ``flat`` ignores ``notional`` entirely and returns the configured amount —
         byte-identical to the pre-Karar-1 behaviour, which is what lets the default

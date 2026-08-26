@@ -103,7 +103,14 @@ class DuplicatePinOrdinalError(ProvenanceError):
     """Two items claim the same pin ordinal — the merge order would be ambiguous."""
 
 
-def _money_str(value: Decimal) -> str:
+def money_str(value: Decimal) -> str:
+    """The canonical MANIFEST spelling of a money amount.
+
+    Public because the provenance section is now assembled by a sibling module
+    (``portfolio_projection.build_portfolio_provenance``) that must spell an executed
+    sleeve exactly as :func:`sleeve_amount_divergences` spells it when it compares one — a
+    second local formatter there could drift by a rounding mode and turn an agreement into
+    a reported divergence, or hide a real one."""
     return str(value.quantize(MONEY_QUANTUM, rounding=MONEY_ROUNDING))
 
 
@@ -256,13 +263,13 @@ def sleeve_amount_divergences(
             raise UnknownProvenanceItemError(
                 f"Allocation entry {item_id!r} has no sleeve in the executed plan."
             )
-        if _money_str(executed) != entry.initial_sleeve_capital:
+        if money_str(executed) != entry.initial_sleeve_capital:
             findings.append(
                 {
                     "code": SLEEVE_AMOUNT_DIVERGENCE,
                     "composition_item_snapshot_id": item_id,
                     "manifest_initial_sleeve_capital": entry.initial_sleeve_capital,
-                    "executed_sleeve_capital": _money_str(executed),
+                    "executed_sleeve_capital": money_str(executed),
                     "executed_sleeve_capital_exact": str(executed),
                 }
             )
@@ -537,6 +544,7 @@ __all__ = [
     "item_labels_from_identities",
     "ledger_artifact_ref",
     "ledger_equity_rows",
+    "money_str",
     "pinned_items_from_identities",
     "sleeve_amount_divergences",
 ]

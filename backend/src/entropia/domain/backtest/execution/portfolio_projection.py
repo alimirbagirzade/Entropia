@@ -87,6 +87,7 @@ from entropia.domain.backtest.engine import (
     SignalEventRow,
     TradeRow,
 )
+from entropia.domain.backtest.execution.arbitration import resolve_policy
 from entropia.domain.backtest.execution.constants import (
     _HUNDRED,
     _MONEY,
@@ -94,7 +95,13 @@ from entropia.domain.backtest.execution.constants import (
     _RATIO,
     _ZERO,
 )
-from entropia.domain.backtest.execution.intents import ItemIntent
+from entropia.domain.backtest.execution.intents import ItemIdentity, ItemIntent
+from entropia.domain.backtest.execution.provenance import (
+    AllocationProvenance,
+    SleeveProvenance,
+    build_portfolio_manifest,
+    money_str,
+)
 from entropia.domain.backtest.portfolio_engine import (
     PORTFOLIO_LOOP_VERSION,
     PortfolioRun,
@@ -150,6 +157,11 @@ class UnpinnedItemError(PortfolioProjectionError):
     it anyway would put an unnamed, unattributable row into an immutable Result."""
 
 
+class MissingPinOrdinalError(PortfolioProjectionError):
+    """An executing item reached the provenance builder with no pin ordinal. The manifest
+    states a PIN; inferring one from list position would record an order nobody assigned."""
+
+
 class UnpairedCloseError(PortfolioProjectionError):
     """A booked close with no open recorded before it. A trade row built across that gap
     would carry a fabricated entry time and entry price."""
@@ -177,6 +189,18 @@ class PinnedItem:
     item_label: str | None = None
     symbol: str | None = None
     timeframe: str | None = None
+    pin_ordinal: int | None = None
+    """The item's index in the manifest's deterministic pin order, when the caller knows it.
+
+    Optional because the OUTPUT projection never reads it — executing rows follow the
+    ledger's own order, which the loop already sorted by ``(pin_ordinal, item_id)``, so a
+    row cannot move whether this is set or not (ADR §14 A4). It is carried here because
+    :func:`build_portfolio_provenance` needs the ordinal to state a pin, and the alternative
+    was a second per-item record travelling the same seam with one extra field.
+
+    ``None`` means the caller did not pin an order; the provenance builder refuses to guess
+    one from list position, because a positional ordinal that merely LOOKS right would enter
+    an immutable manifest as a pin nobody assigned."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +306,14 @@ def _equity_points(run: PortfolioRun) -> list[EquityPoint]:
         )
         for point in run.ledger.equity_points
     ]
+
+
+def _opt_str(value: Any) -> str | None:
+    """``None`` stays ``None``; everything else is spelled as text.
+
+    Mirrors ``provenance._opt_str`` deliberately: an ABSENT pin must reach the manifest as
+    ``null`` rather than as the string ``"None"``, which would read as a value."""
+    return None if value is None else str(value)
 
 
 def _event_detail(
@@ -578,6 +610,146 @@ def project_portfolio_run(
     )
 
 
+def _allocation_provenance(
+    run: PortfolioRun,
+    *,
+    pinned: Mapping[str, PinnedItem],
+    capital_execution: Mapping[str, Any] | None,
+) -> AllocationProvenance:
+    """The frozen allocation record for this run, doc 13 §13.
+
+    Identity (``plan_id`` / ``plan_revision_id`` / ``config_hash``) is copied from the run
+    manifest's IMMUTABLE ``capital_execution`` snapshot — the same block the sizing chain
+    resolved from — so the manifest names the exact plan revision the run replayed and never
+    today's plan.
+
+    The AMOUNTS come from the executed ``SleevePlan`` rather than from a re-read of the
+    config. They are not a second opinion: the plan is the one the ledger actually charged
+    against, and re-deriving them here would make the manifest capable of disagreeing with
+    the Result it describes.
+
+    **Honest boundary.** The run manifest pins the allocation CONFIG (via ``config_hash``)
+    but not the plan revision's frozen ``derived_amounts`` payload, so there is no
+    independently frozen preview here to cross-check the executed sleeves against. The
+    caller therefore passes ``plan=None`` to :func:`build_portfolio_manifest` and
+    ``divergences`` stays empty — which records that no comparison was made, NOT that a
+    comparison was made and agreed."""
+    snapshot = capital_execution if isinstance(capital_execution, Mapping) else {}
+    config = snapshot.get("config")
+    config_map = config if isinstance(config, Mapping) else {}
+    plan = run.ledger.plan
+    sleeves = plan.initial_sleeves
+    entries = tuple(
+        SleeveProvenance(
+            composition_item_snapshot_id=item_id,
+            # ``_partition`` has already refused a traded item with no pinned record, so
+            # this lookup cannot miss; guarding it would suggest a fallback that must not
+            # exist (an unnamed sleeve in an immutable manifest).
+            item_revision_id=pinned[item_id].revision_id,
+            share_percent=str(plan.shares.get(item_id, _ZERO)),
+            initial_sleeve_capital=money_str(sleeves.get(item_id, _ZERO)),
+        )
+        # The LEDGER's order, which is the ``(pin_ordinal, item_id)`` order the loop sorted
+        # participants into — so a caller that permutes its input cannot move an entry, the
+        # same guarantee ``_composition`` states for the executing rows (ADR §14 A4).
+        for item_id in run.ledger.attribution
+    )
+    return AllocationProvenance(
+        # Stated, not read back from the snapshot. This function is reached only from the
+        # worker's shared branch, which ``_use_unified_clock`` gates on
+        # ``shared_allocation_requested(capital_execution)`` and which fails the run closed
+        # if any item resolves to no sleeve — so shared capital is not an inference here, it
+        # is the precondition. Echoing a ``False`` back from the snapshot would let a
+        # disagreeing block label a genuinely shared run "independent", which doc 13 §13
+        # treats as the one thing the record must never say.
+        enabled=True,
+        plan_id=_opt_str(snapshot.get("plan_id")),
+        plan_revision_id=_opt_str(snapshot.get("plan_revision_id")),
+        config_hash=_opt_str(snapshot.get("config_hash")),
+        base_currency=_opt_str(config_map.get("currency")),
+        compounding_mode=plan.compounding_mode,
+        initial_capital=money_str(plan.pool_initial),
+        reserve_amount=money_str(plan.reserve_nominal),
+        capital_available=money_str(plan.allocatable_initial),
+        total_allocated=money_str(sum(sleeves.values(), _ZERO)),
+        unallocated=money_str(plan.unallocated_initial),
+        active_share_total=str(sum(plan.shares.values(), _ZERO)),
+        entries=entries,
+    )
+
+
+def build_portfolio_provenance(
+    run: PortfolioRun,
+    *,
+    items: Sequence[PinnedItem],
+    engine_version: str,
+    capital_execution: Mapping[str, Any] | None,
+    conflict_policy: str | None,
+    data_revisions: Mapping[str, Mapping[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Assemble the ``portfolio_simulation`` manifest section for a finished co-simulation.
+
+    This is the WRITER half of ``domain/backtest/portfolio_mode.py``. That module classifies
+    a persisted Result by looking for exactly this section's
+    ``policy_versions.portfolio_manifest_version``, and until this function had a production
+    caller the ``unified_clock`` branch was unreachable from any real Result — every shared
+    run read back as ``unknown``, which is the honest answer to "no evidence was retained"
+    and the wrong one for a run that co-simulated on a merged clock.
+
+    It lives HERE, inside ``execution/``, rather than in the worker on purpose.
+    ``execution.provenance`` is a contained phase-loop module whose production importers are
+    an allowlist a human signed with two named modules in it, and the containment gate scans
+    for that import in every production module OUTSIDE this package. Assembling the section
+    in ``application/jobs/backtest_engine.py`` would have widened that signed allowlist by a
+    third, unsigned module. The worker stays a CALLER of this seam and never an IMPORTER of
+    the phase loop's vocabulary — the same shape `C3`/`C4` settled for the loop itself.
+
+    Every field is derived from the run that just finished and from the run manifest's own
+    immutable snapshot. Nothing here reads the live composition, the live allocation plan or
+    the live capability flag, so re-reading a Result written by this function can never
+    re-interpret it.
+
+    Raises rather than degrades, on the projection's own principle: a section that entered an
+    immutable manifest with a guessed pin ordinal or an unnameable policy would be a
+    provenance record nobody could trust."""
+    pinned, _others = _partition(run, items)
+    identities: list[ItemIdentity] = []
+    for item_id in run.ledger.attribution:
+        record = pinned[item_id]
+        if record.pin_ordinal is None:
+            raise MissingPinOrdinalError(
+                f"Item '{item_id}' executed in the run but carries no pin ordinal. The "
+                "manifest states a PIN, and a pin inferred from list position is one "
+                "nobody assigned."
+            )
+        identities.append(
+            ItemIdentity(
+                item_id=record.item_id,
+                item_kind=record.item_kind,
+                pin_ordinal=record.pin_ordinal,
+                root_id=record.root_id,
+                selected_revision_id=record.revision_id,
+                item_label=record.item_label,
+            )
+        )
+    manifest = build_portfolio_manifest(
+        engine_version=engine_version,
+        allocation=_allocation_provenance(run, pinned=pinned, capital_execution=capital_execution),
+        identities=identities,
+        conflict_policy=resolve_policy(conflict_policy),
+        tick_instants=run.instants,
+        # The SAME series ``_equity_points`` persists as the equity-curve artifact, so the
+        # ledger reference the manifest pins and the artifact a reader pages are the one
+        # curve — a second selection here (``dated_points``, say) would pin a digest of
+        # something nobody can fetch.
+        equity_points=run.ledger.equity_points,
+        # No frozen preview to compare against — see ``_allocation_provenance``.
+        plan=None,
+        data_revisions=data_revisions,
+    )
+    return manifest.as_dict()
+
+
 __all__ = [
     "ABSENT_BY_CONSTRUCTION",
     "CONTRIBUTION_NEEDS_RESIMULATION",
@@ -589,10 +761,12 @@ __all__ = [
     "PER_ITEM_BASIS",
     "PORTFOLIO_PROJECTION_VERSION",
     "POSITION_INTERVALS_ABSENT",
+    "MissingPinOrdinalError",
     "PinnedItem",
     "PortfolioProjectionError",
     "UnpairedCloseError",
     "UnpinnedItemError",
     "UnpricedIntentError",
+    "build_portfolio_provenance",
     "project_portfolio_run",
 ]

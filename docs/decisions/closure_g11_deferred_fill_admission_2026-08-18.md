@@ -4,6 +4,13 @@
 > imza bloğu **boştur** ve onu yalnız ürün sahibi / maintainer doldurabilir.
 > `closure_g4_cap_overflow_2026-08-17.md`, `closure_g15_external_row_winner_2026-08-17.md` ve
 > `closure_participant_importer_allowlist_2026-08-18.md` ile aynı disiplin.
+>
+> **GÜNCELLEME (2026-08-26): §Karar İMZALANDI — (a) tam admission blok (entry + exit).**
+> Yukarıdaki cümle belgenin yazıldığı anı anlatır ve tarihsel olarak doğrudur; imza
+> §Karar'daki kutulardadır. Ön koşul kutusu `sayılamadı` işaretlenmiş ve belgenin kendi
+> *"(a) bu sayı alınmadan imzalanmamalıdır"* kuralı ürün sahibi tarafından **bilinçli olarak
+> geçersiz kılınmıştır** — gerekçe imza notundadır. Uygulama bu belgeye değil `C6`'ya aittir
+> (§Sınırlar md. 5, değişmedi).
 
 - **Tarih:** 2026-08-18
 - **Base:** `origin/main` @ `fbb45e1` (`test(closure-e6): exercise the containment gate in both values of the flag (#756)`)
@@ -257,14 +264,20 @@ Hiçbir kapı eklenmez; `C9` sonrası ertelenmiş fill'ler arbitrasyonu baypas e
 **Ön koşul — patlama yarıçapı (üretim DB'si):** kayıtlı ve `active` Strategy revizyonlarından
 kaçı erteleyen bir `entry_timing`/`exit_timing` ya da bekleyen bir emir tipi taşıyor?
 
-`[ ] sayıldı ve 0`   `[ ] sayıldı ve > 0 (sayı: ____)`   `[ ] sayılamadı`
+`[ ] sayıldı ve 0`   `[ ] sayıldı ve > 0 (sayı: ____)`   `[x] sayılamadı`
 
 > **(a) ve (a-dar) bu sayı alınmadan imzalanmamalıdır.** §Ölçüm 8'in sayısı repo
 > fixture'larının vekilidir, üretim dağılımı **değildir**.
 
+> **İmza notu (2026-08-26): yukarıdaki kural ürün sahibi tarafından BİLİNÇLİ OLARAK
+> geçersiz kılındı.** Üretim veritabanına erişim yok ve ürün henüz üretimde değil — ölçülecek
+> gerçek bir kullanıcı dağılımı mevcut değil. Karar, §Ölçüm 8'in vekil sayısının (a)'nın
+> *gerçek bir özelliği kapattığını* gösterdiği **bilinerek** verildi; bu bir gözden kaçırma
+> değil, imzalı bir sapmadır.
+
 **Dispozisyon:**
 
-`[ ] (a) admission blocker — entry ve exit, erteleyen timing + bekleyen emir tipi`
+`[x] (a) admission blocker — entry ve exit, erteleyen timing + bekleyen emir tipi`
 `[ ] (a-dar) admission blocker — YALNIZ entry tarafı`
 `[ ] (b) P2'yi modelle (C6'nın kapsamı büyür)`
 `[ ] (c) imzalı sapma — sessiz baypas kabul edilir`
@@ -272,33 +285,34 @@ kaçı erteleyen bir `entry_timing`/`exit_timing` ya da bekleyen bir emir tipi t
 
 **Alt-karar — yalnız (a) veya (a-dar) imzalanırsa:** blocker kodu doc 14 §9.1 taksonomisinde
 hangi adı alır?
-`[ ] ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`
+`[x] ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`
 `[ ] STRATEGY_EXECUTION_TIMING_UNSUPPORTED_IN_SHARED_MODE`
 `[ ] (başka: ______________________)`
 
 **Alt-karar — `field_path` neyi gösterir?**
 `[ ] ihlal eden alanın kendisi (execution.entry_timing / execution.exit_timing / order_config.type)`
 `[ ] Portfolio toggle (enabled) — SHARED_ALLOCATION_FIELD_PATH emsali`
-`[ ] ikisi de (lider blocker alanı gösterir, details tümünü taşır — O-02 emsali)`
+`[x] ikisi de (lider blocker alanı gösterir, details tümünü taşır — O-02 emsali)`
 
 **Alt-karar — (a-dar) imzalanırsa:** ertelenmiş bir exit yüzünden `PV` anında hâlâ açık olan
 pozisyonun `E(t)`'ye dahil olması kabul ediliyor mu?
 `[ ] evet, doğru davranış (item'ın modeline göre pozisyon gerçekten açık)`
 `[ ] hayır, ayrı bir kusur olarak izlensin (issue açılsın)`
+*(boş bırakıldı — (a) imzalandığı için bu kutu konu dışıdır: exit tarafı da bloklanır)*
 
 **Hüküm onayı (a)** — *P2 runtime'da reddedilemez, çünkü kendini bir `kind` olarak ilan
 etmez; P8'in `UnsupportedIntentKindError` emsali P2 için **yapısal olarak** kurulamaz
-(§Ölçüm 2)* — kabul ediliyor mu? `[ ] evet` `[ ] hayır (gerekçe: ______)`
+(§Ölçüm 2)* — kabul ediliyor mu? `[x] evet` `[ ] hayır (gerekçe: ______)`
 
 **Hüküm onayı (b)** — *P2 iki fazda book eder (`_phase_open_fills` **ve** `_phase_tail` (3d)),
 dolayısıyla P-C2 §C.3.7'nin "adaptör `open_fills`'i çağırmasın" çaresi tek başına eksiktir
-(§Ölçüm 4)* — kabul ediliyor mu? `[ ] evet` `[ ] hayır (gerekçe: ______)`
+(§Ölçüm 4)* — kabul ediliyor mu? `[x] evet` `[ ] hayır (gerekçe: ______)`
 
 **Hüküm onayı (c)** — *(b) seçeneği `_phase_tail`'in ayrılmasını gerektirir ve o
 ayrılabilirlik ADIM 71'de sınırlı ölçülmüştür; yani `G11` ile `G12` bağımsız kapılar
-değildir (§Ölçüm 5)* — kabul ediliyor mu? `[ ] evet` `[ ] hayır (gerekçe: ______)`
+değildir (§Ölçüm 5)* — kabul ediliyor mu? `[x] evet` `[ ] hayır (gerekçe: ______)`
 
-karar veren: ________________  tarih: ____________
+karar veren: **ürün sahibi (alimirbagirzade)**  tarih: **2026-08-26**
 
 ---
 

@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 116 landed — unified Result'ın provenance'ı sevk edildi; sıradaki hamle HÂLÂ bir imza, kod değil
 

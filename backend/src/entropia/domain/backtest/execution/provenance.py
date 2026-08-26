@@ -19,10 +19,16 @@ outside that content — the same split ``manifest.pinned_item_labels`` already 
 sequential manifest (``manifest.py:160-185``): renaming a composition item must never fork a
 run's reproducibility identity.
 
-**3. An open decision is disclosed, never guessed.** ADR 0002 §13 OD-2 (how an open
-position is marked at a tick with no fresh bar of its own) is unanswered, so
-``MARK_STALENESS_POLICY`` carries the literal ``"undefined_pending_od2"`` and the manifest
-says so out loud. ``arbitration.CONTENTION_SELECTION_STATUS`` set that precedent for OD-3.
+**3. A decided-but-unbuilt policy is disclosed, never assumed.** ADR 0002 §13 OD-2 (how an
+open position is marked at a tick with no fresh bar of its own) was RESOLVED on 2026-08-05 to
+option (a) — carry the last closed bar's close forward under a declared ``stale_after`` bound
+with a diagnostic counter (§13.1). None of that is built, and §13.1 assigns both the mark
+policy and this label's flip to ADIM 20, because flipping a policy label before the manifest
+that carries it exists would advertise a behaviour no artifact can show. So
+``MARK_STALENESS_POLICY`` still carries the literal ``"undefined_pending_od2"`` and the
+manifest says so out loud: what it advertises as absent is the IMPLEMENTATION, not the
+decision. ``arbitration.CONTENTION_SELECTION_STATUS`` is the same shape for OD-3, whose (a)
+behaviour ships while its label waits for the same slice.
 
 The allocation amounts are NOT recomputed here. They are the numbers the server already
 derived and froze onto ``PortfolioAllocationPlanRevision.derived_amounts``
@@ -75,9 +81,13 @@ PORTFOLIO_MANIFEST_VERSION = "portfolio-manifest-v1"
 #: Modül 11 §10 fixes this literal; it is canon, not a local choice.
 ENGINE_ALLOCATION_POLICY_VERSION = "portfolio-allocation-v1"
 
-#: ADR 0002 §13 OD-2 is OPEN. The manifest advertises the absence rather than a default:
-#: a run that forward-fills a stale mark and a run that refuses to are not comparable, and
-#: silently picking one would hide a product decision inside an artifact.
+#: ADR 0002 §13 OD-2 is DECIDED — (a), carry forward under a declared ``stale_after`` bound
+#: with a diagnostic counter (§13.1, 2026-08-05). What is still open is the IMPLEMENTATION:
+#: none of it is built, and §13.1 gives ADIM 20 both the mark policy and this label's flip.
+#: Until then the manifest advertises the absence rather than a default, and these three
+#: literals are held ON PURPOSE — a run that forward-fills a stale mark and a run that
+#: refuses to are not comparable, so claiming the decided policy before it runs would hide
+#: the gap inside an artifact just as surely as guessing one would have.
 MARK_STALENESS_POLICY = "undefined_pending_od2"
 MARK_STALENESS_STATUS = "open_decision"
 MARK_STALENESS_TRACKING = "ADR 0002 §13 OD-2"

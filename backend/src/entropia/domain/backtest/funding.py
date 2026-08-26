@@ -30,6 +30,7 @@ from zoneinfo import ZoneInfo
 
 from entropia.domain.research_data.enums import AvailableTimePolicy
 from entropia.domain.research_data.time_policy import resolve_available_at, time_policy_is_valid
+from entropia.shared.dst import is_nonexistent_local_time
 from entropia.shared.errors import FundingSourceInvalid
 
 # Canonical native-column resolution (doc 12: the source keeps its native schema; there is
@@ -105,7 +106,15 @@ def parse_utc(value: Any, *, source_zone: ZoneInfo | None) -> datetime | None:
         except ValueError:
             return None
     if dt.tzinfo is None:
-        return None if source_zone is None else dt.replace(tzinfo=source_zone).astimezone(UTC)
+        if source_zone is None:
+            return None
+        # G8 (GH #559, signed 2026-08-26): a DST GAP never occurred -> unresolvable, exactly
+        # as an absent ``source_zone`` is. A DST FOLD stays resolvable at ``fold=0`` (A1).
+        # This reader and the ingest normalizer MUST move together — their agreement is the
+        # invariant, so both call ``entropia.shared.dst`` rather than restating the rule.
+        if is_nonexistent_local_time(dt, source_zone):
+            return None
+        return dt.replace(tzinfo=source_zone).astimezone(UTC)
     return dt.astimezone(UTC)
 
 

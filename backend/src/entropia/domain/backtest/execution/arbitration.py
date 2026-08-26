@@ -193,15 +193,22 @@ item_id)`` order until the pool's committable capital is exhausted, then reject 
 whole."""
 
 CONTENTION_SELECTION_STATUS = "recommended_pending_approval"
-"""**OD-3 is open.** Canon decides the RESPONSE to a solvency shortfall — reject, never a
-partial fill, never a borrow (Modül 11 §5.3) — and this module implements exactly that. It
-does not decide *which* of several individually-affordable intents is refused; ADR §13 OD-3
-records that gap, recommends this policy and flags the alternative a reviewer may prefer
-(reject ALL competing intents, which has no systematic ordering advantage at the cost of
-refusing trades that could have filled). The recommendation is implemented and LABELLED as
-such rather than silently adopted: :data:`CONTENTION_SELECTION_POLICY` travels in every
-report, so a Result produced under it can always be told from one produced under a different
-resolution."""
+"""**OD-3 is DECIDED; this label has not caught up, and that lag is deliberate.** ADR §13.1
+(2026-08-05) resolved OD-3 to option (a) — exactly the rule
+:data:`CONTENTION_SELECTION_POLICY` already implements — and §13.1 then assigns *this label's*
+flip to ADIM 20, because moving a policy label before the manifest that carries it exists
+would advertise a decision no artifact records. So the value below still reads
+``"recommended_pending_approval"`` on purpose; it describes the LABEL's state, not the
+decision's.
+
+Canon decides the RESPONSE to a solvency shortfall — reject, never a partial fill, never a
+borrow (Modül 11 §5.3) — and this module implements exactly that. It does not decide *which*
+of several individually-affordable intents is refused; ADR §13 recorded that gap, recommended
+this policy and flagged the alternative a reviewer might prefer (reject ALL competing intents,
+which has no systematic ordering advantage at the cost of refusing trades that could have
+filled). §13.1 chose the recommendation. It is implemented and LABELLED rather than silently
+adopted: :data:`CONTENTION_SELECTION_POLICY` travels in every report, so a Result produced
+under it can always be told from one produced under a different resolution."""
 
 CONTENTION_SELECTION_NOTE = (
     "OD-3 (ADR 0002 §13) is unresolved. Admission order is the manifest-pinned "

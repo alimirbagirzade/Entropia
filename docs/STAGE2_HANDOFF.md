@@ -8578,6 +8578,51 @@ truth gate `exit 0`), **hasar yok** — ama ders değişmedi: main'i içeri alma
 `PROJECT_HISTORY.md` §ADIM 114 · `docs/ADIM114_LANDED_KICKOFF.md`.
 
 
+## Stage ADIM 116 — unified portfolio Result'ının provenance'ı sevk edildi landed (PR #840)
+
+**ÜRÜN KODU DEĞİŞTİ** (dört dosya, `backend/src`) ama **hiçbir sayı oynamadı**: migration
+**YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS`
+= **`future_dev` (KALDIRILMADI)** · kabul borcu tavanları **el değmedi** (54/6 · A1 B21 C6
+D32) · blocker sayısı **DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+
+**Görevin öncülü yarı bayattı, ölçülerek düzeltildi.** `project_portfolio_run`'ın üretim
+çağıranı **vardı** (`C4`/E5 = #799 + #805); duplicate fix **yazılmadı**. Gerçek boşluk daha
+dardı: `portfolio_mode` `unified_clock`'u Result'ın manifest snapshot'ındaki
+`portfolio_simulation` bölümüne bağlar, o bölümü **üretimde hiçbir şey yazmıyordu**, ve
+`build_portfolio_manifest`'in üretim çağıranı **hiç yoktu** → paylaşımlı saatte ko-simüle
+edilmiş her Result **`unknown`** okunuyordu. **Okuyucu tamdı; yazıcı hiç var olmamıştı.**
+
+**Sevk edilen:** `execution/portfolio_projection.py::build_portfolio_provenance` (YENİ, bilerek
+`execution/` **İÇİNDE** — dışarıda olsa imzalı importer allowlist'ini üçüncü, imzasız bir
+modülle genişletirdi) · worker bölümü projeksiyonla **aynı `try`'da** kurup `_UnifiedOutcome`
+ile taşır · `create_result` bölümü Result'ın **SNAPSHOT**'ına **kopyalayarak** pinler (run'ın
+manifest satırına değil) · `provenance._money_str` → **`money_str`** (public).
+
+**ADJUDICATED:** `manifest_hash` **RUN'ın admission hash'i olarak KALIR** (doc 15 §7/§8.4 —
+run kimliği, `source_manifest_hash`'e ileri taşınır); bölüm **kendi** içerik hash'ini taşır
+(`execution_key` ↔ `manifest_hash` ikilisinin aynı şekli). **Bedeli yazılı:** unified bir
+Result'ta snapshot hash'i saklanan belgenin tamamını kapsamaz — **iki yönde birden pinli**.
+
+**DÖRT negatif kontrol, dördü de ayırt edici; NC-1 boşluğun ÖLÇÜMÜDÜR** (bölüm sökülünce
+önceden var olan **on** dosyalık küme **YEŞİL KALIR**). İkisi yeniden nişanlandı: NC-3
+*doğru sebep/yanlış kapsam*'dı, NC-4 **bu slice'ın kendi testindeki TOTOLOJİYİ** yakaladı
+(`ordinals == sorted(ordinals)` bedava, çünkü üretici zaten ordinal'e göre sıralıyor).
+
+**ASIL DERS: NEGATİF KONTROL KÜMESİ DE EKSİK OLABİLİR.** İlk küme iki containment dosyası
+taşıyordu; ağaçta **altı** per-modül importer guard'ı + iki gate var. Eksiklik yüzünden ilk
+commit arbitration allowlist'inin **dördüncü** importer'ı oldu (liste **insan imzalı**), tam
+suite yakaladı, ve **çözüm listeyi genişletmek değil IMPORT ETMEMEK** oldu —
+`build_portfolio_manifest` artık ham token'ı da alıp **kendisi** çözer, ki zaten onun işidir.
+
+**DÜRÜST SINIR:** frontend'de sıfır satır → kapılar yerelde koşulmadı (CI'da **yeşil**);
+`data_revisions` per-item **pinlenMEDİ** (manifest böyle bir harita taşımıyor) ve
+`divergences` **boş** — bu bir anlaşma değil, **ölçüm yokluğu** (donmuş `derived_amounts`
+manifest'te yok → `plan=None`). **#839 bu PR açıkken indi** → **rebase** edildi, çakışma
+yalnız üretilmiş üç artefakttaydı ve `generate_repository_facts.py` **yeniden koşularak**
+çözüldü (elle değil); birleşik sayı **3777 in 358 files**.
+
+`PROJECT_HISTORY.md` §ADIM 116 · `docs/ADIM116_LANDED_KICKOFF.md`.
+
 ## Stage ADIM 115 — worker'ın paylaşımlı saatinin ARBİTRAJI ilk kez sürüldü (kayıtsız PR yok)
 
 **ÜRÜN KODU DEĞİŞMEDİ** — `backend/src`'te sıfır satır. Üç dosya: bir integration test modülü
@@ -8632,6 +8677,25 @@ integration testleri **gerçekten koştu** (hedef modül **7 → 14 passed**, co
 
 
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
+
+> **ADIM 116 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe ADIM 81/85/86/92/112/114/115 güncellemelerinde: `docs-history-guard` bir `## `
+> başlığının **kökünü** karşılaştırır ve **yeniden adlandırma bloklanır**.)
+>
+> **BAŞLIKTAN HİÇBİR İMZA DÜŞMEDİ.** `G8` (#559) ve `G14` (#544) hâlâ **imzasız**; ADIM 116
+> **hiçbir ürün sorusunu karara bağlamadı, hiçbir issue durumunu değiştirmedi, hiçbir bayrağı
+> kıpırdatmadı.** `C6` de **kıpırdamadı** (`G11`+`G12` imzasız).
+>
+> **`C9` İÇİN DEĞİŞEN ŞEY: artık ETİKET DE var, ve etiket bayraktan BAĞIMSIZ.** ADIM 115
+> birleşik eksenin arbitrajını assert etmişti; ADIM 116 o eksende üretilen Result'ın **kendi
+> provenance'ını taşımasını** sevk etti. `C9` inince paylaşımlı Result'lar `unknown` değil
+> **`unified_clock`** okunacak, ve **bunun için hiçbir migration ya da geri doldurma
+> gerekmeyecek** — bölüm yalnız ileriye yazılır, eski satırlar `unknown` kalır ve **kalmalıdır**
+> (kanıt gerçekten yok).
+>
+> **YENİ, KÜÇÜK, YAZILI BİR BORÇ:** unified bir Result'ta snapshot'ın `manifest_hash`'i
+> saklanan belgenin **tamamını kapsamaz** (bölüm kendi hash'ini taşır). Adjudicated ve iki
+> yönde pinli; `C9` öncesi bir denetim bunu kusur sanmasın diye burada da adlandırılıyor.
 
 > **ADIM 115 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe ADIM 81/85/86/92/112/114 güncellemelerinde: `docs-history-guard` bir `## ` başlığının

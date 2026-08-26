@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # 27D — Unified portfolio production oracle + containment lift: **VERDICT = BLOCKED**
 

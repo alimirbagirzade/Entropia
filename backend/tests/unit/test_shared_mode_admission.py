@@ -71,11 +71,11 @@ def _data_time(*bases: str | None) -> list[dict[str, Any]]:
 
 def test_only_strategy_executes_and_the_complement_is_the_allocatable_rest() -> None:
     """Strategy is the only kind the worker simulates (``output=None`` for the rest)."""
-    assert EXECUTING_ITEM_KINDS == frozenset({MainboardItemKind.STRATEGY})
-    assert ALLOCATABLE_ITEM_KINDS - EXECUTING_ITEM_KINDS == {
+    assert frozenset({MainboardItemKind.STRATEGY}) == EXECUTING_ITEM_KINDS
+    assert {
         MainboardItemKind.TRADING_SIGNAL,
         MainboardItemKind.TRADE_LOG,
-    }
+    } == ALLOCATABLE_ITEM_KINDS - EXECUTING_ITEM_KINDS
 
 
 def test_an_unknown_future_kind_is_treated_as_non_executing() -> None:

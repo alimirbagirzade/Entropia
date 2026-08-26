@@ -473,14 +473,73 @@ def _imports_provenance(source: str) -> bool:
     )
 
 
-def test_nothing_in_production_imports_the_provenance_layer_yet() -> None:
+#: The production modules that may name the provenance layer, as an EXHAUSTIVE list.
+#: Narrowed from ``== []`` at 27C, never deleted: the layer gained a production caller, so
+#: "nobody imports it" stopped being true, but "anybody may import it" was never the
+#: replacement. ``portfolio_projection.py`` is the seam — it sits INSIDE ``execution/``
+#: precisely so the worker can reach the section without naming the phase loop's vocabulary,
+#: which would widen the SIGNED importer allowlist that
+#: ``oracles/test_oracle_portfolio_containment_gate.py`` holds at two named modules.
+_AUTHORISED_PROVENANCE_IMPORTERS = ["domain/backtest/execution/portfolio_projection.py"]
+
+
+def test_the_provenance_layer_has_exactly_one_production_importer() -> None:
+    """27C wired the manifest section; this bounds WHERE it may be assembled from.
+
+    Was ``test_nothing_in_production_imports_the_provenance_layer_yet``, asserting ``== []``.
+    That assertion was correct while ``build_portfolio_manifest`` had no production caller
+    and the ``unified_clock`` branch of ``portfolio_mode`` was unreachable from any real
+    Result. Both changed here, so the assertion is re-aimed rather than relaxed: a SECOND
+    importer — a route, a command, the worker itself — is still a red build.
+    """
     src = Path(__file__).resolve().parents[2] / "src" / "entropia"
-    importers = [
+    importers = sorted(
         path.relative_to(src).as_posix()
         for path in src.rglob("*.py")
         if path.name != "provenance.py" and _imports_provenance(path.read_text(encoding="utf-8"))
-    ]
-    assert importers == []
+    )
+    assert importers == _AUTHORISED_PROVENANCE_IMPORTERS, (
+        f"the provenance layer gained an unauthorised production importer: {importers}"
+    )
+
+
+def test_both_unified_clock_entry_points_have_a_production_caller() -> None:
+    """27C's acceptance criterion, stated directly.
+
+    ``project_portfolio_run`` gained one at `C4`; ``build_portfolio_manifest`` had none at
+    all, which is why the ``unified_clock`` branch of ``portfolio_mode`` was unreachable from
+    any real Result. Asserted as *some production module outside this layer calls it*, which
+    is the weakest form of the claim — the behavioural proof that the call actually happens
+    on a live run is ``tests/integration/test_unified_portfolio_provenance.py``, and the
+    bound on WHERE it may be called from is the allowlist above."""
+    src = Path(__file__).resolve().parents[2] / "src" / "entropia"
+    sources = {
+        path.relative_to(src).as_posix(): path.read_text(encoding="utf-8")
+        for path in src.rglob("*.py")
+    }
+    for symbol, definer in (
+        ("build_portfolio_manifest", "domain/backtest/execution/provenance.py"),
+        ("project_portfolio_run", "domain/backtest/execution/portfolio_projection.py"),
+    ):
+        callers = sorted(
+            path for path, text in sources.items() if path != definer and f"{symbol}(" in text
+        )
+        assert callers, f"{symbol} still has no production caller"
+
+
+def test_the_worker_reaches_provenance_through_the_seam_and_not_by_importing_it() -> None:
+    """The worker CALLS the section builder and never names the provenance layer.
+
+    This is the half the allowlist above cannot state. That list would stay satisfied if the
+    worker stopped building a section at all, so it proves nothing about the wiring being
+    live; and the containment gate's own scan is blind here because it exempts everything
+    inside ``execution/``. Together: the worker calls the seam (so the section is really
+    assembled in production) AND does not import the layer (so the signed allowlist that
+    gate holds is untouched)."""
+    src = Path(__file__).resolve().parents[2] / "src" / "entropia"
+    worker = (src / "application" / "jobs" / "backtest_engine.py").read_text(encoding="utf-8")
+    assert "build_portfolio_provenance(" in worker
+    assert not _imports_provenance(worker)
 
 
 def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None:

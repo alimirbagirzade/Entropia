@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 114 landed — Karar 1 imzalandı; sıradaki hamle YİNE bir imza, kod değil
 

@@ -29,7 +29,14 @@ live in this infra-free package:
 
 * ``tests/integration/test_shared_clock_worker_branch.py`` — a real two-Strategy independent
   run never reaches the loop, and (with the flag forced by a test-owned fixture) a shared one
-  does, is cancellable between ticks, and fails closed on a shape the adapter cannot drive;
+  does, is cancellable between ticks, and fails closed on a shape the adapter cannot drive.
+  It now also carries the half this file states only as SOURCE facts. The two assertions
+  below — ``combine_item_runs(`` present, and the item loop's header present exactly once —
+  prove the independent fold still EXISTS; that module proves it still produces the same
+  BYTES with the flag lifted, over the stored per-artifact content checksums. Existing and
+  pricing identically are different claims, and a negative control separated them: folding a
+  lone Strategy as a one-row composite, and letting the fold read the capability flag instead
+  of the run's own plan, each left every assertion in THIS file green;
 * ``tests/integration/test_shared_allocation_containment.py`` — already shipped, and it must
   stay green **unweakened**: it is what proves no request can ask for the branch at all.
 

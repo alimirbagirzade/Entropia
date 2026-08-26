@@ -49,6 +49,23 @@ RUN set -eu; \
 # it listens on 8080 — which is why nginx.conf says `listen 8080`. The published
 # HOST port is unchanged, so nothing outside the container moves.
 FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
+# The base tag still ships openssl 3.5.7-r0, which carries CVE-2026-14456
+# (unbounded memory growth in the QUIC server, HIGH, fixed in 3.5.8-r0). The
+# tag is floating, so this resolves itself the moment upstream rebuilds — until
+# then the release gate fails on a finding that HAS a published fix, and the
+# only alternatives were waiving it in .github/security-allowlist.json (an
+# exception needs a named owner and an expiry; nothing is currently waived and
+# that is the goal state) or pinning a digest we would then have to chase.
+# `apk upgrade` is scoped to the two openssl packages so it cannot quietly pull
+# an unrelated version bump into the runtime layer.
+#
+# This is the ONE root step in this stage and it exists only for the duration of
+# the upgrade: `USER 101` is restored immediately, because running wholly as
+# uid 101 is the entire reason this image is the `-unprivileged` variant (see
+# the note above). Do not let a later edit leave the stage as root.
+USER root
+RUN apk upgrade --no-cache libcrypto3 libssl3
+USER 101
 # Deliberately NOT under conf.d/. The stock nginx.conf globs
 # `include /etc/nginx/conf.d/*.conf` inside its `http` block, so a header file
 # placed there is pulled in at http level as well as by the two explicit

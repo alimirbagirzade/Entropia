@@ -13,12 +13,15 @@ It deliberately does NOT:
   and belong to ADIM 19. An intent carries ``sleeve_capacity`` as a *dependency* so the
   cap layer can apply it; it never applies it itself;
 * run the phase loop or drive the clock — ``run_portfolio`` is ADIM 18;
-* decide how a position with no fresh bar is marked — that is **OD-2, still open**. The
+* decide how a position with no fresh bar is marked — OD-2 is **decided but unbuilt**
+  (ADR §13.1: option (a), carry forward under a declared ``stale_after`` bound). The
   intent RECORDS which price it was formed at (``price_authority``) and chooses no
   mark policy;
-* decide whether a non-executing kind may hold a sleeve — that is **OD-6, still open**.
-  A Trading Signal / Trade Log item gets a ``blocked`` intent naming the honest V1
-  boundary, which is what both OD-6 readings agree on at this phase.
+* decide whether a non-executing kind may hold a sleeve — OD-6 is **decided but unbuilt**
+  (ADR §13.1: option (a) for ADIM 20, block a shared plan whose active entries include a
+  non-executing kind; §13.1 puts that block at ADMISSION, not here). A Trading Signal /
+  Trade Log item gets a ``blocked`` intent naming the honest V1 boundary, which is what
+  (a) and the rejected (b) agree on at this phase.
 
 **Nothing in production imports this module.** As with the ADIM 15 clock, the rollback is
 "delete the module": ``run_engine`` keeps its signature *and* its semantics (ADR §3.2),

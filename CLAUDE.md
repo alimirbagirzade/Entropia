@@ -270,9 +270,86 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION` **değişmedi** ·
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · **OpenAPI değişmedi (ÖLÇÜLDÜ)** ·
+> `SHARED_ALLOCATION_STATUS` = **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 119
+> (`C6`'nın OD-1/OD-6 yarısı): ÜRÜN KODU DEĞİŞTİ (üç dosya) ama hiçbir finansal sayı
+> oynamadı — golden el değmedi, kabul tavanları el değmedi (54/6 · A1 B21 C6 D32).
+> Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> **Görev `C6`'ydı, kapısı ÖLÇÜLDÜĞÜ AN KIRMIZIYDI ve VARSAYILAN SEÇİLMEDİ (kapı bu PR açıkken #849 ile YEŞİLE DÖNDÜ — ölçüm yanlış değildi, BAYATLADI):** `G11` (P2) ve `G12` (P8)
+> imza kutuları **boş** ölçüldü → planın *"do not pick a default"* durdurma koşulu uygulandı,
+> **P2/P8 blocker'ları YAZILMADI**. **TUZAK: `G12`'nin dosyasında işaretli kutular VAR** ama
+> hepsi Karar 1/2/4/5'e ait; §Karar 6 aralığı (`:1076–:1180`) boş — **imza kutusu BÖLÜM
+> bazında okunur, dosya düzeyinde grep yanıltır.**
+> **ASIL DERS: BİR SLICE'IN ÖN KOŞULU SLICE'IN TAMAMI İÇİN DEĞİL, PARÇALARI İÇİN ÖLÇÜLÜR** —
+> ön koşul defteri `#13/#14`'ü **insan**a, `#15/#16`'yı **E6**'ya veriyor; kapı yarısı için
+> kırmızı, diğer yarısı için hiç var olmamıştı. Kapsam **ürün sahibine soruldu**.
+> Sevk edilen: ADR §13.1 **OD-6(a)** + **OD-1(a)** → yeni
+> `domain/allocation/shared_mode_admission.py` (`participant.py::_unsupported_shapes`'in
+> **KARDEŞİ, kopyası değil** — o tablo tek çözülmüş koşuyu, bu modül kompozisyonun tamamını
+> sorar, ayrıklık yapısal), iki yeni `ReadinessIssueCode`, `_admit_run_body` 3b + 3c.
+> **İKİNCİ DERS: sevk edilen dünyada ULAŞILAMAYAN bir guard'ın testi, LİFT EDİLMEZSE
+> kendisini değil CONTAINMENT'ı kanıtlar** → her refüz testi ADIM 76'nın iki-dünya
+> fixture'ını kullanır; ayrı bir test shipped dünyada containment'ın **hâlâ önde** olduğunu
+> pinler. **ÜÇ NC: NC-1/NC-2 yalnız kendi hedefini düşürür; NC-3 boşluğun ÖLÇÜMÜ** — iki
+> guard birden sökülünce önceden var olan containment suite'i **YEŞİL KALIR**.
+> **ÖLÇÜLEREK DÜZELTİLEN İKİ İDDİA:** planın *"OpenAPI change? Likely"* satırı bu yarı için
+> **yanlış** (readiness kodları `openapi.json`'da yayımlanmıyor, sevk edilmiş
+> `ALLOCATION_SHARED_MODE_NOT_IN_BUILD` bile 0 kez geçiyor) · kendi değişikliğimin
+> **yarattığı** bayatlık: `BACKEND_LAYERS.md` §Kapsama'nın `:542`/`:573`/`:154` satırları
+> **sembol adına çevrildi** (§Conventions kuralı).
+> **DÜRÜST SINIR:** **`C6` KAPANMADI** (#13/#14 kapsam dışı bırakıldı; **iki imza #849 ile İNDİ**, sıradaki hamle artık **P2/P8 blocker'ları = ADIM 120**) ·
+> iki guard sevk edilen build'de **ULAŞILAMAZ** (`C9` lift edince devreye girecek fail-closed
+> taban) · frontend'de sıfır satır → frontend kapıları KOŞULMADI · `TL-11.c3` kapatılmadı ve
+> **yeniden sınıflandırılmadı** · `G11`'in istediği **üretim DB sayımı YAPILMADI** (imzacı bunu `sayılamadı` olarak **bilerek** imzaladı, #849) ·
+> geçen sayı ve coverage **CI'ın otoritesinde**.
+> `PROJECT_HISTORY.md` §ADIM 119 · `docs/ADIM119_LANDED_KICKOFF.md`.
+>
+>
+> OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 117 (G11 + G12
+> İMZALANDI, DOCS-ONLY): G11 = (a) tam admission blok** (kod `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`,
+> `field_path` ikisi de/O-02; ön koşul `sayılamadı` — kural ürün sahibince BİLİNÇLİ geçersiz kılındı, imzalı
+> sapma) · **G12 = A + ret "ikisi de"**. `C6`'nın ÜÇ ön koşulu da tamam (C4 #777/#799/#805 + iki imza) →
+> **sıradaki kalem `C6`** (iki imza TEK slice'ta, kapsam `docs/ADIM117_LANDED_KICKOFF.md`). Blocker
+> DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. `PROJECT_HISTORY.md` §ADIM 117.
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration YOK) ·
+> `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> **`future_dev` (DOKUNULMADI)**. **Son dalga — ADIM 118 (`G14`'ün `C`'si sevk edildi):
+> BİR İMZALI KARAR İNDİ, HİÇBİR KAPI KAPANMADI.** (`G8` bu dalda yazılmıştı ama PR sıra
+> beklerken **paralel olarak #847 ile indi**; üç ürün dosyası **birebir aynı** ölçüldü ve
+> commit **SKIP** edildi — **duplicate fix YAZILMADI**.) Blocker sayısı DEĞİŞMEDİ
+> (1 — yalnız A-08), BLOCKED; kabul borcu tavanlarına dokunulmadı.
+> `G8` (#559, A1+B2+C1): yeni `shared/dst.py::is_nonexistent_local_time`, gap →
+> `timezone_unresolved` (**yeni sözcük dağarcığı YOK**), fold → `fold=0`'da kalır (davranış
+> değişmedi). `G14` (#544) **Karar 1 = `C` şimdi + `B` (KALDIR) `C9` öncesi**, **Karar 3 =
+> metin** — ikisi de imzalı; **`B` UYGULANMADI** (migration'dır) ve **Karar 2 İMZASIZ**.
+> **ASIL DERS: BİR BİLDİRİMİ SABİT YAZMAK, ONU BİR SONRAKİ DÜNYADA YENİDEN YALAN YAPAR** —
+> sevk edilen metin iki kez karşı-olgusaldı (containment altında downgrade **gerçekleşmiyor**;
+> faz döngüsü NET'i **REDDEDİYOR**, downgrade etmiyor), ama *"hiçbir şey koşmuyor"* diye
+> sabit yazmak yalanı yalnız `C9`'un öbür tarafına taşırdı → metin ikiye ayrıldı ve ön ek
+> `shared_allocation_is_executable()`'dan **TÜRETİLDİ** (`rules.py::_net_policy_warning`);
+> bayrak `validate_allocation` içinde **tek kez** okunur. **Belge "üç yüzey" diyordu,
+> DÖRDÜNCÜSÜ vardı** (`enums.py`'de `CONFLICT_POLICY_NET_V1` **üyesinin yorumu**) — belgenin
+> kendi *"biri unutulursa çelişki devam eder"* uyarısı, o maddenin **saymadığı** yüzeyden
+> gerçekleşecekti. **Beş semantik ADIYLA gösterildi, İMPORT EDİLMEDİ — kısıt, tercih değil:**
+> `NET_UNDEFINED_SEMANTICS` `execution/arbitration.py`'de ve importer allowlist'i **imzalı**;
+> kapı `execution.arbitration import` dizesini **METİN olarak** tarar (NC-4: import iki kapıyı
+> birden kırmızıya çevirir). **YEDİ negatif kontrol, BİRİ REDDEDİLDİ. NC-3 asıl ölçüm:** eski
+> metin geri konunca iki yeni eksen kırmızı, **mevcut 18 test YEŞİL** — suite mesajın
+> **kodunu** pinliyordu, **metnini hiç** okumuyordu; iki yıl karşı-olgusal kalabilmesinin
+> sebebi budur. **NC-6 REDDEDİLDİ, reddi öğretici:** `InlineError`'ı kırpmak kırmızı verdi ama
+> **yanlış** testlerde (`inline_issues` oradan **akmıyor**, ayrı tablo satırı render eder) →
+> gerçek yolda yeniden kuruldu. **NC-7 bir GÖLGE kaydetti** (`issue.code` ekseni zaten dört
+> mevcut testle korunuyor). **DÜRÜST SINIR:** `C` `G14`'ü **KAPATMAZ**, **#544 KAPATILMADI**,
+> `CrossItemConflictPolicy.NET` **kaldırılmadı**, `NET_TRACKING_ISSUE`'ye **dokunulmadı**
+> (#544 açık ölçüldü → kusur yok), **A-08 el değmedi**. **SIRADAKİ HAMLE YİNE İMZA: Karar 2.**
+> `PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 115 (worker'ın paylaşımlı saatinin
+> **`future_dev` (KALDIRILMADI)**. Öncesinde **ADIM 115 (worker'ın paylaşımlı saatinin
 > ARBİTRAJI, PR #839): ÜRÜN KODU DEĞİŞMEDİ — `backend/src`'te SIFIR SATIR.** Üç dosya: bir
 > integration modülü (+7 case), containment gate docstring'i, üretilmiş olgular (collection
 > 3758 → 3765). Tavanlar OYNAMADI (54/6 · A1 B21 C6 D32). Blocker sayısı DEĞİŞMEDİ (1 — yalnız
@@ -329,6 +406,8 @@ Before stopping a working session, produce **ALL** of the following:
 > **#839 bu PR açıkken indi → REBASE**, çakışma yalnız üretilmiş üç artefaktta,
 > `generate_repository_facts.py` **yeniden koşularak** çözüldü (3777 / 358 dosya).
 > `PROJECT_HISTORY.md` §ADIM 116 · `docs/ADIM116_LANDED_KICKOFF.md`.
+>
+>
 >
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
@@ -2115,9 +2194,10 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next: KOD DEĞİL, İMZA** — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon TABANI) ·
-> `G11`+`G12` (→ `C6`) · `G15` (leg 3) · `G10` **hiç talep edilmedi**; sonra `C6`, ön koşul
-> 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
+> **GERÇEK Next (ADIM 117'de güncellendi): `C6` — KOD.** ~~`G11`+`G12` imza~~ → **ikisi de
+> 2026-08-26'da imzalandı** (G11 = (a), G12 = A; `PROJECT_HISTORY.md` §ADIM 117); Karar 1'in TABANI
+> ADIM 114'te imzalanmıştı. Hâlâ imzasız: ~~`G8`~~ (**#847 ile İMZALANDI**, `A1+B2+C1`, 2026-08-26) · `G14` (#544) ·
+> `G15` (leg 3) · `G10` **hiç talep edilmedi**. Sıra: `C6`, sonra `G15`, ön koşul 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
 > `docs/audit/final_closure_delta_audit_2026-08-25.md` §10. Eski ölçüm:
 > `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden

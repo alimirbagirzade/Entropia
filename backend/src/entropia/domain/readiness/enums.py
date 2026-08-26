@@ -175,6 +175,21 @@ class ReadinessIssueCode(StrEnum):
     # capital (doc 13 §1.1) is unaffected. Status, texts and the removal condition
     # live in ``domain/allocation/capability.py``.
     ALLOCATION_SHARED_MODE_NOT_IN_BUILD = "ALLOCATION_SHARED_MODE_NOT_IN_BUILD"
+    # ADR 0002 §13.1 OD-6(a): a SHARED plan whose active entries include a kind the
+    # engine runs no simulation for (Trading Signal / Trade Log — F-04 hands them
+    # ``output=None``). Their share would be withheld from the items that CAN trade
+    # while doing nothing itself. Blocks RUN at admission; independent mode is
+    # unaffected, and the item may still feed a Strategy as a data input. Texts and
+    # the predicate live in ``domain/allocation/shared_mode_admission.py``.
+    ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM = "ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM"
+    # ADR 0002 §13.1 OD-1(a): a SHARED run whose pinned market datasets declare
+    # DIFFERENT ``record_time_basis`` values. The engine keeps one decision-time
+    # convention and never branches on that field (A-1), so a shared clock would fold
+    # two differently-based axes together as if identical. Blocks RUN at admission;
+    # independent mode replays each item on its own axis and is unaffected.
+    ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS = (
+        "ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS"
+    )
     ALLOCATION_ISSUE = "ALLOCATION_ISSUE"
 
 

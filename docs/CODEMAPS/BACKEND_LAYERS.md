@@ -125,7 +125,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 |---|---|---|
 | `admin_panel` | `log_taxonomy`, `role_matrix` | Log olay taksonomisi + kanonik rol-scope matrisi (doc 19) |
 | `agent_lab` | `cursor`, `enums`, `state_machine`, `tool_gateway` | Analysis Lab durum makinesi + gateway sözleşmesi |
-| `allocation` | `capability`, `config`, `enums`, `rules` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar. **CONTAINMENT (ADIM 3):** `capability.py` shared capital'in bu build'de **çalışmadığını** ilan eden TEK kaynak (`SHARED_ALLOCATION_STATUS = "future_dev"`); `rules.py::validate_allocation` enabled planı `SHARED_MODE_NOT_IN_BUILD` BLOCKER'ı ile açar → Portfolio sayfası + revision freeze + Ready Check (`ALLOCATION_SHARED_MODE_NOT_IN_BUILD`) + `commands/backtest_run.py` admission guard aynı verdict'i okur. Independent mod etkilenmez. Kaldırma şartları: `docs/decisions/2026-08-03_shared_portfolio_containment.md` §6. **Portfolio-level cross-item kuralları burada tanımlı ve doc 13 §8.2'de YOK:** `config.py:118-119` iki alan · `enums.py:37-53` `CrossItemConflictPolicy` (`NET` / `BLOCK_OPPOSITE` / `KEEP_SEPARATE`) · `rules.py:164-186` `MAX_TOTAL_EXPOSURE_INVALID` (BLOCKER) + `CONFLICT_POLICY_NET_V1` (WARNING). Tam kayıt: `docs/PROJECT_HISTORY.md` §B-1 |
+| `allocation` | `capability`, `config`, `enums`, `rules`, `shared_mode_admission` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar. **`shared_mode_admission.py` (ADIM 117):** ADR §13.1 OD-1(a)/OD-6(a)'nın plan-düzeyi admission tablosu — kapsama kalkana kadar ULAŞILAMAZ, ayrıntı §Kapsama tablosunun 3–4. satırları. **CONTAINMENT (ADIM 3):** `capability.py` shared capital'in bu build'de **çalışmadığını** ilan eden TEK kaynak (`SHARED_ALLOCATION_STATUS = "future_dev"`); `rules.py::validate_allocation` enabled planı `SHARED_MODE_NOT_IN_BUILD` BLOCKER'ı ile açar → Portfolio sayfası + revision freeze + Ready Check (`ALLOCATION_SHARED_MODE_NOT_IN_BUILD`) + `commands/backtest_run.py` admission guard aynı verdict'i okur. Independent mod etkilenmez. Kaldırma şartları: `docs/decisions/2026-08-03_shared_portfolio_containment.md` §6. **Portfolio-level cross-item kuralları burada tanımlı ve doc 13 §8.2'de YOK:** `config.py:118-119` iki alan · `enums.py:37-53` `CrossItemConflictPolicy` (`NET` / `BLOCK_OPPOSITE` / `KEEP_SEPARATE`) · `rules.py:164-186` `MAX_TOTAL_EXPOSURE_INVALID` (BLOCKER) + `CONFLICT_POLICY_NET_V1` (WARNING). Tam kayıt: `docs/PROJECT_HISTORY.md` §B-1 |
 
 | `backtest` | `engine`, `manifest`, `funding`, `portfolio_engine`, `portfolio_mode`, `execution/*` | Backtest motoru + çalıştırma manifest'i. **İKİ AYRI YOL taşır ve karıştırılmamalıdır:** (1) **sevk edilen tek-item yolu** — `engine.py::run_engine`, worker'ın `jobs/backtest_engine.py:859`'dan çağırdığı; (2) **unified-clock adası** — `portfolio_engine.py` + `execution/` alt paketi, **üretimde sıfır çağıranı olan** kapsanmış faz döngüsü. Ada haritası aşağıda §Unified-clock portfolio adası. `manifest.py:126` `ENGINE_VERSION`'ın tek kaynağı |
 | `capability` | `baseline`, `enums`, `lifecycle` | Future Dev capability registry durum makinesi + activation gate'leri |
@@ -186,8 +186,31 @@ sembolü "yok" saymak da (#582 gövdesi), bağlı olmayan bir sembolü "çalış
 
 | # | Yer | Yüzey | Etki |
 |---|---|---|---|
-| 1 (sert kapı) | `application/commands/backtest_run.py:542` | run admission | `ALLOCATION_SHARED_MODE_NOT_IN_BUILD` ile reddeder. Snapshot yüklemesinden **sonra**, `build_run_manifest` (`:573`) öncesinde → **run yok, manifest yok, job satırı yok** |
-| 2 (teşhis kapısı) | `domain/allocation/rules.py:154` | `validate_allocation` | `SHARED_MODE_NOT_IN_BUILD` BLOCKER → Portfolio sayfası + revision freeze + Ready Check |
+| 1 (sert kapı) | `application/commands/backtest_run.py::_admit_run_body` | run admission | `ALLOCATION_SHARED_MODE_NOT_IN_BUILD` ile reddeder. Snapshot yüklemesinden **sonra**, `build_run_manifest` öncesinde → **run yok, manifest yok, job satırı yok** |
+| 2 (teşhis kapısı) | `domain/allocation/rules.py::validate_allocation` | Ready Check | `SHARED_MODE_NOT_IN_BUILD` BLOCKER → Portfolio sayfası + revision freeze + Ready Check |
+
+> **Satır numaraları SEMBOL ADINA çevrildi (ADIM 117).** Tablo `:542`/`:573`/`:154`
+> yazıyordu; ADIM 117 admission yoluna iki guard eklediği için üçü de **aynı anda
+> bayatladı**. §Conventions zaten *"satır numarası yazma, sembol adı kullan"* diyor —
+> bir sonraki admission slice'ı bu satırları yine kaydırırdı.
+
+#### Kapsama KALKINCA devreye girecek iki plan-düzeyi kapısı (ADIM 117, ADR §13.1)
+
+Bunlar 1 numaralı sert kapının **arkasında** durur, yani `SHARED_ALLOCATION_STATUS`
+`future_dev` iken **ULAŞILAMAZ** — `C9` bayrağı kaldırdığında hazır bulunması gereken
+fail-closed tabandır. İkisi de aynı immutable snapshot'ı **doğrudan** okur (Ready
+Check baypas edilse bile reddederler) ve `build_run_manifest`'ten **önce** çalışır.
+
+| # | Yer | Kapattığı | Etki |
+|---|---|---|---|
+| 3 | `domain/allocation/shared_mode_admission.py::non_executing_sleeve_holders` | **OD-6(a)** | Motorun simüle etmediği bir kind (Trading Signal / Trade Log) **sleeve tutamaz** → `ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM`, `field_path=entries`, ihlal eden her entry `details`'te |
+| 4 | `domain/allocation/shared_mode_admission.py::mixed_record_time_bases` | **OD-1(a)** | Pinlenmiş market revizyonları **farklı** `record_time_basis` bildiriyorsa reddeder → `ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS`, `field_path=data.market_dataset_revision_id`, **`scope_id` YOK** (cross-item kusur, tek item suçlu değil) |
+
+Bu modül `participant.py::_unsupported_shapes`'in **kardeşidir, kopyası değil**: o tablo
+**tek çözülmüş koşunun** şeklini (P2/P8) sorar, bu modül **kompozisyonun tamamını**
+sorar. İkisi yapı gereği ayrıktır; OD-1 iki revizyonu birbiriyle karşılaştırır, OD-6'nın
+ise inceleyeceği çözülmüş koşusu hiç yoktur. **P2/P8 admission blocker'ları bu dosyaya
+AİT ama HENÜZ YAZILMADI** — `G11`/`G12` imzasız (bkz. `docs/decisions/`).
 
 Tek kaynak `domain/allocation/capability.py:105` (`SHARED_ALLOCATION_STATUS = "future_dev"`).
 **Bu bir eksik DEĞİL, BİLİNÇLİ FAIL-CLOSED KAPSAMADIR** — karar kaydı

@@ -102,7 +102,9 @@ async def _require_current_revision(session: AsyncSession, root: Any) -> Researc
     return revision
 
 
-async def _resolve_market_link(session: AsyncSession, market_entity_id: str) -> dict[str, Any]:
+async def _resolve_market_link(
+    session: AsyncSession, actor: Actor, market_entity_id: str
+) -> dict[str, Any]:
     """Resolve the exact ACTIVE+APPROVED market bundle or raise DEPENDENCY_BLOCKED.
 
     The market query raises ``NotFound`` when there is no eligible revision; we
@@ -110,7 +112,7 @@ async def _resolve_market_link(session: AsyncSession, market_entity_id: str) -> 
     the canonical anti-orphan error (DR3, doc 12 §10).
     """
     try:
-        return await resolve_approved_market_data_bundle(session, entity_id=market_entity_id)
+        return await resolve_approved_market_data_bundle(session, actor, entity_id=market_entity_id)
     except NotFoundError as exc:
         raise DependencyBlocked(
             "Link this Research Data version to an Approved Market Data dataset first."
@@ -169,7 +171,7 @@ async def create_research_dataset(
     ``research_market_link`` row.
     """
     require_authenticated(actor)
-    bundle = await _resolve_market_link(session, market_entity_id)
+    bundle = await _resolve_market_link(session, actor, market_entity_id)
 
     async def _op() -> dict[str, Any]:
         root, revision = await rd_repo.create_research_dataset(
@@ -438,7 +440,7 @@ async def create_research_dataset_revision(
     market_id = market_entity_id
     bundle: dict[str, Any] | None = None
     if market_id is not None:
-        bundle = await _resolve_market_link(session, market_id)
+        bundle = await _resolve_market_link(session, actor, market_id)
 
     async def _op() -> dict[str, Any]:
         # Concurrency checks INSIDE the body so a completed-key replay returns the

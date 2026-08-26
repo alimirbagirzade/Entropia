@@ -69,10 +69,41 @@ gh run list --branch main --limit 5
 gh run view <id>   # 0 job => koşmadı, "yesil" DEĞİL
 ```
 
+> **`gh` HER ORTAMDA YOK — ölçüldü (2026-08-25, remote container: `command -v gh` boş).**
+> Aşağıdaki `gh` komutları **yerel** oturumun yoludur. `gh` yoksa aynı bilgiyi GitHub
+> MCP araçlarından al (bunlar `.claude/settings.json` `permissions.allow`'da salt-okur
+> olarak zaten kayıtlı): PR listesi `mcp__github__list_pull_requests` · PR ayrıntısı,
+> diff'i ve check'leri `mcp__github__pull_request_read` · koşu listesi
+> `mcp__github__actions_list` · koşu ayrıntısı `mcp__github__actions_get` · job log'u
+> `mcp__github__get_job_logs` · PR açma `mcp__github__create_pull_request`.
+> **Kanıt sorusu değişmez, aracı değişir.**
+
+## 3b. Sır taraması YERELDE koşturulabilir (Docker gerekmez)
+
+`Secret scan (gitleaks)` CI'da Docker imajıyla koşar ve bu container'da **Docker
+daemon yoktur** — ama bu "yerelde doğrulanamaz" demek DEĞİLDİR: gitleaks statik tek
+bir binary olarak yayımlanır.
+
+```bash
+curl -sSL -o gl.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz
+tar xzf gl.tar.gz && ./gitleaks detect --source . --no-git --config .gitleaks.toml --redact -v
+```
+
+**Allowlist eklerken iki tuzak, ikisi de yaşandı:**
+
+1. **`regexTarget = "line"` yazmayı unutma.** Allowlist regex'leri öntanımlı olarak
+   **secret**'a bakar, satıra değil; satır şekli tarif eden bir desen sessizce
+   etkisiz kalır ve kapı aynı bulguyla kırmızı kalmaya devam eder.
+2. **Negatif kontrolü PRISTINE config ile karşılaştır.** Sahte bir kimlik satırı
+   ekleyip "yakalanmadı" görmek tek başına *allowlist çok geniş* demek değildir —
+   kural o şekli hiç tanımıyor da olabilir. Aynı probe'u eski konfigle koştur:
+   fark yoksa probe kusurlu, fark varsa allowlist geniş.
+
 ## 4. Belgeler bayat-varsayılandır
 
 - **Handoff / önceki oturum özeti / yerel branch güvenilmez.** Oturum başında:
-  `git fetch`, `git log --oneline origin/main -6`, `gh pr list --state all`.
+  `git fetch`, `git log --oneline origin/main -6`, `gh pr list --state all`
+  (`gh` yoksa `mcp__github__list_pull_requests`).
 - `CLAUDE.md` §Current position **elle** yazılır; içindeki **HEAD sha'sı yapısal
   olarak bayattır** (kapanış commit'inin kendisi onu değiştirir).
 - Bir belgenin güncel mi tarihsel mi olduğunu ilk satırındaki
@@ -120,6 +151,6 @@ işaretle.
 [ ] git fetch + origin/main taze mi
 [ ] docs PR ise: git show <sha> -- docs/ | grep '^-## '  → bos
 [ ] openapi --check ve repository_facts --check yesil
-[ ] gh run view <id> → job sayisi > 0
+[ ] gh run view <id> (gh yoksa mcp__github__actions_get) → job sayisi > 0
 [ ] "landed/closed" iddialarinin kaniti var
 ```

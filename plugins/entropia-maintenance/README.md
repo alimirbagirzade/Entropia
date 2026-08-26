@@ -14,11 +14,14 @@ Entropia'ya özgü Claude Code plugin'i: **ajanlar** (kim çalışır), **skill'
 dosyasını okur. Kurulum sonrası ajanlar, skill'ler ve hook'lar otomatik yüklenir;
 oturumu yeniden başlat.
 
-**Kurulmazsa ajanlar, skill'ler, slash command'lar ve dört hook'un ikisi aktif
-olmaz.** Bu bilinçli: aynı ajan/skill'i hem `.claude/` hem plugin üzerinden
-yüklemek çift kayıt üretirdi, o yüzden `.claude/` altında kopya bırakılmadı.
-**İki bloklayıcı guard ADIM 57'de bu kuralın açık istisnası oldu** — aşağıdaki
-§Çift koşma bölümü kararı gerekçesiyle birlikte yazıyor.
+**Kurulmasa da hiçbir içerik kaybolmuyor — ama bu HER ZAMAN böyle değildi.**
+Eskiden burada *"kurulmazsa ajanlar, skill'ler, slash command'lar ve hook'ların
+çoğu aktif olmaz; `.claude/` altında kopya bırakılmadı"* yazıyordu. O karar üç
+adımda geri alındı: **ADIM 57** iki bloklayıcı guard'ı `settings.json`'a doğrudan
+kaydetti, **`a5d9e4f`** ajan ve skill aynasını kurdu, **bu değişiklik** command
+aynasını ve kalan üç hook kaydını ekledi. Bugün plugin'in tamamı kurulum
+istemeden ulaşılabilir; kaynak hâlâ burasıdır, ikilenen şey kayıt ve aynadır.
+Ayrıntı ve gerekçe: aşağıdaki §Çift koşma.
 
 **`enabledPlugins` KURULUMU TETİKLEMEZ — ölçüldü, tahmin değil (2026-08-13).**
 ADIM 53 *"depoya güvenen her oturumda önerilir/etkinleşir"* yazıyordu; remote'ta
@@ -29,9 +32,10 @@ kendisi bir **onay istemi** ister, remote container etkileşimsizdir, istem hiç
 gelmez. Sebep bir yapılandırma hatası **değil** — `scripts/agent-config-gate.mjs`
 adın marketplace'te çözüldüğünü doğruluyor ve yeşil.
 
-Pratik sonucu: bu plugin **yerel** oturumların aracıdır. Remote'ta yalnız aşağıdaki
-iki guard koşar, onlar da plugin üzerinden değil `.claude/settings.json`'daki
-doğrudan kayıt üzerinden koşar.
+Pratik sonucu **değişti**: bu plugin artık yalnız yerel oturumların aracı değil.
+Remote'ta **beş hook'un beşi de** koşar (plugin üzerinden değil,
+`.claude/settings.json`'daki doğrudan kayıt üzerinden) ve ajanlar / skill'ler /
+slash command'lar `.claude/` aynasından yüklenir.
 
 ## İçerik
 
@@ -43,8 +47,14 @@ entropia-maintenance/
 ├── skills/     entropia-canonical-rules · entropia-testing
 │               entropia-regression-check · entropia-frontend-parity
 └── hooks/      hooks.json + guard-generated.sh · guard-git.sh
-                 post-edit-lint.sh · session-brief.sh
+                 post-edit-lint.sh · session-brief.sh · vendor-react-rules.sh
 ```
+
+`agents/`, `commands/` ve `skills/` **aynalanır** (`scripts/sync-agent-mirror.sh` →
+`.claude/`), `hooks/` ise **kaydedilir** (`.claude/settings.json`). İkisinin de
+tazeliği `scripts/agent-config-gate.mjs` ile CI'da kapılıdır. Bu dizinde bir dosya
+düzenledikten sonra sync betiğini koştur; aynayı commit etmeyi unutursan kapı
+ayrışan dosyayı **adıyla** kırmızıya çevirir.
 
 ### Ajanlar
 
@@ -89,9 +99,10 @@ enjekte eder — modelin hatırladığı duruma değil, gerçek çıktıya bakar
 | Olay | Script | Davranış |
 |---|---|---|
 | `PreToolUse` (Edit/Write/MultiEdit/NotebookEdit) | `guard-generated.sh` **(+ settings.json)** | `docs/openapi.json`, `docs/generated/*` elle düzenlemesini **engeller** (exit 2) ve üreticiyi söyler |
-| `PostToolUse` (Edit/Write/MultiEdit) | `post-edit-lint.sh` | Değişen **tek** backend `.py` üzerinde ruff check + format → kırmızıysa exit 2. Migration / `lib/*.ts` / `app/nav.ts` / adjudicated shared dosyaları / `PROJECT_HISTORY.md` için bağlam hatırlatması (bloklamaz) |
+| `PostToolUse` (Edit/Write/MultiEdit) | `post-edit-lint.sh` **(+ settings.json)** | Değişen **tek** backend `.py` üzerinde ruff check + format → kırmızıysa exit 2. Migration / `lib/*.ts` / `app/nav.ts` / adjudicated shared dosyaları / `PROJECT_HISTORY.md` için bağlam hatırlatması (bloklamaz) |
+| `PreToolUse` (Edit/Write/MultiEdit/NotebookEdit) | `vendor-react-rules.sh` **(+ settings.json)** | `frontend/src/**/*.ts(x)` yazılırken hangi Vercel kural ailesinin bu projede geçerli olduğunu hatırlatır (bloklamaz) |
 | `PreToolUse` (Bash) | `guard-git.sh` **(+ settings.json)** | Üç otomatik kapı: **docs kayıt silen commit** (`git diff --cached -- docs/ \| grep '^-## '` boş değilse **engeller**), **self-merge** (`gh pr merge` engellenir — merge yetkisi insandadır), **main'e force push** |
-| `SessionStart` | `session-brief.sh` | "Belgeler bayat varsayılır" + doğrulama komutları + skill/ajan listesi |
+| `SessionStart` | `session-brief.sh` **(+ settings.json)** | "Belgeler bayat varsayılır" + doğrulama komutları + skill/ajan listesi |
 
 Kapat: `export ENTROPIA_HOOKS=off` (üç script de sessizce çıkar).
 
@@ -123,9 +134,21 @@ ikinci koşu birincinin sonucunu değiştirmez.
    tam olarak korumak için yazıldığı üç regresyondan (#590 211 satır, #604 194
    satır) sonra eklendi — ve **hiç koşmadı**, çünkü remote container plugin
    kurmuyor. Hiçbir CI kapısı `docs/` okumadığı için tek otomatik savunma budur.
-3. **Yalnız BLOKLAYAN ikisi ikilendi.** `post-edit-lint.sh`, `session-brief.sh` ve
-   `vendor-react-rules.sh` bilerek **dışarıda** bırakıldı: onlar hatırlatmadır,
-   ikilenmeleri güvenlik kazandırmaz, yalnız gürültü üretir.
+3. **~~Yalnız BLOKLAYAN ikisi ikilendi.~~ GERİ ALINDI — beşi de kaydedildi.**
+   ADIM 57 `post-edit-lint.sh`, `session-brief.sh` ve `vendor-react-rules.sh`'i
+   *"onlar hatırlatmadır, ikilenmeleri güvenlik kazandırmaz, yalnız gürültü üretir"*
+   diye dışarıda bırakmıştı. İki kusuru vardı ve ikisi de ölçüldü:
+   **(a)** niteleme `post-edit-lint.sh` için **yanlıştı** — ruff dalı **exit 2** ile
+   *bloklar*, yani o bir hatırlatma değil bir kapıdır;
+   **(b)** karşılaştırma yanlış eksendeydi — soru *"ikilenmesi ne kazandırır"* değil,
+   *"hiç koşmaması ne kaybettirir"*tir. Cevap ölçüldü: remote'ta üçü de **hiç
+   koşmadı**, yani vendor kural sınırı `frontend/src` altında hiç hatırlatılmadı,
+   migration / `lib/*.ts` / adjudicated shared dosya uyarıları hiç çıkmadı ve oturum
+   brifi hiç görünmedi. **Erişilebilirlik de bir sonuçtur**; gürültü, yokluğa yeğdir.
+   Bedeli **ölçülmedi ama şekli biliniyor**: yerelde kuruluysa vendor notu ve brif
+   bağlama iki kez enjekte edilir, ruff iki kez koşar (temiz dosyada ~50 ms), kırmızıda
+   iki özdeş stderr bloğu çıkar. Üçü de salt-okur ve idempotent; kapatma anahtarı
+   `ENTROPIA_HOOKS=off` üçünü birden susturur.
 
 **İkilenme görünmezleşemez:** `scripts/agent-config-gate.mjs` iki kaydı da okur.
 Betik yeniden adlandırılırsa ya da `chmod -x` edilirse kapı **her iki

@@ -68,5 +68,31 @@ secretGroup = 1
 # (config/settings.py::_reject_shipped_default_credentials_in_production), so
 # their being readable here is a documented boundary, not a leak.
 [allowlist]
-description = "Committed template of local-only defaults"
+description = "Committed template of local-only defaults + one documentation false positive"
 paths = ['''^\.env\.example$''']
+# `regexTarget = "line"` ZORUNLUDUR ve unutulması bu allowlist'i SESSİZCE ETKİSİZ
+# kılar: gitleaks'in allowlist regex'leri öntanımlı olarak SECRET'a bakar, satıra
+# değil. Aşağıdaki desen bir SATIR şeklini tarif ediyor, o yüzden hedef satır olmalı.
+# Bu satır olmadan ilk deneme CI'da aynı bulguyla kırmızı kaldı (da971b0) — hata
+# yerelde indirilen gitleaks 8.28.0 ile birebir üretilip düzeltildi.
+regexTarget = "line"
+regexes = [
+  # gitleaks' `curl-auth-user` rule reads `-u <value>` as curl's credential flag.
+  # `sqlmap -u <URL>` uses the SAME flag for the target URL, so a documentation
+  # example trips it: `.claude/skills/sast-sqli/SKILL.md` (vendored from
+  # utkusen/sast-skills) shows `sqlmap -u "https://app.example.com/search?q=test"`.
+  # There is no credential on that line.
+  #
+  # Shape, not path — consistent with the note at the top of this file. Excluding
+  # `.claude/skills/**` would be the lazy fix and the wrong one: those are vendored
+  # third-party documents, which is exactly where an upstream bump could smuggle a
+  # real key in unnoticed.
+  #
+  # The narrowing is the closing quote plus the `@` exclusion, and it was negative-
+  # controlled: `sqlmap -u "https://admin:pw@host/x"` is NOT forgiven (the `@` ends
+  # the character class before the closing quote can match), nor is `curl -u
+  # user:pass`, nor the same shape under any other tool name. The unquoted form is
+  # not forgiven either — RE2 has no lookaround, so the boundary has to be the
+  # quote, and failing closed there is the right direction.
+  '''\bsqlmap\s+-u\s+"https?://[^"@\s]*"''',
+]

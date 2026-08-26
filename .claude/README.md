@@ -8,18 +8,38 @@ Entropia'nın ajanları, invariant skill'leri ve hook'ları artık bir plugin'di
 /plugin install entropia-maintenance@entropia
 ```
 
-Kurulmadan ajanlar (`entropia-triage`, `entropia-scoped-fix`, `entropia-verifier`),
-skill'ler (`entropia-canonical-rules`, `entropia-testing`,
-`entropia-regression-check`, `entropia-frontend-parity`) ve plugin'in **öteki**
-hook'ları **aktif olmaz**. Kopya bırakılmadı — aynı isim iki kez yüklenmesin diye.
-İki **bloklayıcı** guard bu kuralın bilinçli istisnasıdır, aşağıya bak.
+**GÜNCEL DURUM: plugin kurulu olmasa da hiçbir şey kaybolmaz.** Kurulum hâlâ
+gerçekleşmiyor ve aşağıdaki ölçüm hâlâ geçerli — değişen şey, plugin'in TÜM
+içeriğinin kurulum istemeyen iki yoldan birine bağlanmış olması:
+
+| İçerik | Nasıl ulaşılıyor | Tek kaynak |
+|---|---|---|
+| Ajanlar (`entropia-triage`, `entropia-scoped-fix`, `entropia-verifier`) | `.claude/agents/` **aynası** | plugin |
+| Skill'ler (`entropia-canonical-rules`, `entropia-testing`, `entropia-regression-check`, `entropia-frontend-parity`) | `.claude/skills/` **aynası** | plugin |
+| Slash command'lar (`/session-start`, `/verify`, `/merge-check`, `/close-session`) | `.claude/commands/` **aynası** | plugin |
+| Beş hook'un **hepsi** | `settings.json`'daki **doğrudan kayıt** | plugin |
+
+**"Kopya bırakılmadı" cümlesi ARTIK DOĞRU DEĞİL ve bu yüzden kaldırıldı.** Ajan ve
+skill kopyaları `a5d9e4f` (2026-08-18) ile geri kondu; command kopyaları bu
+değişiklikle eklendi. Ayna bir kopya olduğu için **sapabilir**, o yüzden eşitlik bir
+CI kapısıdır: `scripts/agent-config-gate.mjs` ayrışan dosyayı **adıyla** kırmızıya
+çevirir, `scripts/sync-agent-mirror.sh` eşitler. Plugin altında bir ajan/skill/command
+düzenledikten sonra **sync betiğini koştur ve aynayı da commit et.**
+
+**Command'lar neden İŞARETÇİ değil KOPYA — ölçüldü, tercih değil.**
+`commands/session-start.md` taze git durumunu `` !`…` `` biçimiyle enjekte eder ve
+harness bu genişletmeyi **yüklediği** dosyada yapar; *"plugin'deki kopyayı oku"* diyen
+bir dosya hem o genişletmeyi hem `close-session`/`verify`'ın `$ARGUMENTS` ikamesini
+kaybederdi. Davranışı koruyan şey kopyalama, kopyayı dürüst tutan şey kapıdır.
 
 **`enabledPlugins` KURULUM DEĞİLDİR — ölçüldü (2026-08-13, bu remote container).**
 `settings.json`'daki `extraKnownMarketplaces.entropia` + `enabledPlugins` yalnızca
 adın **çözülebildiğini** ve kurulunca etkin sayılacağını söyler; kurulumun kendisi
 bir **onay istemi** ister ve remote container etkileşimsizdir, istem yoktur. Ölçüm:
 `/root/.claude/plugins/installed_plugins.json` = `{"version":2,"plugins":{}}` — **boş**.
-Yani plugin **kurulu değil** ve ajanları/skill'leri/komutları bu oturumda **yüklenmedi**.
+Yani plugin **kurulu değil** — ve ajanları/skill'leri/komutları **plugin olarak**
+yüklenmedi. (Yukarıdaki tablonun anlattığı gibi, içerikleri artık aynadan yükleniyor;
+ölçümün kendisi değişmedi, sonucu değişti.)
 Bu bir yapılandırma hatası DEĞİL: `scripts/agent-config-gate.mjs` adın marketplace'te
 çözüldüğünü doğruluyor ve yeşil. ADIM 53'ün *"depoya güvenen her oturumda
 önerilir/etkinleşir"* cümlesi remote'ta **yanlıştı**; yerelde önerilir, remote'ta
@@ -32,12 +52,38 @@ kopyalanmadı — tek kaynak hâlâ plugin'in içinde; ikilenen şey yalnızca *
 Plugin yerelde kuruluysa aynı guard iki kez koşar (ölçülen bedel ≈ 25 ms/çağrı,
 gerekçe: `../plugins/entropia-maintenance/README.md` §Çift koşma).
 
+**Genişletildi: kalan ÜÇ hook da aynı yolla kaydedildi.** ADIM 57 yalnız **bloklayan**
+ikisini ikilemişti; gerekçesi *"öteki üçü hatırlatmadır, ikilenmeleri güvenlik
+kazandırmaz, yalnız gürültü üretir"* idi. Karar sahibince geri alındı, çünkü
+**erişilebilirlik de bir sonuçtur**: o üçü remote'ta hiç koşmadığı için `frontend/src`
+altında vendor kural sınırı hiç hatırlatılmadı, migration / `lib/*.ts` / adjudicated
+shared dosya uyarıları hiç çıkmadı, oturum brifi hiç görünmedi. Ayrıca eski
+gerekçedeki *"hatırlatma"* nitelemesi `post-edit-lint.sh` için **yanlıştı**: onun ruff
+dalı **exit 2** ile bloklar.
+
+| Olay | Script | Bu değişiklikle eklendi |
+|---|---|---|
+| `PreToolUse` (Bash) | `guard-git.sh` | — (ADIM 57) |
+| `PreToolUse` (Edit/Write/MultiEdit/NotebookEdit) | `guard-generated.sh` | — (ADIM 57) |
+| `PreToolUse` (Edit/Write/MultiEdit/NotebookEdit) | `vendor-react-rules.sh` | ✔ |
+| `PostToolUse` (Edit/Write/MultiEdit) | `post-edit-lint.sh` | ✔ |
+| `SessionStart` (`startup`/`resume`/`clear`) | `session-brief.sh` | ✔ |
+
+**Çift koşmanın bedeli bu üçü için ayrıca ÖLÇÜLMEDİ; şekli biliniyor:** plugin
+**yerelde kuruluysa** vendor notu ve oturum brifi bağlama iki kez enjekte edilir, ruff
+aynı dosyada iki kez koşar (temiz dosyada ~50 ms) ve kırmızıda iki özdeş stderr bloğu
+çıkar. Yan etki yok — üçü de salt-okurdur ve idempotenttir. Alternatif (*"kuruluysa
+atla"*) ADIM 57'de **fail-open** olduğu için reddedilmişti; o gerekçe burada da
+geçerlidir. Üçünü birden susturmak için: `export ENTROPIA_HOOKS=off`.
+
 Aynı zamanda `settings.json` **#651'den beri geçersiz JSON'du** ve ADIM 53'te
 onarıldı: o aradaki her oturumda buradaki `docs-history-guard` ve
 `ultrareview-advisor` hook'ları hiç koşmuyordu (`scripts/agent-config-gate.mjs`).
 
-Burada kalan tek şey `skills/ponytail-entropia/`: bu çalışmadan önce vardı ve
-`CLAUDE.md` ona **yoluyla** atıf yapıyor, o yüzden yeri değişmedi.
+`skills/ponytail-entropia/` plugin'e **hiç alınmadı**: bu çalışmadan önce vardı ve
+`CLAUDE.md` ona **yoluyla** atıf yapıyor, o yüzden yeri değişmedi. `pr-drive-to-green`
+ve iki `vercel-*` skill'i de plugin'de yok — üçü de aynanın **dışındadır**: kapı yalnız
+plugin'de tanımlı olanı arar, `.claude/` altındaki fazlalığa karışmaz.
 
 ## `skills/vercel-*` — vendor'lanan üçüncü taraf skill'ler
 
@@ -50,6 +96,24 @@ taşınırlarsa güncelleme zinciri kopar.
 |---|---|
 | `vercel-composition-patterns` | `architecture-*`, `state-*`, `patterns-*` — `react19-*` ATLA (React 18.3) |
 | `vercel-react-best-practices` | `rerender-*`, `rendering-*`, `js-*`, `advanced-*` — `async-*`/`bundle-*`/`server-*`/`client-swr-*` Next.js + RSC özel, GEÇERSİZ |
+
+## `skills/sast-*` — vendor'lanan güvenlik tarayıcıları (10 skill)
+
+`utkusen/sast-skills` (MIT) deposundan **ölçülerek seçilmiş** bir alt küme. Upstream
+skill'leri `sast-files/.claude/skills/` altında tuttuğu için `npx skills` bu yerleşimi
+çözmez → `skills-lock.json`'a **girmediler**, sürüm takibi elle yapılır. **Gövdeler
+birebir**; yalnız `description` alanları bu deponun sembollerine çapalanacak biçimde
+yeniden yazıldı (ölçüm: 4124 → 1821 char; varsayılan listing bütçesi ≈ 2000 char, yani
+kısaltılmasaydı **tüm** skill'lerin açıklaması kesilirdi).
+
+**Sıra zorunludur:** `sast-analysis` (→ `sast/architecture.md`) → ilgili `sast-*` →
+`sast-report`. Çıktı `sast/` altına yazılır ve **`.gitignore`'dadır**.
+
+**Bunlar DENETÇİDİR, DÜZELTİCİ DEĞİL.** Bir bulguyu uygulamadan önce
+`entropia-canonical-rules` ile doğrula: *"doğrulama ekle"* ya da *"zarfı değiştir"*
+önerisi karara bağlanmış bir alanı (O-02, O-12, O-13, O-30, K-06, K-07) gevşetiyor olabilir.
+
+Alınan / alınmayan her depo ve gerekçesi: **`../docs/EXTERNAL_SKILLS_REGISTRY.md`**.
 
 Bu ayrımı `frontend/src/**/*.ts(x)` yazılırken plugin'in
 `hooks/vendor-react-rules.sh` PreToolUse hook'u hatırlatır. Sınırın kendisi

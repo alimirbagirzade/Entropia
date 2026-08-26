@@ -13,8 +13,10 @@ none of the questions that follow from it:
 * it holds no capital, books no PnL and owns no ledger (ADIM 17);
 * it forms no intent, runs no phase loop and publishes no snapshot (ADIM 18);
 * it arbitrates no conflict, caps no sleeve and rejects no order (ADIM 19);
-* it does not decide how an unmarked position is marked — that is **OD-2, still open**;
-  the clock reports the facts a mark policy would need and chooses nothing.
+* it does not decide how an unmarked position is marked — OD-2 is **decided but unbuilt**
+  (ADR §13.1, 2026-08-05: option (a), carry the last closed bar's close forward under a
+  declared ``stale_after`` bound with a diagnostic counter); the clock reports the facts
+  that mark policy will need and chooses nothing.
 
 **Nothing imports this module yet.** Per ADR §12 the ADIM 15 rollback is "delete the
 module"; ``run_engine`` keeps its signature *and its semantics* (ADR §3.2), so no shipped
@@ -126,8 +128,9 @@ class ItemTickView:
     item's latest closed/available state. It can never be a future bar: the cursor is
     advanced by the axis itself, so at tick ``t`` no bar with ``t' > t`` has been read into
     it. This is the *input* a mark policy needs, not a mark policy: whether a stale bar may
-    be carried forward, and for how long, is **OD-2 and unanswered**. ``staleness_ms``
-    likewise MEASURES the gap and applies no bound."""
+    be carried forward, and for how long, is **OD-2 — answered (a) in ADR §13.1 and not yet
+    built**. ``staleness_ms`` likewise MEASURES the gap and applies no bound; the
+    ``stale_after`` bound (a) calls for is ADIM 20's to introduce, not this type's."""
 
     item_id: str
     pin_ordinal: int

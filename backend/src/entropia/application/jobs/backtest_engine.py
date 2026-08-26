@@ -107,6 +107,7 @@ from entropia.domain.backtest.execution.fills import (
 from entropia.domain.backtest.execution.portfolio import combine_item_runs
 from entropia.domain.backtest.execution.portfolio_projection import (
     PinnedItem,
+    build_portfolio_provenance,
     project_portfolio_run,
 )
 from entropia.domain.backtest.metrics import derive_metric_values
@@ -364,6 +365,7 @@ async def run_backtest(
     # lives HERE rather than inside ``_use_unified_clock`` because it is a different
     # invariant with a different source, and folding two reasons into one predicate would
     # leave neither of them stated.
+    portfolio_provenance: dict[str, Any] | None = None
     if len(prepared_items) > 1 and _use_unified_clock(capital_execution):
         unified = await _replay_shared_clock(
             session,
@@ -375,11 +377,16 @@ async def run_backtest(
             item_labels=item_labels,
             base_rules=base_rules,
         )
-        if not isinstance(unified, EngineOutput):
+        if not isinstance(unified, _UnifiedOutcome):
             # Already durable: the shared replay cancelled or failed the run and this is its
             # terminal reference, the same shape every other early return here carries.
             return unified
-        output = unified
+        output = unified.output
+        # Pinned into the Result's immutable manifest snapshot below. This is the ONLY
+        # branch that sets it: an independent or sequentially folded Result must never
+        # carry the section, because carrying it is what makes a Result read back as
+        # ``unified_clock``.
+        portfolio_provenance = unified.provenance
         # Every participant was driven to exhaustion on ONE clock — there is no per-item
         # replay count on this path, and reporting ticks under an item key would be a lie in
         # a durable event. ``unified_clock`` names the path the run actually took.
@@ -498,6 +505,7 @@ async def run_backtest(
         manifest=manifest,
         engine_output=output,
         metric_values=metric_values,
+        portfolio_provenance=portfolio_provenance,
     )
     terminal_from = run.state
     run.result_id = result.result_id
@@ -985,6 +993,21 @@ def _replay_strategy(
 
 
 @dataclass(frozen=True, slots=True)
+class _UnifiedOutcome:
+    """What ONE finished shared-clock replay hands back: the composite output AND the
+    provenance section that says the composite is a unified-clock one.
+
+    They travel together because they must be written together. The section is what
+    ``portfolio_mode.resolve_portfolio_simulation_mode`` reads to classify the persisted
+    Result, so an output stored without it would be an immutable Result that co-simulated
+    on a merged clock and reads back as ``unknown`` forever — a Result cannot be relabelled
+    afterwards (doc 15 §3.2)."""
+
+    output: EngineOutput
+    provenance: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
 class _SharedClockInputs:
     """Everything ``iter_portfolio`` needs for ONE shared-pool run, resolved once.
 
@@ -1130,6 +1153,11 @@ def _shared_clock_inputs(
                 item_label=item_labels.get(entry_id),
                 symbol=symbols.get(entry_id),
                 timeframe=timeframes.get(entry_id),
+                # The SAME map the participants were built from, so the ordinal the
+                # manifest records and the ordinal the clock merged on are one value read
+                # once. Derived from the UNFILTERED pin list on purpose: skipping disabled
+                # entries here would renumber the survivors and silently re-pin a run.
+                pin_ordinal=pin_ordinals[entry_id],
             )
         )
     return _SharedClockInputs(
@@ -1154,13 +1182,13 @@ async def _replay_shared_clock(
     item_count: int,
     item_labels: dict[str, str],
     base_rules: PortfolioRules | None,
-) -> EngineOutput | dict[str, Any]:
+) -> _UnifiedOutcome | dict[str, Any]:
     """Co-simulate every pinned Strategy on ONE merged clock over ONE shared pool.
 
-    Returns the composite ``EngineOutput`` on success, or the DURABLE terminal reference of
-    a run this function already cancelled or failed — the same two shapes ``run_backtest``'s
-    independent branch produces, so the caller's tail (metrics, checkpoint #4, Result) is
-    reached by exactly one path.
+    Returns the composite output PLUS its provenance section on success, or the DURABLE
+    terminal reference of a run this function already cancelled or failed — the same two
+    shapes ``run_backtest``'s independent branch produces, so the caller's tail (metrics,
+    checkpoint #4, Result) is reached by exactly one path.
 
     **Unreachable from any production request as shipped.** Run admission
     (``commands/backtest_run.py``) refuses every shared run while the capability is
@@ -1242,16 +1270,34 @@ async def _replay_shared_clock(
         tick_index += 1
 
     try:
-        return project_portfolio_run(
+        output = project_portfolio_run(
             portfolio_run,
             items=inputs.items,
             execution_key=manifest.execution_key,
             item_count=item_count,
         )
+        # Built in the SAME try as the projection, and before anything durable is written.
+        # Both describe the same finished run, so a shape one of them refuses is a shape
+        # neither may publish: letting the section fail after the output was accepted would
+        # persist a unified-clock Result that reads back as ``unknown`` — the exact silent
+        # mislabelling this slice exists to close.
+        provenance = build_portfolio_provenance(
+            portfolio_run,
+            items=inputs.items,
+            engine_version=manifest.engine_version,
+            capital_execution=manifest.manifest.get("capital_execution"),
+            conflict_policy=inputs.conflict_policy,
+            # The per-item data-revision map is not something the run manifest pins; the
+            # data provenance it DOES pin (``tick_data``, ``data_time_context``) is
+            # run-level and already sits in this same manifest. Passing nothing states
+            # "none recorded per item" rather than inventing a per-item claim.
+            data_revisions=None,
+        )
     except Exception as exc:
         # The projection fails closed on a traded item with no pinned record, a booked close
-        # with no open before it and a position priced at nothing. Each would otherwise
-        # reach an IMMUTABLE Result as a plausible-looking row.
+        # with no open before it and a position priced at nothing; the provenance builder
+        # adds an unassigned pin ordinal and an unnameable conflict policy. Each would
+        # otherwise reach an IMMUTABLE Result as a plausible-looking row.
         return await _fail_run(
             session,
             job,
@@ -1259,6 +1305,7 @@ async def _replay_shared_clock(
             code=RunFailureCode.ENGINE_ERROR,
             message=f"Shared-clock run could not be projected into a Result: {exc}",
         )
+    return _UnifiedOutcome(output=output, provenance=provenance)
 
 
 async def _record_stage(

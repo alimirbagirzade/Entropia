@@ -250,13 +250,19 @@ def test_an_offset_carrying_row_ignores_the_declared_zone_entirely() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# T-9 — DST fold / gap: CHARACTERIZATION, not canon                             #
+# T-9 — DST fold / gap: ADJUDICATED (G8 / GH #559, signed 2026-08-26)           #
 # --------------------------------------------------------------------------- #
-# Doc 12 §5.2 requires UTC normalization and says "conversion failure blocks
-# approval/run", but it declares NO rule for the two local wall clocks that are
-# not a 1:1 mapping. Rather than invent one (forbidden by the ADIM 13 charter),
-# these tests pin what ships so the behavior is visible and any future product
-# decision is a deliberate, reviewable change. Tracked as an open product question.
+# These were CHARACTERIZATION tests: doc 12 §5.2 requires UTC normalization and
+# says "conversion failure blocks approval/run", but declared NO rule for the two
+# wall clocks that are not a 1:1 mapping, so the tests pinned what shipped.
+# The product question is now ANSWERED, and the answer is ASYMMETRIC:
+#   A1 — FOLD is ACCEPTED at fold=0. The hour occurred twice; picking the earlier
+#        instant is a defensible answer to a real question. Behaviour unchanged.
+#   B2 — GAP is REFUSED. The hour never occurred; there is no instant to choose,
+#        so normalizing invents one. Now reported as timezone_unresolved.
+#   C1 — Scope is ingest/approval only. APPROVED revisions are pinned into
+#        completed run manifests and are NOT re-analyzed or invalidated.
+# Rule: entropia.shared.dst. Decision: docs/decisions/closure_g8_dst_fold_gap_2026-08-25.md
 
 
 def test_an_ambiguous_dst_fold_string_resolves_to_the_first_occurrence() -> None:
@@ -264,6 +270,12 @@ def test_an_ambiguous_dst_fold_string_resolves_to_the_first_occurrence() -> None
     # An offset-less STRING cannot express which one, and ``fold`` defaults to 0, so
     # the earlier (EDT) instant wins. The later occurrence is UNREACHABLE from a
     # source file: it is one hour of data that can never be addressed.
+    #
+    # G8/A1 ADJUDICATED: this is now the DECIDED rule, not an accident. No option
+    # could have recovered the second occurrence — an offset-less string cannot
+    # express fold=1, which is the format's limit, not an implementation choice.
+    # So the choice was only between accepting a defensible instant and refusing a
+    # real one; A1 accepts. Contrast the gap below, which has NO instant to accept.
     ambiguous = "2024-11-03T01:30:00"
     edt_instant = datetime(2024, 11, 3, 5, 30, tzinfo=UTC)
     est_instant = datetime(2024, 11, 3, 6, 30, tzinfo=UTC)
@@ -275,16 +287,28 @@ def test_an_ambiguous_dst_fold_string_resolves_to_the_first_occurrence() -> None
     assert edt_instant != est_instant
 
 
-def test_a_nonexistent_dst_gap_string_is_accepted_not_rejected() -> None:
+def test_a_nonexistent_dst_gap_string_is_refused_as_a_conversion_failure() -> None:
     # 2024-03-10 02:30 America/New_York NEVER occurred (the clock jumped 02:00->03:00).
-    # It is nevertheless normalized (as if the pre-transition EST offset applied)
-    # rather than reported as a conversion failure.
+    # G8/B2 ADJUDICATED: there is no instant to normalize to, so the cell is a doc 12
+    # §5.2 conversion failure and BLOCKS approval. Before the decision it silently
+    # resolved to 07:30Z, as if the pre-transition EST offset had applied — publishing
+    # a timestamp for a moment that never existed.
     nonexistent = "2024-03-10T02:30:00"
-    resolved = datetime(2024, 3, 10, 7, 30, tzinfo=UTC)
 
-    assert resolve_timestamp(nonexistent, source_zone=_NY).moment == resolved
-    assert parse_utc(nonexistent, source_zone=_NY) == resolved
-    assert resolve_timestamp(nonexistent, source_zone=_NY).timezone_unresolved is False
+    parsed = resolve_timestamp(nonexistent, source_zone=_NY)
+    assert parsed.moment is None
+    assert parsed.timezone_unresolved is True
+    # The funding reader MUST agree — a divergence would store at one instant and
+    # replay at another. It refuses through its own shipped ``None`` channel.
+    assert parse_utc(nonexistent, source_zone=_NY) is None
+    # The refusal is NARROW: the hours either side of the jump are ordinary and stay
+    # resolvable. A blanket refusal of the transition DAY would be a different rule.
+    assert resolve_timestamp("2024-03-10T01:30:00", source_zone=_NY).moment == datetime(
+        2024, 3, 10, 6, 30, tzinfo=UTC
+    )
+    assert resolve_timestamp("2024-03-10T03:30:00", source_zone=_NY).moment == datetime(
+        2024, 3, 10, 7, 30, tzinfo=UTC
+    )
 
 
 @pytest.mark.parametrize(

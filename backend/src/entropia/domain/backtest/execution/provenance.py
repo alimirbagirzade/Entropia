@@ -50,6 +50,7 @@ from entropia.domain.backtest.execution.arbitration import (
     CONTENTION_SELECTION_POLICY,
     CONTENTION_SELECTION_STATUS,
     ConflictPolicyRule,
+    resolve_policy,
 )
 from entropia.domain.backtest.execution.attribution import (
     ATTRIBUTION_POLICY_VERSION,
@@ -103,7 +104,14 @@ class DuplicatePinOrdinalError(ProvenanceError):
     """Two items claim the same pin ordinal — the merge order would be ambiguous."""
 
 
-def _money_str(value: Decimal) -> str:
+def money_str(value: Decimal) -> str:
+    """The canonical MANIFEST spelling of a money amount.
+
+    Public because the provenance section is now assembled by a sibling module
+    (``portfolio_projection.build_portfolio_provenance``) that must spell an executed
+    sleeve exactly as :func:`sleeve_amount_divergences` spells it when it compares one — a
+    second local formatter there could drift by a rounding mode and turn an agreement into
+    a reported divergence, or hide a real one."""
     return str(value.quantize(MONEY_QUANTUM, rounding=MONEY_ROUNDING))
 
 
@@ -256,13 +264,13 @@ def sleeve_amount_divergences(
             raise UnknownProvenanceItemError(
                 f"Allocation entry {item_id!r} has no sleeve in the executed plan."
             )
-        if _money_str(executed) != entry.initial_sleeve_capital:
+        if money_str(executed) != entry.initial_sleeve_capital:
             findings.append(
                 {
                     "code": SLEEVE_AMOUNT_DIVERGENCE,
                     "composition_item_snapshot_id": item_id,
                     "manifest_initial_sleeve_capital": entry.initial_sleeve_capital,
-                    "executed_sleeve_capital": _money_str(executed),
+                    "executed_sleeve_capital": money_str(executed),
                     "executed_sleeve_capital_exact": str(executed),
                 }
             )
@@ -475,13 +483,23 @@ def build_portfolio_manifest(
     engine_version: str,
     allocation: AllocationProvenance,
     identities: Sequence[ItemIdentity],
-    conflict_policy: ConflictPolicyRule,
+    conflict_policy: ConflictPolicyRule | str | None,
     tick_instants: Sequence[int],
     equity_points: Sequence[PortfolioEquityPoint] = (),
     plan: SleevePlan | None = None,
     data_revisions: Mapping[str, Mapping[str, str]] | None = None,
 ) -> PortfolioManifest:
     """Assemble the manifest section. Pure: no DB, no clock, no randomness.
+
+    ``conflict_policy`` takes either the resolved :class:`ConflictPolicyRule` or the raw
+    token the run manifest pinned (``None`` / blank being the absence of a cross-item rule,
+    which is KEEP_SEPARATE by definition). Resolving a token is THIS module's job rather
+    than its callers': pinning the resolved rule is precisely why provenance is one of the
+    three named modules allowed to import the arbitration layer
+    (``test_backtest_cross_item_arbitration.py``'s importer allowlist, signed 2026-08-18).
+    Having the section's assembler resolve it instead would have made that assembler a
+    FOURTH importer of a human-signed list — measured, not hypothetical: it turned that
+    guard red.
 
     ``plan`` is optional and used ONLY to cross-check the frozen sleeve amounts against
     what will actually execute; passing it never changes an amount, it only populates
@@ -490,6 +508,11 @@ def build_portfolio_manifest(
         raise MissingAllocationProvenanceError(
             "A shared-mode manifest needs the frozen allocation record (doc 13 §13)."
         )
+    rule = (
+        conflict_policy
+        if isinstance(conflict_policy, ConflictPolicyRule)
+        else resolve_policy(conflict_policy)
+    )
     instants = sorted(set(tick_instants))
     divergences = (
         sleeve_amount_divergences(allocation, plan)
@@ -500,7 +523,7 @@ def build_portfolio_manifest(
         engine_version=engine_version,
         allocation=allocation,
         items=pinned_items_from_identities(identities, data_revisions=data_revisions),
-        conflict_policy=conflict_policy,
+        conflict_policy=rule,
         ledger_artifact=ledger_artifact_ref(equity_points) if equity_points else None,
         timeline_identity=timeline_identity(instants),
         tick_count=len(instants),
@@ -537,6 +560,7 @@ __all__ = [
     "item_labels_from_identities",
     "ledger_artifact_ref",
     "ledger_equity_rows",
+    "money_str",
     "pinned_items_from_identities",
     "sleeve_amount_divergences",
 ]

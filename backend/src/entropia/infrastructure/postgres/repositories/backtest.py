@@ -25,6 +25,12 @@ from entropia.domain.backtest.artifacts import (
 from entropia.domain.backtest.engine import EngineOutput
 from entropia.domain.backtest.enums import RUN_ACTIVE_STATES, BacktestRunState, RunEventType
 from entropia.domain.backtest.metrics import MetricValue
+from entropia.domain.backtest.portfolio_mode import (
+    UNIFIED_MANIFEST_KEY as PORTFOLIO_SIMULATION_KEY,
+)
+from entropia.domain.backtest.portfolio_mode import (
+    UNIFIED_MANIFEST_VERSION_FIELD,
+)
 from entropia.infrastructure.postgres.models.backtest import (
     BacktestResult,
     BacktestRun,
@@ -254,6 +260,31 @@ async def list_run_events(
 # --------------------------------------------------------------------------- #
 
 
+def _snapshot_manifest(
+    manifest: dict[str, Any], portfolio_provenance: dict[str, Any] | None
+) -> dict[str, Any]:
+    """The run manifest as the RESULT pins it, plus the unified-clock section when there is
+    one (doc 13 §13 / ADR 0002 §10.4).
+
+    The section is OUTCOME provenance — a merged timeline identity, a tick count, the
+    ledger's own equity digest — so it cannot exist at admission, when the run manifest is
+    built and hashed. It is therefore appended here, at the one moment both the admission
+    pins and the finished run are in hand, and it is appended to the Result's SNAPSHOT
+    rather than to the run's manifest row: doc 15 §12 makes this copy the thing historical
+    reads resolve against precisely so a Result never depends on a mutable neighbour.
+
+    A copy, never a mutation: ``manifest.manifest`` belongs to the run and is read by the
+    independent branch and by every replay of it. Writing the key in place would edit a
+    live JSONB row's Python object under a caller that did not ask for a portfolio.
+
+    Returns the input unchanged when there is no section, so an independent Result's
+    snapshot stays byte-identical to what it was before this parameter existed.
+    """
+    if portfolio_provenance is None:
+        return manifest
+    return {**manifest, PORTFOLIO_SIMULATION_KEY: portfolio_provenance}
+
+
 async def create_result(
     session: AsyncSession,
     *,
@@ -261,11 +292,17 @@ async def create_result(
     manifest: BacktestRunManifest,
     engine_output: EngineOutput,
     metric_values: list[MetricValue],
+    portfolio_provenance: dict[str, Any] | None = None,
 ) -> BacktestResult:
     """Materialize the immutable Result + summary + metrics + artifacts (CR-03).
 
     The ``backtest_result`` root is flushed BEFORE any child so every FK is
     satisfiable in-transaction (L1).
+
+    ``portfolio_provenance`` is the ``portfolio_simulation`` section, supplied ONLY by the
+    unified-clock branch of the worker. It is pinned into the Result's manifest SNAPSHOT
+    (see below); ``None`` — every independent and every sequentially folded run — stores the
+    run manifest byte-for-byte as before.
     """
     result_id = new_id("btres")
     result = BacktestResult(
@@ -403,10 +440,18 @@ async def create_result(
         ResultManifestSnapshot(
             snapshot_id=new_id("btms"),
             result_id=result_id,
+            # The RUN's admission hash, unchanged. It is the run's IDENTITY (doc 15 §7,
+            # §8.4 "retry -> new manifest hash") and it is what ties this Result back to
+            # its run and forwards to every export's ``source_manifest_hash``. Rehashing
+            # the extended dict below would fork that identity: ``result.manifest_hash``
+            # would stop equalling ``run.manifest_hash`` and the provenance chain would
+            # break at the join. The section carries its OWN content hash instead — the
+            # same two-hashes-over-overlapping-content shape ``execution_key`` and
+            # ``manifest_hash`` already have in ``domain/backtest/manifest.py``.
             manifest_hash=manifest.manifest_hash,
             execution_key=manifest.execution_key,
             engine_version=manifest.engine_version,
-            manifest=manifest.manifest,
+            manifest=_snapshot_manifest(manifest.manifest, portfolio_provenance),
         )
     )
     await session.flush()
@@ -539,8 +584,11 @@ async def get_portfolio_mode_markers(
 
     pinned = select(
         ResultManifestSnapshot.result_id.label("result_id"),
-        ResultManifestSnapshot.manifest["portfolio_simulation"]["policy_versions"][
-            "portfolio_manifest_version"
+        # The SAME constants the writer pins with (``_snapshot_manifest``). Two literals
+        # here would let a rename move the writer and leave the reader silently blind —
+        # and a reader that finds no section reports ``unknown``, not an error.
+        ResultManifestSnapshot.manifest[PORTFOLIO_SIMULATION_KEY]["policy_versions"][
+            UNIFIED_MANIFEST_VERSION_FIELD
         ]
         .as_string()
         .label("version"),

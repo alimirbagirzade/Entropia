@@ -304,6 +304,34 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> `future_dev` (**KALDIRILMADI**). **Son dalga — ADIM 116 (unified Result'ın PROVENANCE'ı, PR
+> #840): ÜRÜN KODU DEĞİŞTİ (dört dosya) ama HİÇBİR SAYI OYNAMADI — migration yok, golden yok,
+> kabul tavanları el değmedi (54/6 · A1 B21 C6 D32). Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> `portfolio_mode`'un `unified_clock` dalı **TEK** şeye bakar (Result'ın manifest snapshot'ındaki
+> `portfolio_simulation` bölümü) ve o bölümü **üretimde hiçbir şey yazmıyordu** →
+> **okuyucu tamdı, YAZICI HİÇ VAR OLMAMIŞTI**; her paylaşımlı Result `unknown` okunuyordu.
+> Yeni `portfolio_projection.py::build_portfolio_provenance` **bilerek `execution/` İÇİNDE**
+> (dışarıda olsa imzalı importer allowlist'ini genişletirdi); `create_result` bölümü snapshot'a
+> **kopyalayarak** pinler. **`manifest_hash` RUN'ın admission hash'i olarak KALIR** (adjudicated,
+> doc 15 §7/§8.4) — bölüm **kendi** içerik hash'ini taşır; bedeli (unified'da snapshot hash'i
+> belgenin tamamını kapsamaz) **iki yönde pinli**. Görevin *"`project_portfolio_run` unwired"*
+> öncülü **bayattı** (#799/#805) → **duplicate fix yazılmadı**.
+> **ASIL DERS: NEGATİF KONTROL KÜMESİ DE EKSİK OLABİLİR** — küme iki containment dosyası
+> taşıyordu, ağaçta **altı** per-modül importer guard'ı + iki gate var; eksiklik yüzünden ilk
+> commit arbitration'ın **dördüncü** (imzalı liste!) importer'ı oldu, **tam suite yakaladı**, ve
+> çözüm **listeyi genişletmek değil IMPORT ETMEMEK** oldu. NC-4 ayrıca **kendi testimdeki
+> TOTOLOJİYİ** yakaladı (`ordinals == sorted(ordinals)` bedava). Dört NC, dördü ayırt edici;
+> **NC-1 boşluğun ÖLÇÜMÜ**: bölüm sökülünce önceden var olan **on** dosyalık küme **YEŞİL KALIR**.
+> **DÜRÜST SINIR:** frontend'de sıfır satır (kapılar CI'da yeşil) · `data_revisions` per-item
+> **pinlenMEDİ** · `divergences` boş = **ölçüm yokluğu, anlaşma değil** · eski Result'lar
+> `unknown` KALIR (geri doldurma yok) · geçen sayı ve coverage **CI'ın otoritesinde**.
+> **#839 bu PR açıkken indi → REBASE**, çakışma yalnız üretilmiş üç artefaktta,
+> `generate_repository_facts.py` **yeniden koşularak** çözüldü (3777 / 358 dosya).
+> `PROJECT_HISTORY.md` §ADIM 116 · `docs/ADIM116_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Son dalga — ADIM 114 (Karar 1 İMZALANDI + uygulandı, PR #831): ÜRÜN KODU
 > DEĞİŞTİ (finansal) ama VARSAYILAN ALTINDA TEK BİR SAYI OYNAMADI — 50 golden digest BAYT BAYT

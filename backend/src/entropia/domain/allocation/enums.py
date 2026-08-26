@@ -41,11 +41,24 @@ class CrossItemConflictPolicy(StrEnum):
 
     ``KEEP_SEPARATE`` is the pre-rules behaviour (each item replays independently).
     ``BLOCK_OPPOSITE`` blocks a later-pinned item's entry while an earlier-pinned
-    item holds the opposite direction on the same instrument. ``NET`` (offsetting
-    the aggregate position) needs a unified-clock multi-item co-simulation the V1
-    sequential engine cannot honestly run — the engine executes it conservatively
-    as BLOCK_OPPOSITE and discloses the downgrade (validation warning + L4 engine
-    warning, never silent).
+    item holds the opposite direction on the same instrument.
+
+    ``NET`` (offsetting the aggregate position) HAS NO CANONICAL DEFINITION, and
+    that — not the missing clock — is why it does not run. Neither doc 13 nor
+    Master Ref Modül 11 §6.3 states a netting price, position custody, fee
+    attribution, realized-PnL attribution or margin treatment for an offset pair;
+    the five are enumerated in ``domain/backtest/execution/arbitration.py`` under
+    ``NET_UNDEFINED_SEMANTICS``. The two engines therefore disagree about the
+    value: the V1 sequential engine downgrades it to BLOCK_OPPOSITE and discloses
+    the downgrade (validation warning + L4 engine warning, never silent), while
+    the unified-clock phase loop REFUSES a NET run outright rather than label a
+    block as netting. Neither happens while ``SHARED_ALLOCATION_STATUS`` is
+    ``future_dev``, because no shared plan reaches an engine at all.
+
+    The value is retained for now on purpose: removing it is a migration over the
+    persisted ``portfolio_allocation_plan.conflict_policy`` CHECK, decided as
+    option `B` and scheduled before `C9`
+    (``docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md``, GH #544).
     """
 
     NET = "NET"
@@ -84,8 +97,12 @@ class AllocationIssueCode(StrEnum):
     # a non-positive cap can never admit an entry and is a misconfiguration, not a
     # tradable plan (portfolio-level rules slice).
     MAX_TOTAL_EXPOSURE_INVALID = "MAX_TOTAL_EXPOSURE_INVALID"
-    # Pre-disclosure of the engine's honest V1 boundary: NET needs a unified-clock
-    # co-simulation, so the engine executes it conservatively as BLOCK_OPPOSITE.
+    # Pre-disclosure that the chosen NET policy has no canonical definition, so the
+    # two engines treat it differently (sequential downgrades to BLOCK_OPPOSITE, the
+    # phase loop refuses) and containment means neither runs today. The wire token
+    # keeps its ``_V1`` spelling: it is a shipped machine code and renaming it would
+    # break every caller for a spelling (O-31 precedent). Text: ``rules.py``
+    # ``_net_policy_warning``; decision: G14 / GH #544.
     CONFLICT_POLICY_NET_V1 = "CONFLICT_POLICY_NET_V1"
     # An active entry points at a composition item whose kind is not allocatable.
     # doc 13 §5.2 ("selected item ... must be compatible") and §14#8 name the

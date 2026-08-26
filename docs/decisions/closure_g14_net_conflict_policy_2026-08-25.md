@@ -149,7 +149,47 @@ yeni sürümü yazılmış olur. Ölçülmüş doğru içerik:
 - faz döngüsü onu **reddeder**;
 - NET'in kanonik tanımı **yok** ve beş semantiği `NET_UNDEFINED_SEMANTICS`'te sayılı.
 
-☐ **Onaylanan metin:** ____________   ☐ **İmza:** ____________   ☐ **Tarih:** __________
+☑ **Onaylanan metin:** `rules.py::_net_policy_warning` (gerekçe aşağıda)   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-26
+
+> **METİN SABİT DEĞİL, TÜRETİLMİŞTİR — ve bu imzanın parçasıdır.** Dört maddenin **birincisi**
+> yalnız containment yürürlükteyken doğrudur; onu sabit yazmak `C9` lift'inin **ertesi günü**
+> yeni bir karşı-olgusal cümle bırakırdı — yani bu belgenin var olma sebebi olan hatanın
+> tekrarı olurdu. Metin bu yüzden ikiye ayrıldı:
+>
+> - **gövde** (`_NET_POLICY_BODY`) — 2., 3. ve 4. maddeler; bayrağın **her iki** değerinde doğru;
+> - **ön ek** (`_NET_POLICY_NOT_EXECUTABLE_PREFIX`) — 1. madde; yalnız
+>   `shared_allocation_is_executable()` **False** iken eklenir.
+>
+> **AMPİRİK OLARAK ÖLÇÜLDÜ, varsayılmadı:** `validate_allocation` `config.enabled` değilse
+> `([], None)` döner → NET uyarısı **yalnız enabled** planda fire eder; ve enabled bir plan bu
+> build'de **her zaman** `SHARED_MODE_NOT_IN_BUILD` blocker'ını da taşır. İkisi de
+> `test_the_net_notice_is_worded_against_the_world_that_applies` içinde **assert edilir**
+> (elle iddia edilmez), ve bayrak `validate_allocation` içinde **tek kez** okunur — kapı ile
+> bildirim tek bir doğrulama turunda iki ayrı dünyayı anlatamaz.
+>
+> **DÖRDÜNCÜ BİR YÜZEY BULUNDU; BU BELGE ONU ADLANDIRMIYORDU.** `enums.py`'de
+> `AllocationIssueCode.CONFLICT_POLICY_NET_V1` **üyesinin yorumu** da aynı iddiayı taşıyordu
+> (*"the engine executes it conservatively as BLOCK_OPPOSITE"*). Ölçülüp düzeltildi — md. 2'nin
+> *"biri unutulursa çelişki devam eder"* uyarısı, tam da o maddenin saymadığı bir yüzeyden
+> gerçekleşecekti. Wire token'ın `_V1` yazımı **DEĞİŞMEDİ**: sevk edilmiş bir makine kodudur ve
+> bir yazım uğruna yeniden adlandırmak tüm çağıranları kırardı (O-31 emsali).
+>
+> **BEŞ SEMANTİK ADIYLA GÖSTERİLDİ, İMPORT EDİLMEDİ — bu bir KISIT, tercih değil.**
+> `NET_UNDEFINED_SEMANTICS` `execution/arbitration.py`'de yaşar; o modülün importer allowlist'i
+> **imzalıdır** (`closure_participant_importer_allowlist_2026-08-18.md`) ve kapı
+> `execution.arbitration import` dizesini **metin olarak** tarar. Ölçüldü (NC-4): import eklemek
+> hem yeni testi hem `test_the_phase_loop_exists_but_no_production_path_reaches_it`'i kırmızıya
+> çeviriyor → beş dizeyi yeniden yazmamak için **imzalı bir listeyi imzasız bir modülle**
+> genişletmek gerekirdi; `C4`/E5'in reddettiği takasın aynısı.
+>
+> **BOŞLUK ÖLÇÜLDÜ (NC-3):** sevk edilen eski metin geri konduğunda iki yeni eksen de kırmızı
+> verdi ama `test_allocation_rules.py`'nin **18 testinin 18'i de yeşil kaldı** — mevcut suite
+> mesajın **kodunu ve severity'sini** pinliyordu, **metnini hiç** okumuyordu. İki yıl boyunca
+> karşı-olgusal kalabilmesinin sebebi budur.
+>
+> **`C` BU KAPIYI KAPATMAZ.** Karar 1'in uyarısı burada da geçerlidir: `G14` **AÇIK KALIR**,
+> **#544 KAPATILMAZ**, ön koşul 20 **kırmızı** — kapanış `B`'nin sevkine bağlıdır ve
+> **Karar 2 hâlâ imzasızdır**.
 
 ---
 

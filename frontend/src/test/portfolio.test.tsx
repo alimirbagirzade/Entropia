@@ -665,3 +665,69 @@ describe("Portfolio / Equity Allocation page", () => {
     expect(screen.getByRole("button", { name: /save draft/i })).toBeEnabled();
   });
 });
+
+describe("Portfolio — the NET conflict policy notice (G14 / GH #544)", () => {
+  // The label used to read "Net (V1: executed as Block opposite)" — a SECOND copy of a
+  // finding the server already sends, frozen at the moment it was typed. It went stale
+  // twice over: containment means no shared plan reaches an engine at all, and the
+  // unified-clock phase loop REFUSES NET rather than downgrading it. The fix is not a
+  // better frozen sentence; it is to stop stating the outcome here at all.
+  it("names the option without announcing an outcome the server owns", async () => {
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_EMPTY,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
+    const select = screen.getByLabelText("Conflicting signals (same instrument)");
+    const net = within(select).getByRole("option", { name: /^Net\b/ });
+
+    // The wire token is untouched — this is a presentation assertion, not a contract one.
+    expect(net).toHaveValue("NET");
+
+    // The label must not re-state what running NET does. "Block opposite" is a SIBLING
+    // option's label, so claiming it here is precisely the confusion that shipped.
+    expect(net).not.toHaveTextContent(/block/i);
+    expect(net).not.toHaveTextContent(/executed as/i);
+    // ... and it must point the reader at the authority instead of replacing it.
+    expect(net).toHaveTextContent(/warning/i);
+  });
+
+  it("renders the server's NET finding verbatim rather than a client paraphrase", async () => {
+    // The server words this against the CURRENT containment flag, which is exactly why the
+    // page may not keep its own copy: a copy would be frozen in one world. Sent here as an
+    // opaque string — if the page paraphrased or truncated it, this fails.
+    const serverNotice =
+      "Shared capital allocation does not execute in this build, so no plan carrying " +
+      "this policy reaches an engine at all and the downgrade described below does not " +
+      "happen. NET has no canonical definition.";
+    stubApi({
+      "PUT /mainboard-compositions/ws_1/portfolio-allocation-draft": {
+        ...SAVE_RESULT,
+        inline_issues: [
+          {
+            code: "CONFLICT_POLICY_NET_V1",
+            severity: "warning",
+            message: serverNotice,
+            field: "conflict_policy",
+            composition_item_id: null,
+          },
+        ],
+      },
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_EMPTY,
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
+    fireEvent.change(screen.getByLabelText("Conflicting signals (same instrument)"), {
+      target: { value: "NET" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    expect(await screen.findByText("Draft saved")).toBeInTheDocument();
+    expect(screen.getByText("CONFLICT_POLICY_NET_V1")).toBeInTheDocument();
+    expect(screen.getByText(serverNotice)).toBeInTheDocument();
+  });
+});

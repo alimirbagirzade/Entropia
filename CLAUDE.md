@@ -270,6 +270,26 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0043_i08_registry_strategy_fks`** (migration YOK) · `ENGINE_VERSION` **değişmedi** ·
+> OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 120
+> (`G15` İMZALANDI = Seçenek B, ve AYNI SLICE'TA UYGULANDI):** Ready Check leg 3'ün kazananı artık
+> **en yeni** satır, **toplam** sıra `created_at DESC, <pk> DESC`; leg 3 batch'lendi ve
+> `query_budgets.json` `per_item` **1 → 0** (`queries_large` 18 → 8, ölçüldü). **`_resolve_external`
+> artık `session` ALMAZ** → N+1 yapısal olarak imkânsız. **ASIL DERS: bir ön koşulu GEÇERSİZ KILMAK
+> ile ONA İHTİYAÇ DUYMAMAK aynı şey değildir** — üretim duplikasyon sayısı yine alınamadı
+> (`[x] sayılamadı`), ama belgenin kendi kuralı *"B ve D sayıdan bağımsız imzalanabilir"* diyor, ve
+> **A/C imzalanmadı** → ADIM 117 tarzı bilinçli geçersiz kılma **gerekmedi** (gereksiz bir "sapma"
+> notu sahte borç yaratırdı). Görevin *"§ÖLÇÜM 3 ile doğrulanmış betik ÇELİŞİYOR"* öncülü **ölçüldü ve
+> ÇÜRÜDÜ** — doğrulanan sayı değil **betikti**, belge bunu kendisi yazıyor. **İkame yığından `0`
+> okunMADI** (ADIM 109). Üç negatif kontrol, üçü ayırt edici; **NC-1 önce `queries_large`'ı vurdu →
+> gölge tavanlar 999'a çıkarılarak KALDIRILDI** ve slope'un kendisi ölçüldü (ADIM 101 kuralı).
+> **`work_object_revision_id` UNIQUE DEĞİL** — B belirsizliği KARARA BAĞLAR, KALDIRMAZ; `A` (migration)
+> **açık**, sayı bekliyor. §Ölçüm 4'ün pin-taşıma kusuru → **#854** (G15'in hiçbir seçeneği çözmez).
+> Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. **Sıradaki kalem `C6`'nın kalan yarısı** (G11+G12,
+> #849'da İMZALI, kodu **hâlâ inmedi** — ölçüldü, sıfır hit). `PROJECT_HISTORY.md` §ADIM 120 ·
+> `docs/ADIM120_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION` **değişmedi** ·
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · **OpenAPI değişmedi (ÖLÇÜLDÜ)** ·

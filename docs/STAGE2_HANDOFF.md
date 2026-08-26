@@ -8789,7 +8789,59 @@ yeniden sınıflandırılmadı · `G11`'in istediği **üretim DB sayımı yapı
 `PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md`.
 
 
+## Stage ADIM 120 — `G15` imzalandı (Seçenek B) ve aynı slice'ta uygulandı; Ready Check leg 3 artık FLAT landed
+
+- **PR:** bu slice · **taban:** rebase sonrası `origin/main` (#849/#850/#851/#852 oturum çalışırken indi)
+- **migration:** YOK · `ENGINE_VERSION` değişmedi · OpenAPI değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`
+- **blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED** · kabul borcu tavanları OYNAMADI
+
+**Karar:** `closure_g15_external_row_winner_2026-08-17.md` §Karar 4 → **Seçenek B**, kazanan
+**en yeni**, toplam sıra `created_at DESC, <pk> DESC`. Hüküm (a)+(b) onaylandı. §Ölçüm 4'ün
+pin-taşıma kusuru ayrı kalem → **#854**.
+
+**Ön koşul (üretim duplikasyon sayısı) `[x] sayılamadı`** — ve bu bir sapma DEĞİL: belgenin
+kendi kuralı *"B ve D sayıdan bağımsız imzalanabilir"* der. **A ve C imzalanmadı**, dolayısıyla
+ADIM 117'deki gibi bilinçli bir geçersiz kılmaya **gerek kalmadı**. `A` açık kalır; kısıtın hâlâ
+yokluğu (A'nın ikinci ön koşulu) migration kaynağından **yeniden ölçüldü**.
+
+**Sevk edilen:** `readiness.py`'de dört okuyucu (ikisi YENİ, `DISTINCT ON`) ·
+`readiness_check.py::_build_item_inputs` döngüden ÖNCE iki batch okuma ·
+`_resolve_external` **`session` ALMAZ** (saf lookup) · `query_budgets.json`
+`queries_large` 18 → **8**, `per_item` 1 → **0** (ölçüldü, rebase sonrası **yeniden** ölçüldü).
+
+**Üç negatif kontrol, üçü ayırt edici** — batch kaldır → **slope** kırmızı (gölge, tavanlar
+geçici 999'a çıkarılarak **kaldırıldı**) · per-item kazanan ters → yalnız kazanan assertion'ı ·
+yalnız batch formu ters → yalnız *"iki form anlaşır"* assertion'ı.
+
+**Deferred:** `A` (UNIQUE + migration, sayı bekliyor) · **#854** · `C6`'nın **G11/G12 yarısı
+hâlâ inmedi** (ADIM 119 yalnız OD-1/OD-6'yı sevk etti).
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
+
+> **ADIM 120 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe önceki güncellemelerde: `docs-history-guard` bir `## ` başlığının **kökünü**
+> karşılaştırır ve **yeniden adlandırma bloklanır**.)
+>
+> **BAŞLIKTAN HİÇBİR İMZA DÜŞMEDİ, AMA BİR KAPI EKLENDİ VE HEMEN KAPANDI: `G15`.**
+> Başlığın imza listesinde hiç yoktu (o liste `G8`/`G14`/Karar 1'i sayar); `G15` ordered
+> plan §2'nin *"imzalanacak bir bloğu olmayan"* iki kapısından biriydi. **ADIM 120'de
+> imzalandı (Seçenek B) ve aynı slice'ta uygulandı.**
+>
+> **SIRADAKİ MÜHENDİSLİK KALEMİ DEĞİŞMEDİ: `C6`'nın kalan yarısı** (G11 + G12 admission
+> blocker'ları). İkisi de **#849'da İMZALI**, yani kapı açık; kodları **hâlâ inmedi**
+> (ölçüldü: `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED` → `backend/src`'te **sıfır
+> hit**). ADIM 119 `C6`'nın yalnız **OD-1/OD-6** yarısını sevk etti — kendi başlığı bunu
+> söylüyor. Yukarıdaki ADIM 118 güncellemesinin çapaları (`shared_mode_admission.py`,
+> `_admit_run_body` 3b/3c, `_lifted` fixture'ı, **LIFT ETMEDEN TEST YAZMA** uyarısı)
+> **aynen geçerlidir**.
+>
+> **`G15` SONRASI SIRA:** `C6`'nın kalanı → OD-1/2/3/6'nın kalanı (ön koşul 15–18) →
+> `G10` (#852 imza yüzeyini açtı, **talep edilmedi**) → **EN SON `C9`**.
+>
+> **BUNU BİLMEDEN LEG 3'E DOKUNMA:** `work_object_revision_id` **UNIQUE DEĞİLDİR**;
+> B onu belirlenimli yaptı, **kaldırmadı**. Ve `created_at` **tek başına toplam sıra
+> değildir** (`func.now()` transaction damgasıdır) — pk tie-break'i kaldırırsan eski
+> belirlenimsizlik geri gelir.
 
 > **ADIM 118 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe önceki güncellemelerde: `docs-history-guard` yeniden adlandırmayı bloklar.)

@@ -16828,3 +16828,131 @@ bu slice'ın dosyaları **commit edilmemişti**, checkout onları silerdi. Her t
 - **`SHARED_ALLOCATION_STATUS` KALDIRILMADI**, `G10` (Gate 2) **talep edilmedi**.
 
 `PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md`.
+
+## ADIM 120 — `G15` İMZALANDI (Seçenek B) ve AYNI SLICE'TA UYGULANDI: BİR ÖN KOŞULU "GEÇERSİZ KILMAK" İLE "ONA İHTİYAÇ DUYMAMAK" AYNI ŞEY DEĞİLDİR
+
+**Taban:** `origin/main` (rebase sonrası; #849/#850/#851/#852 bu oturum çalışırken indi).
+**alembic head `0043_i08_registry_strategy_fks`** (bu dalgada **migration YOK**) ·
+`ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+**ÜRÜN KODU DEĞİŞTİ** (üç dosya) ve **bir ratchet İNDİ**. Blocker sayısı **DEĞİŞMEDİ (1 — yalnız
+A-08), BLOCKED.** Kabul borcu tavanları **OYNAMADI**.
+
+### Ne karara bağlandı
+
+`docs/decisions/closure_g15_external_row_winner_2026-08-17.md` §Karar 4 — *"Ready Check leg 3
+hangi external-import satırını okur?"* — **Seçenek B** olarak imzalandı: kazanan **en yeni**
+satır, **toplam** bir sıra altında (`created_at DESC, <pk> DESC`). Hüküm (a) ve (b) onaylandı;
+§Ölçüm 4'ün pin-taşıma kusuru **ayrı kalem** olarak imzalandı → **#854** açıldı.
+
+`work_object_revision_id` **UNIQUE DEĞİL** (bu oturumda yeniden ölçüldü: bu iki tabloya dokunan
+**tek** iki migration `0010_trading_signal` ve `0011_trade_log`, ikisi de `unique=True`
+kurmuyor; iki modelde de kolon `nullable=True, index=True`). İmzadan önce iki okuyucu da
+`ORDER BY`'sız `.first()` idi — yani **üretimde belirlenimsiz**.
+
+### ASIL DERS — bir ön koşulu GEÇERSİZ KILMAK ile ONA İHTİYAÇ DUYMAMAK aynı şey değildir
+
+Belgenin ön koşul kutusu *"üretimdeki duplikasyon sayısı"*nı ister ve sayı **bu oturumda da
+alınamadı** (ortamda üretim bağlantı dizesi yok; erişilebilir tek Postgres bir **dev/test**
+yığını ve ana `entropia` veritabanı `0039`'da, yani alembic **head'de bile değil**).
+
+Görev tanımı bu noktada **ADIM 117 emsalini** uygulamayı söylüyordu: *"çelişkiyi imzacıya göster,
+bilinçli geçersiz kılma cevabı gelirse imzaya gerekçeli not düş."* **Uygulanmadı, çünkü gerekmedi
+— ve gerekmediğini görmek belgeyi SONUNA KADAR okumayı gerektirdi:** kutunun hemen altındaki
+cümle *"**A ve C** bu sayı alınmadan imzalanamaz; **B ve D sayıdan bağımsız** imzalanabilir"*
+diyor. Seçilen **B**'dir. Ön koşul **geçersiz kılınmadı**; **kapsamı dışında kalındı**.
+
+> Bir ön koşulu gereksizce geçersiz kılmak, gereksizce ona uymak kadar hatalıdır: imzaya
+> "bilinçli sapma" notu düşmek, sapma olmayan bir yerde **sahte bir borç** yaratırdı ve bir
+> sonraki okuyucu G15'i imzalı-sapma sicilinde arardı.
+
+### İKİNCİ DERS — GÖREVİN ÖNCÜLÜ ÖLÇÜLDÜ VE ÇÜRÜDÜ (çelişki YOKTU)
+
+Görev *"§ÖLÇÜM 3 'SAYILAMADI' diyor AMA belge doğrulanmış bir sayım betiği taşıyor"* diye bir
+**çelişki** bildiriyordu. Ölçüldü: **çelişki yok.** §"Betiğin doğrulanması (2026-08-18)" kendi
+ilk cümlesinde *"Üretim sayısı **HÂLÂ ALINMADI**"* diyor — doğrulanan şey **sayı değil,
+betiğin kendisidir** (pozitif + negatif kontrolle, ki üretimden dönecek bir `0`'ın *"duplikasyon
+yok"* mu *"sorgu bozuk"* mu olduğu ayrılabilsin). İki cümle **uyumludur**. ADIM 117'deki gerçek
+çelişkiden **farklıdır** ve öyle raporlandı.
+
+### ÜÇÜNCÜ DERS — İKAME BİR YIĞINDAN OKUNAN `0`, BİR SAYI DEĞİL BİR YALANDIR
+
+Erişilebilir bir Postgres **vardı** ve betik oraya karşı koşturulabilirdi. **Koşturulmadı:**
+o veritabanı farklı provision edilmiş bir dev yığınıdır ve oradan dönecek `0`, *"duplikasyon
+yok"* değil *"başka bir yerde duplikasyon yok"* demektir — tam olarak §"Betiğin doğrulanması"nın
+negatif kontrolle satın aldığı ayrımı çöpe atardı (**ADIM 109 emsali**). Kutu **`[x] sayılamadı`**
+işaretlendi ve **üç gerekçesi yeniden ölçülerek** yazıldı.
+
+**Ama betiğin ÜÇÜNCÜ bloğu (kısıt hâlâ yok mu) VERİ değil ŞEMA sorusudur ve KOŞTURULDU** —
+migration kaynağından, veritabanından bağımsız olarak. **UNIQUE kısıt bugün de yok** → `A`
+ileride hâlâ ucuz.
+
+### Sevk edilen
+
+| Sembol | Ne oldu |
+|---|---|
+| `readiness.py::resolve_trade_log_batch` | `ORDER BY created_at DESC, record_batch_id DESC LIMIT 1` |
+| `readiness.py::resolve_signal_revision` | `ORDER BY created_at DESC, normalized_revision_id DESC LIMIT 1` |
+| `readiness.py::resolve_trade_log_batches` | **YENİ** — `DISTINCT ON`, aynı toplam sıra |
+| `readiness.py::resolve_signal_revisions` | **YENİ** — Trading Signal yarısı |
+| `readiness_check.py::_build_item_inputs` | döngüden **ÖNCE** iki batch okuma |
+| `readiness_check.py::_resolve_external` | **`session` KALDIRILDI** → saf map lookup |
+| `query_budgets.json` | `queries_large` 18 → **8**, `per_item` 1 → **0** |
+
+**`_resolve_external`'ın `session`'ı bilerek alındı.** Tek çağıranı vardı, dolayısıyla opsiyonel
+bir `mirrors=None` seam'ine (P4 deseni) gerek yoktu; parametreyi zorunlu yapmak fonksiyonu **saf**
+hâle getirdi ve N+1'in geri gelmesini bir dikkat meselesi olmaktan çıkarıp **yapısal olarak
+imkânsız** kıldı — kapsamında session yok.
+
+**`per_item` 1 → 0 bir performans düzeltmesi DEĞİL, imzanın SONUCUDUR.** Beş dalgadır bilerek
+1'de duruyordu (P3 / P-C2 §D.2). Kural `query_budgets.json`'ın `note`'una yazıldı:
+**kazananı kararsız olan bir bacağı batch'leyerek `per_item` düşürme** — o bir onarım değil,
+sessiz bir ürün kararıdır.
+
+### ÜÇ NEGATİF KONTROL, ÜÇÜ DE AYIRT EDİCİ
+
+1. **batch kaldırıldı** → **slope assertion** kırmızı: `1.0 queries per external work object
+   item (recorded 0) — 8 at n=1 vs 18 at n=11`. Kazanan testleri **yeşil kaldı**.
+2. **per-item kazanan ters** (yalnız trade_log) → yalnız iki Trade Log testi, yalnız **kazanan**
+   assertion'ında. Trading Signal testleri ve bütçe testi **yeşil** — iki tablo, iki ayrı ifade.
+3. **yalnız BATCH formu ters** → yalnız *"iki form aynı satırı döndürür"* assertion'ı; per-item
+   kazanan assertion'ı **yeşil geçti**.
+
+> **DÖRDÜNCÜ DERS — GÖLGEYİ KAYDETMEKLE YETİNME, KALDIR (ADIM 101 kuralı, proaktif).** NC-1'in
+> ilk **iki** denemesi `queries_small`/`queries_large` üzerinde kırmızı verdi; o assertion'lar
+> slope'u **gölgeliyor**. Kontrol *"kırmızı verdi"* diye kabul edilmedi — tavanlar geçici olarak
+> `999`'a çıkarılıp gölge **kaldırıldı** ve slope assertion'ının kendisi (satır 213) ölçüldü.
+> Ayrıca ilk denemem **item başına İKİ okuma** yapıyordu, yani N+1'i değil beceriksiz bir
+> kontrolü ölçüyordu; sevk-öncesi şekle (**tek** okuma, kind'a göre dallanan) yeniden kuruldu.
+
+### DÜRÜST SINIR
+
+- **Üretim duplikasyon sayısı ALINMADI** ve tahmin edilmedi → **`A` AÇIK KALIR**.
+- **B belirsizliği KARARA BAĞLAR, KALDIRMAZ.** Duplikasyon oluşmaya devam edebilir ve artık
+  sessizce **tolere edilir**. Bunu bir UNIQUE kısıt sanma — değildir, ölçüldü.
+- **Duplikasyon VARSA Ready Check cevabı oynayabilir** — bilerek: rastgele cevap belirlenimli
+  bir cevaba döner. Yoksa hiçbir cevap oynamaz.
+- **§Ölçüm 4'ün kusuru ÇÖZÜLMEDİ** (#854); G15'in **hiçbir** seçeneği onu çözmez — orada satır
+  sayısı 2 değil **0**'dır.
+- **Frontend'e sıfır satır dokunuldu** → frontend kapıları **koşulmadı**.
+- **Migration yok** → alembic up/down/up **koşulmadı** (koşacak yeni revision yok).
+
+### NUMARA — DOSYA YOLUYLA ÖLÇÜLDÜ, İKİ KEZ
+
+Oturum başında son kayıt **ADIM 117** idi ve iki açık PR (#850, #851) **ikisi de**
+`docs/ADIM118_LANDED_KICKOFF.md` ekliyordu. Oturum çalışırken **dördü de indi**: #851 kendini
+renumber edip **118 ve 119'u birlikte** aldı. Dal `stage-119` adıyla açılmıştı, kapanışta
+**`stage-120`**'ye taşındı. **Boş görünen bir numara güvenli numara değildir** (ADIM 100).
+
+**Ve `docs-history-guard` bunu YAKALADI:** bayat tabanla atılan commit ADIM 118 + 119 kayıtlarını
+düşürüyordu; kapı #590/#604 desenini adıyla bildirip **reddetti**. Çare `ENTROPIA_DOCS_GUARD=off`
+**değil**, kapının kendi tavsiyesi oldu: dal `origin/main` üzerine **rebase** edildi (*"Update
+branch"* düğmesi **kullanılmadı**, ADIM 93/94) ve kirli belge değişikliği **`git stash` ile
+değil** bir patch dosyasıyla taşındı (stash yığını worktree'ler arası **paylaşımlıdır**).
+Tavan rebase **sonrası yeniden ölçüldü** — `8/8, slope 0`, tam tavanda.
+
+### C6 SIRASI — ÜRÜN SAHİBİ KENDİ KURALINI BİLİNÇLİ GEÇERSİZ KILDI
+
+Görev *"C6 inmediyse DUR"* diyordu. Oturum başında **inmemişti** (ölçüldü: G11'in kodu
+`backend/src`'te sıfır hit; #851 açıktı) ve bu **ürün sahibine gösterildi**; cevabı *"TAM devam"*
+oldu. Slice yazılırken **#851 indi**, yani sıra **fiilen** de sağlandı. `C6`'nın G11/G12 yarısı
+(admission blocker'ları) **hâlâ inmemiştir** — ADIM 119'un kendi başlığı bunu söylüyor.

@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 119 landed — `C6`'nın OD-1/OD-6 yarısı sevk edildi; P2/P8'in kapıları BU PR AÇIKKEN İMZALANDI
 

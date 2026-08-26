@@ -91,9 +91,7 @@ async def _signal(
         NormalizedSignalEventRevision(
             normalized_revision_id=revision_id,
             source_asset_id=asset_id,
-            status=(
-                NormalizedRevisionStatus.SUCCEEDED if ok else NormalizedRevisionStatus.FAILED
-            ),
+            status=(NormalizedRevisionStatus.SUCCEEDED if ok else NormalizedRevisionStatus.FAILED),
             accepted_count=accepted,
             skipped_count=0,
             events=[],
@@ -242,8 +240,7 @@ async def test_signal_newest_revision_wins_and_survives_planner_variation(sessio
         per_item = await readiness_repo.resolve_signal_revision(session, _PIN)
         assert per_item is not None
         assert per_item.normalized_revision_id == "nsrev_newer", (
-            f"per-item reader picked {per_item.normalized_revision_id} "
-            f"under seqscan={seqscan}"
+            f"per-item reader picked {per_item.normalized_revision_id} under seqscan={seqscan}"
         )
         assert (per_item.accepted_count, str(per_item.status)) == (0, "failed")
         batched = await readiness_repo.resolve_signal_revisions(session, [_PIN])
@@ -256,12 +253,8 @@ async def test_signal_created_at_tie_is_broken_by_pk_in_both_forms(session) -> N
     """The Trading Signal half of the totality claim."""
     asset_id = await _source_asset(session)
     same = datetime(2026, 4, 4, tzinfo=UTC)
-    await _signal(
-        session, asset_id, revision_id="nsrev_aaa", created_at=same, accepted=1, ok=True
-    )
-    await _signal(
-        session, asset_id, revision_id="nsrev_zzz", created_at=same, accepted=9, ok=True
-    )
+    await _signal(session, asset_id, revision_id="nsrev_aaa", created_at=same, accepted=1, ok=True)
+    await _signal(session, asset_id, revision_id="nsrev_zzz", created_at=same, accepted=9, ok=True)
     await session.commit()
     session.expire_all()
 
@@ -287,9 +280,7 @@ async def test_absent_pin_is_absent_from_the_batch_maps(session) -> None:
     fall through to a query with an empty ``IN ()``.
     """
     asset_id = await _source_asset(session)
-    await _batch(
-        session, asset_id, batch_id="btch_only", created_at=_NEWER, accepted=1, ok=True
-    )
+    await _batch(session, asset_id, batch_id="btch_only", created_at=_NEWER, accepted=1, ok=True)
     await session.commit()
     session.expire_all()
 

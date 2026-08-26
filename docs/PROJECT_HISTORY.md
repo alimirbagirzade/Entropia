@@ -16275,3 +16275,187 @@ değil.
 
 `docs/ADIM115_LANDED_KICKOFF.md` · `tests/integration/test_shared_clock_worker_branch.py` ·
 `tests/unit/oracles/test_oracle_portfolio_containment_gate.py`.
+
+## ADIM 116 — unified portfolio Result'ının PROVENANCE'ı sevk edildi: OKUYUCU TAMDI, YAZICI HİÇ VAR OLMAMIŞTI — BİR SINIFLANDIRICI, SINIFLANDIRACAĞI KANITI KİMSE YAZMIYORSA SESSİZCE "unknown" DÖNER (PR #840)
+
+**Taban `a57e552`, dal rebase sonrası `8a1d52d` (ADIM 115 = #839) üzerine oturur.**
+**ÜRÜN KODU DEĞİŞTİ** (dört dosya, `backend/src`) ama **hiçbir sayı oynamadı**: migration
+**YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS`
+= **`future_dev` (KALDIRILMADI)** · kabul borcu tavanları **el değmedi** (54/6 · A1 B21 C6
+D32) · blocker sayısı **DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+
+### Kapatılan boşluk — ve görevin öncülünün DÜZELTİLMESİ
+
+Görev *"`project_portfolio_run` ve `build_portfolio_manifest` unwired"* diyordu.
+**Yarısı bayattı ve ölçülerek düzeltildi:** `project_portfolio_run`'ın üretim çağıranı
+**vardı** (`C4`/E5 = #799 + #805; `CLAUDE.md`'nin *"sıfır importer"* bloğu ADIM 59'dan
+kalma). HARD RULE uygulandı, **duplicate fix yazılmadı**.
+
+**Gerçek boşluk daha dar ve daha keskindi.**
+`domain/backtest/portfolio_mode.py::resolve_portfolio_simulation_mode` `unified_clock`'u
+**TEK** şeye bağlar: Result'ın kendi manifest snapshot'ındaki `portfolio_simulation`
+bölümünün `policy_versions.portfolio_manifest_version` alanı. O bölümü **üretimde hiçbir şey
+yazmıyordu**; `build_portfolio_manifest`'in üretim çağıranı **hiç yoktu**. Yani paylaşımlı
+saatte gerçekten ko-simüle edilmiş her Result **`unknown`** okunuyordu — hem detay sayfasında
+hem toplu History indeksinde.
+
+**Okuyucu tarafı eksiksizdi ve doğruydu** (bayrağa bakmıyor, iki yüzey aynı kuralı paylaşıyor,
+`get_portfolio_mode_markers` batched). **Eksik olan yazıcıydı, ve o hiç yazılmamıştı.**
+
+### Sevk edilen
+
+* **`execution/portfolio_projection.py::build_portfolio_provenance` (YENİ).** Bölümü biten
+  koşudan + run manifest'inin **kendi değişmez pinlerinden** kurar. **Bilerek `execution/`
+  İÇİNDE**: `execution.provenance` contained bir faz-döngüsü modülü, üretim importer'ları
+  **imzalı** bir allowlist, ve containment gate o import'u `execution/` **DIŞINDAKİ** her
+  üretim modülünde tarar. Bölümü worker'da kurmak imzalı listeyi **üçüncü, imzasız** bir
+  modülle genişletirdi. Worker seam'in **ÇAĞIRANI** kalır, faz döngüsünün sözlüğünün
+  **IMPORTER'I asla** — `C3`/`C4`'ün döngünün kendisi için kurduğu şeklin aynısı.
+* **`jobs/backtest_engine.py`** — paylaşımlı dal bölümü projeksiyonla **AYNI `try` içinde** ve
+  kalıcı hiçbir şey yazılmadan **önce** kurar, ikisini `_UnifiedOutcome` ile `create_result`'a
+  verir. `PinnedItem` artık participant'ların **zaten** kurulduğu `pin_ordinal`'ı taşır.
+* **`repositories/backtest.py`** — `create_result` bölümü Result'ın manifest **SNAPSHOT**'ına
+  pinler (doc 15 §12), run'ın manifest satırına **değil**, ve **kopyalar, mutate etmez**.
+  Okuyucu ile yazıcı artık **tek sabiti** paylaşır (iki literal yerine).
+* **`execution/provenance.py`** — `_money_str` → **`money_str`** (public), böylece bölüm bir
+  sleeve'i `sleeve_amount_divergences`'ın karşılaştırdığı **birebir aynı** yazımla yazar.
+
+### ADJUDICATED — `manifest_hash` RUN'ın admission hash'i olarak KALIR
+
+Bölüm Result'a **sonradan** eklenir (birleşik eksen, tick sayısı, ledger digest'i admission
+anında **var olamaz**). Soru şu: snapshot'ın `manifest_hash`'i yeniden türetilsin mi?
+
+**HAYIR, ve gerekçe sayılabilir:** `manifest_hash` **RUN'ın KİMLİĞİDİR** (doc 15 §7, §8.4
+*"retry -> new manifest hash"*); Result'ı run'ına bağlar ve her export'un
+`source_manifest_hash`'ine **ileri taşır**. Genişletilmiş belgeyi yeniden hash'lemek o zinciri
+**birleşme noktasında çatallardı** (`result.manifest_hash != run.manifest_hash`).
+
+Bölüm bunun yerine **kendi kendini tarif eder**: `PortfolioManifest.identity` kendi
+`execution_content()`'i üzerinden hesaplanır — deponun `execution_key` ↔ `manifest_hash`
+ikilisinde **zaten** var olan *"örtüşen içerik üzerinde iki hash"* şeklinin aynısı.
+
+**BEDELİ AÇIKÇA YAZILIYOR:** unified bir Result için snapshot'ın hash'i **saklanan belgenin
+tamamını kapsamaz**. Bu, bu slice'ın zayıflattığı **tek** özelliktir ve **iki yönde birden**
+pinlidir: bağımsız Result'ın snapshot'ı hâlâ run manifest'ine **bayt bayt** hash'lenir
+(`test_an_independent_results_snapshot_still_hashes_to_its_run_manifest`), unified olanınki
+**bilerek** hash'lenmez (`test_a_unified_result_keeps_its_runs_manifest_hash_as_its_identity`).
+Örtük bırakmak, bir denetçinin bunu kusur sanmasına yol açardı.
+
+### ASIL DERS — BİR ÖLÇÜM, ÖLÇTÜĞÜ ŞEYİN YALNIZ BİR YARISINI KAPSAYABİLİR
+
+**NC-1 bu slice'ın en önemli ölçümüdür ve tek başına bir cümledir:** bölüm Result sınırında
+sökülünce (yani **27C öncesi dünya birebir**) yeni testler kırmızı olur ve **önceden var olan
+ON dosyalık portföy/worker/containment kümesinin ONU DA YEŞİL KALIR.** Boşluğun *iddiası*
+değil, **ÖLÇÜMÜ**: mevcut hiçbir test onu yakalayamazdı.
+
+**İKİNCİ DERS — NEGATİF KONTROL KÜMESİ DE EKSİK OLABİLİR, ve bunun bedelini bu slice ödedi.**
+İlk NC kümesi **iki** containment dosyası taşıyordu. Ağaçta **ALTI** per-modül importer
+guard'ı (`_imports_provenance` · `_imports_portfolio_ledger` · `_imports_intents` ·
+`_imports_arbitration` · `_imports_attribution` + unified clock) **artı iki gate** var. Eksik
+küme yüzünden ilk commit `resolve_policy`'yi `portfolio_projection.py`'ye import etti ve
+**arbitration allowlist'inin DÖRDÜNCÜ importer'ı** oldu — o liste **insan imzalı**, üç adlı
+modülde, ve kendi docstring'i *"üçüncü importer zaten kırmızı build"* diyor.
+`test_the_arbitration_layer_is_reachable_only_through_the_phase_loop` **haklı olarak** kırmızı
+verdi. **YAKALAYAN ŞEY TAM SUITE OLDU, odaklı koşu değil** (ADIM 76'nın dersinin birebir
+tekrarı, ve bu sefer bir CI turuna mal oldu).
+
+**ÇÖZÜM LİSTEYİ GENİŞLETMEK DEĞİL, IMPORT ETMEMEKTİ.** `build_portfolio_manifest` artık
+çözülmüş `ConflictPolicyRule`'un yanında **ham token'ı da** kabul eder ve token'ı **kendisi**
+çözer — ki zaten onun işidir: çözülmüş kuralı manifest'e pinlemek, `provenance.py`'nin o üç
+addan biri olmasının **tam sebebidir**. Mevcut çağıranlar kural geçer, etkilenmez. Davranış
+değişmedi: `resolve_policy(None)` tanım gereği KEEP_SEPARATE. **NC-1 ondan sonra ON dosyalık
+tam kümeye karşı yeniden koşuldu ve hâlâ ayırt edici** — ölçüm zayıflamadı, güçlendi.
+
+### DÖRT NEGATİF KONTROL, DÖRDÜ DE AYIRT EDİCİ — ve İKİSİ YENİDEN NİŞANLANDI
+
+| # | Kusur | Hedef | Önceden var olan küme (10 dosya) |
+|---|---|---|---|
+| NC-1 | bölümü Result sınırında sök (27C öncesi dünya) | kırmızı | **YEŞİL** |
+| NC-2 | bölümü **koşulsuz** pinle | kırmızı | yeşil |
+| NC-3b | **SAKLANAN** bölümün `identity`'sini boz | kırmızı | yeşil |
+| NC-4b | pin ordinal'lerini **permüte et** | kırmızı | yeşil |
+
+**NC-3'ün ilk yazımı REDDEDİLDİ:** `PortfolioManifest.__post_init__`'i yamalıyordu ve
+provenance **unit** testlerini de kırmızıya çeviriyordu → *doğru sebep, yanlış kapsam* (ADIM
+105'in dersi). Zaten doğrudan kapsaması olan bir kodda kusur açmak, assertion'ın **ateşlendiğini**
+gösterir ama **gerekli olduğunu** göstermez. Yalnız **persist edilen** bölümü bozacak şekilde
+yeniden kuruldu.
+
+**NC-4'ün ilk yazımı REDDEDİLDİ ve REDDİ BİR BULGU DOĞURDU:** her item'a `pin_ordinal=0`
+veriyordu, bu duplicate-ordinal reddini tetikleyip **RUN'ı** düşürüyordu → ordinal
+assertion'ını izole edemiyordu. Permütasyon olarak yeniden kuruldu ve **bu slice'ın KENDİ
+testindeki bir TOTOLOJİYİ yakaladı**: `ordinals == sorted(ordinals)` **bedavadır**, çünkü
+`pinned_items_from_identities` çıktısını zaten `(pin_ordinal, item_id)` ile sıralar — her
+item'a liste konumunu damgalayan bir kusur o assertion'ı **geçerdi**. Assertion artık her
+ordinal'i manifest'in **kendi `mainboard_items` sırasına** karşı doğrular.
+
+### BİR TEST ÖNCÜLÜ YANLIŞTI ve düzeltilmesi davranışı DAHA İYİ anlattı
+
+İlk yazım *"bölümü sökülmüş bir Result `legacy_sequential` okunur"* diye assert ediyordu.
+**YANLIŞ: `unknown` okunur, ve doğrusu budur.** Böyle bir satır unified engine kind'ı taşır
+ve sequential uyarısını **taşımaz** → iki ko-simülasyonu ayırt edecek kanıt **gerçekten
+yoktur**. `portfolio_mode`'un kendi yazılı kuralı (*"kanıtın yokluğu kanıt değildir"*) tam
+burada hak eder: *"legacy"* diye tahmin etmek, **gerçek bir portföy değerlemesini** sıralı bir
+fold gibi tarif ederdi.
+
+### GERİYE DÖNÜK UYUMLULUK — VARSAYILMADI, ASSERT EDİLDİ
+
+* Bağımsız çok-item'lı Result: bölüm **YOK**, hâlâ `legacy_sequential`, snapshot'ı run
+  manifest'ine **bayt bayt** hash'lenir.
+* Bölüm var olmadan yazılmış Result: `unknown`, ve **İKİ BAYRAK DÜNYASINDA DA** aynı — yani
+  sessiz yeniden hesaplama **yok**, `unified_clock` olarak yeniden etiketleme **yok**. Okumak
+  **yazmaz**: satır geri doldurulmaz (doc 15 §3.2).
+* `legacy_sequential` etiketi bayrak kalkıkken de **kıpırdamaz** (ayrı satır şekli, ayrı
+  kusur: bu satır kanıtı **taşır**, yani bayrağa bakan bir sınıflandırıcı *kendinden emin*
+  yanlış cevap verirdi, dürüst bir `unknown` değil).
+
+### DÜRÜST SINIR
+
+* Tam suite bu container'da koştu; **ilk koşu 4353 passed / 1 failed, coverage %93.92** — o
+  bir hata yukarıdaki arbitration guard'ıydı ve ikinci commit onu kapattı. Rebase sonrası
+  ağaçta **320 passed** (altı importer guard'ı + iki gate + #839'un yeni case'leri + bu
+  slice'ın 10'u birlikte). **Geçen sayının ve coverage'ın otoritesi CI'dır.**
+* **Frontend'de sıfır satır** → frontend kapıları **yerelde koşulmadı**; CI'ın
+  `Frontend — lint, typecheck, build, test` işi bu head'de **yeşil**. `unified_clock` değeri
+  zaten temsil edilebilirdi ve `ResultDetail.tsx` onu `comparable_with_unified_clock`
+  üzerinden zaten işliyordu.
+* **Containment KALDIRILMADI.** `SHARED_ALLOCATION_STATUS` = `future_dev`; lift fixture'ı
+  test sahipli ve `backend/src`'ten yapısal olarak ulaşılamaz.
+* **`data_revisions` per-item olarak pinlenMEDİ, bilerek:** run manifest'i böyle bir harita
+  taşımıyor; taşıdığı veri provenance'ı (`tick_data`, `data_time_context`) **run düzeyinde**
+  ve aynı manifest'te zaten duruyor. Hiçbir şey geçmek *"per-item kayıt yok"* der; uydurmak
+  bir provenance yalanı olurdu (ADIM 66 emsali: arkasında sevk edilmiş alan olmayan bir adı
+  `[]` diye yayımlama).
+* **`divergences` BOŞ ve bu bir ANLAŞMA DEĞİL, ÖLÇÜM YOKLUĞUDUR:** run manifest'i allocation
+  **config**'ini (`config_hash`) pinler ama plan revizyonunun donmuş `derived_amounts`
+  payload'ını **pinlemez** → karşılaştırılacak bağımsız bir donmuş önizleme yok, o yüzden
+  `build_portfolio_manifest`'e `plan=None` geçilir. Gerekçe `_allocation_provenance`'ın
+  docstring'inde yazılı.
+
+### ORTAM TUZAKLARI (üçü de bu oturumda birinci elden)
+
+1. **Arka plan bildiriminin *"exit code 0"*'ı sarmalayıcının SON komutunun kodudur.** Gerçek
+   `FULL_EXIT=1`'di. CLAUDE.md bunu zaten yazıyor; yine de yaşandı. **Çıktıyı dosyaya yaz,
+   `$?`'i AYRI oku, ve bildirime değil dosyaya bak.**
+2. **Yanlış cwd → sistem Python.** Bir koşu repo kökünden başladı, `rootdir` `backend` değil
+   `/home/user/Entropia` oldu ve **203 collection error** (`No module named 'yaml'`) verdi.
+   Diff'le ilgisi yoktu.
+3. **`kill -9`'lanmamış bir suite, sonraki koşuyu SAHTE KIRMIZI yapar.** Altı integration
+   testi `DeadlockDetectedError` verdi; sebep kod değil, hâlâ koşan **eski** bir pytest
+   süreciydi (öldürdüğümü sanmıştım, pattern eşleşmemişti). **Bir kırmızıyı kodun sanmadan
+   önce `ps -eo pid,cmd | grep bin/pytest` çalıştır.**
+4. **Contract testleri MİGRATE EDİLMİŞ `DATABASE_URL` DB'si ister** (ADIM 97 emsali):
+   `test_auth_mode_login_gate` `relation "human_users" does not exist` ile düşüyordu; ilgisiz,
+   `alembic upgrade head` sonrası geçti.
+
+### SIRA — #839 (ADIM 115) BU PR AÇIKKEN İNDİ
+
+Dal `a57e552`'den kesilmişti; #839 araya girdi ve **çakışma yalnız üretilmiş üç artefaktta**
+oldu (iki dal da test ekledi → collected sayısı ayrıştı). **REBASE edildi** (*"Update branch"*
+düğmesi **kullanılmadı**, ADIM 93/94 emsali), çakışma main'in sürümü alınıp
+`generate_repository_facts.py` **yeniden koşularak** çözüldü — **elle değil, araçla**.
+Birleşik sayı **3777 in 358 files**, `--check` yeşil. Tavan **taşınmadı**: kabul ratchet'i
+merged ağaçta taze ölçüldü, **54/6 · A1 B21 C6 D32 — DEĞİŞMEDİ** (bu slice hiçbir kabul
+kriteri kapatmıyor; kapattığı şey bir **uygulama** boşluğu).
+
+`PROJECT_HISTORY.md` §ADIM 116 · `docs/ADIM116_LANDED_KICKOFF.md`.

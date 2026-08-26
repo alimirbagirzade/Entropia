@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 118 landed — G14/`C` sevk edildi; KAPISINI KAPATMIYOR (G8 paralel olarak #847 ile indi)
 

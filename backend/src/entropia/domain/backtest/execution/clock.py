@@ -38,7 +38,12 @@ Design notes that are contracts, not taste:
   merge rule canon does not supply, and dropping one would silently discard pinned data.
 * **Bar timestamp == decision time** (ADR §4.3, adjudication A-1): the clock keeps the
   shipped convention and does NOT branch on ``record_time_basis``. Honoring that field is
-  OD-1 and would be a second semantic change landing in the same digest refresh.
+  OD-1 and would be a second semantic change landing in the same digest refresh. OD-1(a)
+  is answered the other way instead: a shared run whose pinned revisions DISAGREE about
+  the basis is refused at admission
+  (`allocation/shared_mode_admission.py::mixed_record_time_bases`, ADIM 119), so this
+  clock only ever folds revisions that already share one convention — it still branches
+  on nothing.
 * **Fail closed, never skip.** A bar whose timestamp cannot be placed in time, or a stream
   that goes backwards, raises. ADR §11 / Modül 12 §9: a worker that cannot place a tick
   fails the run rather than continuing on a silently broken axis.

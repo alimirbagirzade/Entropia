@@ -1,7 +1,10 @@
 # DST fold ve DST gap: sessizce çözülmeye devam mı, `TIME_POLICY_INVALID` blocker'ı mı? (kapı **G8**)
 
-> **BU BELGEDE HİÇBİR KARAR VERİLMEMİŞTİR.** Yazarın rolü **hazırlık**tır. §Karar'ın
-> imza bloğu **boştur** ve onu yalnız ürün sahibi / maintainer doldurabilir.
+> **KARAR İMZALANDI — 2026-08-26: `A1 + B2 + C1`.** Belge hazırlık olarak doğdu; imzalar
+> §Karar 1/2/3'te **doldurulmuş** hâlde durur. Özgün banner şunu diyordu ve artık tarihseldir:
+> *"BU BELGEDE HİÇBİR KARAR VERİLMEMİŞTİR … imza bloğu boştur."*
+>
+> Yazarın rolü **hazırlıktı**; kararı ürün sahibi / maintainer verdi.
 > `closure_g11_deferred_fill_admission_2026-08-18.md`, `closure_g4_cap_overflow_2026-08-17.md`
 > ve `closure_g15_external_row_winner_2026-08-17.md` ile aynı disiplin.
 
@@ -103,7 +106,14 @@ offset taşımasıdır ve bu ürünün kontrolünde değildir.
 | **A2** | **BLOKLA** — belirsiz hücre `RESEARCH_DATA_TIMEZONE_UNRESOLVED` / `MARKET_DATA_TIMEZONE_UNRESOLVED` üretir | `_localize`'a `fold` belirsizliği tespiti + iki okuyucuda simetrik değişiklik | **DST gözeten `custom` kaynakların bir kısmı artık onaya giremez**; bugün geçen veri yarın reddedilir |
 | **A3** | **UYAR, bloklamA** — çözüm sürer ama bir quality-rule uyarısı yazılır | orta yol; `quality_rules.py` zaten uyarı üretebiliyor | uyarı okunmazsa A1 ile aynı sonuç |
 
-☐ **Seçim:** ____   ☐ **İmza:** ____________   ☐ **Tarih:** __________
+☑ **Seçim:** **A1 — bugünkü davranışı ONAYLA** (ilk/EDT occurrence kuraldır)   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-26
+
+> **Gerekçe (imzanın parçasıdır):** fold'un savunulabilir bir cevabı **vardır** — saat gerçekten
+> iki kez yaşandı ve ikisinden birini seçmek gerçek bir soruya verilen gerçek bir cevaptır.
+> İkinci occurrence **hiçbir seçenekte** kurtarılamaz (offset'siz dize `fold=1`'i ifade edemez;
+> Ölçüm 5 — biçimin sınırı, uygulama tercihi değil), o yüzden seçim yalnız *savunulabilir bir
+> instant'ı kabul etmek* ile *gerçek bir saati reddetmek* arasındaydı. **Kod değişmedi**; üç
+> characterization testi "karara bağlanmış davranış"a terfi etti.
 
 ## Karar 2 — **GAP**: hiç yaşanmamış saat
 
@@ -118,7 +128,19 @@ offset taşımasıdır ve bu ürünün kontrolünde değildir.
 > ucuzdur. `A2 + B1` ise ölçülen tek **tutarsız** kombinasyondur: daha savunulabilir hâli
 > bloklayıp daha savunulamaz hâli geçirir.
 
-☐ **Seçim:** ____   ☐ **İmza:** ____________   ☐ **Tarih:** __________
+☑ **Seçim:** **B2 — BLOKLA** (gap hücresi conversion failure'dır)   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-26
+
+> **Gerekçe (imzanın parçasıdır):** gap'in savunulabilir bir cevabı **yoktur** — seçilecek
+> instant yok, o yüzden normalize etmek var olmayan bir an'ı **icat eder**. Yukarıdaki §Not'un
+> ölçtüğü asimetri budur ve `A1 + B2` onun doğrudan sonucudur.
+>
+> **Uygulandı (2026-08-26):** kural TEK yerde — `shared/dst.py::is_nonexistent_local_time`
+> (PEP 495 round-trip: fold kendine döner, gap dönmez) — ve **iki okuyucu birlikte** çağırır
+> (`validation_rules.py::_localize`, `funding.py::parse_utc`), Ölçüm 1'in şart koştuğu gibi.
+> Yeni sözcük dağarcığı **gerekmedi** (Ölçüm 3): sevk edilmiş `timezone_unresolved` bayrağının
+> **üçüncü sebebi** oldu. **İki negatif kontrol koşuldu**, ikisi de simetrik kırmızı verdi: tek
+> bir okuyucuyu geri almak hem gap testini **hem de** iki okuyucunun anlaşma testini kırıyor —
+> yani "ikisi birlikte değişmelidir" kuralı **canlı olarak** korunuyor.
 
 ## Karar 3 — KAPSAM (yalnız A2 ya da B2 seçilirse anlamlı)
 
@@ -128,7 +150,20 @@ offset taşımasıdır ve bu ürünün kontrolünde değildir.
 | **C2** | **+ geriye dönük denetim** — `timezone_audit.py` desenli **READ-ONLY** rapor | K-01 emsali; hiçbir satır mutate edilmez, *"at risk"* listesi üretilir |
 | **C3** | **+ geriye dönük geçersiz kılma** | **ÖLÇÜLDÜ, ÖNERİLMİYOR:** onaylı revision'lar tamamlanmış run manifest'lerine pinlidir (doc 15 §15, INF-04/INF-05); onları geçersiz kılmak sevk edilmiş Result'ların girdisini değiştirir |
 
-☐ **Seçim:** ____   ☐ **İmza:** ____________   ☐ **Tarih:** __________
+☑ **Seçim:** **C1 — yalnız ingest/approval** (yeni revision'lar)   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-26
+
+> **Gerekçe (imzanın parçasıdır):** onaylı revision'lar tamamlanmış run manifest'lerine
+> **pinlidir**; onlara dokunmak sevk edilmiş, **değiştirilemez** Result'ların *girdisini*
+> değiştirirdi. Migration yok, backfill yok, hiçbir saklanan satır değişmiyor.
+>
+> **C2 REDDEDİLMEDİ, ERTELENDİ.** Read-only denetim raporu (`timezone_audit.py` deseni, K-01
+> emsali) istendiği anda **ayrı bir slice** olarak eklenebilir ve bu imza onu engellemez —
+> hangi revision'ın gerçekten bir gap hücresi taşıdığı object storage'daki **baytlarda** yaşar,
+> veritabanında değil (Ölçüm 4), o yüzden çıktısı bir migration değil bir **rapordur**.
+>
+> **DÜRÜST SINIR:** `C1` geriye dönük hiçbir şey düzeltmez. Bugün APPROVED olan ve bir gap
+> hücresi taşıyan bir revision **varsa**, o hücre hâlâ icat edilmiş instant'ıyla pinlidir ve bu
+> imza onu bulmaz. Bunu bilmenin tek yolu `C2`'dir.
 
 ---
 

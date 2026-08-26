@@ -110,7 +110,24 @@ açıklama metni, ve davranışı pinleyen **beş test dosyası** (`test_allocat
 >
 > **Kombinasyon serbesttir ve muhtemelen doğrusudur:** `C` **şimdi**, `A`/`B` `C9` öncesi.
 
-☐ **Seçim:** ____   ☐ **İmza:** ____________   ☐ **Tarih:** __________
+☑ **Seçim:** **`C` şimdi + `B` (KALDIR) `C9` öncesi**   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-26
+
+> **Gerekçe (imzanın parçasıdır):** `B`, `A`'ya tercih edildi çünkü NET'in kanonik tanımı
+> **yoktur** ve onu tanımlamak (`A`) beş ayrı ürün kararı + netleme aritmetiği + golden
+> fixture'lar açar; `B` çelişkiyi kökten bitirir. `C` **şimdi** imzalandı çünkü bugün
+> kullanıcıya söylenen şey karşı-olgusaldır ve bunu durdurmak migration gerektirmez.
+>
+> **`C` BU KAPIYI KAPATMAZ — belgenin kendi uyarısı geçerlidir ve burada tekrarlanır.** Ön
+> koşul 20 NET'in *anlamının* kararını ister, bildiriminin doğruluğunu değil. `C` inince
+> `G14` **AÇIK KALIR**; kapanışı `B`'nin sevkine bağlıdır.
+>
+> **AÇIK, VE BİLEREK:** **Karar 2** (`'NET'` taşıyan mevcut satırlar — `B1`/`B2`/`B3`) `B`
+> uygulanmadan **imzalanmalıdır**; bu imza onu kapsamaz. **Karar 3** (`C`'nin metni) `C`
+> yazılırken imzalanacaktır. **#544, `B` sevk edilene kadar KAPATILMAZ.**
+>
+> **Bu imza 2026-08-26'da verildi; `C` ve `B` HENÜZ UYGULANMADI.** Kod tarafında sıfır satır
+> değişti — imza ile sevkin arasındaki bu boşluk #720 emsalinin tersidir (orada sevk vardı,
+> imza yoktu) ve kapanana kadar açıkça böyle okunmalıdır.
 
 ## Karar 2 — YALNIZ `B` seçilirse: `'NET'` taşıyan mevcut satırlar
 

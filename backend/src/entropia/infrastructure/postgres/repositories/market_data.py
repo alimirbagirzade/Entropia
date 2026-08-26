@@ -414,9 +414,11 @@ async def find_approved_tick_revisions_for_instruments(
     ``ORDER BY created_at DESC, revision_id DESC LIMIT 1`` returns, because that order
     is **total**: ``revision_id`` breaks every ``created_at`` tie, so "the newest" is a
     single well-defined row per instrument and there is no ordering ambiguity for a
-    batch to resolve differently. (Contrast the external-import leg, whose readers key
-    on a column that is not UNIQUE and carry no ``ORDER BY`` at all — batching THAT is
-    a product decision about which row wins, not a performance change.)
+    batch to resolve differently. (The external-import leg keys on a column that is
+    still NOT UNIQUE and for a long time carried no ``ORDER BY`` at all, which is why
+    batching it was a product decision about which row wins rather than a performance
+    change. G15/Karar 4 signed **Seçenek B** and gave it the same total order, so
+    ``readiness.resolve_trade_log_batches`` now mirrors this function exactly.)
     """
     ids = list(dict.fromkeys(instrument_ids))
     if not ids:

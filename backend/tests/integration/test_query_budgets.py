@@ -846,17 +846,22 @@ async def test_ready_check_whole_operation(session) -> None:
       every strategy in that fixture pins the same package revision, so the per-item
       ``_resolve_strategy_payload`` read is absorbed by the identity map, which is the
       blind spot the file header already names;
-    * a trade-log composition is **8 -> 18**, i.e. exactly **one statement per item**.
+    * a trade-log composition **used to be 8 -> 18**, i.e. exactly one statement per
+      item, and is now **FLAT at 8** (measured, n=1 and n=11 alike).
 
-    That one statement is ``_resolve_external`` (`readiness_check.py:341`), called
-    inside ``for item, available in enabled:`` and issuing
-    ``resolve_trade_log_batch`` / ``resolve_signal_revision`` per row. It is leg 3 of
-    P-C2 §D.1 and it is **live and unrepaired on purpose**: batching it changes which
-    row wins when two items pin the same ``work_object_revision_id``, which is not
-    UNIQUE — an undecided product question (gate G15). P3 measures; it does not repair.
+    That one statement was ``_resolve_external``, called inside
+    ``for item, available in enabled:`` and issuing ``resolve_trade_log_batch`` /
+    ``resolve_signal_revision`` per row — leg 3 of P-C2 §D.1, the last live N+1 in
+    Ready Check. It stayed unrepaired for five waves **on purpose**, because batching it
+    decides which row wins when two rows share a ``work_object_revision_id``, and that
+    column is not UNIQUE: an undecided product question (gate G15). P3 measured; it did
+    not repair.
 
-    Recording 0 here would be false, and omitting the row to avoid the number is the
-    silence this gate exists to break.
+    It is repaired now because the question was **answered** — Karar 4 signed Seçenek B
+    and gave both readers a total order — not because the number was inconvenient.
+    Recording 0 before that signature would have been false; recording 1 now would be
+    equally false. The rule this row teaches is unchanged: **never lower a per_item by
+    batching a leg whose winner is undecided.**
     """
     await _principal(session, "user_1")
     await session.commit()

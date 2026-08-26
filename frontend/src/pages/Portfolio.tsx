@@ -472,8 +472,12 @@ function DraftEditor({
             </div>
             {/* Portfolio-level rules (doc 13 §8.4, cross-item). Both optional —
                 blank = no cap / keep separate (the pre-rules behaviour). The
-                server validates and pre-discloses the NET V1 downgrade as an
-                inline warning, rendered verbatim below. */}
+                server validates and pre-discloses the NET finding as an inline
+                warning, rendered verbatim below: NET has no canonical definition,
+                the two engines disagree about it, and containment means neither
+                runs today (G14 / GH #544). Verbatim is load-bearing — the server
+                words that warning against the current value of the containment
+                flag, so any copy made here would be frozen in one world. */}
             <div className="section-title-upper" style={{ marginTop: 12 }}>
               Portfolio rules
             </div>

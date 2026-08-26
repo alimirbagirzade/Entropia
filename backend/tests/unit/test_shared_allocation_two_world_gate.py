@@ -429,3 +429,112 @@ def test_containment_is_not_runtime_configurable() -> None:
         if "SHARED_ALLOCATION_STATUS =" in path.read_text(encoding="utf-8")
     ]
     assert writers == ["domain/allocation/capability.py"]
+
+
+# --------------------------------------------------------------------------- #
+# G14 Decision C — the NET notice, in BOTH worlds                              #
+# --------------------------------------------------------------------------- #
+def _net_warning(*, enabled: bool = True) -> str:
+    """The single CONFLICT_POLICY_NET_V1 message a NET plan produces."""
+    from entropia.domain.allocation.rules import validate_allocation
+
+    plan = _plan(enabled=enabled).model_copy(update={"conflict_policy": "NET"})
+    issues, _derived = validate_allocation(plan, item_refs=_refs())
+    net = [i for i in issues if str(i.code) == str(AllocCode.CONFLICT_POLICY_NET_V1)]
+    assert len(net) == 1, f"expected exactly one NET notice, got {len(net)}"
+    return str(net[0].message)
+
+
+def test_the_net_notice_is_worded_against_the_world_that_applies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G14 Decision C — the counter-factual half, and the reason a frozen string fails.
+
+    The shipped notice said the engine "executes NET conservatively as BLOCK_OPPOSITE".
+    Under containment that downgrade CANNOT happen — ``validate_allocation`` returns
+    ``([], None)`` for a disabled plan, so a NET notice only ever fires on an ENABLED plan,
+    and an enabled plan in this build always carries ``SHARED_MODE_NOT_IN_BUILD`` as well
+    (asserted below, so this is measured rather than assumed). The message therefore
+    described a world nobody was in.
+
+    Writing "nothing runs" instead would only move the lie to the other side of `C9`. So
+    the claim is DERIVED, and this asserts the derivation in both directions: the
+    containment clause appears exactly when containment applies, and the body — which is
+    true whatever the flag says — is identical in both worlds.
+    """
+    contained = _net_warning()
+    with _lifted(monkeypatch):
+        lifted = _net_warning()
+
+    # Anti-vacuity: the two worlds must actually differ, or every assertion below is free.
+    assert contained != lifted
+
+    # The clause that is true only under containment.
+    for clause in ("does not execute in this build", "does not happen"):
+        assert clause in contained, clause
+        assert clause not in lifted, f"a lifted build must not claim {clause!r}"
+
+    # ... and it is a PREFIX to a shared body, not a different message.
+    assert contained.endswith(lifted)
+
+    # The premise the containment clause rests on, measured rather than asserted by hand:
+    # an enabled plan in this build always also carries the containment blocker, and a
+    # disabled plan produces no issues at all (so no NET notice can escape the pairing).
+    codes = _validate(enabled=True)
+    assert str(AllocCode.SHARED_MODE_NOT_IN_BUILD) in codes
+    assert _validate(enabled=False) == []
+
+
+def test_the_net_notice_states_all_four_things_decision_3_requires(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G14 Decision 3 — the content half, kept separate from the wording half on purpose.
+
+    These are two different defect classes and neither test can see the other's: a message
+    can be perfectly counter-factual-aware and still omit that the phase loop refuses NET,
+    and it can name all four facts while freezing them into one world. Decision 3 lists the
+    four; this pins them by the claim each makes, in the body that ships in BOTH worlds.
+    """
+    with _lifted(monkeypatch):
+        body = _net_warning()
+
+    # (1) NET has no canonical definition -- the actual reason, not the missing clock.
+    assert "no canonical definition" in body
+
+    # (2) ... and the five undefined semantics are NAMED where they are enumerated, so the
+    # notice points at the list instead of shipping a second copy that can drift from it.
+    assert "NET_UNDEFINED_SEMANTICS" in body
+    for semantic in ("netting price", "position custody", "fee attribution"):
+        assert semantic in body, semantic
+
+    # (3) the sequential engine downgrades to BLOCK_OPPOSITE ...
+    assert "BLOCK_OPPOSITE" in body
+    assert "downgrade" in body
+
+    # (4) ... and the phase loop REFUSES it. This is the clause the shipped text lacked
+    # entirely, and the one that made the old notice more wrong over time, not less.
+    assert "REFUSES" in body
+
+    # The notice must remain actionable: naming a defect without naming the way out is how
+    # a warning becomes noise the user learns to scroll past.
+    assert "KEEP_SEPARATE" in body
+    assert "#544" in body
+
+
+def test_the_net_notice_does_not_import_the_phase_loop_to_say_this(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The five semantics are NAMED, never imported -- and that is a containment invariant.
+
+    ``NET_UNDEFINED_SEMANTICS`` lives in ``execution/arbitration.py``, a phase-loop module
+    whose importer allowlist is SIGNED
+    (``closure_participant_importer_allowlist_2026-08-18.md``). The gate that enforces it
+    is a TEXT scan for ``execution.arbitration import``, so an import added here to save
+    retyping five strings would widen a signed list by an unsigned module -- the exact
+    trade `C4`/E5 refused. This asserts the cheap alternative held.
+    """
+    source = (_SRC / "domain" / "allocation" / "rules.py").read_text(encoding="utf-8")
+    assert "execution.arbitration import" not in source
+    assert "from entropia.domain.backtest" not in source
+    # The pointer survives, so the reader can still find the list.
+    assert "NET_UNDEFINED_SEMANTICS" in source

@@ -271,6 +271,39 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 115 (worker'ın paylaşımlı saatinin
+> ARBİTRAJI, PR #839): ÜRÜN KODU DEĞİŞMEDİ — `backend/src`'te SIFIR SATIR.** Üç dosya: bir
+> integration modülü (+7 case), containment gate docstring'i, üretilmiş olgular (collection
+> 3758 → 3765). Tavanlar OYNAMADI (54/6 · A1 B21 C6 D32). Blocker sayısı DEĞİŞMEDİ (1 — yalnız
+> A-08), BLOCKED.
+> **Görev "wiring" istedi; WIRING İNMİŞTİ** (`C3` #777, `C4`/E5 #799+#805) → **duplicate fix
+> yazılmadı**. **TUZAK, ikinci kez: worker `iter_portfolio` çağırır ve çağırmak ZORUNDADIR** —
+> `run_portfolio` generator'ı tüketir, iptal kontrolü `async`'tir; ona çevirmek checkpoint #3b'yi
+> **silerdi**, yani görevin kendi CANCELLATION maddesini ihlal ederdi. Gate **ikisini birden**
+> grepler (`_LOOP_ENTRY_POINTS`).
+> **ASIL DERS: BİR DALIN KOŞTUĞUNU KANITLAMAK, O DALIN VAR OLMA SEBEBİNİ KANITLAMAZ** — `C4`'ün
+> dört olgusu dalın koştuğunu söyler; aynı anda karar veren iki item'ın **tek donmuş snapshot**
+> gördüğü, pin sırasının hiçbirini ayrıcalıklı kılmadığı, kapasitenin kardeşe geçmediği ve
+> koşunun yalnız pinlerinin fonksiyonu olduğu **hiç okunmamıştı** — ve durum sevk edilen
+> fixture'da **her koşuda oluşuyordu**. **YEDİ NEGATİF KONTROL, yedisinde de sevk edilen yedi
+> case YEŞİL KALDI. İkisi öğretici:** tek Strategy'yi **bileşik fold**'a yollamak sevk edilen
+> `!= UNIFIED_KIND` assertion'ını yeşil bırakıyor (Result sessizce yeniden fiyatlanıyor) →
+> **yolu ADIYLA assert et** (`v1_bar_replay`); sıralı fold'un **capability bayrağını** okuması
+> sevk edilen `engine_kind` assertion'ını yeşil bırakıyor (satırlar oynuyor, **etiket
+> oynamıyor**) → `C9` inince korunması gereken şey etiket değil **satırlardır**.
+> **KİMLİK ARACI ÖLÇÜLEREK SEÇİLDİ:** `result_artifact_checksum`'ın **dördü**; `diagnostics`
+> **bilerek dışarıda** — projeksiyonu satırı taze `diagnostic_id` ULID'iyle hash'ler, bayt bayt
+> aynı iki koşuda bile **yapı gereği** ayrışır; içeriği **doğrudan** karşılaştırılır.
+> **DÜRÜST SINIR:** A14'ün en güçlü okuması (aynı kompozisyon iki dünyada aynı baytlar) tek-item
+> için **KURULAMIYOR** — paylaşımlı kompozisyon sevk edilen dünyada **admission'da reddediliyor**,
+> ikinci dünya yok (`C9`'un borcu, docstring'e yazıldı) · frontend'de sıfır satır → frontend
+> kapıları KOŞULMADI · integration **gerçekten koştu** (hedef modül 7 → 14, containment ailesi
+> 44 passed / exit 0) ama tam suite + coverage **CI'ın otoritesinde**.
+> `PROJECT_HISTORY.md` §ADIM 115 · `docs/ADIM115_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Son dalga — ADIM 114 (Karar 1 İMZALANDI + uygulandı, PR #831): ÜRÜN KODU
 > DEĞİŞTİ (finansal) ama VARSAYILAN ALTINDA TEK BİR SAYI OYNAMADI — 50 golden digest BAYT BAYT

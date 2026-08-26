@@ -49,18 +49,22 @@ RUN set -eu; \
 # it listens on 8080 — which is why nginx.conf says `listen 8080`. The published
 # HOST port is unchanged, so nothing outside the container moves.
 FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
-# The floating `1.31-alpine` tag lags Alpine security releases: a CVE lands in the
-# distro repo days before upstream nginx rebuilds the image, and the Trivy gate
-# rightly refuses a fixable HIGH with no exception (CVE-2026-14456 shipped as
-# libcrypto3/libssl3 3.5.7-r0 while 3.5.8-r0 was already published). The `>=`
-# floor makes this fail-closed: if the mirror does not carry the fixed version
-# the BUILD stops, instead of a bare `apk upgrade` silently doing nothing and CI
-# going red fifty minutes later. Raise the floor only for a new CVE; any newer
-# release keeps satisfying it. The base image sets USER 101 and apk needs root,
-# so the switch is restored immediately — the security workflow's non-root check
-# reads the runtime uid.
+# The base tag still ships openssl 3.5.7-r0, which carries CVE-2026-14456
+# (unbounded memory growth in the QUIC server, HIGH, fixed in 3.5.8-r0). The
+# tag is floating, so this resolves itself the moment upstream rebuilds — until
+# then the release gate fails on a finding that HAS a published fix, and the
+# only alternatives were waiving it in .github/security-allowlist.json (an
+# exception needs a named owner and an expiry; nothing is currently waived and
+# that is the goal state) or pinning a digest we would then have to chase.
+# `apk upgrade` is scoped to the two openssl packages so it cannot quietly pull
+# an unrelated version bump into the runtime layer.
+#
+# This is the ONE root step in this stage and it exists only for the duration of
+# the upgrade: `USER 101` is restored immediately, because running wholly as
+# uid 101 is the entire reason this image is the `-unprivileged` variant (see
+# the note above). Do not let a later edit leave the stage as root.
 USER root
-RUN apk add --no-cache 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0'
+RUN apk upgrade --no-cache libcrypto3 libssl3
 USER 101
 # Deliberately NOT under conf.d/. The stock nginx.conf globs
 # `include /etc/nginx/conf.d/*.conf` inside its `http` block, so a header file

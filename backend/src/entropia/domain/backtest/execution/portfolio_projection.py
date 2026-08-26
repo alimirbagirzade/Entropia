@@ -87,7 +87,6 @@ from entropia.domain.backtest.engine import (
     SignalEventRow,
     TradeRow,
 )
-from entropia.domain.backtest.execution.arbitration import resolve_policy
 from entropia.domain.backtest.execution.constants import (
     _HUNDRED,
     _MONEY,
@@ -736,7 +735,10 @@ def build_portfolio_provenance(
         engine_version=engine_version,
         allocation=_allocation_provenance(run, pinned=pinned, capital_execution=capital_execution),
         identities=identities,
-        conflict_policy=resolve_policy(conflict_policy),
+        # The TOKEN, resolved inside ``provenance`` — see its docstring. Resolving it here
+        # would make this module a fourth importer of the arbitration layer's signed
+        # allowlist, which is a red build (and was: the full suite caught it).
+        conflict_policy=conflict_policy,
         tick_instants=run.instants,
         # The SAME series ``_equity_points`` persists as the equity-curve artifact, so the
         # ledger reference the manifest pins and the artifact a reader pages are the one

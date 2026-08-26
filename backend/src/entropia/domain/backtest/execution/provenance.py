@@ -50,6 +50,7 @@ from entropia.domain.backtest.execution.arbitration import (
     CONTENTION_SELECTION_POLICY,
     CONTENTION_SELECTION_STATUS,
     ConflictPolicyRule,
+    resolve_policy,
 )
 from entropia.domain.backtest.execution.attribution import (
     ATTRIBUTION_POLICY_VERSION,
@@ -482,13 +483,23 @@ def build_portfolio_manifest(
     engine_version: str,
     allocation: AllocationProvenance,
     identities: Sequence[ItemIdentity],
-    conflict_policy: ConflictPolicyRule,
+    conflict_policy: ConflictPolicyRule | str | None,
     tick_instants: Sequence[int],
     equity_points: Sequence[PortfolioEquityPoint] = (),
     plan: SleevePlan | None = None,
     data_revisions: Mapping[str, Mapping[str, str]] | None = None,
 ) -> PortfolioManifest:
     """Assemble the manifest section. Pure: no DB, no clock, no randomness.
+
+    ``conflict_policy`` takes either the resolved :class:`ConflictPolicyRule` or the raw
+    token the run manifest pinned (``None`` / blank being the absence of a cross-item rule,
+    which is KEEP_SEPARATE by definition). Resolving a token is THIS module's job rather
+    than its callers': pinning the resolved rule is precisely why provenance is one of the
+    three named modules allowed to import the arbitration layer
+    (``test_backtest_cross_item_arbitration.py``'s importer allowlist, signed 2026-08-18).
+    Having the section's assembler resolve it instead would have made that assembler a
+    FOURTH importer of a human-signed list — measured, not hypothetical: it turned that
+    guard red.
 
     ``plan`` is optional and used ONLY to cross-check the frozen sleeve amounts against
     what will actually execute; passing it never changes an amount, it only populates
@@ -497,6 +508,11 @@ def build_portfolio_manifest(
         raise MissingAllocationProvenanceError(
             "A shared-mode manifest needs the frozen allocation record (doc 13 §13)."
         )
+    rule = (
+        conflict_policy
+        if isinstance(conflict_policy, ConflictPolicyRule)
+        else resolve_policy(conflict_policy)
+    )
     instants = sorted(set(tick_instants))
     divergences = (
         sleeve_amount_divergences(allocation, plan)
@@ -507,7 +523,7 @@ def build_portfolio_manifest(
         engine_version=engine_version,
         allocation=allocation,
         items=pinned_items_from_identities(identities, data_revisions=data_revisions),
-        conflict_policy=conflict_policy,
+        conflict_policy=rule,
         ledger_artifact=ledger_artifact_ref(equity_points) if equity_points else None,
         timeline_identity=timeline_identity(instants),
         tick_count=len(instants),

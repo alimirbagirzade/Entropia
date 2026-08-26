@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 115 landed — paylaşımlı saatin ARBİTRAJI pinlendi; sıradaki hamle HÂLÂ bir imza, kod değil
 

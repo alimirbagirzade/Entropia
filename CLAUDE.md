@@ -277,11 +277,43 @@ Before stopping a working session, produce **ALL** of the following:
 > sapma) · **G12 = A + ret "ikisi de"**. `C6`'nın ÜÇ ön koşulu da tamam (C4 #777/#799/#805 + iki imza) →
 > **sıradaki kalem `C6`** (iki imza TEK slice'ta, kapsam `docs/ADIM117_LANDED_KICKOFF.md`). Blocker
 > DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. `PROJECT_HISTORY.md` §ADIM 117.
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration YOK) ·
+> `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+> **`future_dev` (DOKUNULMADI)**. **Son dalga — ADIM 118 (`G14`'ün `C`'si sevk edildi):
+> BİR İMZALI KARAR İNDİ, HİÇBİR KAPI KAPANMADI.** (`G8` bu dalda yazılmıştı ama PR sıra
+> beklerken **paralel olarak #847 ile indi**; üç ürün dosyası **birebir aynı** ölçüldü ve
+> commit **SKIP** edildi — **duplicate fix YAZILMADI**.) Blocker sayısı DEĞİŞMEDİ
+> (1 — yalnız A-08), BLOCKED; kabul borcu tavanlarına dokunulmadı.
+> `G8` (#559, A1+B2+C1): yeni `shared/dst.py::is_nonexistent_local_time`, gap →
+> `timezone_unresolved` (**yeni sözcük dağarcığı YOK**), fold → `fold=0`'da kalır (davranış
+> değişmedi). `G14` (#544) **Karar 1 = `C` şimdi + `B` (KALDIR) `C9` öncesi**, **Karar 3 =
+> metin** — ikisi de imzalı; **`B` UYGULANMADI** (migration'dır) ve **Karar 2 İMZASIZ**.
+> **ASIL DERS: BİR BİLDİRİMİ SABİT YAZMAK, ONU BİR SONRAKİ DÜNYADA YENİDEN YALAN YAPAR** —
+> sevk edilen metin iki kez karşı-olgusaldı (containment altında downgrade **gerçekleşmiyor**;
+> faz döngüsü NET'i **REDDEDİYOR**, downgrade etmiyor), ama *"hiçbir şey koşmuyor"* diye
+> sabit yazmak yalanı yalnız `C9`'un öbür tarafına taşırdı → metin ikiye ayrıldı ve ön ek
+> `shared_allocation_is_executable()`'dan **TÜRETİLDİ** (`rules.py::_net_policy_warning`);
+> bayrak `validate_allocation` içinde **tek kez** okunur. **Belge "üç yüzey" diyordu,
+> DÖRDÜNCÜSÜ vardı** (`enums.py`'de `CONFLICT_POLICY_NET_V1` **üyesinin yorumu**) — belgenin
+> kendi *"biri unutulursa çelişki devam eder"* uyarısı, o maddenin **saymadığı** yüzeyden
+> gerçekleşecekti. **Beş semantik ADIYLA gösterildi, İMPORT EDİLMEDİ — kısıt, tercih değil:**
+> `NET_UNDEFINED_SEMANTICS` `execution/arbitration.py`'de ve importer allowlist'i **imzalı**;
+> kapı `execution.arbitration import` dizesini **METİN olarak** tarar (NC-4: import iki kapıyı
+> birden kırmızıya çevirir). **YEDİ negatif kontrol, BİRİ REDDEDİLDİ. NC-3 asıl ölçüm:** eski
+> metin geri konunca iki yeni eksen kırmızı, **mevcut 18 test YEŞİL** — suite mesajın
+> **kodunu** pinliyordu, **metnini hiç** okumuyordu; iki yıl karşı-olgusal kalabilmesinin
+> sebebi budur. **NC-6 REDDEDİLDİ, reddi öğretici:** `InlineError`'ı kırpmak kırmızı verdi ama
+> **yanlış** testlerde (`inline_issues` oradan **akmıyor**, ayrı tablo satırı render eder) →
+> gerçek yolda yeniden kuruldu. **NC-7 bir GÖLGE kaydetti** (`issue.code` ekseni zaten dört
+> mevcut testle korunuyor). **DÜRÜST SINIR:** `C` `G14`'ü **KAPATMAZ**, **#544 KAPATILMADI**,
+> `CrossItemConflictPolicy.NET` **kaldırılmadı**, `NET_TRACKING_ISSUE`'ye **dokunulmadı**
+> (#544 açık ölçüldü → kusur yok), **A-08 el değmedi**. **SIRADAKİ HAMLE YİNE İMZA: Karar 2.**
+> `PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md`.
 >
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
-> **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 115 (worker'ın paylaşımlı saatinin
+> **`future_dev` (KALDIRILMADI)**. Öncesinde **ADIM 115 (worker'ın paylaşımlı saatinin
 > ARBİTRAJI, PR #839): ÜRÜN KODU DEĞİŞMEDİ — `backend/src`'te SIFIR SATIR.** Üç dosya: bir
 > integration modülü (+7 case), containment gate docstring'i, üretilmiş olgular (collection
 > 3758 → 3765). Tavanlar OYNAMADI (54/6 · A1 B21 C6 D32). Blocker sayısı DEĞİŞMEDİ (1 — yalnız

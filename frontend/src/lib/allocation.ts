@@ -220,15 +220,20 @@ export interface AllocationDraftInput {
 // AllocationCurrency wire tokens (doc 13 §5.1).
 export const ALLOCATION_CURRENCIES = ["USD", "USDT", "EUR", "TRY"] as const;
 
-// CrossItemConflictPolicy wire tokens (doc 13 §8.4 — hydration only; the V1
-// engine executes NET conservatively as BLOCK_OPPOSITE and the server
-// pre-discloses that as the CONFLICT_POLICY_NET_V1 warning, rendered verbatim).
+// CrossItemConflictPolicy wire tokens (doc 13 §8.4 — hydration only). NET has no
+// canonical definition; the two engines disagree about it (the sequential engine
+// downgrades it to BLOCK_OPPOSITE, the unified-clock phase loop refuses it) and
+// containment means neither runs today. The label says only that much — the full
+// finding is the server's CONFLICT_POLICY_NET_V1 warning, which this page renders
+// VERBATIM and which is worded against the world that actually applies. Do not
+// restate the outcome here: a second, frozen copy is how the old label went stale
+// (G14 / GH #544).
 export const CONFLICT_POLICIES = ["KEEP_SEPARATE", "BLOCK_OPPOSITE", "NET"] as const;
 
 export const CONFLICT_POLICY_LABELS: Record<string, string> = {
   KEEP_SEPARATE: "Keep separate (independent items)",
   BLOCK_OPPOSITE: "Block opposite (earlier-pinned item wins)",
-  NET: "Net (V1: executed as Block opposite)",
+  NET: "Net (undefined — see warning)",
 };
 
 // CompoundingMode wire tokens (doc 13 §5.1, §8.3; Fixed Item Notional is NOT

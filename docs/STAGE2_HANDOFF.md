@@ -8698,10 +8698,58 @@ integration testleri **gerçekten koştu** (hedef modül **7 → 14 passed**, co
 - Ölçülen iki bayat öncül (taban `bda4aba8` anında): #847 (G8/DST) o an AÇIKTI; C9 verdict
   belgesi o an yalnız #847'nin dalındaydı. **Rebase'te yeniden ölçüldü: #847 CI koşarken merge
   oldu (G8 imzalı, `A1+B2+C1`) ve verdict belgesi artık ağaçta (`historical` işaretli).** Suite'ler koşulmadı (docs-only) — otorite CI.
+## Stage 117 — `G8` sevk edildi + `G14`'ün `C`'si sevk edildi: bildirim artık TÜRETİLİYOR landed
+
+**alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration YOK) ·
+`ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+**`future_dev` (dokunulmadı)** · **blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+İki imzalı karar sevk edildi, **ikisi de kendi kapısını kapatmadı**:
+
+* **`G8` (#559)** — DST gap'i bir dönüşüm hatası olarak hükme bağlandı (A1+B2+C1). Yeni
+  `shared/dst.py::is_nonexistent_local_time`; gap → `timezone_unresolved` (**yeni sözcük
+  dağarcığı YOK**), fold → `fold=0`'da kalır (**davranış değişmedi**).
+* **`G14` (#544) Karar `C`** — bildirim düzeltmesi, **migration YOK**. Karar 1 = *"`C` şimdi
+  + `B` (KALDIR) `C9` öncesi"*, Karar 3 = metnin kendisi; ikisi de imzalı. **`B` UYGULANMADI**
+  ve **Karar 2 hâlâ İMZASIZ**.
+
+**ASIL DERS: bir bildirimi SABİT yazmak, onu bir sonraki dünyada yeniden yalan yapar.**
+Sevk edilen metin *"the engine executes NET conservatively as BLOCK_OPPOSITE"* diyordu ve
+**iki kez** karşı-olgusaldı (containment altında downgrade **gerçekleşmiyor**; faz döngüsü
+NET'i **reddediyor**, downgrade etmiyor). *"Hiçbir şey koşmuyor"* diye sabit yazmak yalanı
+yalnız `C9`'un öbür tarafına taşırdı → metin ikiye ayrıldı ve ön ek
+`shared_allocation_is_executable()`'dan **TÜRETİLDİ**
+(`rules.py::_net_policy_warning`); bayrak `validate_allocation` içinde **tek kez** okunur.
+
+**Belge "üç yüzey" diyordu, DÖRDÜNCÜSÜ vardı:** `enums.py`'de `CONFLICT_POLICY_NET_V1`
+**üyesinin yorumu** aynı bayat iddiayı taşıyordu — belgenin kendi *"biri unutulursa çelişki
+devam eder"* uyarısı, o maddenin **saymadığı** bir yüzeyden gerçekleşecekti.
+
+**Beş semantik ADIYLA gösterildi, İMPORT EDİLMEDİ — kısıt, tercih değil:**
+`NET_UNDEFINED_SEMANTICS` `execution/arbitration.py`'de ve o modülün importer allowlist'i
+**imzalı**; kapı `execution.arbitration import` dizesini **metin olarak** tarar. NC-4'te
+ölçüldü: import iki kapıyı birden kırmızıya çeviriyor.
+
+**YEDİ negatif kontrol, BİRİ REDDEDİLDİ.** **NC-3 asıl ölçüm:** sevk edilen eski metin geri
+konduğunda iki yeni eksen kırmızı, **mevcut 18 test YEŞİL** — suite mesajın **kodunu**
+pinliyordu, **metnini hiç** okumuyordu; bildirimin iki yıl karşı-olgusal kalabilmesinin
+sebebi budur. **NC-6 REDDEDİLDİ ve reddi öğretici:** `InlineError`'ı kırpmak kırmızı verdi
+ama **yanlış** testlerde (`inline_issues` oradan **akmıyor**) → gerçek render yolunda
+yeniden kuruldu. **NC-7 bir GÖLGE kaydetti:** verbatim testinin `issue.code` assertion'ı
+kendi ekseni değil, dört mevcut test onu zaten koruyor.
+
+**DÜRÜST SINIR:** `C` `G14`'ü **KAPATMAZ** (ön koşul 20 NET'in *anlamını* ister),
+**#544 KAPATILMADI**, **Karar 2 imzasız**, `CrossItemConflictPolicy.NET` **kaldırılmadı**,
+`arbitration.py::NET_TRACKING_ISSUE`'ye **dokunulmadı** (#544 açık ölçüldü → kusur yok),
+kabul borcu tavanlarına **dokunulmadı**, **A-08 el değmedi**.
+
+`PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md` ·
+`docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md`.
+
 
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
-> **ADIM 117 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> **ADIM 118 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe önceki güncellemelerde: `docs-history-guard` yeniden adlandırmayı bloklar.)
 >
 > **BAŞLIĞIN "sonra C6" YARISI ARTIK FİİLEN SIRADADIR.** ADIM 117 `G11` + `G12`'yi imzaladı
@@ -8730,6 +8778,25 @@ integration testleri **gerçekten koştu** (hedef modül **7 → 14 passed**, co
 > **YENİ, KÜÇÜK, YAZILI BİR BORÇ:** unified bir Result'ta snapshot'ın `manifest_hash`'i
 > saklanan belgenin **tamamını kapsamaz** (bölüm kendi hash'ini taşır). Adjudicated ve iki
 > yönde pinli; `C9` öncesi bir denetim bunu kusur sanmasın diye burada da adlandırılıyor.
+> **ADIM 118 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe ADIM 81/85/86/92/112/114/115 güncellemelerinde: `docs-history-guard` bir `## `
+> başlığının **kökünü** karşılaştırır ve **yeniden adlandırma bloklanır**.)
+>
+> **BAŞLIĞIN ÜÇ İMZASINDAN İKİSİ ARTIK VERİLDİ — ama HİÇBİR KAPI KAPANMADI.**
+> `G8` (#559) **imzalandı ve sevk edildi** (A1+B2+C1, `shared/dst.py`); `G14` (#544)
+> **Karar 1 + Karar 3 imzalandı**, ama imzanın kendisi *"`C` şimdi, `B` `C9` öncesi"*
+> diyor → **`G14` AÇIK KALIR ve #544 KAPATILMADI**. `Karar 1` (komisyon tabanı) ADIM
+> 114'te inmişti ve o güncelleme yukarıda duruyor.
+>
+> **SIRADAKİ HAMLE YİNE BİR İMZA, KOD DEĞİL: `G14` Karar 2** — `'NET'` taşıyan mevcut
+> satırların kaderi (`B1` yeniden yaz / `B2` NULL / `B3` migration dursun). **`B`
+> imzasız uygulanamaz**, ve `B` bir **migration**'dır (`portfolio_allocation_plan.
+> conflict_policy` VARCHAR + CHECK) + beş test dosyası.
+>
+> **`C6` — `G11`+`G12` ARTIK İMZALI** (#849 / `ADIM 117`).
+> `G10` (ADR §16 Gate 2 = lift onayının kendisi) **HİÇ TALEP EDİLMEDİ**.
+> `C9` verdict **BLOCKED** — 22 ön koşulun 12'si yeşil, 10 kırmızının 10'u da bir insan
+> imzasının arkasında (`docs/audit/closure_c9_containment_lift_verdict_2026-08-26.md`).
 
 > **ADIM 115 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe ADIM 81/85/86/92/112/114 güncellemelerinde: `docs-history-guard` bir `## ` başlığının

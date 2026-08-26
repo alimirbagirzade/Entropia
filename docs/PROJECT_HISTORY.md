@@ -16527,3 +16527,135 @@ G11 §Ölçüm 5'in bağı gereği iki imza **tek C6 slice'ında birlikte** uygu
 - Kabul borcu tavanları, A-08 sayaçları, #514 el değmedi.
 - **NUMARA:** son kayıt 116, en yüksek kickoff dosyası `ADIM116`, açık PR'ların hiçbiri `ADIM<n>` yolu
   eklemiyor (anlık görüntü, garanti değil — ADIM 100/103 emsali) → bu kayıt **117**.
+---
+
+## ADIM 118 — G14'ün `C`'si sevk edildi: BİR BİLDİRİMİ SABİT YAZMAK, ONU BİR SONRAKİ DÜNYADA YENİDEN YALAN YAPAR
+
+**Dal:** `claude/g14-c-net-notice` · **Taban:** `baadf5d0` (G8, main `8a1d52d8` üzerinde) ·
+**alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration YOK) ·
+`ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** ·
+`SHARED_ALLOCATION_STATUS` = **`future_dev` (DOKUNULMADI)** ·
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+
+Bu kayıt **iki** imzalı kararın sevkini defterliyor. Birincisi (`G8` / #559) bir önceki
+oturumda inmişti ve kaydı yoktu; ikincisi (`G14` / #544 Karar 1 + Karar 3) bu oturumda
+yazıldı. **Hiçbiri kendi kapısını kapatmıyor** ve bu bir eksiklik değil, iki belgenin de
+kendi yazdığı sınırdır.
+
+### 1. `G8` (#559) — DST gap'i bir dönüşüm HATASI olarak hükme bağlandı (`baadf5d0`)
+
+İmza **A1 + B2 + C1**. Sevk edilen: yeni `shared/dst.py::is_nonexistent_local_time`
+(PEP 495 round-trip), `validation_rules.py::_localize` ile `funding.py::parse_utc`
+**birlikte** çağırır; gap → `timezone_unresolved` (**yeni sözcük dağarcığı YOK**, üçüncü
+sebep olarak mevcut taksonomiye girdi), fold → `fold=0`'da kalır (**davranış değişmedi**).
+İki negatif kontrol, ikisi de simetrik kırmızı. `ruff` 0 · `mypy` 0 · 95 hedefli test.
+
+### 2. `G14` (#544) Karar `C` — bildirim düzeltmesi, migration YOK
+
+**Karar 1 = `C` şimdi + `B` (KALDIR) `C9` öncesi**, **Karar 3 = aşağıdaki metin**; ikisi de
+`docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md`'de imzalı. **`B` UYGULANMADI**
+(o bir migration'dır: `portfolio_allocation_plan.conflict_policy` VARCHAR + CHECK) ve
+**Karar 2 hâlâ İMZASIZ** — `'NET'` taşıyan mevcut satırların kaderi `B` sevk edilmeden
+imzalanmalıdır.
+
+**ASIL DERS: BİR BİLDİRİMİ SABİT YAZMAK, ONU BİR SONRAKİ DÜNYADA YENİDEN YALAN YAPAR.**
+Sevk edilen metin *"the engine executes NET conservatively as BLOCK_OPPOSITE"* diyordu ve
+**iki kez** karşı-olgusaldı: containment yürürlükteyken hiçbir shared plan bir motora
+ulaşmıyor (downgrade **gerçekleşmiyor**), ve `C4` ile bağlanan faz döngüsü NET'i
+**downgrade etmiyor, REDDEDİYOR** (`arbitration.py::NET_SUPPORT_STATUS`). Ama düzeltmeyi
+*"hiçbir şey koşmuyor"* diye sabit yazmak yalanı yalnız `C9`'un öbür tarafına taşırdı. Bu
+yüzden metin **ikiye ayrıldı** ve ön ek `shared_allocation_is_executable()`'dan
+**TÜRETİLDİ**: gövde (`_NET_POLICY_BODY`) bayrağın her iki değerinde doğru, ön ek
+(`_NET_POLICY_NOT_EXECUTABLE_PREFIX`) yalnız contained dünyada eklenir. Bayrak
+`validate_allocation` içinde **tek kez** okunur — kapı ile bildirim tek bir doğrulama
+turunda iki ayrı dünyayı anlatamaz.
+
+**Ön ekin dayandığı önerme ÖLÇÜLDÜ, varsayılmadı:** `validate_allocation` `config.enabled`
+değilse `([], None)` döner → NET uyarısı **yalnız enabled** planda fire eder; ve enabled bir
+plan bu build'de **her zaman** `SHARED_MODE_NOT_IN_BUILD` blocker'ını da taşır. İkisi de
+testin içinde assert edilir.
+
+**İKİNCİ DERS: BİR KARAR BELGESİ YÜZEYLERİ SAYABİLİR VE EKSİK SAYABİLİR.** Belge "üç yüzey"
+diyordu; **dördüncüsü** `enums.py`'de `AllocationIssueCode.CONFLICT_POLICY_NET_V1`
+**üyesinin yorumuydu** ve aynı bayat iddiayı taşıyordu. Belgenin kendi md. 2'si *"biri
+unutulursa çelişki devam eder"* diye uyarıyordu — ve tam da o maddenin **saymadığı** bir
+yüzeyden gerçekleşecekti. Wire token'ın `_V1` yazımı **DEĞİŞMEDİ** (sevk edilmiş makine
+kodu; O-31 emsali).
+
+**ÜÇÜNCÜ DERS — BEŞ SEMANTİK ADIYLA GÖSTERİLDİ, İMPORT EDİLMEDİ, VE BU BİR KISITTI.**
+`NET_UNDEFINED_SEMANTICS` `execution/arbitration.py`'de yaşar; o modülün importer
+allowlist'i **imzalıdır** ve kapı `execution.arbitration import` dizesini **metin olarak**
+tarar. Ölçüldü (NC-4): import eklemek hem yeni testi hem
+`test_the_phase_loop_exists_but_no_production_path_reaches_it`'i kırmızıya çeviriyor →
+beş dizeyi yeniden yazmamak için **imzalı bir listeyi imzasız bir modülle** genişletmek
+gerekirdi. `C4`/E5'in reddettiği takasın aynısı; kaçınma **vacuous değil**.
+
+### 3. Negatif kontroller — YEDİ tur, BİRİ REDDEDİLDİ
+
+| # | yama | ölçülen |
+|---|---|---|
+| NC-1 | metni sabitle (ön ek her zaman) | **yalnız** wording ekseni kırmızı, içerik ekseni yeşil |
+| NC-2 | `REFUSES` clause'unu düşür | **yalnız** içerik ekseni kırmızı, wording ekseni yeşil |
+| **NC-3** | **sevk edilen eski metni geri koy** | **iki yeni eksen kırmızı, `test_allocation_rules.py`'nin 18 testi YEŞİL** |
+| NC-4 | `arbitration`'ı import et | yeni test **ve** imzalı containment gate kırmızı |
+| NC-5 | eski frontend label'ı geri koy | **yalnız** label ekseni kırmızı (17 yeşil) |
+| ~~NC-6~~ | `InlineError`'ı kırp | **REDDEDİLDİ** — kırmızı verdi ama **yanlış** testlerde |
+| NC-6b | `issue.message`'ı kırp (gerçek yol) | **yalnız** verbatim ekseni kırmızı (17 yeşil) |
+| NC-7 | `issue.code`'u render etme | **gölge ortaya çıktı** — o eksen zaten dört mevcut testle korunuyor |
+
+**NC-3 BU SLICE'IN ASIL ÖLÇÜMÜ:** sevk edilen metin geri konduğunda iki yeni eksen de
+kırmızı verdi ama **mevcut 18 test yeşil kaldı** — suite mesajın **kodunu ve severity'sini**
+pinliyordu, **metnini hiç** okumuyordu. Bildirimin iki yıl boyunca karşı-olgusal
+kalabilmesinin sebebi budur; boşluk **iddia edilmedi, ölçüldü** (ADIM 110'un dersi).
+
+**NC-6 REDDEDİLDİ VE REDDİ ÖĞRETİCİ (ADIM 105'in üçüncü şekli):** `InlineError`'ı kırpmak
+kırmızı verdi — ama benim verbatim testim **yeşil kaldı** ve iki **başka** test düştü. Yani
+`inline_issues` `InlineError` üzerinden **akmıyor**; ayrı bir tablo satırı render ediyor.
+Kırmızının varlığı yetmez, **hangi assertion'da** olduğu okunmalıdır. Kontrol gerçek render
+yolunda yeniden kuruldu (NC-6b) ve tam ayırt edici çıktı.
+
+**NC-7 BİR GÖLGE KAYDETTİ, KAPATILMADI:** verbatim testinin
+`getByText("CONFLICT_POLICY_NET_V1")` assertion'ı **kendi ekseni değildir** — `issue.code`
+render'ı zaten dört mevcut test tarafından korunuyor. Testin katkısı **mesaj** eksenidir;
+bu not assertion'ın yanına da yazıldı.
+
+### 4. DÜRÜST SINIRLAR
+
+- **`C` `G14`'Ü KAPATMAZ.** Ön koşul 20 NET'in *anlamının* kararını ister, bildiriminin
+  doğruluğunu değil. **`G14` AÇIK KALIR**, **#544 KAPATILMAZ** — kapanış `B`'nin sevkine
+  bağlıdır. Belgenin kendi uyarısı; bu slice onu değiştirmedi, tekrarladı.
+- **Karar 2 İMZASIZ** ve bu slice onu imzalamadı — `'NET'` taşıyan mevcut satırların kaderi
+  `B`'nin ön koşuludur, `C`'nin değil.
+- **`arbitration.py::NET_TRACKING_ISSUE`'ye DOKUNULMADI.** Belge md. 5 *"kapalı bir issue'yu
+  göstermemelidir"* diyor; #544 **AÇIK** olduğu ölçüldü → kusur zaten yok, değişiklik
+  gereksiz olurdu (ponytail).
+- **`CrossItemConflictPolicy.NET` üyesi KALDIRILMADI** ve enum'a hiç dokunulmadı — kaldırmak
+  `B`'dir, bir migration'dır, ve **geri alması zordur**.
+- **Yeniden sınıflandırma YAPILMADI**, kabul borcu tavanlarına **dokunulmadı**.
+- **YAN BULGU, ÖLÇÜLDÜ VE KAPATILDI — `G8` dalının bıraktığı bir `doc-status` kusuru.**
+  `docs/audit/closure_c9_containment_lift_verdict_2026-08-26.md` `baadf5d0`'da
+  **`current`** işaretiyle inmişti; documentation-truth kapısı bunu **iki** bulguyla
+  yakaladı (*"bir history/audit kaydı asla canlı handoff olamaz"* + *"birden fazla belge
+  `current` iddia ediyor"*). `historical`'a çevrildi. **Kusur bu slice'ın değildi ama
+  kapının kırmızısı bu slice'ta göründü** — ADIM 95'in dersi (tam suite, odaklı koşunun
+  göremediği kapıyı kırar) bu partide de birebir yaşandı: hedefli koşular yeşildi.
+- **Üretilmiş olgular TAZELENDİ** — backend collection **3777 → 3780**, frontend call
+  sites **729 → 731**. ADIM 60'ın dersi (*"test ekleyen slice olguları tazelemeli"*)
+  yine ateşlendi ve tam suite'in **tek** kırmızısı buydu.
+- **A-08 (#514) EL DEĞMEDİ** — kendi hattında, RC verdict'ini bağımsız blokluyor.
+
+`docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md` (Karar 1 + Karar 3 imzalı,
+Karar 2 açık) · `docs/decisions/closure_g8_dst_fold_gap_2026-08-25.md` ·
+`docs/audit/closure_c9_containment_lift_verdict_2026-08-26.md` (verdict **BLOCKED**,
+22 ön koşulun 12'si yeşil).
+
+> **SLICE YAZILIRKEN KAPSAMI DARALDI, VE DARALMASI BİR ÖLÇÜMDÜR.** Bu dal `G8`'i de
+> taşıyordu (taban `baadf5d0`); PR sıra beklerken **`G8` PARALEL OLARAK #847 ile indi**
+> (`ae18f46b`). Rebase'te commit **SKIP EDİLDİ** — ama körlemesine değil: üç ürün
+> dosyasının üçü de (`shared/dst.py`, `market_data/validation_rules.py`,
+> `backtest/funding.py`) `git diff` ile **BİREBİR AYNI** ölçüldü, tek fark audit
+> belgesinin `doc-status` satırıydı ve #847 onu zaten `historical` indirmişti.
+> **DUPLICATE FIX YAZILMADI** (ADIM 114/115'in dersi, üçüncü kez). Bu yüzden ADIM 117
+> **yalnız `G14`'ün `C`'sidir**; başlığın *"G8 sevk edildi"* yarısı **kaldırıldı** çünkü
+> onu bu slice sevk etmedi. **ADIM 100'ün dersi yine ateşlendi:** boş/durağan bir açık-PR
+> listesi bir garanti değil, bir **anlık görüntüdür**.

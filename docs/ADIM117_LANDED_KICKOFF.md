@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 117 LANDED — G11 + G12 imzalandı → sıradaki slice C6 (kickoff)
 
 > **Bu belge ADIM 117'nin (G11+G12 imza slice'ı) kapanış kickoff'udur.** Tam kayıt:

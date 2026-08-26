@@ -55,6 +55,16 @@ from entropia.domain.allocation.capability import (
     shared_allocation_is_executable,
     shared_allocation_requested,
 )
+from entropia.domain.allocation.shared_mode_admission import (
+    MIXED_RECORD_TIME_BASIS_FIELD_PATH,
+    MIXED_RECORD_TIME_BASIS_MESSAGE,
+    MIXED_RECORD_TIME_BASIS_REMEDIATION,
+    NON_EXECUTING_ITEM_FIELD_PATH,
+    NON_EXECUTING_ITEM_MESSAGE,
+    NON_EXECUTING_ITEM_REMEDIATION,
+    mixed_record_time_bases,
+    non_executing_sleeve_holders,
+)
 from entropia.domain.backtest.enums import (
     RUN_RETRYABLE_STATES,
     RUN_TERMINAL_STATES,
@@ -558,6 +568,36 @@ async def _admit_run_body(
             ]
         )
 
+    # 3b. OD-6(a) (ADR 0002 §13.1) — a shared plan may not give a sleeve to a kind the
+    #     engine runs no simulation for. Reads the SAME immutable capital snapshot as
+    #     the containment guard above, for the same reason: the refusal must not depend
+    #     on Ready Check having been run, believed, or supplied by the caller. It sits
+    #     before the tick/context resolution below so a composition that can never run
+    #     is refused before that work is done.
+    #
+    #     While containment is on this is UNREACHABLE — the guard above already refused
+    #     every shared run. It is the fail-closed floor `C9` needs to find in place when
+    #     it lifts the flag, and the two-world tests drive it through the lifted world.
+    if shared_allocation_requested(snapshot.capital_mode_snapshot):
+        non_executing = non_executing_sleeve_holders(snapshot.capital_mode_snapshot)
+        if non_executing:
+            raise _readiness_blocked(
+                [
+                    ReadinessIssue(
+                        ReadinessIssueCode.ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM,
+                        ReadinessSeverity.BLOCKER,
+                        ReadinessScope.PORTFOLIO_ALLOCATION,
+                        NON_EXECUTING_ITEM_MESSAGE,
+                        remediation=NON_EXECUTING_ITEM_REMEDIATION,
+                        field_path=NON_EXECUTING_ITEM_FIELD_PATH,
+                        # O-02: the leader names ONE offending entry and the envelope
+                        # promotes it; every offender is listed in ``details``.
+                        scope_id=item_id,
+                    ).as_dict()
+                    for item_id in non_executing
+                ]
+            )
+
     # F-07i (B): pin the approved tick/trade revision for every tick-demanding Strategy
     # NOW, into the immutable manifest — the worker must never resolve 'newest approved'
     # itself (doc 15 §15), and two runs replaying different tick paths must never share
@@ -570,6 +610,32 @@ async def _admit_run_body(
     # replays. The worker re-resolves these pins fail-closed and never falls back to the
     # current Mainboard, Package Library or a 'latest' dataset row (doc 15 §15).
     context = await resolve_run_manifest_context(session, snapshot.item_manifest)
+
+    # 3c. OD-1(a) (ADR 0002 §13.1) — a shared run may not merge pinned market datasets
+    #     that declare DIFFERENT record time bases. This is the one admission check that
+    #     cannot read the capital snapshot alone: the bases live on the pinned market
+    #     dataset revisions, so it runs on the context resolved just above. It is still
+    #     ahead of ``new_id``/``build_run_manifest``, so a refusal leaves no run,
+    #     manifest or job behind — the same guarantee as every guard before it.
+    #
+    #     Cross-item by nature: no single item is at fault, so the finding carries no
+    #     ``scope_id`` and points at the field whose values diverge.
+    if shared_allocation_requested(snapshot.capital_mode_snapshot):
+        divergent_bases = mixed_record_time_bases(context.data_time)
+        if divergent_bases:
+            raise _readiness_blocked(
+                [
+                    ReadinessIssue(
+                        ReadinessIssueCode.ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS,
+                        ReadinessSeverity.BLOCKER,
+                        ReadinessScope.PORTFOLIO_ALLOCATION,
+                        f"{MIXED_RECORD_TIME_BASIS_MESSAGE} Pinned bases: "
+                        f"{', '.join(divergent_bases)}.",
+                        remediation=MIXED_RECORD_TIME_BASIS_REMEDIATION,
+                        field_path=MIXED_RECORD_TIME_BASIS_FIELD_PATH,
+                    ).as_dict()
+                ]
+            )
 
     run_id = new_id("btrun")
     manifest_id = new_id("btman")

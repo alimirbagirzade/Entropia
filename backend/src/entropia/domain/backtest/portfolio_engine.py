@@ -87,7 +87,8 @@ HONEST BOUNDARY — what this module does NOT do
    through :meth:`PortfolioLedger.set_position`, which would REPLACE the held size with the
    layer size and quietly shrink the position.
 3. **No mark policy.** ``E(t)`` is realized-only, exactly as the ledger defines it. How an open
-   position is marked at a tick where its own item has no fresh bar is **OD-2, still open**.
+   position is marked at a tick where its own item has no fresh bar is **OD-2 — decided (a) in
+   ADR §13.1 and not yet built**; §13.1 assigns that policy to ADIM 20, not to this loop.
 """
 
 from __future__ import annotations

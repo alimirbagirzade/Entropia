@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from entropia.domain.lifecycle.enums import ValidationStatus
 from entropia.domain.market_data.enums import MarketDataType, ResolutionKind, TradeSide
+from entropia.shared.dst import is_nonexistent_local_time
 
 DecimalLike = Decimal | str | int
 
@@ -210,10 +211,21 @@ def parse_timestamp(value: Any, *, source_zone: ZoneInfo | None) -> datetime | N
 
 
 def _localize(moment: datetime, source_zone: ZoneInfo | None) -> TimestampParse:
-    """Normalize one parsed ``datetime`` to UTC under the declared source zone."""
+    """Normalize one parsed ``datetime`` to UTC under the declared source zone.
+
+    G8 (GH #559, signed 2026-08-26): a DST **gap** is a conversion failure — the wall clock
+    never occurred, so there is no instant to normalize to and inventing one would publish a
+    timestamp that never existed. A DST **fold** is NOT a failure: the hour occurred twice
+    and ``fold=0`` picks the earlier instant, which is a decided answer to a real question
+    (A1). The asymmetry is the decision; see :mod:`entropia.shared.dst`.
+
+    The gap reuses the SAME ``timezone_unresolved`` channel the ``source_zone is None`` case
+    already uses — a third reason for a shipped fail-closed branch, not a new mechanism."""
     if moment.tzinfo is not None:
         return TimestampParse(moment.astimezone(UTC))
     if source_zone is None:
+        return TimestampParse(None, timezone_unresolved=True)
+    if is_nonexistent_local_time(moment, source_zone):
         return TimestampParse(None, timezone_unresolved=True)
     return TimestampParse(moment.replace(tzinfo=source_zone).astimezone(UTC))
 

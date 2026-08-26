@@ -20,14 +20,17 @@ It deliberately does NOT:
 * run the phase loop or drive the clock — ``run_portfolio`` is ADIM 18. This module is the
   state the loop mutates, plus the arithmetic it mutates the state with;
 * arbitrate BETWEEN items — when two intents are individually affordable but jointly
-  insolvent, *which* one is rejected is **OD-3, still open** (ADR §13). :meth:`resolve_capacity`
-  answers one item's question against the ledger as it stands; the selection rule is ADIM 19's;
+  insolvent, *which* one is rejected is **OD-3, decided (a) and SHIPPED** as
+  ``arbitration.CONTENTION_SELECTION_POLICY == "pin_order_admission"`` (ADR §13.1).
+  :meth:`resolve_capacity` answers one item's question against the ledger as it stands; the
+  selection rule lives in ADIM 19's arbitration module, not here;
 * define cross-item conflict or ``NET`` netting — ADR §9.4 / GH #544. ``net_exposure`` here is
   a **measurement**, never an offset: no cap, no solvency figure and no margin requirement is
   computed from it (see :class:`PortfolioValuation`);
-* decide how a position with no fresh bar is marked — **OD-2, still open**. A mark is *given*
-  to :meth:`valuation` with the authority it came from; an unmarkable position is REPORTED,
-  never valued at zero;
+* decide how a position with no fresh bar is marked — **OD-2, decided (a) in ADR §13.1 and
+  not yet built** (carry forward under a declared ``stale_after`` bound with a diagnostic
+  counter; §13.1 gives that to ADIM 20). A mark is *given* to :meth:`valuation` with the
+  authority it came from; an unmarkable position is REPORTED, never valued at zero;
 * model margin or leverage. Canon defines no maintenance-margin formula and Master Ref §10.2
   delegates ``leverage_mode=cross`` to a portfolio risk model that does not exist. The ledger
   therefore uses the shipped convention — **committed capital == entry-basis notional**
@@ -363,7 +366,9 @@ class MarkPrice:
 
     ``authority`` and ``staleness_ms`` are the clock's own facts (``ItemTickView``), carried
     so a valuation is auditable. They are RECORDED, not judged: whether a stale price may mark
-    a position, and for how long, is **OD-2 and unanswered** (ADR §13). ``unavailable`` — and
+    a position, and for how long, is **OD-2 — answered (a) in ADR §13.1 and not yet built**;
+    this type deliberately applies no bound, because the ``stale_after`` bound (a) calls for
+    arrives with ADIM 20's mark policy. ``unavailable`` — and
     a non-positive price — mean the position cannot be marked at all, which is REPORTED rather
     than valued at zero."""
 

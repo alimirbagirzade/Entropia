@@ -49,6 +49,19 @@ RUN set -eu; \
 # it listens on 8080 — which is why nginx.conf says `listen 8080`. The published
 # HOST port is unchanged, so nothing outside the container moves.
 FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
+# The floating `1.31-alpine` tag lags Alpine security releases: a CVE lands in the
+# distro repo days before upstream nginx rebuilds the image, and the Trivy gate
+# rightly refuses a fixable HIGH with no exception (CVE-2026-14456 shipped as
+# libcrypto3/libssl3 3.5.7-r0 while 3.5.8-r0 was already published). The `>=`
+# floor makes this fail-closed: if the mirror does not carry the fixed version
+# the BUILD stops, instead of a bare `apk upgrade` silently doing nothing and CI
+# going red fifty minutes later. Raise the floor only for a new CVE; any newer
+# release keeps satisfying it. The base image sets USER 101 and apk needs root,
+# so the switch is restored immediately — the security workflow's non-root check
+# reads the runtime uid.
+USER root
+RUN apk add --no-cache 'libcrypto3>=3.5.8-r0' 'libssl3>=3.5.8-r0'
+USER 101
 # Deliberately NOT under conf.d/. The stock nginx.conf globs
 # `include /etc/nginx/conf.d/*.conf` inside its `http` block, so a header file
 # placed there is pulled in at http level as well as by the two explicit

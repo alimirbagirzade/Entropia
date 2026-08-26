@@ -271,6 +271,42 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION` **değişmedi** ·
+> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> `ENGINE_VERSION` **değişmedi** · **OpenAPI değişmedi (ÖLÇÜLDÜ)** ·
+> `SHARED_ALLOCATION_STATUS` = **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 119
+> (`C6`'nın OD-1/OD-6 yarısı): ÜRÜN KODU DEĞİŞTİ (üç dosya) ama hiçbir finansal sayı
+> oynamadı — golden el değmedi, kabul tavanları el değmedi (54/6 · A1 B21 C6 D32).
+> Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
+> **Görev `C6`'ydı, kapısı ÖLÇÜLDÜĞÜ AN KIRMIZIYDI ve VARSAYILAN SEÇİLMEDİ (kapı bu PR açıkken #849 ile YEŞİLE DÖNDÜ — ölçüm yanlış değildi, BAYATLADI):** `G11` (P2) ve `G12` (P8)
+> imza kutuları **boş** ölçüldü → planın *"do not pick a default"* durdurma koşulu uygulandı,
+> **P2/P8 blocker'ları YAZILMADI**. **TUZAK: `G12`'nin dosyasında işaretli kutular VAR** ama
+> hepsi Karar 1/2/4/5'e ait; §Karar 6 aralığı (`:1076–:1180`) boş — **imza kutusu BÖLÜM
+> bazında okunur, dosya düzeyinde grep yanıltır.**
+> **ASIL DERS: BİR SLICE'IN ÖN KOŞULU SLICE'IN TAMAMI İÇİN DEĞİL, PARÇALARI İÇİN ÖLÇÜLÜR** —
+> ön koşul defteri `#13/#14`'ü **insan**a, `#15/#16`'yı **E6**'ya veriyor; kapı yarısı için
+> kırmızı, diğer yarısı için hiç var olmamıştı. Kapsam **ürün sahibine soruldu**.
+> Sevk edilen: ADR §13.1 **OD-6(a)** + **OD-1(a)** → yeni
+> `domain/allocation/shared_mode_admission.py` (`participant.py::_unsupported_shapes`'in
+> **KARDEŞİ, kopyası değil** — o tablo tek çözülmüş koşuyu, bu modül kompozisyonun tamamını
+> sorar, ayrıklık yapısal), iki yeni `ReadinessIssueCode`, `_admit_run_body` 3b + 3c.
+> **İKİNCİ DERS: sevk edilen dünyada ULAŞILAMAYAN bir guard'ın testi, LİFT EDİLMEZSE
+> kendisini değil CONTAINMENT'ı kanıtlar** → her refüz testi ADIM 76'nın iki-dünya
+> fixture'ını kullanır; ayrı bir test shipped dünyada containment'ın **hâlâ önde** olduğunu
+> pinler. **ÜÇ NC: NC-1/NC-2 yalnız kendi hedefini düşürür; NC-3 boşluğun ÖLÇÜMÜ** — iki
+> guard birden sökülünce önceden var olan containment suite'i **YEŞİL KALIR**.
+> **ÖLÇÜLEREK DÜZELTİLEN İKİ İDDİA:** planın *"OpenAPI change? Likely"* satırı bu yarı için
+> **yanlış** (readiness kodları `openapi.json`'da yayımlanmıyor, sevk edilmiş
+> `ALLOCATION_SHARED_MODE_NOT_IN_BUILD` bile 0 kez geçiyor) · kendi değişikliğimin
+> **yarattığı** bayatlık: `BACKEND_LAYERS.md` §Kapsama'nın `:542`/`:573`/`:154` satırları
+> **sembol adına çevrildi** (§Conventions kuralı).
+> **DÜRÜST SINIR:** **`C6` KAPANMADI** (#13/#14 kapsam dışı bırakıldı; **iki imza #849 ile İNDİ**, sıradaki hamle artık **P2/P8 blocker'ları = ADIM 120**) ·
+> iki guard sevk edilen build'de **ULAŞILAMAZ** (`C9` lift edince devreye girecek fail-closed
+> taban) · frontend'de sıfır satır → frontend kapıları KOŞULMADI · `TL-11.c3` kapatılmadı ve
+> **yeniden sınıflandırılmadı** · `G11`'in istediği **üretim DB sayımı YAPILMADI** (imzacı bunu `sayılamadı` olarak **bilerek** imzaladı, #849) ·
+> geçen sayı ve coverage **CI'ın otoritesinde**.
+> `PROJECT_HISTORY.md` §ADIM 119 · `docs/ADIM119_LANDED_KICKOFF.md`.
+>
+>
 > OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 117 (G11 + G12
 > İMZALANDI, DOCS-ONLY): G11 = (a) tam admission blok** (kod `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`,
 > `field_path` ikisi de/O-02; ön koşul `sayılamadı` — kural ürün sahibince BİLİNÇLİ geçersiz kılındı, imzalı
@@ -370,6 +406,8 @@ Before stopping a working session, produce **ALL** of the following:
 > **#839 bu PR açıkken indi → REBASE**, çakışma yalnız üretilmiş üç artefaktta,
 > `generate_repository_facts.py` **yeniden koşularak** çözüldü (3777 / 358 dosya).
 > `PROJECT_HISTORY.md` §ADIM 116 · `docs/ADIM116_LANDED_KICKOFF.md`.
+>
+>
 >
 >
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·

@@ -17,7 +17,10 @@ It deliberately does NOT:
   (ADR §13.1: option (a), carry forward under a declared ``stale_after`` bound). The
   intent RECORDS which price it was formed at (``price_authority``) and chooses no
   mark policy;
-* decide whether a non-executing kind may hold a sleeve — OD-6 is **decided but unbuilt**
+* decide whether a non-executing kind may hold a sleeve — OD-6 is **decided and now
+  BLOCKED AT ADMISSION** (`allocation/shared_mode_admission.py::non_executing_sleeve_holders`,
+  ADIM 119); the composition never reaches this phase, so the ``blocked`` intent below
+  stays as the loop-side belt to admission's braces
   (ADR §13.1: option (a) for ADIM 20, block a shared plan whose active entries include a
   non-executing kind; §13.1 puts that block at ADMISSION, not here). A Trading Signal /
   Trade Log item gets a ``blocked`` intent naming the honest V1 boundary, which is what

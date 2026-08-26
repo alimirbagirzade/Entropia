@@ -8747,6 +8747,48 @@ kabul borcu tavanlarına **dokunulmadı**, **A-08 el değmedi**.
 `docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md`.
 
 
+## Stage ADIM 119 — `C6`'nın OD-1/OD-6 yarısı sevk edildi, P2/P8 kapıları BU PR AÇIKKEN imzalandı (#849) landed
+
+**Taban `bda4aba8` (ADIM 116 = #840).** Migration **YOK** · `ENGINE_VERSION` **değişmedi** ·
+**OpenAPI değişmedi (ölçüldü)** · `SHARED_ALLOCATION_STATUS` = **`future_dev` (KALDIRILMADI)** ·
+golden **el değmedi** · kabul tavanları **el değmedi** (54/6 · A1 B21 C6 D32) · blocker **1**
+(yalnız A-08), **BLOCKED**.
+
+**Görev `C6`'ydı ve kapısı KIRMIZI çıktı.** `G11` (P2) ve `G12` (P8) imza kutuları
+**boş** ölçüldü (`karar veren: ____`) → planın durdurma koşulu (*"If G11/G12 are unsigned,
+do not pick a default"*) uygulandı, **P2/P8 blocker'ları YAZILMADI**. Tuzak: `G12`'nin
+dosyasında işaretli kutular **var**, ama hepsi Karar 1/2/4/5'e ait; §Karar 6 aralığı boş.
+
+**Sevk edilen yarı — ön koşul #15 + #16:** ADR §13.1 **OD-6(a)** (motorun simüle etmediği
+bir kind sleeve tutamaz) ve **OD-1(a)** (pinlenmiş revizyonlar farklı `record_time_basis`
+bildiremez). Yeni modül `domain/allocation/shared_mode_admission.py`, iki yeni
+`ReadinessIssueCode`, `backtest_run.py::_admit_run_body`'de adım 3b + 3c. İkisi de
+containment guard'ının **arkasında**, `build_run_manifest`'ten **önce**.
+
+**Ayrımı repo'nun kendi defteri zaten kodlamıştı:** ön koşul tablosunda `#13/#14`'ün sahibi
+**insan**, `#15/#16`'nınki **E6**. Kapı slice'ın yarısı için kırmızı, diğer yarısı için hiç
+var olmamıştı. Kapsam kararı **ürün sahibine soruldu**.
+
+**Üç negatif kontrol, üçü de ölçüldü:** NC-1/NC-2 her biri **yalnız** kendi hedefini
+düşürür (diğer blocker'ın testleri, iki negatif kontrol ve shipped-world testi yeşil
+kalır); **NC-3 boşluğun ÖLÇÜMÜDÜR** — iki guard birden sökülünce bu slice'tan önce var
+olan containment suite'i **yeşil kalır**.
+
+**Ölçülerek düzeltilen iki iddia:** (1) planın *"OpenAPI change? Likely"* satırı bu yarı
+için **yanlış** — readiness kodları `openapi.json`'da yayımlanmıyor (sevk edilmiş
+`ALLOCATION_SHARED_MODE_NOT_IN_BUILD` bile **0 kez** geçiyor); (2) kendi değişikliğimin
+**yarattığı** bayatlık: `BACKEND_LAYERS.md` §Kapsama tablosu `backtest_run.py:542`/`:573`
+yazıyordu, iki guard üçünü birden kaydırdı → sayı güncellenmedi, §Conventions uyarınca
+**sembol adına çevrildi**.
+
+**DÜRÜST SINIR:** `C6` **KAPANMADI** (#13/#14 açık) · iki guard sevk edilen build'de
+**ULAŞILAMAZ** (containment önde; `C9` lift edince devreye girecek fail-closed taban) ·
+frontend'de **sıfır satır** → frontend kapıları koşulmadı · `TL-11.c3` kapatılmadı ve
+yeniden sınıflandırılmadı · `G11`'in istediği **üretim DB sayımı yapılmadı**.
+
+`PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md`.
+
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
 > **ADIM 118 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -8759,6 +8801,30 @@ kabul borcu tavanlarına **dokunulmadı**, **A-08 el değmedi**.
 > `C6`'dır:** G11 blocker'ı + G12 blocker çifti + `_phase_tail` scaling dışlaması + G11 md. 4'ün
 > zorunlu negatif kontrolleri — tek slice, iki imza birlikte. Sonrası: `G15` → OD-1/2/3/6
 > (ön koşul 15–18) → `G10` → EN SON `C9`.
+>
+> (Gerekçe ADIM 81/85/86/92/112/114/115/116 güncellemelerinde: `docs-history-guard` bir
+> `## ` başlığının **kökünü** karşılaştırır ve **yeniden adlandırma bloklanır**.)
+>
+> **BAŞLIKTAN HİÇBİR İMZA DÜŞMEDİ.** `G8` (#559) ve `G14` (#544) hâlâ imzasız; ADIM 117
+> hiçbir ürün sorusunu karara bağlamadı, hiçbir issue durumunu değiştirmedi, hiçbir bayrağı
+> kıpırdatmadı.
+>
+> **AMA BAŞLIĞIN *"→ sonra `C6`"* KISMI ARTIK YARIM DOĞRU.** `C6`'nın dört blocker'ından
+> **ikisi indi** (OD-1 + OD-6, ön koşul #15/#16). Kalan ikisi (P2/P8) **kendi** kapılarını
+> bekliyor ve o kapılar **`G8`/`G14` DEĞİL**: **`G11`** ve **`G12`**. Yani bu başlığın imza
+> listesi `C6`'nın kalanını açmaz — sıradaki hamle ~~isterse `G8`/`G14`, isterse `G11`/`G12`~~ **`C6`'nın kalanıdır (`G11`+`G12` #849 ile İMZALANDI)**
+> olabilir; **ikisi ayrı hattır**.
+>
+> **`C6`'nın kalan yarısı için hazır çapalar:** ev `domain/allocation/shared_mode_admission.py`,
+> wire `backtest_run.py::_admit_run_body` 3b/3c, iki-dünya lift fixture'ı
+> `tests/integration/test_shared_mode_admission.py::_lifted`, harness
+> `_attach_ready_strategy` / `_two_strategy_composition` / `_enable_shared` /
+> `_assert_nothing_admitted`. Motor tarafındaki eşleşecek tablo
+> `participant.py::_unsupported_shapes` (P2/P8 satırları **orada zaten var**).
+>
+> **UYARI — LIFT ETMEDEN TEST YAZMA.** Bu iki guard sevk edilen dünyada ULAŞILAMAZ;
+> lift etmeyen bir test containment'ı kanıtlar, guard'ı **değil**. P2/P8 testleri de
+> aynı fixture'a mecburdur.
 
 > **ADIM 116 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe ADIM 81/85/86/92/112/114/115 güncellemelerinde: `docs-history-guard` bir `## `

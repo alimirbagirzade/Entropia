@@ -16659,3 +16659,172 @@ Karar 2 açık) · `docs/decisions/closure_g8_dst_fold_gap_2026-08-25.md` ·
 > **yalnız `G14`'ün `C`'sidir**; başlığın *"G8 sevk edildi"* yarısı **kaldırıldı** çünkü
 > onu bu slice sevk etmedi. **ADIM 100'ün dersi yine ateşlendi:** boş/durağan bir açık-PR
 > listesi bir garanti değil, bir **anlık görüntüdür**.
+## ADIM 119 — `C6`'nın İMZASIZ YARISI YAZILMADI, İMZASIZ OLMAYAN YARISI SEVK EDİLDİ: BİR SLICE'IN ÖN KOŞULU SLICE'IN TAMAMI İÇİN DEĞİL, PARÇALARI İÇİN ÖLÇÜLÜR
+
+> **SONRADAN DÜZELTME (aynı gün, bu PR açıkken) — KAYIT SİLİNMEDİ, ÜSTÜNE YAZILMADI.**
+> Bu kaydın başlığı ve gövdesi `G11`/`G12`'yi **İMZASIZ** diye anlatır. O ölçüm
+> `2026-08-26 11:0x`'te **doğruydu**; **#849** kutuları `11:51:09Z`'de imzaladı — yani bu
+> slice'ın PR'ı açıkken. Ölçüm yanlış değildi, **bayatladı**; ADIM 100'ün *"boş bir
+> açık-PR listesi bir GARANTİ değil, bir ANLIK GÖRÜNTÜDÜR"* dersinin bu slice'taki
+> tekrarı. **Başlık bilerek DEĞİŞTİRİLMEDİ** (`docs-history-guard` yeniden adlandırmayı
+> bloklar, ADIM 61) — düzeltme gövdeye yazılır.
+> **İmzalar:** `G11` = **(a)** tam admission blok (entry + exit), kod
+> `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`, `field_path` **ikisi de** (O-02) ·
+> `G12` = **A** + ret **"ikisi de"** → P8 **TEK KATMAN DEĞİL**: hem Ready Check blocker
+> hem admission reddi.
+> **SEVK EDİLEN KODA ETKİSİ: SIFIR.** OD-1/OD-6 ADR §13.1'e dayanır ve `G11`/`G12`'ye
+> **hiç dayanmıyordu**; bu yüzden bu slice'ın diff'i imzalardan önce de sonra da aynıdır.
+> **NUMARA ÜÇ KEZ TAŞINDI: `117` → `118` → `119`.** Bu kayıt `ADIM 117` yazıldı;
+> **#849** o adı merge edilmiş olarak aldı → `118`; sonra **#850** `118`'i aldı → **`119`**.
+> Üçünde de sebep aynı ve ders aynı: **ayrılan numara güvenli numara değildir**
+> (ADIM 92). Hiçbir kayıt silinmedi, hiçbir başlık yeniden adlandırılmadı.
+> P2/P8 uygulaması **ADIM 120**'a aittir ve #849'un kendi kaydı gereği **iki imza tek
+> slice'ta birlikte** uygulanır (`G11` §Ölçüm 5'in bağı).
+
+**Taban `bda4aba8` (ADIM 116 = #840).** **ÜRÜN KODU DEĞİŞTİ** (üç dosya, `backend/src`)
+ama hiçbir finansal sayı oynamadı: migration **YOK** · `ENGINE_VERSION` **değişmedi** ·
+**OpenAPI değişmedi (ÖLÇÜLDÜ, aşağıda)** · `SHARED_ALLOCATION_STATUS` = **`future_dev`
+(KALDIRILMADI)** · golden digest **el değmedi** · kabul borcu tavanları **el değmedi**
+(54/6 · A1 B21 C6 D32 — bu slice hiçbir kabul kriteri kapatmıyor) · blocker sayısı
+**DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+
+### Görev `C6`'ydı; `C6`'nın kapısı KIRMIZI çıktı ve VARSAYILAN SEÇİLMEDİ
+
+Plan (`final_closure_ordered_plan_2026-08-13.md` §`C6`) dört admission blocker'ı ister:
+**OD-1 · OD-6 · P2 · P8**. Ön koşul satırı: *"C4 merged + **G11 (P2)** + **G12 (P8)**
+decided."* Durdurma koşulu kelimesi kelimesine: *"If G11/G12 are unsigned, do not pick a
+default."*
+
+**İkisi de imzasız ölçüldü — prozadan değil, İMZA KUTUSUNDAN:**
+
+| Kapı | İmza kutusu | Ölçüm |
+|---|---|---|
+| `G11` | `closure_g11_deferred_fill_admission_2026-08-18.md` §Karar | `karar veren: ____`, dosyada **sıfır** `[x]` |
+| `G12` | `closure_product_decisions_2026-08-13.md` §Karar 6 | `karar veren: ____` |
+
+**Tuzak ve nasıl atlatıldı:** o ikinci dosya `[x]` **taşıyor** — ama işaretlerin hepsi
+`:302/:303/:306` (Karar 1 = komisyon), `:575/:579/:581` (Karar 2), `:939/:943` (Karar 4 =
+G9) ve `:1045` (Karar 5 = G13) satırlarında. §Karar 6'nın aralığı (`:1076–:1180`)
+**tamamen boş**. *"Dosyada imza var"* demek *"bu kapı imzalı"* demek DEĞİLDİR — kutu
+**bölüm bazında** okunur. Açık PR'lar da ölçüldü: #847 `G8`/`G14`'e dokunuyor, #848
+salt CI → **hiçbiri G11/G12'yi imzalamıyor**.
+
+**Sonuç: P2 ve P8 blocker'ları YAZILMADI.** Bir varsayılan seçilmedi, *"zaten A önerilmiş"*
+diye sevk edilmedi. (§Karar 6'nın kendi metni ADIM 71'i alıntılayarak A'yı *"ölçülmüş
+zorunluluk"* ilan ediyor — **yine de imza değildir**.)
+
+### ASIL DERS — ÖN KOŞUL SLICE'IN TAMAMINA DEĞİL, PARÇALARINA AİTTİR
+
+Plan'ın ön koşul satırı `C6`'yı **bir bütün** olarak `G11 + G12`'ye bağlıyor. Aynı satırın
+devamı ise şunu söylüyor: *"**OD-1/OD-6 are resolved in ADR §13.1 and need no new
+signature.**"* İki cümle aynı satırda ve **farklı şey** söylüyor.
+
+Ayrımı **repo'nun kendi defteri zaten kodlamıştı** — bu slice'ın icadı değil:
+
+```
+| 13 | Deferred-fill / limit-order admission blocker (P2) | insan | ❌ İMZASIZ | G11 |
+| 14 | Scaling admission blocker (P8)                     | insan | ❌ İMZASIZ | G12 |
+| 15 | OD-6(a) blocker'ı                                  | E6    | ❌         |     |
+| 16 | OD-1(a) blocker'ı (mixed record_time_basis)        | E6    | ❌         |     |
+```
+
+`#13/#14`'ün sahibi **insan**, `#15/#16`'nın sahibi **E6** — yani slice'ın kendisi. Kapı
+slice'ın yarısı için kırmızı, diğer yarısı için **hiç var olmamıştı**. *"Kapı kırmızı, dur"*
+kadar *"kapı kırmızı, her şeyi durdur"* da yanlış olurdu; doğru soru **hangi parçanın hangi
+kapıya bağlı olduğudur**. Kapsam kararı **ürün sahibine soruldu ve OD-1/OD-6 yarısı
+onaylandı** — ajan kendi başına daraltmadı.
+
+### Sevk edilen — ADR §13.1 OD-1(a) + OD-6(a)
+
+ADR §13.1'in iki satırı ikisini de **çözülü** ilan ediyor ve ikisi için de *"Not built"*
+diyor (`:811` OD-1, `:816` OD-6). Ölçüldü, **bayat değildi** (ADIM 115/116'nın dersi
+proaktif uygulandı): `record_time_basis` yalnız manifest'e **yazılıyor**
+(`backtest_run_context.py::_data_time_entry`) ve `execution/clock.py` *"does NOT branch
+on"* diyor; `ALLOCATABLE_ITEM_KINDS` **üç kind'ı da** kabul ediyor ve `rules.py`'daki tek
+kapı kümenin **dışındakini** reddediyor — yani Trading Signal / Trade Log sleeve alıyordu.
+
+**Yeni modül `domain/allocation/shared_mode_admission.py`** + `ReadinessIssueCode`'a iki
+üye + `backtest_run.py::_admit_run_body`'ye iki guard. İkisi de containment guard'ının
+**ARKASINDA** ve `build_run_manifest`'ten **ÖNCE** → refüz **run/manifest/job bırakmaz**.
+
+**Modül `participant.py::_unsupported_shapes`'in KARDEŞİ, KOPYASI DEĞİL — ve ayrıklık
+yapısaldır.** Görev *"iki liste eşleşmeli, tek kaynaktan türetmeyi değerlendir"* diyordu;
+ölçüldü ve **türetilemez**, çünkü iki tablo **farklı soru** soruyor: `_unsupported_shapes`
+*"bu ÇÖZÜLMÜŞ koşunun şekli modellenebilir mi"* (her satırı tek item'dan bilinir), bu modül
+*"bu KOMPOZİSYON modellenebilir mi"*. OD-1 iki revizyonu **birbiriyle** karşılaştırır,
+OD-6'nın ise inceleyeceği çözülmüş koşu **hiç yoktur**. Bu yüzden ikisi de o tabloda
+**yok** ve buraya **kopyalanmadı**. P2/P8 blocker'ları inince o tabloyla eşleşecek olan
+yarı **odur** — ve bu dosyaya aittir.
+
+**`EXECUTING_ITEM_KINDS` POZİTİF küme olarak yazıldı** (`{STRATEGY}`), tamamlayanı değil:
+worker (`_enabled_non_strategy_items`) Strategy olmayan her item'a `output=None` verir, ve
+negatif küme yazılsaydı `MainboardItemKind`'a eklenen yeni bir kind **sessizce sleeve
+kazanırdı**. Fail-closed yön test edildi (`quantum_oracle` → offender).
+
+### İKİNCİ DERS — SEVK EDİLEN DÜNYADA ULAŞILAMAYAN BİR GUARD'IN TESTİ, LİFT EDİLMEZSE KENDİSİNİ DEĞİL CONTAINMENT'I KANITLAR
+
+`SHARED_ALLOCATION_STATUS = future_dev` iken 1 numaralı sert kapı **her** paylaşımlı koşuyu
+zaten reddediyor, dolayısıyla arkasındaki iki guard **üretimde ULAŞILAMAZ**. Lift etmeyen
+bir test kırmızı/yeşil olurdu ama **containment hakkında** olurdu. Bu yüzden her refüz testi
+ADIM 76'nın iki-dünya fixture'ıyla `active_v1` dünyasını kuruyor
+(`patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "active_v1")` — fonksiyonun
+`__globals__`'ı o modülün dict'i olduğu için `backtest_run.py` buradan hiçbir şey import
+etmeden patch'i görür).
+
+**Bu bir eksiklik değil, planın kendi cümlesi:** *"only shared runs are affected, and no
+shared run is admissible until C9."* Sevk edilen sıralamayı bozmadığımı ayrı bir test
+pinliyor (`test_containment_still_leads_in_the_shipped_world`): lift edilmemiş dünyada
+ihlal eden kompozisyon **containment koduyla** reddedilir, OD-1/OD-6 kodlarıyla **değil**.
+
+**YAN ÜRÜN — ADIM 52'nin "kurulamaz" kaydı artık KURULABİLİR.**
+`test_external_object_run_provenance.py`'ın docstring'i *"`TL-11.c3` names a run over an
+allocation-enabled composition … so that run cannot be admitted and **no test can construct
+it**"* diyor. İki-dünya lift'i tam olarak onu kurulabilir yapar; `TL-11.c3` bu slice'ta
+**kapatılmadı ve yeniden sınıflandırılmadı** (B→D tavan yükseltir, ADIM 42 kuralı) — ama
+artık *"kurulamaz"* değil, *"kurulmadı"*.
+
+### NEGATİF KONTROLLER — ÜÇÜ DE ÖLÇÜLDÜ, VE ÜÇÜNCÜSÜ BOŞLUĞUN KENDİSİNİ ÖLÇER
+
+| # | Kusur | HEDEF suite | ÖNCEDEN VAR OLAN containment suite |
+|---|---|---|---|
+| NC-1 | OD-6 guard'ı etkisizleştirildi | **yalnız** `test_od6_refuses_…` kırmızı | **YEŞİL (rc=0)** |
+| NC-2 | OD-1 guard'ı etkisizleştirildi | **yalnız** `test_od1_refuses_…` kırmızı | **YEŞİL (rc=0)** |
+| NC-3 | **İKİSİ BİRDEN** kaldırıldı | — | **YEŞİL (rc=0)** |
+
+**NC-3 bir kontrol değil, bir ÖLÇÜMDÜR:** iki guard da sökülünce bu slice'tan önce var olan
+hiçbir test bunu göremiyor. Boşluğun *iddiası* değil, **büyüklüğü**. NC-1/NC-2 ayrıca
+**ayırt edici**: her biri yalnız kendi hedefini düşürüyor, diğer blocker'ın testlerini,
+**iki negatif kontrolü** ve shipped-world testini yeşil bırakıyor.
+
+**Kontrol harness'i belleğe geri yazar, `git checkout --` KULLANMAZ** (ADIM 111'in dersi):
+bu slice'ın dosyaları **commit edilmemişti**, checkout onları silerdi. Her turdan sonra
+`git status` + `grep 'NC: guard neutralised'` ile ağaç doğrulandı (ADIM 100'ün dersi:
+`finally` SIGTERM'de koşmaz).
+
+### ÖLÇÜLEREK DÜZELTİLEN İKİ PLAN/BELGE İDDİASI
+
+1. **Plan *"OpenAPI change? Likely"* diyor — BU YARI İÇİN YANLIŞ.** `docs/openapi.json`
+   readiness issue kodlarını **yayımlamıyor**: sevk edilmiş `ALLOCATION_SHARED_MODE_NOT_IN_BUILD`
+   dahi dosyada **0 kez** geçiyor. Kodlar `details` içinde serbest metin olarak yolculuk
+   ediyor → **iki yeni üye şemayı kıpırdatmıyor**, drift guard'ı tazelemek gerekmedi.
+2. **Kendi değişikliğimin YARATTIĞI bayatlık bulundu ve düzeltildi.** `BACKEND_LAYERS.md`
+   §Kapsama tablosu `backtest_run.py:542` / `:573` / `rules.py:154` yazıyordu; admission
+   yoluna iki guard eklemek **üçünü birden** kaydırdı. Sayılar güncellenmedi — §Conventions'ın
+   *"satır numarası yazma, sembol adı kullan"* kuralı uygulanıp **sembol adına çevrildiler**,
+   yoksa bir sonraki admission slice'ı aynı satırları yine bayatlatırdı.
+
+### DÜRÜST SINIR
+
+- **`C6` KAPANMADI.** Ön koşul **#15 + #16** kapandı; **#13 (P2) ve #14 (P8) AÇIK** ve
+  `G11`/`G12` imzasız kaldığı sürece açık kalır. Sıradaki hamle **kod değil, İKİ İMZA**.
+- **İki guard da sevk edilen build'de ULAŞILAMAZ** — `C9` lift ettiğinde hazır bulunması
+  gereken fail-closed taban. Bu bir eksiklik değil, planın satırı; ama *"sevk edildi"* ile
+  *"üretimde koşuyor"* aynı şey **değildir**.
+- **Frontend'de SIFIR satır** → hiçbir frontend kapısı koşulmadı, otorite CI.
+- **`TL-11.c3` kapatılmadı**, kabul defterine dokunulmadı, hiçbir tavan oynamadı.
+- **Üretim DB'si sayılmadı.** `G11`'in imza kutusu *"kaç aktif revizyon erteleyen timing
+  taşıyor"* diye soruyor; bu ölçüm **yapılmadı** (repo fixture'ları vekil değildir) ve
+  imzayı bekleyenin bir parçasıdır.
+- **`SHARED_ALLOCATION_STATUS` KALDIRILMADI**, `G10` (Gate 2) **talep edilmedi**.
+
+`PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md`.

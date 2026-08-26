@@ -270,6 +270,15 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION` **değişmedi** ·
+> OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 117 (G11 + G12
+> İMZALANDI, DOCS-ONLY): G11 = (a) tam admission blok** (kod `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`,
+> `field_path` ikisi de/O-02; ön koşul `sayılamadı` — kural ürün sahibince BİLİNÇLİ geçersiz kılındı, imzalı
+> sapma) · **G12 = A + ret "ikisi de"**. `C6`'nın ÜÇ ön koşulu da tamam (C4 #777/#799/#805 + iki imza) →
+> **sıradaki kalem `C6`** (iki imza TEK slice'ta, kapsam `docs/ADIM117_LANDED_KICKOFF.md`). Blocker
+> DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. `PROJECT_HISTORY.md` §ADIM 117.
+>
+>
 > **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 115 (worker'ın paylaşımlı saatinin
@@ -2115,9 +2124,10 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next: KOD DEĞİL, İMZA** — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon TABANI) ·
-> `G11`+`G12` (→ `C6`) · `G15` (leg 3) · `G10` **hiç talep edilmedi**; sonra `C6`, ön koşul
-> 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
+> **GERÇEK Next (ADIM 117'de güncellendi): `C6` — KOD.** ~~`G11`+`G12` imza~~ → **ikisi de
+> 2026-08-26'da imzalandı** (G11 = (a), G12 = A; `PROJECT_HISTORY.md` §ADIM 117); Karar 1'in TABANI
+> ADIM 114'te imzalanmıştı. Hâlâ imzasız: ~~`G8`~~ (**#847 ile İMZALANDI**, `A1+B2+C1`, 2026-08-26) · `G14` (#544) ·
+> `G15` (leg 3) · `G10` **hiç talep edilmedi**. Sıra: `C6`, sonra `G15`, ön koşul 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
 > `docs/audit/final_closure_delta_audit_2026-08-25.md` §10. Eski ölçüm:
 > `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden

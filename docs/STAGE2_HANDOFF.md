@@ -8676,7 +8676,41 @@ integration testleri **gerçekten koştu** (hedef modül **7 → 14 passed**, co
 `PROJECT_HISTORY.md` §ADIM 115 · `docs/ADIM115_LANDED_KICKOFF.md`.
 
 
+## Stage ADIM 117 — G11 + G12 imzalandı: C6'yı tutan son iki kapı açıldı landed
+
+- **2026-08-26 · dal `claude/g11-g12-imza-hazirligi-15d2ce` · taban `bda4aba8` (#840). ÜRÜN KODU
+  DEĞİŞMEDİ — iki dosya, ikisi de `docs/decisions/` altında.** Migration yok, `ENGINE_VERSION`
+  değişmedi, OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS = future_dev` kaldı. Blocker sayısı
+  DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+- **G11** (`closure_g11_deferred_fill_admission_2026-08-18.md` §Karar): **(a) tam admission blok
+  (entry + exit)** · blocker kodu `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED` ·
+  `field_path` **ikisi de** (O-02 emsali) · üç hüküm onayı da evet. **Ön koşul kutusu `sayılamadı`
+  ve belgenin "(a) bu sayı alınmadan imzalanmamalı" kuralı ürün sahibince BİLİNÇLİ geçersiz
+  kılındı** — imzalı sapma, gerekçe imza notunda (ürün üretimde değil, gerçek dağılım yok).
+- **G12** (`closure_product_decisions_2026-08-13.md` §Karar 6): **A (admission'da blokla)** ·
+  alt-karar **ikisi de** (Ready Check blocker + admission reddi —
+  `ALLOCATION_SHARED_MODE_NOT_IN_BUILD` + `SHARED_MODE_NOT_IN_BUILD` çifti emsal). Belgenin canlı
+  tablosunda Karar 6 → İMZALI; o belgede imza bekleyen tek kapı **Karar 3 (#559/DST)** kaldı.
+- **Sonuç: `C6`'nın tüm ön koşulları tamam** (plan §6: `C4 + G11 + G12`; `C4` #777/#799/#805 ile
+  inmişti). Uygulama iki belgenin KENDİ hükmüyle **C6'ya aittir** ve iki imza G11 §Ölçüm 5'in bağı
+  gereği **tek C6 slice'ında birlikte** uygulanır — kapsam ve zorunlu negatif kontroller
+  `PROJECT_HISTORY.md` §ADIM 117'de.
+- Ölçülen iki bayat öncül (taban `bda4aba8` anında): #847 (G8/DST) o an AÇIKTI; C9 verdict
+  belgesi o an yalnız #847'nin dalındaydı. **Rebase'te yeniden ölçüldü: #847 CI koşarken merge
+  oldu (G8 imzalı, `A1+B2+C1`) ve verdict belgesi artık ağaçta (`historical` işaretli).** Suite'ler koşulmadı (docs-only) — otorite CI.
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
+
+> **ADIM 117 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (Gerekçe önceki güncellemelerde: `docs-history-guard` yeniden adlandırmayı bloklar.)
+>
+> **BAŞLIĞIN "sonra C6" YARISI ARTIK FİİLEN SIRADADIR.** ADIM 117 `G11` + `G12`'yi imzaladı
+> (G11 = (a) tam admission blok; G12 = A + "ikisi de") → `C6`'nın tüm ön koşulları tamam.
+> Başlıktaki imza listesinden `G8` (#559) ~~açık PR #847'de sürülüyor~~ **#847 İLE İNDİ ve İMZALANDI** (`A1+B2+C1`, `closure_g8_dst_fold_gap_2026-08-25.md`; rebase'te ölçüldü — #847 kendi ADIM kaydını yazmadı, o borç sahibinin), `G14` (#544)
+> hâlâ imzasız, Karar 1'in TABANI ADIM 114'te imzalanmıştı. **Sıradaki mühendislik kalemi
+> `C6`'dır:** G11 blocker'ı + G12 blocker çifti + `_phase_tail` scaling dışlaması + G11 md. 4'ün
+> zorunlu negatif kontrolleri — tek slice, iki imza birlikte. Sonrası: `G15` → OD-1/2/3/6
+> (ön koşul 15–18) → `G10` → EN SON `C9`.
 
 > **ADIM 116 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
 > (Gerekçe ADIM 81/85/86/92/112/114/115 güncellemelerinde: `docs-history-guard` bir `## `

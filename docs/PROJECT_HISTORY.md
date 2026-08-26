@@ -16459,3 +16459,71 @@ merged ağaçta taze ölçüldü, **54/6 · A1 B21 C6 D32 — DEĞİŞMEDİ** (b
 kriteri kapatmıyor; kapattığı şey bir **uygulama** boşluğu).
 
 `PROJECT_HISTORY.md` §ADIM 116 · `docs/ADIM116_LANDED_KICKOFF.md`.
+
+## ADIM 117 — G11 + G12 İMZALANDI (C6'yı tutan son iki kapı): BİR İMZA KUTUSUNUN ÖN KOŞUL SATIRI DA İMZANIN PARÇASIDIR — ÇELİŞKİYİ İMZACIYA GÖSTER, SESSİZCE ÇÖZME
+
+- **Tarih:** 2026-08-26 · **Taban:** `origin/main` @ `bda4aba8` (#840) · **Dal:** `claude/g11-g12-imza-hazirligi-15d2ce`
+- **ÜRÜN KODU DEĞİŞMEDİ — SIFIR SATIR.** İki dosya, ikisi de `docs/decisions/` altında; migration yok,
+  `ENGINE_VERSION` değişmedi, OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS = future_dev` KALDI.
+  Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict **BLOCKED**.
+
+### Ne imzalandı
+
+1. **G11 — paylaşımlı koşuda P2 (ertelenmiş fill / bekleyen limit-stop):**
+   `closure_g11_deferred_fill_admission_2026-08-18.md` §Karar → **(a) tam admission blok (entry VE exit)**.
+   - Blocker kodu: **`ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`** (ALLOCATION_* ailesi;
+     `STRATEGY_EXECUTION_TIMING_*` yazımı reddedildi — bekleyen emir tipi timing değildir, o ad yarıyı kapsamazdı).
+   - `field_path`: **ikisi de** — lider blocker ihlal eden alanı gösterir, `details` tümünü taşır (O-02 emsali,
+     `commands/backtest_run.py::_readiness_blocked` yükseltme deseniyle uyumlu).
+   - Üç hüküm onayı da **evet** (P2 runtime'da reddedilemez · P2 iki fazda book eder, §C.3.7 çaresi eksik ·
+     G11–G12 bağımsız değil).
+   - (a-dar) alt-kutusu **bilerek boş** — (a) imzalandığı için konu dışı; belgeye not düşüldü.
+2. **G12 — paylaşımlı koşuda scaling (Karar 6):** `closure_product_decisions_2026-08-13.md` §Karar 6 →
+   **A (admission'da blokla)**; alt-karar **ikisi de** (Ready Check blocker + admission reddi —
+   `ALLOCATION_SHARED_MODE_NOT_IN_BUILD` + `SHARED_MODE_NOT_IN_BUILD` çiftinin emsali).
+   Belgenin canlı başlık tablosundaki Karar 6 satırı İMZASIZ → **İMZALI** çevrildi ve *"hâlâ imza bekleyen
+   İKİ kapı"* cümlesi strike-through ile düzeltildi (eski metin kanıt olarak korunarak) — bu belgede imza
+   bekleyen tek kapı **Karar 3 (#559/DST)** kaldı.
+
+### ASIL DERS — ön koşul kutusu imzanın parçasıdır
+
+G11 belgesinin kendi kuralı: *"(a) ve (a-dar) [üretim DB sayımı] alınmadan imzalanmamalıdır."* Ürün sahibi
+**(a)**'yı seçti ama sayım kutusu **`sayılamadı`** idi — iki cevap birbiriyle çelişiyordu. Çelişki
+**sessizce çözülmedi** (ne sayım varsayıldı, ne (a) sulandırıldı): ayrı bir soru olarak imzacıya geri
+gösterildi ve cevap **"kuralı bilinçli geçersiz kıl, imzala"** oldu — gerekçesiyle (ürün henüz üretimde
+değil, ölçülecek gerçek kullanıcı dağılımı yok; §Ölçüm 8'in vekil sayısı, (a)'nın gerçek bir özelliği
+kapattığı BİLİNEREK kabul edildi). Bu bir gözden kaçırma değil, **imzalı bir sapmadır** ve imza kutusunun
+hemen altına yazıldı. Süreç: iki belgedeki seçenek tabloları AskUserQuestion ile **hiçbir seçenek elenmeden**
+sunuldu (4 ana + 4 alt soru); ajan yalnız G12'de belgenin KENDİ önerisini (A) aktardı, kendi önerisini eklemedi.
+
+### İki doğrulama, ikisi de görev promptunu düzeltti
+
+- Prompt *"PR #847 (G8/DST) muhtemelen inmiştir"* diyordu → **ölçüldü: #847 o an hâlâ AÇIKTI** (main HEAD
+  `bda4aba8`). **REBASE NOTU (aynı gün):** bu PR'ın CI'ı koşarken #847 (ve #848) merge oldu → dal
+  `ae18f46b` üzerine rebase edildi (çakışma sıfır — #847 hiçbir ritüel/karar dosyama dokunmuyor),
+  canlı belgelerdeki "#847 açık / G8 imzasız" cümleleri düzeltildi. #847 `G8`'i **imzalayarak** indi
+  (`A1+B2+C1`, `closure_g8_dst_fold_gap_2026-08-25.md`) ama **kendi ADIM kaydını yazmadı** — o borç
+  sahibinin (ADIM 97/109 emsali), bu kayıt onu uydurmaz.
+- Prompt `docs/audit/closure_c9_containment_lift_verdict_2026-08-26.md`'yi bağlam gösteriyordu → **o dosya bu
+  ağaçta YOK**; #847'nin dalında yaşıyor (`git log` ile ölçüldü: `97e98c91` onu historical işaretliyor) —
+  27D/12-yeşil sayıları o belge indiğinde okunmalı, buradan alıntılanmadı.
+
+### Sonuç — C6'nın önü AÇILDI, kapsamı da imzayla ÇİZİLDİ
+
+Plan §6: `C6 = C4 + G11 + G12`. `C4` inmişti (#777/#799/#805); G11+G12 bugün imzalandı → **C6'nın tüm ön
+koşulları tamam.** İmzaların gerektirdiği uygulama (iki belgenin KENDİ hükmüyle) **bu slice'a değil C6'ya
+aittir** ve kapsamı artık yazılıdır: G11 blocker'ı (readiness + admission fail-closed tekrar) · G12 blocker
+çifti · `_phase_tail`'in scaling bölümünün (`engine.py` `:3253`–`:3411` yapısı, ADIM 71 ölçümü) adaptörden
+dışlanması · G11 md. 4'ün **zorunlu negatif kontrolleri** (erteleyen Strategy'li paylaşımlı koşu gerçekten
+reddedilir; blocker kaldırılınca test kırmızı; bağımsız mod aynı Strategy ile koşmaya devam eder).
+G11 §Ölçüm 5'in bağı gereği iki imza **tek C6 slice'ında birlikte** uygulanır.
+
+### DÜRÜST SINIR
+
+- Üretim DB sayımı **yapılmadı** (yapılamazdı) — kutu `sayılamadı`, sapma imzalı.
+- Ürün/test kodunda sıfır satır → **iki suite de KOŞULMADI**, hiçbir geçen/coverage sayısı iddia edilmiyor; otorite CI.
+- `final_closure_ordered_plan_2026-08-13.md` `doc-status: historical` → G11/G12 satırları **bilerek güncellenmedi**
+  (donmuş kayıt kuralı); canlı işaret bu kayıt + karar belgelerinin kendisidir.
+- Kabul borcu tavanları, A-08 sayaçları, #514 el değmedi.
+- **NUMARA:** son kayıt 116, en yüksek kickoff dosyası `ADIM116`, açık PR'ların hiçbiri `ADIM<n>` yolu
+  eklemiyor (anlık görüntü, garanti değil — ADIM 100/103 emsali) → bu kayıt **117**.

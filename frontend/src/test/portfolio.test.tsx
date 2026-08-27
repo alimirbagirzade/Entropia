@@ -352,8 +352,11 @@ describe("Portfolio / Equity Allocation page", () => {
     fireEvent.change(screen.getByLabelText("Max total exposure %"), {
       target: { value: "150" },
     });
+    // Driven with BLOCK_OPPOSITE since B0 (G14 / GH #544, signed 2026-08-27) dropped NET
+    // from the selectable list. The claim under test is that the page SENDS the two rule
+    // fields; it never depended on which policy token was picked.
     fireEvent.change(screen.getByLabelText("Conflicting signals (same instrument)"), {
-      target: { value: "NET" },
+      target: { value: "BLOCK_OPPOSITE" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     expect(await screen.findByText("Draft saved")).toBeInTheDocument();
@@ -361,7 +364,7 @@ describe("Portfolio / Equity Allocation page", () => {
     const init = callFor(fetchMock, "PUT", "/portfolio-allocation-draft");
     const body = JSON.parse(String(init.body));
     expect(body.max_total_exposure_percent).toBe("150");
-    expect(body.conflict_policy).toBe("NET");
+    expect(body.conflict_policy).toBe("BLOCK_OPPOSITE");
   });
 
   it("surfaces a stale-draft conflict verbatim", async () => {
@@ -672,7 +675,10 @@ describe("Portfolio — the NET conflict policy notice (G14 / GH #544)", () => {
   // twice over: containment means no shared plan reaches an engine at all, and the
   // unified-clock phase loop REFUSES NET rather than downgrading it. The fix is not a
   // better frozen sentence; it is to stop stating the outcome here at all.
-  it("names the option without announcing an outcome the server owns", async () => {
+  it("no longer offers NET on a fresh draft (B0)", async () => {
+    // B0 (signed 2026-08-27) froze the write path: NET is not an option a NEW plan can
+    // pick. The enum value is NOT gone — that is `B`, a migration shipping before C9 —
+    // so this asserts the SELECTABLE list, not the wire vocabulary.
     stubApi({
       "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_EMPTY,
       "GET /mainboards/default": MAINBOARD,
@@ -681,17 +687,33 @@ describe("Portfolio — the NET conflict policy notice (G14 / GH #544)", () => {
 
     fireEvent.click(await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
     const select = screen.getByLabelText("Conflicting signals (same instrument)");
+    expect(within(select).queryByRole("option", { name: /^Net\b/ })).toBeNull();
+
+    // Positive control: the two supported policies are still offered, so the assertion
+    // above measures NET's removal and not a broken render.
+    expect(within(select).getByRole("option", { name: /^Keep separate/ })).toBeTruthy();
+    expect(within(select).getByRole("option", { name: /^Block opposite/ })).toBeTruthy();
+  });
+
+  it("still shows a STORED NET verbatim, disabled — never a silent fallback", async () => {
+    // A plan saved before B0 still carries NET. Without an option for it the controlled
+    // <select> would have no matching child and the browser would show the FIRST option:
+    // the user would read "keep separate" while the server holds NET. That is the exact
+    // silent fallback B1 was rejected for, so it may not reappear in the UI.
+    stubApi({
+      "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": {
+        ...DRAFT_EMPTY,
+        draft: { ...DRAFT_EMPTY.draft, enabled: true, conflict_policy: "NET" },
+      },
+      "GET /mainboards/default": MAINBOARD,
+    });
+    renderPage();
+
+    const select = await screen.findByLabelText("Conflicting signals (same instrument)");
+    expect(select).toHaveValue("NET");
     const net = within(select).getByRole("option", { name: /^Net\b/ });
-
-    // The wire token is untouched — this is a presentation assertion, not a contract one.
-    expect(net).toHaveValue("NET");
-
-    // The label must not re-state what running NET does. "Block opposite" is a SIBLING
-    // option's label, so claiming it here is precisely the confusion that shipped.
-    expect(net).not.toHaveTextContent(/block/i);
-    expect(net).not.toHaveTextContent(/executed as/i);
-    // ... and it must point the reader at the authority instead of replacing it.
-    expect(net).toHaveTextContent(/warning/i);
+    // Visible and honest, but not re-selectable once the user moves away from it.
+    expect(net).toBeDisabled();
   });
 
   it("renders the server's NET finding verbatim rather than a client paraphrase", async () => {

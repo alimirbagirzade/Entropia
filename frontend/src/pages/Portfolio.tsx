@@ -505,6 +505,18 @@ function DraftEditor({
                       {CONFLICT_POLICY_LABELS[token] ?? token}
                     </option>
                   ))}
+                  {/* A plan stored before B0 still carries NET. Without this option the
+                      controlled <select> would have no matching child and the browser
+                      would display the first one -- the user would read "keep separate"
+                      while the server holds NET. It renders DISABLED: visible and honest,
+                      but not re-selectable once changed. Server-driven, so any future
+                      retired token is covered without a second list to maintain. */}
+                  {conflictPolicy !== "" &&
+                  !(CONFLICT_POLICIES as readonly string[]).includes(conflictPolicy) ? (
+                    <option value={conflictPolicy} disabled>
+                      {CONFLICT_POLICY_LABELS[conflictPolicy] ?? conflictPolicy}
+                    </option>
+                  ) : null}
                 </select>
               </label>
             </div>

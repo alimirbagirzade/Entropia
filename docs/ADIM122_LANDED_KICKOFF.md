@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 122 landed — `G14` Karar 2'nin ölçümü (DOCS-ONLY)
 

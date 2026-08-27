@@ -23,11 +23,13 @@ from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.queries import allocation_plan as alloc_query
 from entropia.application.queries import mainboard as mb_query
+from entropia.domain.allocation.enums import CrossItemConflictPolicy
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.infrastructure.postgres.models import (
     AuditEvent,
     OutboxEvent,
+    PortfolioAllocationPlan,
     PortfolioAllocationPlanRevision,
     Principal,
 )
@@ -38,6 +40,7 @@ from entropia.shared.errors import (
     AllocationDraftConflictError,
     AllocationHasBlockersError,
     AllocationValidationFailedError,
+    CrossItemConflictPolicyNotSelectableError,
 )
 
 pytestmark = pytest.mark.integration
@@ -332,8 +335,16 @@ async def test_idempotent_upsert_replay(session) -> None:
 
 
 async def test_portfolio_rules_round_trip_and_revision_carry(session) -> None:
-    """PUT persists the two rule fields; the draft GET, the NET pre-disclosure
-    warning, the immutable revision config and the blocker path all reflect them."""
+    """PUT persists the two rule fields; the draft GET, the immutable revision config
+    and the blocker path all reflect them.
+
+    This used to drive the policy field with ``"net"``. B0 (signed 2026-08-27) froze that
+    write path, so the field is now driven with ``"block_opposite"`` -- the claim under
+    test is that the TWO RULE FIELDS round-trip, and that claim never depended on which
+    policy token was used. The lowercase input is kept deliberately: the normalisation
+    axis (``_norm_conflict``) is part of what this test covers. NET's own behaviour moved
+    to ``test_b0_freezes_the_net_write_path``.
+    """
     await _seed_principals(session)
     composition_id, items = await _composition_with_items(session, USER1)
 
@@ -347,23 +358,22 @@ async def test_portfolio_rules_round_trip_and_revision_carry(session) -> None:
         compounding_mode="COMPOUND_PORTFOLIO_EQUITY",
         reserve_cash_percent="10",
         max_total_exposure_percent="150",
-        conflict_policy="net",
+        conflict_policy="block_opposite",
         entries=_entries((items[0], "40"), (items[1], "35"), (items[2], "15")),
     )
     await session.commit()
-    # NET is a valid save, pre-disclosed as the V1 block downgrade (warning, no blocker).
+    # A supported policy raises no policy issue at all.
     codes = {i["code"] for i in put["inline_issues"]}
-    assert "CONFLICT_POLICY_NET_V1" in codes
+    assert "CONFLICT_POLICY_NET_V1" not in codes
     # ADIM 3 containment: the draft still SAVES (authoring is preserved) and the only
-    # blocker among the inline issues is the shared-mode containment — NET itself is
-    # still just the pre-disclosed V1 downgrade warning it always was.
+    # blocker among the inline issues is the shared-mode containment.
     assert {i["code"] for i in put["inline_issues"] if i["severity"] == "blocker"} == {
         _CONTAINMENT_CODE
     }
 
     draft = await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
     assert draft["draft"]["max_total_exposure_percent"] == "150.000000"
-    assert draft["draft"]["conflict_policy"] == "NET"
+    assert draft["draft"]["conflict_policy"] == "BLOCK_OPPOSITE"
 
     # ADIM 3 containment: the rules still round-trip through the DRAFT (asserted
     # above), but they can no longer be frozen into an immutable revision — shared
@@ -402,3 +412,90 @@ async def test_nonpositive_max_total_exposure_blocks_the_revision(session) -> No
         await alloc_cmd.create_allocation_revision(
             session, USER1, composition_id=composition_id, expected_row_version=1
         )
+
+
+# --------------------------------------------------------------------------- #
+# B0 — the NET write path is frozen (G14 / GH #544, signed 2026-08-27)         #
+# --------------------------------------------------------------------------- #
+
+
+async def test_b0_freezes_the_net_write_path(session) -> None:
+    """A submitted NET token is refused BEFORE anything is written.
+
+    ``pytest.raises`` alone would not close this clause: moving the guard below the
+    mutation raises the very same exception while leaving the row behind (the ADIM 94
+    lesson). So the plan table is READ BACK, and the read happens without a rollback --
+    a rollback would discard a row a below-the-mutation guard had written and the test
+    would pass vacuously.
+    """
+    await _seed_principals(session)
+    composition_id, items = await _composition_with_items(session, USER1)
+
+    for token in ("NET", "net", "  Net  "):
+        with pytest.raises(CrossItemConflictPolicyNotSelectableError) as exc_info:
+            await alloc_cmd.upsert_allocation_draft(
+                session,
+                USER1,
+                composition_id=composition_id,
+                expected_row_version=None,
+                enabled=True,
+                initial_capital={"amount": "10000", "currency": "USDT"},
+                compounding_mode="COMPOUND_PORTFOLIO_EQUITY",
+                reserve_cash_percent="10",
+                conflict_policy=token,
+                entries=_entries((items[0], "40")),
+            )
+        # No rollback: the assertion below must see whatever the command actually left.
+        assert (await session.execute(select(PortfolioAllocationPlan))).first() is None, token
+
+    # The envelope carries the recovery fields the page needs (O-02), not just a code.
+    err = exc_info.value
+    assert err.code == "CROSS_ITEM_CONFLICT_POLICY_NOT_SELECTABLE"
+    assert err.field_path == "conflict_policy"
+    assert err.suggested_action == "choose_supported_conflict_policy"
+    assert err.details[0]["supported"] == ["KEEP_SEPARATE", "BLOCK_OPPOSITE"]
+
+    # Positive control: the SAME call with a supported token writes exactly one row, so
+    # the refusal above is attributable to the token and not to a broken fixture.
+    await _put_shared_draft(session, USER1, composition_id, _entries((items[0], "40")))
+    plan_count = await session.scalar(select(func.count()).select_from(PortfolioAllocationPlan))
+    assert plan_count == 1
+
+
+async def test_a_stored_net_plan_still_reads_back_verbatim(session) -> None:
+    """B0 freezes WRITES; it must not touch reads.
+
+    A plan saved before B0 still carries ``'NET'``. The value is not rewritten, not
+    nulled and not downgraded -- B1 and B2 were both considered and rejected. This is
+    also the guard against the placement trap: putting the refusal in the shared Pydantic
+    model would have turned this read into a 500, because ``_plan_to_config`` re-validates
+    STORED rows through that same model.
+    """
+    await _seed_principals(session)
+    composition_id, items = await _composition_with_items(session, USER1)
+    await _put_shared_draft(session, USER1, composition_id, _entries((items[0], "40")))
+
+    # Simulate a row written before B0: the command path can no longer produce one.
+    plan = (await session.execute(select(PortfolioAllocationPlan))).scalar_one()
+    plan.conflict_policy = CrossItemConflictPolicy.NET
+    await session.commit()
+    session.expire_all()
+
+    draft = await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
+    assert draft["draft"]["conflict_policy"] == "NET"
+
+    # Validation reads the stored row back through ``_plan_to_config`` -- the exact path
+    # that a refusal in the shared Pydantic model would have turned into a 500. It must
+    # succeed, and the NET issue must now be a BLOCKER: that is the drainage signal B3
+    # needs, since it is how the operator finds the rows that would halt the migration.
+    #
+    # ``state``/``valid`` are NOT asserted here: an enabled plan already carries the
+    # containment blocker, so both are pinned by containment whatever NET's severity is.
+    # The severity of the NET issue itself is the only distinguishing axis.
+    report = await alloc_cmd.validate_allocation_draft(
+        session, USER1, composition_id=composition_id
+    )
+    net = [i for i in report["issues"] if i["code"] == "CONFLICT_POLICY_NET_V1"]
+    assert len(net) == 1
+    assert net[0]["severity"] == "blocker"
+    assert net[0] not in report["warnings"]

@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from entropia.application.idempotency import run_idempotent
 from entropia.application.queries.allocation_currency import resolve_settlement_currencies
 from entropia.domain.allocation.config import PortfolioAllocationConfigV1
+from entropia.domain.allocation.enums import CrossItemConflictPolicy
 from entropia.domain.allocation.rules import (
     AllocationItemRef,
     canonical_config,
@@ -58,6 +59,7 @@ from entropia.shared.errors import (
     AllocationPlanNotFoundError,
     AllocationValidationFailedError,
     CompositionNotFoundError,
+    CrossItemConflictPolicyNotSelectableError,
 )
 from entropia.shared.ids import new_id
 
@@ -101,6 +103,34 @@ async def upsert_allocation_draft(
             "entries": raw_entries,
         }
     )
+    # B0 (G14 / GH #544, signed 2026-08-27): the write path is frozen for NET. THIS is the
+    # freeze -- the ``Sev.BLOCKER`` flip in ``rules.py`` cannot be, because this is the only
+    # function that writes ``plan.conflict_policy`` and it deliberately never consults
+    # ``has_blockers`` (a draft may be invalid). Measured with ``ast``, not grep: the set
+    # that writes the column and the set that enforces blockers are DISJOINT.
+    #
+    # The guard sits ABOVE the mutation and above ``run_idempotent`` on purpose: a refusal
+    # must leave no row and no replayable idempotency envelope behind.
+    #
+    # It refuses the TOKEN, not "any blocker" -- an enabled plan always carries the
+    # containment blocker in this build, so refusing blockers here would make shared
+    # allocation entirely unsavable. And it lives here rather than in
+    # ``config.py::_norm_conflict`` because ``_plan_to_config`` re-validates STORED rows
+    # through that same model: refusing there would turn reading an existing NET plan into
+    # a 500. Reading stays untouched; only new writes are frozen.
+    if config.conflict_policy == CrossItemConflictPolicy.NET:
+        raise CrossItemConflictPolicyNotSelectableError(
+            details=[
+                {
+                    "field": "conflict_policy",
+                    "submitted": str(CrossItemConflictPolicy.NET),
+                    "supported": [
+                        str(CrossItemConflictPolicy.KEEP_SEPARATE),
+                        str(CrossItemConflictPolicy.BLOCK_OPPOSITE),
+                    ],
+                }
+            ]
+        )
 
     async def _op() -> dict[str, Any]:
         plan = await alloc_repo.get_plan_for_workspace(session, composition_id)

@@ -228,12 +228,19 @@ export const ALLOCATION_CURRENCIES = ["USD", "USDT", "EUR", "TRY"] as const;
 // VERBATIM and which is worded against the world that actually applies. Do not
 // restate the outcome here: a second, frozen copy is how the old label went stale
 // (G14 / GH #544).
-export const CONFLICT_POLICIES = ["KEEP_SEPARATE", "BLOCK_OPPOSITE", "NET"] as const;
+// Selectable cross-item conflict policies. NET was dropped by B0 (G14 / GH #544, signed
+// 2026-08-27): the write path is frozen because NET has no canonical definition and the
+// two engines disagree about it. The value is NOT removed from the enum here -- that is
+// `B`, a migration, and it ships before C9.
+export const CONFLICT_POLICIES = ["KEEP_SEPARATE", "BLOCK_OPPOSITE"] as const;
 
+// Display map, deliberately WIDER than CONFLICT_POLICIES. A plan saved before B0 still
+// carries NET and must render as NET: dropping the label would show a stored plan as
+// something it is not, which is the silent-fallback this decision exists to avoid.
 export const CONFLICT_POLICY_LABELS: Record<string, string> = {
   KEEP_SEPARATE: "Keep separate (independent items)",
   BLOCK_OPPOSITE: "Block opposite (earlier-pinned item wins)",
-  NET: "Net (undefined — see warning)",
+  NET: "Net (no longer selectable — undefined)",
 };
 
 // CompoundingMode wire tokens (doc 13 §5.1, §8.3; Fixed Item Notional is NOT

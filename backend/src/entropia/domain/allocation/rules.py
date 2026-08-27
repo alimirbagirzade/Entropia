@@ -270,10 +270,20 @@ def validate_allocation(
             )
         )
     if config.conflict_policy == ConflictPolicy.NET:
+        # BLOCKER, not WARNING, since B0 (signed 2026-08-27). The MESSAGE is unchanged --
+        # it is pinned by Decision 3's signature and already ends by telling the caller to
+        # choose BLOCK_OPPOSITE or KEEP_SEPARATE, which is what a blocker must say.
+        #
+        # What this flip does and does NOT do. It makes a STORED NET plan read NOT_READY
+        # instead of READY_WITH_WARNINGS (``_readiness_state``) -- that is the drainage
+        # signal B3 needs. It does NOT stop a NET row from being written: the only writer
+        # of ``plan.conflict_policy`` is ``upsert_allocation_draft`` and that path never
+        # consults ``has_blockers`` (a draft is allowed to be invalid). The actual freeze
+        # is the token refusal at that write boundary; see Decision 4 / Olcum 6.
         issues.append(
             AllocationIssue(
                 Code.CONFLICT_POLICY_NET_V1,
-                Sev.WARNING,
+                Sev.BLOCKER,
                 _net_policy_warning(shared_is_executable=shared_is_executable),
                 field="conflict_policy",
             )

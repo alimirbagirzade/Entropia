@@ -50,14 +50,23 @@ class CrossItemConflictPolicy(StrEnum):
     the five are enumerated in ``domain/backtest/execution/arbitration.py`` under
     ``NET_UNDEFINED_SEMANTICS``. The two engines therefore disagree about the
     value: the V1 sequential engine downgrades it to BLOCK_OPPOSITE and discloses
-    the downgrade (validation warning + L4 engine warning, never silent), while
+    the downgrade (validation BLOCKER + L4 engine warning, never silent), while
     the unified-clock phase loop REFUSES a NET run outright rather than label a
     block as netting. Neither happens while ``SHARED_ALLOCATION_STATUS`` is
     ``future_dev``, because no shared plan reaches an engine at all.
 
-    The value is retained for now on purpose: removing it is a migration over the
+    THE WRITE PATH IS FROZEN (`B0`, signed 2026-08-27). ``upsert_allocation_draft``
+    refuses an incoming ``NET`` token, and the frontend no longer offers it, so no NEW
+    row can carry the value. Rows written before that keep it verbatim: they are not
+    rewritten (`B1`) and not nulled (`B2`) -- both were rejected as silent changes to a
+    configuration the user chose. Reading such a row is deliberately still supported,
+    which is why the refusal lives at the command boundary and NOT in
+    ``config.py``: ``_plan_to_config`` re-validates stored rows through that model.
+
+    The value itself is retained for now on purpose: removing it is a migration over the
     persisted ``portfolio_allocation_plan.conflict_policy`` CHECK, decided as
-    option `B` and scheduled before `C9`
+    option `B` and scheduled before `C9`; per `B3` that migration HALTS if any row still
+    carries ``'NET'``
     (``docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md``, GH #544).
     """
 

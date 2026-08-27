@@ -129,6 +129,66 @@ açıklama metni, ve davranışı pinleyen **beş test dosyası** (`test_allocat
 > değişti — imza ile sevkin arasındaki bu boşluk #720 emsalinin tersidir (orada sevk vardı,
 > imza yoktu) ve kapanana kadar açıkça böyle okunmalıdır.
 
+## Ölçüm 5 — YENİ (ADIM 122): Karar 2'nin sorduğu küme **DONMUŞ DEĞİL, BÜYÜYOR**
+
+Karar 2 *"`'NET'` taşıyan **mevcut** satırlar"* diye soruyor. Bu soru sessizce bir şey
+varsayıyor: kümenin **kapalı** olduğunu. **Ölçüldü — değil.**
+
+| Ne | Ölçüm | Kanıt (taban `9bb14570`) |
+|---|---|---|
+| NET seçimi kaydı **bloklar mı** | **HAYIR** | `rules.py` NET için `Sev.WARNING` üretir — yanındaki `MAX_TOTAL_EXPOSURE_INVALID` ve `NO_ACTIVE_ENTRY` `Sev.BLOCKER`'dır, o **değil** |
+| Kapı neyi sayar | **yalnız BLOCKER** | `rules.py::has_blockers` = `any(severity == Sev.BLOCKER)`; üç çağıranı `commands/allocation_plan.py` |
+| Plan **geçerli** sayılır mı | **EVET** | `allocation_plan.py` → `valid = not has_blockers(issues)` → NET'li plan **`valid=True`** |
+| Kullanıcı NET'i **seçebilir mi** | **EVET** | `frontend/src/lib/allocation.ts::CONFLICT_POLICIES` üç üyeli ve `NET` **canlı**; gövdenin `conflict_policy: "NET"` gittiği `portfolio.test.tsx`'te **pinli** |
+| Kolon | **nullable** | `models/allocation.py::PortfolioAllocationPlan.conflict_policy`, `nullable=True` (B2'nin ucuz olmasının sebebi) |
+
+**Sonuç, ve Karar 2'yi doğrudan etkiler:** `'NET'` satırları **bugün, sevk edilmiş build'de
+oluşmaya devam ediyor**. Kullanıcı seçer → kayıt **başarılı olur** → satır kalıcılaşır →
+koşuda `engine.py::conflict_downgraded_from_net` onu sessizce downgrade eder (ADIM 118'in
+bildirimi bunu **anlatır**, **engellemez**).
+
+Bu üç şeyi birden söyler:
+
+1. **Karar 2 boş bir küme umuduna yaslanamaz.** *"Belki sıfırdır, o zaman ucuz"* okuması
+   **kurulamaz**: sayı bugün sıfır olsa bile yarın olmayabilir.
+2. **`G15` emsali burada TERSİNE işler.** `G15`'te sayı **alınabilirdi** ve alınmadığı için
+   imza bekledi. Burada sayı **alınsa bile bayatlar**, çünkü yazma yolu açık — yani sayı bir
+   **ön koşul** değil, bir **anlık görüntüdür**.
+3. **B1/B2/B3'ün üçü de boş olmayan bir kümeyi varsaymak zorundadır**, ve `B3` (migration
+   dursun) **koşan bir sisteme karşı** ayrıca kırılgandır: deploy anında sıfır olan sayı,
+   bir sonraki deploy'da sıfır olmayabilir.
+
+### Sayının kendisi ALINMADI — ve ikame edilmedi
+
+Üretim DB'sine erişim yok; repo fixture'ları vekil **değildir** (`G15` §Ölçüm kuralı).
+İmzacının koşturacağı sorgu:
+
+```sql
+SELECT count(*) FILTER (WHERE conflict_policy = 'NET') AS net_rows,
+       count(*)                                        AS total_plans
+FROM portfolio_allocation_plan;
+```
+
+**Bu sayı bir ön koşul kutusu DEĞİLDİR** (yukarıdaki md. 2) — Karar 2 onsuz da imzalanabilir;
+sayı yalnız migration'ın karşılaşacağı işin **büyüklüğünü** söyler, **cinsini** değil.
+
+### Ölçümün doğurduğu DÖRDÜNCÜ seçenek — bir ÖNERİ DEĞİL
+
+Belgenin B1/B2/B3'ü kümeyi **kapalı** varsaydığı için, onu **kapatan** bir seçenek listede
+yok. Ölçüm onu doğuruyor ve **karara bağlanmadan** kaydediliyor (`G15`'in dördüncü
+seçeneğinin doğuşuyla aynı şekil):
+
+> **B0 — ÖNCE YAZMA YOLUNU DONDUR.** `Sev.WARNING` → `Sev.BLOCKER` **ve**
+> `CONFLICT_POLICIES`'ten `NET`'i düşür. Küme o an **donar**; migration sabit bir küme
+> üzerinde çalışır ve B1/B2/B3 arasındaki seçim **ölçülebilir** hâle gelir.
+> **Bedeli dürüstçe:** bu **kendi başına** bir davranış değişikliğidir — bugün `valid=True`
+> alan bir yapılandırma yarın blocker alır, yani `C9`'dan **bağımsız** olarak kullanıcıya
+> görünür. Yani B0 Karar 2'yi ucuzlatır ama **bedavaya değil**; ayrıca imzalanmalıdır.
+
+**Bu bölüm hiçbir kutu doldurmaz.** §Karar 2'nin imza bloğu **boştur** ve öyle bırakıldı.
+
+---
+
 ## Karar 2 — YALNIZ `B` seçilirse: `'NET'` taşıyan mevcut satırlar
 
 | # | Seçenek | Ölçülmüş sonucu |

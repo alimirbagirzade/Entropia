@@ -21,7 +21,6 @@ from entropia.domain.allocation.capability import (
 from entropia.domain.allocation.config import PortfolioAllocationConfigV1
 from entropia.domain.allocation.enums import AllocationIssueCode as Code
 from entropia.domain.allocation.enums import AllocationIssueSeverity as Sev
-from entropia.domain.allocation.enums import CrossItemConflictPolicy as ConflictPolicy
 from entropia.domain.mainboard.enums import MainboardItemKind
 
 _HUNDRED = Decimal(100)
@@ -45,58 +44,6 @@ ALLOCATABLE_ITEM_KINDS: frozenset[MainboardItemKind] = frozenset(
         MainboardItemKind.TRADE_LOG,
     }
 )
-
-
-# ---- NET cross-item conflict policy: the notice (G14 / GH #544, Decision C) ---- #
-#
-# Signed 2026-08-26, ``docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md``
-# Decision 1 = "C now + B (REMOVE) before C9", Decision 3 = the text below. The value is
-# NOT removed by this slice (that is `B`, and it is a migration), so what ships here is
-# only the notice — and the notice had been counter-factual since it was written.
-#
-# WHY THE LEADING CLAUSE IS DERIVED AND NOT SPELLED OUT. Under containment no shared plan
-# reaches an engine at all, so "the engine executes NET as BLOCK_OPPOSITE" describes
-# something that cannot happen; but hard-coding "nothing runs" would itself become a lie
-# the day `C9` lifts the flag. So the first clause is a function of
-# ``shared_allocation_is_executable()`` and the message is honest in BOTH worlds — which
-# is what ``test_shared_allocation_two_world_gate`` measures.
-#
-# WHY THE FIVE SEMANTICS ARE NAMED, NOT IMPORTED. They are enumerated in
-# ``domain/backtest/execution/arbitration.py`` under ``NET_UNDEFINED_SEMANTICS``, which is
-# a phase-loop module: the signed containment allowlist
-# (``test_oracle_portfolio_containment_gate::_AUTHORISED_PHASE_LOOP_IMPORTERS``) scans for
-# the literal text of such an import, so importing it here would widen a SIGNED list by an
-# unsigned module. Naming the symbol costs nothing and keeps the guard meaningful.
-_NET_POLICY_BODY = (
-    "NET has no canonical definition: neither doc 13 nor Master Ref Modül 11 §6.3 states a "
-    "netting price, position custody, fee attribution, realized-PnL attribution or margin "
-    "treatment for an offset pair (the five are enumerated in "
-    "domain/backtest/execution/arbitration.py under NET_UNDEFINED_SEMANTICS). The two "
-    "engines consequently disagree about the value: the V1 sequential engine downgrades NET "
-    "to BLOCK_OPPOSITE and discloses the downgrade (a later-pinned item's opposing "
-    "same-instrument entry is blocked, never netted-filled), while the unified-clock phase "
-    "loop REFUSES a NET run outright rather than label a block as netting. Choose "
-    "BLOCK_OPPOSITE or KEEP_SEPARATE to say which of those two you actually want (GH #544)."
-)
-
-_NET_POLICY_NOT_EXECUTABLE_PREFIX = (
-    "Shared capital allocation does not execute in this build, so no plan carrying this "
-    "policy reaches an engine at all and the downgrade described below does not happen. "
-)
-
-
-def _net_policy_warning(*, shared_is_executable: bool) -> str:
-    """The CONFLICT_POLICY_NET_V1 message, told against the world that actually applies.
-
-    The body is the part that is true whatever the flag says; the prefix is the part that
-    is true only while shared capital is contained. Keeping them separate is the whole
-    point — a single frozen string cannot be right in both worlds, and the shipped one was
-    right in neither (it announced a downgrade that containment prevents, and named it as
-    the outcome even though the phase loop refuses it).
-    """
-    if shared_is_executable:
-        return _NET_POLICY_BODY
-    return _NET_POLICY_NOT_EXECUTABLE_PREFIX + _NET_POLICY_BODY
 
 
 def _money(value: Decimal) -> str:
@@ -203,10 +150,7 @@ def validate_allocation(
         return [], None
 
     issues: list[AllocationIssue] = []
-    # Read ONCE: the containment blocker and the NET notice below must never describe two
-    # different worlds within a single validation pass.
-    shared_is_executable = shared_allocation_is_executable()
-    if not shared_is_executable:
+    if not shared_allocation_is_executable():
         issues.append(
             AllocationIssue(
                 Code.SHARED_MODE_NOT_IN_BUILD,
@@ -269,26 +213,6 @@ def validate_allocation(
                 field="max_total_exposure_percent",
             )
         )
-    if config.conflict_policy == ConflictPolicy.NET:
-        # BLOCKER, not WARNING, since B0 (signed 2026-08-27). The MESSAGE is unchanged --
-        # it is pinned by Decision 3's signature and already ends by telling the caller to
-        # choose BLOCK_OPPOSITE or KEEP_SEPARATE, which is what a blocker must say.
-        #
-        # What this flip does and does NOT do. It makes a STORED NET plan read NOT_READY
-        # instead of READY_WITH_WARNINGS (``_readiness_state``) -- that is the drainage
-        # signal B3 needs. It does NOT stop a NET row from being written: the only writer
-        # of ``plan.conflict_policy`` is ``upsert_allocation_draft`` and that path never
-        # consults ``has_blockers`` (a draft is allowed to be invalid). The actual freeze
-        # is the token refusal at that write boundary; see Decision 4 / Olcum 6.
-        issues.append(
-            AllocationIssue(
-                Code.CONFLICT_POLICY_NET_V1,
-                Sev.BLOCKER,
-                _net_policy_warning(shared_is_executable=shared_is_executable),
-                field="conflict_policy",
-            )
-        )
-
     # ---- Entry checks (§5.2, §10.1) ---------------------------------------- #
     active = [e for e in config.entries if e.active]
     if not active:

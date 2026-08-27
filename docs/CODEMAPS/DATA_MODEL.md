@@ -1,9 +1,11 @@
 # DATA_MODEL — Postgres tabloları
 
 Modeller: `backend/src/entropia/infrastructure/postgres/models/*.py`.
-Alembic: `backend/alembic/versions/` — **head = `0043_i08_registry_strategy_fks`**
-(`0042_package_import_source_name` üzerine I-08 slice 1'de eklendi — **yeni tablo yok,
-yalnız 3 FK constraint**).
+Alembic: `backend/alembic/versions/` — **head = `0044_drop_net_conflict_policy`**
+(`0043_i08_registry_strategy_fks` üzerine G14 kararı `B` ile eklendi — **yeni tablo yok,
+yeni kolon yok**: `portfolio_allocation_plan.conflict_policy` üzerine bir CHECK kısıtı
+ekler ve `'NET'` taşıyan satır varsa **durur** (B3, GH #544). Kolon o güne dek hiç
+kısıtlanmamıştı — `enum_column` düz VARCHAR üretir).
 
 > **Tablo / FK / migration SAYISI artık burada yazmıyor — üretiliyor:**
 > [`docs/generated/repository_facts.md`](../generated/repository_facts.md)

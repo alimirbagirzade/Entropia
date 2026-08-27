@@ -17202,3 +17202,118 @@ bir satır yazar.
 - Kullanıcıya görünen sonuç açıkça kabul edildi: saklanan NET bir planı açıp **başka** bir
   alanı değiştirerek kaydetmek de reddedilir (gövde `conflict_policy: "NET"`'i geri gönderir).
   Bu bir yan etki değil, `B3`'ün ihtiyaç duyduğu **drenaj baskısının kendisidir**.
+
+## ADIM 124 — `G14` KARAR 1'İN `B` YARISI SEVK EDİLDİ: YENİDEN YAZILACAK CHECK YOKTU, ÇÜNKÜ HİÇ OLMAMIŞTI
+
+**Ne indi.** `NET`, `CrossItemConflictPolicy`'den **düştü**; yeni migration
+`0044_drop_net_conflict_policy` `portfolio_allocation_plan.conflict_policy` üzerine bir
+CHECK kısıtı **ekler** ve `'NET'` taşıyan satır varsa **durur** (`B3`). Ürün kodu değişti,
+ama **hiçbir finansal sayı oynamadı**: `ENGINE_VERSION` **değişmedi**, 50 golden digest
+**el değmedi**, OpenAPI **değişmedi** (`--check` exit 0, ölçüldü),
+`SHARED_ALLOCATION_STATUS` = `future_dev` (**capability.py'ye hiç dokunulmadı**).
+Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. Net **−196 satır** (ölü kod).
+
+**ASIL DERS: BİR KARARIN MALİYET ANALİZİ, OLMAYAN BİR ŞEYİ VAR SAYABİLİR.** §Ölçüm 4 `B`'yi
+*"CHECK yeniden yazımı"* diye çerçeveliyordu ve maliyetini oradan türetiyordu. Ölçüldü
+(iddia edilmedi): kolon düz `character varying`, tabloda `contype='c'` **sıfır**. Sebep
+`enum_column` → `SAEnum(native_enum=False)` ve **`create_constraint` SQLAlchemy 2.0'da
+varsayılan `False`**; `validate_strings=True` yalnız **Python tarafını** doğrular. Yani
+kolon **hiç kısıtlanmamıştı** ve **yeniden yazılacak bir CHECK yoktu**. Aynı yanlış cümle
+`models/allocation.py`'nin modül docstring'inde de duruyordu (*"Enums use `enum_column`
+(VARCHAR + CHECK …)"*) — büyük ihtimalle §Ölçüm 4'ün **kaynağı** odur. İkisi de düzeltildi.
+
+**Bu, kararı değil `B`'nin NE OLDUĞUNU değiştirdi — ve karara bağlandı.** Karar 1'in
+ölçülmüş sonucu *"değer artık kaydedilemez … kökten biter"*; Python-only bir kapı
+"kökten" değildir. Ürün sahibine üç okuma sunuldu (kısıtı EKLE / şema değişikliği yok /
+DUR ve imzayı tazele) ve **"EKLE"** seçildi (2026-08-27). Sevk edilen migration bu yüzden
+§Ölçüm 4'ün var olduğunu **sandığı** kısıtı ekler, iki hayatta kalan değere daraltılmış hâlde.
+
+**İKİNCİ DERS: `B3`'ün tasarımı ancak bu okumayla ANLAMLIDIR.** *"Satır varsa migration
+DURSUN"*, migration'ın aksi hâlde o satıra **çarpacağını** varsayar. Kısıt eklenmeseydi
+çarpacak bir şey olmazdı ve `B3` saf bir politika jesti olurdu.
+
+**ÜÇÜNCÜ DERS: kısıtlanmamış bir kolon, yalnız kaldırılan değeri değil BİLİNMEYEN bir
+sınıfı da barındırabilir.** Çıplak bir `ADD CONSTRAINT`, enum dışı bir satırda kolonu da
+satırı da adlandırmayan opak bir Postgres hatasıyla düşerdi → migration onu **ayrıca sayar
+ve AYRI bir mesajla durur**. Bu ikinci guard **imzanın parçası DEĞİLDİR**, §Ölçüm 4'ün
+çürümesinin doğrudan sonucudur ve migration'ın docstring'inde öyle yazılıdır.
+
+**DÖRT NEGATİF KONTROL, GERÇEK BİR POSTGRES'TE, dördü de ayırt edici:**
+**NC-1** (`'NET'` satırı ekle) → migration **exit 1**, kısıt **oluşmadı (0)**, ve **satır el
+değmeden duruyor (1)** — yani ne `B1` (yeniden yazma) ne `B2` (NULL'a çevirme); üç eksen
+birden. **NC-2** (enum dışı `'WEIRD_TOKEN'`) → **ayrı** mesajla durdu (iki guard karışmıyor).
+**NC-3** (operatör `BLOCK_OPPOSITE`'a çevirince) → **exit 0**, kısıt oluştu → drenaj yolu
+gerçekten açık, yani `B3` bir çıkmaz sokak değil. **NC-4 — asıl kanıt:** kısıt kurulduktan
+sonra **düz SQL ile** `NET` yazmayı denemek `violates check constraint` verir. Bu, migration
+ÖNCESİ **var olmayan** garantidir ve "kökten" sözünün ölçümüdür.
+**up/down/up** ayrıca koşuldu (exit 0/0/0; kısıt 1 → 0 → 1; head `0044_drop_net_conflict_policy`).
+
+**TUZAK, ilk koşuda yakalandı:** ilk revision id `0044_g14_drop_net_conflict_policy`
+(**33 karakter**) idi ve `alembic_version.version_num` **`varchar(32)`** →
+`StringDataRightTruncationError`, üstelik **şema adımları geçtikten SONRA**. Kısaltıldı
+(`0044_drop_net_conflict_policy`, 29).
+
+**DÖRDÜNCÜ DERS: "hepsi ölü koda döner" iddiası ÖLÇÜLDÜ ve BİR YÜZEY İÇİN YANLIŞ ÇIKTI.**
+Devir notu altı çapayı sayıp hepsinin öleceğini söylüyordu. `engine.py::conflict_downgraded_from_net`
+**ölmez**: o enum'u değil, bir Backtest Result'ın **immutable `capital_execution` manifest
+snapshot'ından** gelen bir **dizeyi** karşılaştırır (`PortfolioRules.conflict_policy: str | None`,
+`resolve_portfolio_rules` docstring'i *"Built from the manifest's immutable snapshot"*).
+Pinlenmiş bir manifest **tarihsel kayıttır** ve bu karar onu geriye dönük daraltamaz;
+`policy_token not in ("NET","BLOCK_OPPOSITE")` tuple'ından `"NET"`'i çıkarmak eski bir
+Result'ın replay'ini `downgraded_from_net`'ten `unknown`'a çevirirdi — imzanın kapsamadığı
+bir davranış değişikliği. **`engine.py`'ye SIFIR satır dokunuldu**, ve bu tercih değil
+**kapılıdır**: `test_the_shipped_sequential_conflict_gate_is_untouched` o satırı
+kaynak-düzeyinde pinliyor.
+
+**PARİTE KAPISI TASARIMI BELİRLEDİ, tercih değil.**
+`test_backtest_cross_item_arbitration.py::test_the_policy_table_covers_every_shipped_conflict_policy`
+`set(CONFLICT_POLICY_TABLE) == {p.value for p in CrossItemConflictPolicy}` assert eder →
+enum'dan düşen değer tablodan da düşmek zorunda, yoksa kapı kırmızı. Alternatif (kapıyı
+`⊆`'ye gevşetmek) **reddedildi** — bu depo düşen sayıyı indirmez. **Delik açılmadığı ÖLÇÜLDÜ:**
+`resolve_policy` bilinmeyen token'da zaten `UnsupportedConflictPolicyError` fırlatıyor, yani
+geçiş **fail-closed → fail-closed**; değişen tek şey mesajın metni. Ayrıca `supported=False`
+dalı **silinmedi**: sevk edilen tek `supported=False` satırı NET'ti, ama dalı kaldırmak
+gelecekte eklenecek desteklenmeyen bir politikanın **sessizce koşmasına** izin verirdi —
+fail-closed bir guard'ı fail-open yapmak. Mesaj genelleştirildi, dal kendi testiyle korunuyor
+(tablo `MappingProxyType` olduğu için `patch.dict` değil **modül niteliği** yamalanır).
+
+**FRONTEND'DE BİR AYRIM: `disabled-option` bloğu NET'e ÖZEL DEĞİL.** Kendi yorumu
+*"any future retired token is covered without a second list to maintain"* diyor — kontrollü
+bir `<select>`'te eşleşen child kalmayınca tarayıcı ilk seçeneği gösterir (= `B1`'in
+reddedildiği sessiz fallback, UI tarafında). Blok **korundu** ve testi **jenerik** bir
+`RETIRED_POLICY` token'ıyla sürülüyor; düşen yalnız `CONFLICT_POLICY_LABELS.NET`.
+
+**TİPLİ HATA KAYBOLMADI, YERİ DEĞİŞTİ.** `CrossItemConflictPolicyNotSelectableError`
+(B0'ın kendi hata sınıfı) kaldırıldı çünkü artık ulaşılamaz: enum daraldığı için token
+komuta varmadan modelde reddediliyor. Ama red **jenerik bir 422 değil** —
+`_parse_config` Pydantic hatasını `AllocationValidationFailedError`'a sarar ve
+`details[].field` **`conflict_policy`** der (O-02). Bu ölçüldü ve teste yazıldı.
+Aynı gerekçeyle `AllocationIssueCode.CONFLICT_POLICY_NET_V1` de düştü; **hiçbiri
+`openapi.json`'da yayımlanmıyordu** (üçü de 0 hit, ölçüldü) → wire sözleşmesi kırılmadı.
+
+**MODEL ile MIGRATION AYNI ŞEYİ ANLATIR, ve bu kapılıdır.** `scripts/schema_parity_gate.py`
+`add_constraint`/`remove_constraint` eksenini **sahiplenir**, o yüzden kısıt hem `0044`'te
+oluşturulur hem `PortfolioAllocationPlan.__table_args__`'ta bildirilir. `enum_column`'a
+`create_constraint=True` vermek **reddedildi**: o yardımcı repoda **105 kolonu** besliyor ve
+tek bir slice'ta 105 yeni kısıt doğururdu. Kapı **PASS** (constraint ekseninde 0 operasyon).
+
+**MIGRATION CANLI ENUM'U IMPORT ETMEZ — `0035`'in tersine.** `0035_portfolio_rules`
+`from entropia.domain.allocation.enums import CrossItemConflictPolicy` yapar, yani taze bir
+veritabanında **bugünün** enum'unu yazar; bu tam da `0044`'ün bir şema değişikliği olarak
+var olma sebebidir. `0044` değerleri **harfi harfine** yazar: migration bir tarihsel kayıttır.
+
+**DÜRÜST SINIRLAR.**
+- **`G14` KAPANMADI ve #544 KAPATILMADI** (`human-only`). Ön koşul 20 **kırmızı kalır**:
+  satırın istediği şey issue'nun kapanmasıdır, kodun inmesi değil. Kalan tek eylem insana ait.
+- **"`B0` üretime çıktı mı" ÖN KOŞULU LİTERAL OLARAK ÖLÇÜLEMEDİ.** Bu repoda **0 git tag,
+  0 GitHub release, deploy eden 0 workflow** var (ölçüldü) → *"üretime çıkmak"* gözlenebilir
+  bir olay **değil**. Gözlenebilir tek sevk olayı main'e inmektir ve `B0` (#858) ile bu
+  migration **ayrı** PR'lardır, yani sıra kısıdı **harfi harfine** karşılanır. Ama
+  **drenaj penceresinin gerçekten oluştuğu KANITLANAMAZ** ve iddia da edilmiyor; `B3` zaten
+  bu belirsizliği çalışma zamanına taşıyan guard'dır.
+- **Üretimdeki `'NET'` satır sayısı ALINMADI ve İKAME EDİLMEDİ** (ADIM 109/122 kuralı).
+  Yerel geliştirme DB'sinde tablo **boş** (0 satır) ve bu **üretim hakkında hiçbir şey
+  söylemez**. Sayıyı migration'ın kendisi, deploy anında alır.
+- `A` (beş semantiğin tanımlanması) **yapılmadı ve gerekmiyor** — Karar 1 `A` yerine `B`'yi
+  imzaladı. ADR-0002'ye **amendment yazılmadı**.
+- Suite'in geçen sayısı ve coverage yüzdesi için otorite **CI'dır**.

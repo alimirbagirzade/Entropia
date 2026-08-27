@@ -21,8 +21,6 @@ from decimal import Decimal
 import pytest
 
 from entropia.domain.backtest.execution.arbitration import (
-    NET_SUPPORT_STATUS,
-    NET_TRACKING_ISSUE,
     UnsupportedConflictPolicyError,
 )
 from entropia.domain.backtest.execution.attribution import attribute
@@ -238,7 +236,13 @@ def test_net_stays_fail_closed_for_the_whole_run_rather_than_downgrading() -> No
     """GH #544 / ADR §9.4. Canon defines no netting price, no position custody and no PnL
     attribution for NET, so the unified path refuses the policy outright instead of running
     it as ``BLOCK_OPPOSITE`` and calling the result netting. Lifting the shared-capital
-    containment does not make NET supported."""
+    containment does not make NET supported.
+
+    Still driven by the LITERAL token after G14 decision ``B`` removed the enum member
+    (migration 0044): a Backtest Result's pinned ``capital_execution`` snapshot is an
+    immutable historical record, so the string can still arrive here even though no new plan
+    can select it. What the removal changed is which branch of ``resolve_policy`` refuses
+    it — the run still produces nothing, which is the property this test owns."""
     items = [
         ScriptedItem(item_id="a", share="50", bars=_FLAT, entries={_HOURS[0]: ("long", "20")}),
         ScriptedItem(item_id="b", share="50", bars=_FLAT, entries={_HOURS[0]: ("short", "20")}),
@@ -246,8 +250,10 @@ def test_net_stays_fail_closed_for_the_whole_run_rather_than_downgrading() -> No
     with pytest.raises(UnsupportedConflictPolicyError) as raised:
         simulate(items, pool="10000", policy="NET")
 
-    assert NET_TRACKING_ISSUE in str(raised.value)
-    assert NET_SUPPORT_STATUS == "undefined_in_canon"
+    message = str(raised.value)
+    assert "NET" in message
+    # The refusal names what CAN be run, so the operator is not left guessing.
+    assert "BLOCK_OPPOSITE" in message and "KEEP_SEPARATE" in message
 
 
 # --------------------------------------------------- conservation and per-item totals

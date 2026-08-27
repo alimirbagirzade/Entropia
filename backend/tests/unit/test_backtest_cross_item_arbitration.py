@@ -7,8 +7,9 @@ neither answer can be changed by the order a caller happened to build its inputs
 
 The load-bearing claims, and how each is checked rather than asserted:
 
-* **NET is refused, not downgraded.** The shipped sequential engine substitutes
-  ``BLOCK_OPPOSITE`` for ``NET`` and discloses it (``engine.py:862-871``); this layer refuses
+* **An unnameable policy is refused, not downgraded.** The shipped sequential engine
+  substitutes ``BLOCK_OPPOSITE`` for ``NET`` and discloses it (``engine.py:862-871``); this
+  layer refuses
   the run instead, because canon defines no netting price, custody, fee split, PnL
   attribution or margin (GH #544). The five gaps are named in the refusal.
 * **KEEP_SEPARATE separates BOOKS, not capital.** Its rows still meet the sleeve cap, the
@@ -30,10 +31,13 @@ from collections.abc import Mapping
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
+from unittest.mock import patch
 
 import pytest
 
 from entropia.domain.allocation.enums import CrossItemConflictPolicy
+from entropia.domain.backtest.execution import arbitration
 from entropia.domain.backtest.execution.arbitration import (
     ARBITRATION_POLICY_VERSION,
     ARBITRATION_REASONS,
@@ -43,13 +47,10 @@ from entropia.domain.backtest.execution.arbitration import (
     CONTENTION_SELECTION_STATUS,
     EXPOSURE_CONSTRAINT,
     MAX_POSITION_CONSTRAINT,
-    NET_MESSAGE,
-    NET_SUPPORT_STATUS,
-    NET_TRACKING_ISSUE,
-    NET_UNDEFINED_SEMANTICS,
     PORTFOLIO_CONFLICT_BLOCKED,
     SLEEVE_CONSTRAINT,
     SOLVENCY_CONSTRAINT,
+    ConflictPolicyRule,
     DuplicateIntentError,
     ItemArbitrationProfile,
     LedgerNotFrozenError,
@@ -85,7 +86,7 @@ _ZERO = Decimal("0")
 _T = 1_700_000_000_000
 _BLOCK = CrossItemConflictPolicy.BLOCK_OPPOSITE.value
 _KEEP = CrossItemConflictPolicy.KEEP_SEPARATE.value
-_NET = CrossItemConflictPolicy.NET.value
+_NET = "NET"  # the REMOVED token, kept as a literal: it is no longer an enum member
 
 
 # ---------------------------------------------------------------------------- fixtures
@@ -196,25 +197,25 @@ def test_the_policy_table_covers_every_shipped_conflict_policy() -> None:
         assert rule.separate_position_books is True
 
 
-def test_net_is_refused_and_never_substituted_by_a_policy_that_is_not_net() -> None:
-    """GH #544 / ADR §9.4. The sequential engine's conservative downgrade advertises a
-    behaviour canon never defined; carrying it forward would label a Result with a policy
-    that did not run. The refusal names every undefined semantic so the reader is told what
-    is missing rather than that "it is unsupported"."""
-    rule = CONFLICT_POLICY_TABLE[_NET]
-    assert rule.supported is False
-    assert rule.opposite_same_instrument == "undefined"
-    assert rule.undefined_semantics == NET_UNDEFINED_SEMANTICS
-    assert NET_SUPPORT_STATUS == "undefined_in_canon"
-    assert len(NET_UNDEFINED_SEMANTICS) == 5
+def test_net_is_gone_from_the_enum_and_from_the_table_and_is_refused_as_unknown() -> None:
+    """G14 decision ``B`` (GH #544, migration 0044) removed the value rather than defining it.
+
+    Three axes, because a partial removal is the failure mode this pins. The ENUM must not
+    offer it (nothing can select it), the TABLE must not carry a row for it (nothing can
+    execute it), and ``resolve_policy`` must still REFUSE the literal token — an already
+    pinned manifest is a historical record and could carry the string even though no new
+    plan can. The refusal moved from the ``supported=False`` branch to the unknown-token
+    branch; both raise the same error, so what changed is the message, never the outcome."""
+    assert "NET" not in {p.value for p in CrossItemConflictPolicy}
+    assert _NET not in CONFLICT_POLICY_TABLE
 
     with pytest.raises(UnsupportedConflictPolicyError) as excinfo:
         resolve_policy(_NET)
     message = str(excinfo.value)
-    assert NET_MESSAGE in message
-    for gap in ("netting price", "position custody", "fee attribution", "margin"):
-        assert gap in message
-    assert NET_TRACKING_ISSUE in message
+    assert _NET in message
+    # It names what CAN be chosen. A refusal that lists nothing leaves the operator stuck.
+    assert _KEEP in message and _BLOCK in message
+
     # And it is refused BEFORE any decision exists — never a report full of blocks that
     # someone could read as "NET ran and blocked everything".
     ledger = _ledger()
@@ -227,6 +228,35 @@ def test_net_is_refused_and_never_substituted_by_a_policy_that_is_not_net() -> N
             profiles=_profiles(),
             policy=_NET,
         )
+
+
+def test_the_unsupported_row_branch_still_guards_a_policy_that_does_not_execute() -> None:
+    """No shipped row is ``supported=False`` now that NET is gone, so this branch guards a
+    row that does not yet exist. Deleting it because it is unreachable would turn a
+    fail-closed guard into a fail-open one: a future policy added with ``supported=False``
+    would execute silently. Exercised against a table this test builds itself."""
+    unsupported = ConflictPolicyRule(
+        policy="FUTURE_POLICY",
+        supported=False,
+        opposite_same_instrument="undefined",
+        same_direction_same_instrument="undefined",
+        separate_position_books=True,
+        shares_capital=True,
+        canon="test-only row",
+        undefined_semantics=("what it does",),
+    )
+    # The shipped table is a MappingProxyType on purpose, so the module attribute is
+    # swapped rather than mutated -- the immutability itself is part of what ships.
+    widened = MappingProxyType({**CONFLICT_POLICY_TABLE, "FUTURE_POLICY": unsupported})
+    with (
+        patch.object(arbitration, "CONFLICT_POLICY_TABLE", widened),
+        pytest.raises(UnsupportedConflictPolicyError) as excinfo,
+    ):
+        resolve_policy("FUTURE_POLICY")
+    message = str(excinfo.value)
+    assert "FUTURE_POLICY" in message
+    assert "what it does" in message
+    assert _KEEP in message and _BLOCK in message
 
 
 def test_an_unknown_policy_token_is_refused_rather_than_failed_closed_to_blocking() -> None:

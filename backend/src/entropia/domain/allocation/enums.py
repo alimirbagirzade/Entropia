@@ -43,34 +43,29 @@ class CrossItemConflictPolicy(StrEnum):
     ``BLOCK_OPPOSITE`` blocks a later-pinned item's entry while an earlier-pinned
     item holds the opposite direction on the same instrument.
 
-    ``NET`` (offsetting the aggregate position) HAS NO CANONICAL DEFINITION, and
-    that — not the missing clock — is why it does not run. Neither doc 13 nor
-    Master Ref Modül 11 §6.3 states a netting price, position custody, fee
-    attribution, realized-PnL attribution or margin treatment for an offset pair;
-    the five are enumerated in ``domain/backtest/execution/arbitration.py`` under
-    ``NET_UNDEFINED_SEMANTICS``. The two engines therefore disagree about the
-    value: the V1 sequential engine downgrades it to BLOCK_OPPOSITE and discloses
-    the downgrade (validation BLOCKER + L4 engine warning, never silent), while
-    the unified-clock phase loop REFUSES a NET run outright rather than label a
-    block as netting. Neither happens while ``SHARED_ALLOCATION_STATUS`` is
-    ``future_dev``, because no shared plan reaches an engine at all.
+    A THIRD VALUE, ``NET``, WAS REMOVED (G14 decision ``B``, GH #544; migration
+    ``0044_drop_net_conflict_policy``). It had no canonical definition — neither doc 13
+    nor Master Ref Modül 11 §6.3 states a netting price, position custody, fee attribution,
+    realized-PnL attribution or margin treatment for an offset pair — so the two engines
+    disagreed about it: the sequential engine downgraded it to BLOCK_OPPOSITE while the
+    unified-clock phase loop refused it outright. Decision ``A`` (define the five semantics)
+    was weighed and rejected as the more expensive path; the value was dropped instead, so
+    the contradiction cannot recur. The write path was frozen first (``B0``, #858) so the
+    set could drain, and the migration HALTS rather than rewriting a surviving row (``B3``)
+    — neither ``BLOCK_OPPOSITE`` nor ``NULL`` may be substituted for a choice the user made.
 
-    THE WRITE PATH IS FROZEN (`B0`, signed 2026-08-27). ``upsert_allocation_draft``
-    refuses an incoming ``NET`` token, and the frontend no longer offers it, so no NEW
-    row can carry the value. Rows written before that keep it verbatim: they are not
-    rewritten (`B1`) and not nulled (`B2`) -- both were rejected as silent changes to a
-    configuration the user chose. Reading such a row is deliberately still supported,
-    which is why the refusal lives at the command boundary and NOT in
-    ``config.py``: ``_plan_to_config`` re-validates stored rows through that model.
+    The removal is enforced at the column, not only here: ``enum_column`` emits a plain
+    VARCHAR (``create_constraint`` defaults to False), so 0044 declares the CHECK explicitly
+    and ``PortfolioAllocationPlan.__table_args__`` mirrors it.
 
-    The value itself is retained for now on purpose: removing it is a migration over the
-    persisted ``portfolio_allocation_plan.conflict_policy`` CHECK, decided as
-    option `B` and scheduled before `C9`; per `B3` that migration HALTS if any row still
-    carries ``'NET'``
-    (``docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md``, GH #544).
+    ONE SURFACE DELIBERATELY STILL NAMES THE TOKEN.
+    ``engine.py``'s sequential conflict gate compares a STRING from a Backtest Result's
+    immutable ``capital_execution`` manifest snapshot, not this enum, and an already-pinned
+    manifest is a historical record this decision cannot narrow retroactively. Rewriting
+    that comparison would change how an old Result replays, which no signature covers.
+    See ``docs/decisions/closure_g14_net_conflict_policy_2026-08-25.md``.
     """
 
-    NET = "NET"
     BLOCK_OPPOSITE = "BLOCK_OPPOSITE"
     KEEP_SEPARATE = "KEEP_SEPARATE"
 
@@ -106,13 +101,6 @@ class AllocationIssueCode(StrEnum):
     # a non-positive cap can never admit an entry and is a misconfiguration, not a
     # tradable plan (portfolio-level rules slice).
     MAX_TOTAL_EXPOSURE_INVALID = "MAX_TOTAL_EXPOSURE_INVALID"
-    # Pre-disclosure that the chosen NET policy has no canonical definition, so the
-    # two engines treat it differently (sequential downgrades to BLOCK_OPPOSITE, the
-    # phase loop refuses) and containment means neither runs today. The wire token
-    # keeps its ``_V1`` spelling: it is a shipped machine code and renaming it would
-    # break every caller for a spelling (O-31 precedent). Text: ``rules.py``
-    # ``_net_policy_warning``; decision: G14 / GH #544.
-    CONFLICT_POLICY_NET_V1 = "CONFLICT_POLICY_NET_V1"
     # An active entry points at a composition item whose kind is not allocatable.
     # doc 13 §5.2 ("selected item ... must be compatible") and §14#8 name the
     # allocatable set exactly: Strategy, Trading Signal, Trade Log. Today

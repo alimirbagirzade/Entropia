@@ -270,7 +270,42 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
-> **alembic head `0043_i08_registry_strategy_fks`** (**migration YOK**) · `ENGINE_VERSION`
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION VAR** — yeni tablo/kolon yok:
+> `portfolio_allocation_plan.conflict_policy` üzerine CHECK kısıtı) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0) · golden **el değmedi** ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**). **Son dalga — ADIM 124 (`G14`
+> Karar 1'in `B` yarısı SEVK EDİLDİ): `NET`, `CrossItemConflictPolicy`'den DÜŞTÜ.**
+> **ASIL BULGU: yeniden yazılacak CHECK YOKTU — hiç olmamıştı.** §Ölçüm 4 `B`'yi *"CHECK
+> yeniden yazımı"* diye çerçeveliyordu; ölçüldü: kolon düz `character varying`, `contype='c'`
+> **0**, çünkü `enum_column` → `SAEnum(native_enum=False)` ve **`create_constraint` varsayılanı
+> `False`** (`validate_strings=True` yalnız Python tarafı). Aynı yanlış cümle
+> `models/allocation.py` docstring'indeydi — muhtemelen §Ölçüm 4'ün kaynağı. Ürün sahibi
+> *"kısıtı EKLE"* okumasını seçti: Karar 1 *"kaydedilemez … kökten"* diyor, Python-only bir
+> kapı kökten değildir; ve **`B3`'ün *"migration DURSUN"* tasarımı ancak uygulanan bir kısıt
+> varsa anlamlıdır**. **DÖRT NC, gerçek Postgres'te:** `'NET'` satırı → exit 1 + kısıt yok +
+> **satır EL DEĞMEDİ** (ne `B1` ne `B2`) · enum dışı token → **ayrı** mesaj · operatör
+> düzeltince → exit 0 · **NC-4 asıl kanıt:** kısıt kurulduktan sonra **düz SQL** ile `NET`
+> yazmak reddedilir = migration ÖNCESİ **var olmayan** garanti. up/down/up **0/0/0**.
+> **DOKUNULMAYAN, ÖLÇÜLEREK: `engine.py::conflict_downgraded_from_net` ÖLÜ KOD DEĞİL** —
+> enum'u değil, Result'ın immutable manifest snapshot'ından gelen **dizeyi** karşılaştırır
+> (tarihsel kayıt), ve `test_the_shipped_sequential_conflict_gate_is_untouched` onu
+> kaynak-düzeyinde **pinler** → devir notunun *"hepsi ölü koda döner"* iddiası bu yüzey için
+> **yanlıştı**. **Parite kapısı tasarımı belirledi:** `set(CONFLICT_POLICY_TABLE) == enum`
+> assert'i NET'i tablodan da düşürmeyi zorunlu kıldı (kapıyı `⊆`'ye gevşetmek **reddedildi**);
+> delik açılmadığı ölçüldü (`resolve_policy` bilinmeyen token'da zaten fırlatıyor →
+> fail-closed → fail-closed), ve `supported=False` **dalı korundu** (silmek fail-open olurdu).
+> **TUZAK:** alembic revision id `varchar(32)`'yi aşarsa şema adımlarından SONRA patlar (33 →
+> 29 karakter). **DÜRÜST SINIR: `G14` KAPANMADI, #544 KAPATILMADI (`human-only`), ön koşul 20
+> KIRMIZI KALIR** — satır issue'nun kapanmasını ister. *"`B0` üretime çıktı mı"* **literal
+> olarak ölçülemedi**: repoda **0 tag / 0 release / deploy eden 0 workflow** → *"üretim"*
+> gözlenebilir bir olay değil; `B0` (#858) ile bu migration **ayrı** PR'lardır (sıra kısıdı
+> harfi harfine karşılandı) ama **drenaj penceresi kanıtlanamaz ve iddia edilmiyor**. Üretimdeki
+> `'NET'` sayısı **alınmadı ve ikame edilmedi** — onu migration deploy anında alır. Blocker
+> DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. Net **−196 satır**.
+> `PROJECT_HISTORY.md` §ADIM 124 · `docs/ADIM124_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (**migration YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden digest'ler **el değmedi** ·
 > `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**). **Son dalga — ADIM 123 (`G14`
 > Karar 2 = `B3` + Karar 4 = `B0` İMZALANDI; `B0` UYGULANDI): ÜRÜN KODU DEĞİŞTİ ama hiçbir
@@ -297,7 +332,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 123 · `docs/ADIM123_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
 > değmedi**). **ADIM 122 (`G14` Karar 2'nin ÖLÇÜMÜ, DOCS-ONLY):
 > `backend/src`/`frontend/src`'te SIFIR satır; §Karar 2'nin imza kutusu BOŞ bırakıldı.**
@@ -315,7 +350,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 122 · `docs/ADIM122_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
 > değmedi**). **Son dalga — ADIM 121 (`G10`'un ön koşul tablosu tazelendi, DOCS-ONLY):
 > `backend/src`/`frontend/src`'te SIFIR satır.** İki bayat öncül çürütüldü: **`G10` (Gate 2)
@@ -333,7 +368,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 121 · `docs/ADIM121_LANDED_KICKOFF.md` · **PR #856**.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (migration YOK) · `ENGINE_VERSION` **değişmedi** ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration YOK) · `ENGINE_VERSION` **değişmedi** ·
 > OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 120
 > (`G15` İMZALANDI = Seçenek B, ve AYNI SLICE'TA UYGULANDI):** Ready Check leg 3'ün kazananı artık
 > **en yeni** satır, **toplam** sıra `created_at DESC, <pk> DESC`; leg 3 batch'lendi ve
@@ -353,8 +388,8 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/ADIM120_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION` **değişmedi** ·
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION` **değişmedi** ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · **OpenAPI değişmedi (ÖLÇÜLDÜ)** ·
 > `SHARED_ALLOCATION_STATUS` = **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 119
 > (`C6`'nın OD-1/OD-6 yarısı): ÜRÜN KODU DEĞİŞTİ (üç dosya) ama hiçbir finansal sayı
@@ -396,7 +431,7 @@ Before stopping a working session, produce **ALL** of the following:
 > sapma) · **G12 = A + ret "ikisi de"**. `C6`'nın ÜÇ ön koşulu da tamam (C4 #777/#799/#805 + iki imza) →
 > **sıradaki kalem `C6`** (iki imza TEK slice'ta, kapsam `docs/ADIM117_LANDED_KICKOFF.md`). Blocker
 > DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. `PROJECT_HISTORY.md` §ADIM 117.
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration YOK) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration YOK) ·
 > `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > **`future_dev` (DOKUNULMADI)**. **Son dalga — ADIM 118 (`G14`'ün `C`'si sevk edildi):
 > BİR İMZALI KARAR İNDİ, HİÇBİR KAPI KAPANMADI.** (`G8` bu dalda yazılmıştı ama PR sıra
@@ -430,7 +465,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 117 · `docs/ADIM117_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > **`future_dev` (KALDIRILMADI)**. Öncesinde **ADIM 115 (worker'ın paylaşımlı saatinin
 > ARBİTRAJI, PR #839): ÜRÜN KODU DEĞİŞMEDİ — `backend/src`'te SIFIR SATIR.** Üç dosya: bir
@@ -463,7 +498,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 115 · `docs/ADIM115_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev` (**KALDIRILMADI**). **Son dalga — ADIM 116 (unified Result'ın PROVENANCE'ı, PR
 > #840): ÜRÜN KODU DEĞİŞTİ (dört dosya) ama HİÇBİR SAYI OYNAMADI — migration yok, golden yok,
@@ -493,7 +528,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Son dalga — ADIM 114 (Karar 1 İMZALANDI + uygulandı, PR #831): ÜRÜN KODU
 > DEĞİŞTİ (finansal) ama VARSAYILAN ALTINDA TEK BİR SAYI OYNAMADI — 50 golden digest BAYT BAYT
@@ -523,7 +558,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 114 · `docs/ADIM114_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 113 (SINIF B TÜKENDİ): DOCS-ONLY — map'in ALTI `notes` alanı
 > + ondan üretilen iki artefakt; ürün/test kodunda SIFIR satır. Tavanlar OYNAMADI (54/6 · A1 B21
@@ -565,7 +600,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 113 · `docs/ADIM113_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 111 (docs kayıt-silme kapısı üretilmiş artefaktlar için
 > DARALTILDI): ÜRÜN KODU DEĞİŞMEDİ — üç dosya, biri agent guard'ı, biri onun davranış kapısı,
@@ -593,7 +628,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 111 · `docs/ADIM111_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 112 (current-main delta forensics, PR #825): DOCS-ONLY —
 > üç yeni dosya, ürün/test kodunda SIFIR satır; **tavanlara BU SLICE DOKUNMADI** (kendi tabanı
@@ -626,7 +661,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 112 · kickoff **YOK**.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 110 (kabul borcu batch 29, doc 02 + doc 14 FRONTEND): ÜRÜN KODU
 > DEĞİŞMEDİ, üç yeni vitest case'i + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -654,7 +689,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 110 · `docs/ADIM110_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 109 (kayıtsız inen #820'nin ritüeli, A-08 devam kartı):
 > DOCS-ONLY — iki dosya, +222/−14; ürün kodunda, testte, migration'da SIFIR satır. A-08
@@ -677,7 +712,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 109 · kickoff **YOK** (gerekçe yukarıda).
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 108 (kayıtsız inen #822'nin ritüeli, a11y precheck advisory
 > prozası): ÜRÜN KODU DEĞİŞTİ ama YALNIZ PROZA — üç dosya, dört satır, dördü de bir `note:`
@@ -697,7 +732,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 108 · `docs/ADIM108_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 107 (kabul borcu batch 28, doc 11 Market Data BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, bir yeni test dosyası (iki integration case) + defter. Blocker sayısı DEĞİŞMEDİ
@@ -723,7 +758,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 107 · `docs/ADIM107_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 106 (kabul borcu batch 27, doc 08 Package Library BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, tek integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -746,7 +781,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 106 · `docs/ADIM106_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 105 (kabul borcu batch 26, doc 06 Create Package BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, iki integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -773,7 +808,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 105 · `docs/ADIM105_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 104 (kabul borcu batch 25, doc 09 ESP BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, iki integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -796,7 +831,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 104 · `docs/ADIM104_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 103 (kabul borcu batch 24, doc 20 Trash BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, tek integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -817,7 +852,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 103 · `docs/ADIM103_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 102 (kabul borcu batch 23, doc 16 Results History BACKEND):
 > ÜRÜN KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
@@ -864,7 +899,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 101 · `docs/ADIM101_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 100 (kabul borcu batch 21, doc 22 Future Dev BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
@@ -914,12 +949,12 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 100 · `docs/ADIM100_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 98 (kabul borcu batch 19, doc 14 Ready Check BACKEND): ÜRÜN
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 99 (kabul borcu batch 20, doc 10 FRONTEND): ÜRÜN KODU
 > DEĞİŞMEDİ, tek vitest case + bir opsiyonel harness parametresi + defter. Blocker sayısı
@@ -945,7 +980,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Öncesinde ADIM 98 (kabul borcu batch 19, doc 14 Ready Check BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, üç yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
@@ -988,12 +1023,12 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 98 · `docs/ADIM98_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 95 (üretilmiş kabul artefaktlarının drift kapısı):
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 97 (kabul borcu batch 18, doc 10 BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, iki pytest case + bir opsiyonel harness parametresi + defter.
@@ -1046,7 +1081,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Öncesinde ADIM 95 (üretilmiş kabul artefaktlarının drift kapısı):
 > ÜRÜN KODU DEĞİŞMEDİ (`backend/src`'te sıfır satır), TAVANLAR OYNAMADI (73 partial /
@@ -1075,7 +1110,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 95 · `docs/ADIM95_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 94 (kabul borcu batch 17, doc 01 Mainboard BACKEND): ÜRÜN
 > KODU DEĞİŞMEDİ, iki yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
@@ -1105,7 +1140,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 94 · `docs/ADIM94_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 93 (kabul borcu batch 16, doc 02 BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, beş yeni integration case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
@@ -1141,7 +1176,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/ADIM93_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev` (**DEĞİŞMEDİ**). Öncesinde **ADIM 92 (`C4`/E5, worker'ın paylaşımlı saat dalı):
 > ÜRÜN KODU DEĞİŞTİ (tek dosya), gözlenebilir ÜRETİM DAVRANIŞI DEĞİŞMEDİ; 50 golden digest BAYT
@@ -1177,7 +1212,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 92 · `docs/ADIM92_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. **Öncesinde ADIM 91 (kabul borcu batch 15, doc 17 BACKEND): ÜRÜN KODU
 > DEĞİŞMEDİ, dört yeni pytest case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
@@ -1218,7 +1253,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 91 · `docs/ADIM91_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 90 (kayıtsız inen #779'un ritüeli): BU SLICE DEFTER,
 > kaydettiği slice TEK PLAN BELGESİ (+37/−7). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
@@ -1249,7 +1284,7 @@ Before stopping a working session, produce **ALL** of the following:
 > açık PR tarafından sürülüyor (#799/#800/#801), kabul borcu hattı #797** → hiçbirine
 > dokunulmadı. **NUMARA: #797 → 88 (bu dal sıra beklerken İNDİ, `ee5ab38` — dal onun üstüne
 > REBASE edildi), #799 → 89 → bu kayıt 90. Sonra **#803 = ADIM 91** (`42c8185`) ve **#799 = ADIM 92** (`3994725`, kendisi de 89'dan taşındı) indi; **ikisi de `ADIM90` yolunu eklemedi** → numara çakışmadı, **yeniden atanmadı**; kayıt sırası 87 → 88 → 91 → 92 → 90. Bedeli: canlı kickoff artık `ADIM92`'ninki, bu slice'ın kickoff'u **`historical` doğdu** (ADIM 82 emsali). **DERS: kuralın iki yarısı AYRIDIR** — *"numaralar yeniden atanmaz"* KAYDI korur; kickoff'un canlılığını `_check_live_kickoff_is_newest` **dosya varlığından** okur, `doc-status`'tan değil. **`89` kalıcı BOŞLUK, `90` bu kayıt.** `PROJECT_HISTORY.md` §ADIM 90 · `docs/ADIM90_LANDED_KICKOFF.md`.
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 88 (kabul borcu batch 14, doc 05 frontend): ÜRÜN KODU DA
 > TEST KODU DA DEĞİŞMEDİ — diff yalnız defter + üretilmiş artefakt.** Tek kriter `TL-18`
@@ -1276,7 +1311,7 @@ Before stopping a working session, produce **ALL** of the following:
 > doğrula.** `PROJECT_HISTORY.md` §ADIM 88 · `docs/ADIM88_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 87 (kabul borcu batch 13, doc 18 FRONTEND): ÜRÜN KODU
 > DEĞİŞMEDİ, tek vitest case + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -1302,7 +1337,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 85 · `docs/ADIM85_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 86 (kayıtsız inen İKİ slice'ın ritüeli: P1-proof #765 +
 > P2 #766): BU SLICE DEFTER; kaydettiği #766 19 satır ürün kodudur, #765 test-only. Blocker
@@ -1320,7 +1355,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 86 · `docs/ADIM86_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev` (**DEĞİŞMEDİ**). Öncesinde **ADIM 85 (C3 / E4c, `_EngineParticipant`):
 > ÜRÜN KODU DEĞİŞTİ ama ÜRETİMDE ÇAĞIRANI YOK; 50 golden digest BAYT BAYT AYNI. Blocker
@@ -1340,7 +1375,7 @@ Before stopping a working session, produce **ALL** of the following:
 > **Next: `C4`.** `PROJECT_HISTORY.md` §ADIM 85 · `docs/ADIM85_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 84 (kabul borcu batch 12, doc 05 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -1364,7 +1399,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 84 · `docs/ADIM84_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 83 (kabul borcu batch 11, doc 18 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -1386,7 +1421,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 83 · `docs/ADIM83_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 82 (kayıtsız inen `C2`'nin ritüeli, PR #759): BU SLICE
 > DEFTER, KAYDETTİĞİ SLICE ÜRÜN KODU. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -1402,7 +1437,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 82.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 81 (§2 kapı tablosu tazelendi, PR #769): ÜRÜN KODU
 > DEĞİŞMEDİ, tek docs dosyası (+93/−30). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -1419,7 +1454,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 81 · `docs/ADIM81_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 80 (kabul borcu batch 10, doc 03 frontend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -1438,7 +1473,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 80 · `docs/ADIM80_LANDED_KICKOFF.md`.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 79 (kabul borcu batch 09, doc 03 backend): ÜRÜN KODU
 > DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -1467,7 +1502,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 79 · `docs/ADIM79_LANDED_KICKOFF.md` · §ADIM 78.
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > `future_dev`. Öncesinde **ADIM 77 (P1 + P4, PR #751 + #754): ÜRÜN KODU DEĞİŞTİ, gözlenebilir
 > DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.** #617'nin şeklinin
@@ -1494,7 +1529,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 >
-> **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
 > **`future_dev` (DEĞİŞMEDİ)**. Öncesinde **ADIM 76 (P-E6/C8: containment kapısının İKİNCİ
 > DÜNYASI): ÜRÜN KODU DEĞİŞMEDİ, yalnız test + defter. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
@@ -1704,7 +1739,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 67 · `docs/ADIM67_LANDED_KICKOFF.md`.
 >
 >
-> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` ·
 > **OpenAPI DEĞİŞTİ**. **ADIM 66 (research timing provenance bundle KİMLİĞİNE
 > pinlendi, P-E3 / GH #558): ÜRÜN KODU DEĞİŞTİ, `bundle_hash` ŞEKİL DEĞİŞTİRDİ. Blocker
@@ -1735,7 +1770,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/ADIM66_LANDED_KICKOFF.md`.
 >
 >
-> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
 > **ADIM 65 (adli denetim kaydı + #541'in iki blocker gerekçesi, PR #700,
 > DARALTILDI): FİNANSAL MANTIK OKUNDU, DOKUNULMADI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
@@ -1763,7 +1798,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/ADIM65_LANDED_KICKOFF.md`.
 >
 >
-> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
 > **ADIM 64 (kabul borcu sınıf B, parti 04 — Backtest Result satır
 > değişmezliği, doc 16, PR #704): `RH-05` `RH-10` `RH-11` `RH-12` `RH-16` KAPANDI,
@@ -1784,7 +1819,7 @@ Before stopping a working session, produce **ALL** of the following:
 > (60→62→63→**64**). `PROJECT_HISTORY.md` §ADIM 64 · `docs/ADIM64_LANDED_KICKOFF.md`.
 >
 >
-> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
 > **ADIM 63 (K-5'in SORUSU düzeltildi — checklist A-3, PR #719): KOD YOK.
 > Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED. K-5 KAPANMADI.**
@@ -1805,7 +1840,7 @@ Before stopping a working session, produce **ALL** of the following:
 > #514 açık. **NUMARA: bu slice BEŞ kez taşındı** (58→59→60→61→62→**63**); commit mesajları
 > `adim-58` yazar. `PROJECT_HISTORY.md` §ADIM 63 · `docs/ADIM63_LANDED_KICKOFF.md` · RC §6.5.
 >
-> Öncesinde **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
 > **ADIM 62 (Ready Check'in son iki artık N+1'i batch'lendi, P-E2, PR #712):
 > DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
@@ -1824,7 +1859,7 @@ Before stopping a working session, produce **ALL** of the following:
 > commit mesajları ADIM numarası taşımaz. `PROJECT_HISTORY.md` §ADIM 62 ·
 > `docs/ADIM62_LANDED_KICKOFF.md`.
 >
-> Öncesinde **HEAD `5e52465`** · **alembic head `0043_i08_registry_strategy_fks`** (migration yok) ·
+> Öncesinde **HEAD `5e52465`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) ·
 > **`ENGINE_VERSION` = `backtest-engine-v18-percent-sizing-per-fill-commission` (BUMP)** ·
 > `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 61 (üç canlı finansal kusur
 > KAPANDI, PR #720, 2026-08-14): ÜRÜN KODU DEĞİŞTİ, FİNANSAL SONUÇLAR OYNADI.** #550 sizing
@@ -1850,7 +1885,7 @@ Before stopping a working session, produce **ALL** of the following:
 > getirir; `docs/decisions/closure_product_decisions_2026-08-13.md` §Karar 1'in kendisi
 > **hâlâ imzasızdır** ve komisyon **tabanı** açık kalır.
 >
-> **alembic head `0043_i08_registry_strategy_fks`** · **`ENGINE_VERSION` DEĞİŞTİ** →
+> **alembic head (o gün) `0043_i08_registry_strategy_fks`** · **`ENGINE_VERSION` DEĞİŞTİ** →
 > `backtest-engine-v18-percent-sizing-per-fill-commission` (**#720**, 2026-08-14: #550/#551/#552
 > KAPANDI) · `SHARED_ALLOCATION_STATUS` = `future_dev`. Test sayıları: **toplanan** için
 > `docs/generated/repository_facts.md`, **geçen** için CI. **Son dalga — P-B (kapanış
@@ -1864,7 +1899,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/audit/final_closure_reconciliation_2026-08-13.md`.
 >
 >
-> Öncesinde **HEAD `ac5cf50`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **HEAD `ac5cf50`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
 > **Son dalga — ADIM 60 (doküman kapısı artık HANGİ kickoff'un canlı olduğunu doğruluyor,
 > PR #716, 2026-08-14): ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
@@ -1877,7 +1912,7 @@ Before stopping a working session, produce **ALL** of the following:
 > (3541 → 3545) — **test ekleyen slice olguları TAZELEMELİ**. `PROJECT_HISTORY.md` §ADIM 60 ·
 > `docs/ADIM60_LANDED_KICKOFF.md`.
 >
-> Öncesinde **HEAD `e547391`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **HEAD `e547391`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ (dört ağaçta 0 satır). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
@@ -1933,7 +1968,7 @@ Before stopping a working session, produce **ALL** of the following:
 > mesajları `adim-57` yazar. Aynı gün main'e inen K-3/D-11 slice'ı da üç ad taşımıştı
 > (54 → 55 → 56 → 57) — bu haftanın **üçüncü** çakışma dizisi.
 >
-> Öncesinde **HEAD `31ed27d`** · **alembic head `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
+> Öncesinde **HEAD `31ed27d`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
 > **Öncesinde ADIM 57 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
 > satır bile değişmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**

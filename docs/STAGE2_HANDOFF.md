@@ -8867,6 +8867,53 @@ Kendi başına bir davranış değişikliğidir → **ayrıca imzalanmalıdır**
 
 `PROJECT_HISTORY.md` §ADIM 122 · `docs/ADIM122_LANDED_KICKOFF.md`.
 
+## Stage ADIM 124 — `G14` Karar 1'in `B` yarısı: `NET` enum'dan düştü + kolon CHECK'i eklendi landed
+
+**PR:** (bu slice) · **migration: VAR** → yeni alembic head **`0044_drop_net_conflict_policy`**
+(`0043_i08_registry_strategy_fks` üzerine). **Yeni tablo/kolon YOK.**
+
+`ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0, ölçüldü) · 50 golden
+digest **el değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (`capability.py` **el değmedi**) ·
+kabul borcu tavanları **oynamadı** · blocker **DEĞİŞMEDİ** (1 — yalnız A-08), BLOCKED.
+Net **−196 satır** (ölü kod kaldırıldı).
+
+**Ne indi.** `CrossItemConflictPolicy` **iki üyeli** (`BLOCK_OPPOSITE`, `KEEP_SEPARATE`);
+migration `portfolio_allocation_plan.conflict_policy` üzerine
+`ck_portfolio_allocation_plan_conflict_policy` ekler ve `'NET'` taşıyan satır varsa **DURUR**
+(`B3`, imzalı). Kısıt hem migration'da oluşturulur hem
+`PortfolioAllocationPlan.__table_args__`'ta bildirilir — `scripts/schema_parity_gate.py`
+constraint eksenini sahiplenir (kapı **PASS**, 0 operasyon).
+
+**ASIL BULGU: yeniden yazılacak CHECK YOKTU.** §Ölçüm 4 `B`'yi *"CHECK yeniden yazımı"* diye
+çerçeveliyordu; ölçüldü — kolon düz `character varying`, `contype='c'` **sıfır**, çünkü
+`enum_column` → `SAEnum(native_enum=False)` ve **`create_constraint` varsayılanı `False`**
+(`validate_strings=True` yalnız Python tarafı). Aynı yanlış cümle `models/allocation.py`
+docstring'inde de duruyordu. Ürün sahibi *"kısıtı EKLE"* okumasını seçti (2026-08-27), çünkü
+Karar 1 *"kaydedilemez … kökten"* diyor ve Python-only bir kapı kökten değildir. İkinci sonuç:
+`B3`'ün *"migration DURSUN"* tasarımı ancak uygulanan bir kısıt varsa anlamlıdır.
+
+**DÖRT NEGATİF KONTROL, gerçek Postgres'te.** NC-1: `'NET'` satırı → exit 1, kısıt oluşmadı,
+**satır el değmedi** (ne `B1` ne `B2`). NC-2: enum dışı token → **ayrı** mesajla durdu.
+NC-3: operatör düzeltti → exit 0 (drenaj yolu açık). **NC-4:** kısıt kurulduktan sonra düz SQL
+ile `NET` yazmak `violates check constraint` verir — migration ÖNCESİ **var olmayan** garanti.
+**up/down/up** exit 0/0/0, kısıt 1 → 0 → 1.
+
+**DOKUNULMAYAN, ölçülerek:** `engine.py::conflict_downgraded_from_net` **ölü kod DEĞİL** —
+enum'u değil, bir Result'ın immutable manifest snapshot'ından gelen **dizeyi** karşılaştırır;
+pinlenmiş manifest tarihsel kayıttır ve `test_the_shipped_sequential_conflict_gate_is_untouched`
+o satırı kaynak düzeyinde **pinler**. Devir notunun *"hepsi ölü koda döner"* iddiası bu yüzey
+için yanlıştı.
+
+**DÜRÜST SINIR:** **`G14` KAPANMADI, #544 KAPATILMADI** (`human-only`) → ön koşul 20 **kırmızı
+kalır**; satır issue'nun kapanmasını ister, kodun inmesini değil. *"`B0` üretime çıktı mı"*
+ön koşulu **literal olarak ölçülemedi**: repoda 0 tag / 0 release / deploy eden 0 workflow var,
+yani *"üretime çıkmak"* gözlenebilir bir olay değil; `B0` (#858) ile bu migration **ayrı**
+PR'lardır (sıra kısıdı harfi harfine karşılandı) ama **drenaj penceresinin oluştuğu
+kanıtlanamaz ve iddia edilmiyor**. Üretimdeki `'NET'` satır sayısı **alınmadı ve ikame
+edilmedi** — onu migration deploy anında alır. Geçen sayı ve coverage **CI'ın otoritesinde**.
+
+`PROJECT_HISTORY.md` §ADIM 124 · `docs/ADIM124_LANDED_KICKOFF.md`.
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
 > **ADIM 120 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -8888,6 +8935,22 @@ Kendi başına bir davranış değişikliğidir → **ayrıca imzalanmalıdır**
 >
 > **`G15` SONRASI SIRA:** `C6`'nın kalanı → OD-1/2/3/6'nın kalanı (ön koşul 15–18) →
 > `G10` (#852 imza yüzeyini açtı, **talep edilmedi**) → **EN SON `C9`**.
+
+> **ADIM 124 GÜNCELLEMESİ (2026-08-27) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> **BAŞLIKTAKİ ÜÇ İMZANIN ÜÇÜ DE ARTIK VERİLDİ** — `G8` (#847, `A1+B2+C1`), `G14` (#544,
+> dört kararın dördü), Karar 1'in komisyon tabanı (ADIM 114). Başlık **tarihseldir**;
+> `docs-history-guard` yeniden adlandırmayı bloklar.
+>
+> **`G14`'ün KODU DA İNDİ:** `C` = ADIM 118, `B0` = #858, **`B` = ADIM 124**
+> (`0044_drop_net_conflict_policy`). **Ama `G14` KAPANMADI ve #544 KAPATILMADI** —
+> kapatma `human-only`, ön koşul **20 kırmızı kalır**.
+>
+> **SIRADAKİ MÜHENDİSLİK KALEMİ DEĞİŞMEDİ: `C6`'nın kalan yarısı** (G11 + G12 admission
+> blocker'ları, #849'da imzalı). Bu slice onu ölçmedi — **yeniden ölç**, ADIM 119'un
+> *"sıfır hit"* sayımı bayatlamış olabilir.
+>
+> **İNSAN EYLEMİ BEKLEYEN:** #544'ün kapanış yorumu (`B`'yi ve bu slice'ı adlandırmalı,
+> #558 emsali) · #559'un kapanış yorumu (`G8` md. 4, ADIM 121'de ölçüldü).
 >
 > **BUNU BİLMEDEN LEG 3'E DOKUNMA:** `work_object_revision_id` **UNIQUE DEĞİLDİR**;
 > B onu belirlenimli yaptı, **kaldırmadı**. Ve `created_at` **tek başına toplam sıra

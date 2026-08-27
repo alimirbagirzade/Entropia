@@ -220,27 +220,22 @@ export interface AllocationDraftInput {
 // AllocationCurrency wire tokens (doc 13 §5.1).
 export const ALLOCATION_CURRENCIES = ["USD", "USDT", "EUR", "TRY"] as const;
 
-// CrossItemConflictPolicy wire tokens (doc 13 §8.4 — hydration only). NET has no
-// canonical definition; the two engines disagree about it (the sequential engine
-// downgrades it to BLOCK_OPPOSITE, the unified-clock phase loop refuses it) and
-// containment means neither runs today. The label says only that much — the full
-// finding is the server's CONFLICT_POLICY_NET_V1 warning, which this page renders
-// VERBATIM and which is worded against the world that actually applies. Do not
-// restate the outcome here: a second, frozen copy is how the old label went stale
-// (G14 / GH #544).
-// Selectable cross-item conflict policies. NET was dropped by B0 (G14 / GH #544, signed
-// 2026-08-27): the write path is frozen because NET has no canonical definition and the
-// two engines disagree about it. The value is NOT removed from the enum here -- that is
-// `B`, a migration, and it ships before C9.
+// Selectable cross-item conflict policies (doc 13 §8.4 — hydration only).
+//
+// A third token, NET, is gone. B0 froze the write path (#858) and `B` then removed the
+// value from CrossItemConflictPolicy and added the column CHECK that enforces it
+// (migration 0044, G14 / GH #544): NET had no canonical definition and the two engines
+// disagreed about it, so it can no longer be stored at all. Per B3 that migration HALTS
+// rather than rewriting a surviving row, so no plan reaching this page carries it.
 export const CONFLICT_POLICIES = ["KEEP_SEPARATE", "BLOCK_OPPOSITE"] as const;
 
-// Display map, deliberately WIDER than CONFLICT_POLICIES. A plan saved before B0 still
-// carries NET and must render as NET: dropping the label would show a stored plan as
-// something it is not, which is the silent-fallback this decision exists to avoid.
+// Display labels. No NET entry: after 0044 the column cannot hold the value, so a label
+// for it would describe a state the database forbids. An unknown token still renders as
+// its raw token rather than silently as something else -- see the <select> in
+// Portfolio.tsx, which keeps that guard for any FUTURE retired or unrecognised value.
 export const CONFLICT_POLICY_LABELS: Record<string, string> = {
   KEEP_SEPARATE: "Keep separate (independent items)",
   BLOCK_OPPOSITE: "Block opposite (earlier-pinned item wins)",
-  NET: "Net (no longer selectable — undefined)",
 };
 
 // CompoundingMode wire tokens (doc 13 §5.1, §8.3; Fixed Item Notional is NOT

@@ -17,13 +17,12 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.commands import mainboard as mb_cmd
 from entropia.application.queries import allocation_plan as alloc_query
 from entropia.application.queries import mainboard as mb_query
-from entropia.domain.allocation.enums import CrossItemConflictPolicy
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import PrincipalType, Role
 from entropia.infrastructure.postgres.models import (
@@ -40,7 +39,6 @@ from entropia.shared.errors import (
     AllocationDraftConflictError,
     AllocationHasBlockersError,
     AllocationValidationFailedError,
-    CrossItemConflictPolicyNotSelectableError,
 )
 
 pytestmark = pytest.mark.integration
@@ -364,7 +362,7 @@ async def test_portfolio_rules_round_trip_and_revision_carry(session) -> None:
     await session.commit()
     # A supported policy raises no policy issue at all.
     codes = {i["code"] for i in put["inline_issues"]}
-    assert "CONFLICT_POLICY_NET_V1" not in codes
+    assert not [c for c in codes if "NET" in c]
     # ADIM 3 containment: the draft still SAVES (authoring is preserved) and the only
     # blocker among the inline issues is the shared-mode containment.
     assert {i["code"] for i in put["inline_issues"] if i["severity"] == "blocker"} == {
@@ -415,24 +413,30 @@ async def test_nonpositive_max_total_exposure_blocks_the_revision(session) -> No
 
 
 # --------------------------------------------------------------------------- #
-# B0 — the NET write path is frozen (G14 / GH #544, signed 2026-08-27)         #
+# B — NET is removed from the enum (G14 / GH #544, migration 0044)             #
 # --------------------------------------------------------------------------- #
 
 
-async def test_b0_freezes_the_net_write_path(session) -> None:
-    """A submitted NET token is refused BEFORE anything is written.
+async def test_b_makes_the_net_token_unwritable_at_the_parse_boundary(session) -> None:
+    """A submitted NET token is refused BEFORE anything is written, in every spelling.
 
-    ``pytest.raises`` alone would not close this clause: moving the guard below the
-    mutation raises the very same exception while leaving the row behind (the ADIM 94
-    lesson). So the plan table is READ BACK, and the read happens without a rollback --
-    a rollback would discard a row a below-the-mutation guard had written and the test
-    would pass vacuously.
+    B0 refused it with a dedicated error at the command boundary because the value still
+    had to be READABLE -- ``_plan_to_config`` re-validates stored rows through the shared
+    model, so refusing there would have turned reading a stored NET plan into a 500. `B`
+    removes the value outright, so that constraint is gone and the refusal moves up to the
+    model itself. The typed envelope survives the move: ``_parse_config`` wraps the
+    Pydantic failure in ``AllocationValidationFailedError`` and names the field (O-02).
+
+    ``pytest.raises`` alone would not close this clause: a guard placed below the mutation
+    raises the very same exception while leaving the row behind (the ADIM 94 lesson). So
+    the plan table is READ BACK, and the read happens WITHOUT a rollback -- a rollback
+    would discard a row such a guard had written and the test would pass vacuously.
     """
     await _seed_principals(session)
     composition_id, items = await _composition_with_items(session, USER1)
 
     for token in ("NET", "net", "  Net  "):
-        with pytest.raises(CrossItemConflictPolicyNotSelectableError) as exc_info:
+        with pytest.raises(AllocationValidationFailedError) as exc_info:
             await alloc_cmd.upsert_allocation_draft(
                 session,
                 USER1,
@@ -448,12 +452,11 @@ async def test_b0_freezes_the_net_write_path(session) -> None:
         # No rollback: the assertion below must see whatever the command actually left.
         assert (await session.execute(select(PortfolioAllocationPlan))).first() is None, token
 
-    # The envelope carries the recovery fields the page needs (O-02), not just a code.
+    # The envelope names the offending FIELD -- a bare "validation failed" would leave the
+    # page unable to mark the control that is wrong.
     err = exc_info.value
-    assert err.code == "CROSS_ITEM_CONFLICT_POLICY_NOT_SELECTABLE"
-    assert err.field_path == "conflict_policy"
-    assert err.suggested_action == "choose_supported_conflict_policy"
-    assert err.details[0]["supported"] == ["KEEP_SEPARATE", "BLOCK_OPPOSITE"]
+    assert err.code == "ALLOCATION_VALIDATION_FAILED"
+    assert any(d["field"] == "conflict_policy" for d in err.details)
 
     # Positive control: the SAME call with a supported token writes exactly one row, so
     # the refusal above is attributable to the token and not to a broken fixture.
@@ -462,40 +465,40 @@ async def test_b0_freezes_the_net_write_path(session) -> None:
     assert plan_count == 1
 
 
-async def test_a_stored_net_plan_still_reads_back_verbatim(session) -> None:
-    """B0 freezes WRITES; it must not touch reads.
+async def test_a_stored_net_row_is_unreadable_which_is_why_the_migration_halts(
+    session,
+) -> None:
+    """The measured reason B3 halts instead of leaving a surviving row behind.
 
-    A plan saved before B0 still carries ``'NET'``. The value is not rewritten, not
-    nulled and not downgraded -- B1 and B2 were both considered and rejected. This is
-    also the guard against the placement trap: putting the refusal in the shared Pydantic
-    model would have turned this read into a 500, because ``_plan_to_config`` re-validates
-    STORED rows through that same model.
+    Before `B` a stored ``'NET'`` row read back verbatim, and that was deliberate: B1
+    (rewrite to BLOCK_OPPOSITE) and B2 (null it) were both rejected as silent changes to a
+    configuration the user chose. `B` narrows the model, so such a row can no longer be
+    projected at all -- ``_plan_to_config`` validates the STORED value through the same
+    enum. This test writes one the only way that is still possible (raw SQL, bypassing both
+    the ORM enum and, in this fixture, the column CHECK) and pins the consequence.
+
+    That consequence is the whole argument for B3: a migration that quietly left such a row
+    would convert a saved plan into an unreadable one. Migration 0044 refuses to run
+    instead, and its own guard is proved against a real database separately.
     """
     await _seed_principals(session)
     composition_id, items = await _composition_with_items(session, USER1)
     await _put_shared_draft(session, USER1, composition_id, _entries((items[0], "40")))
 
-    # Simulate a row written before B0: the command path can no longer produce one.
-    plan = (await session.execute(select(PortfolioAllocationPlan))).scalar_one()
-    plan.conflict_policy = CrossItemConflictPolicy.NET
-    await session.commit()
+    plan_id = await session.scalar(select(PortfolioAllocationPlan.plan_id))
+    # Raw UPDATE: the ORM would reject the value before it reached the database.
+    await session.execute(
+        text(
+            "ALTER TABLE portfolio_allocation_plan "
+            "DROP CONSTRAINT IF EXISTS ck_portfolio_allocation_plan_conflict_policy"
+        )
+    )
+    await session.execute(
+        text("UPDATE portfolio_allocation_plan SET conflict_policy = 'NET' WHERE plan_id = :p"),
+        {"p": plan_id},
+    )
     session.expire_all()
 
-    draft = await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
-    assert draft["draft"]["conflict_policy"] == "NET"
-
-    # Validation reads the stored row back through ``_plan_to_config`` -- the exact path
-    # that a refusal in the shared Pydantic model would have turned into a 500. It must
-    # succeed, and the NET issue must now be a BLOCKER: that is the drainage signal B3
-    # needs, since it is how the operator finds the rows that would halt the migration.
-    #
-    # ``state``/``valid`` are NOT asserted here: an enabled plan already carries the
-    # containment blocker, so both are pinned by containment whatever NET's severity is.
-    # The severity of the NET issue itself is the only distinguishing axis.
-    report = await alloc_cmd.validate_allocation_draft(
-        session, USER1, composition_id=composition_id
-    )
-    net = [i for i in report["issues"] if i["code"] == "CONFLICT_POLICY_NET_V1"]
-    assert len(net) == 1
-    assert net[0]["severity"] == "blocker"
-    assert net[0] not in report["warnings"]
+    with pytest.raises(Exception) as exc_info:
+        await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
+    assert "NET" in str(exc_info.value) or "conflict_policy" in str(exc_info.value)

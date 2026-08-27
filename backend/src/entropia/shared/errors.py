@@ -1545,34 +1545,6 @@ class AllocationDependencyBlockedError(ValidationError):
     category = ErrorCategory.DEPENDENCY_VALIDATION
 
 
-class CrossItemConflictPolicyNotSelectableError(ValidationError):
-    """``NET`` is no longer an accepted value for ``conflict_policy`` (G14 / GH #544,
-    Decision B0, signed 2026-08-27).
-
-    This freezes the WRITE path only. Rows that already carry ``'NET'`` are untouched and
-    still read back verbatim -- the value is not rewritten, not nulled, and not silently
-    downgraded (that would be B1/B2, both rejected). ``B`` -- dropping the value from the
-    enum and rewriting the CHECK constraint -- is a separate migration that ships before
-    ``C9``; per B3 it HALTS if any row still carries ``'NET'``, which is why this refusal
-    exists: it is what lets the set drain.
-    """
-
-    code = "CROSS_ITEM_CONFLICT_POLICY_NOT_SELECTABLE"
-    message = (
-        "NET is no longer a selectable cross-item conflict policy: it has no canonical "
-        "definition and the two engines disagree about what it means. Choose "
-        "BLOCK_OPPOSITE or KEEP_SEPARATE."
-    )
-    category = ErrorCategory.COMPOSITION_VALIDATION
-    suggested_action = "choose_supported_conflict_policy"
-    remediation = (
-        "Set the conflicting-signals policy to Block opposite or Keep separate, then save "
-        "again. An existing plan that still carries NET keeps the stored value until you "
-        "change it here."
-    )
-    field_path = "conflict_policy"
-
-
 class AllocationHasBlockersError(ValidationError):
     """A plan revision was requested from a draft that still has blocking issues
     (doc 13 §7, §10.1)."""

@@ -212,15 +212,26 @@ def test_nonpositive_max_total_exposure_blocks() -> None:
         assert has_blockers(issues), bad
 
 
-def test_net_policy_pre_discloses_the_v1_block_downgrade_as_a_warning() -> None:
+def test_net_policy_is_a_blocker_and_keeps_its_signed_message() -> None:
+    """B0 (G14 / GH #544, signed 2026-08-27) raised NET from WARNING to BLOCKER.
+
+    Two axes, deliberately separate. The SEVERITY moved -- that is B0, and it is what
+    makes a stored NET plan read NOT_READY, the drainage signal B3 needs. The MESSAGE did
+    NOT move: it is pinned by Decision 3's own signature, and it already told the caller to
+    choose BLOCK_OPPOSITE or KEEP_SEPARATE. Asserting only the severity would let the
+    signed text rot exactly the way the pre-ADIM-118 notice did.
+    """
     issues, _ = validate_allocation(
         _config(entries=[_entry("a", "100")], conflict_policy="NET"),
         item_refs=_refs("a"),
     )
     net = [i for i in issues if str(i.code) == str(Code.CONFLICT_POLICY_NET_V1)]
     assert len(net) == 1
-    assert str(net[0].severity) == str(Sev.WARNING)
-    assert _blocker_codes(issues) == _CONTAINMENT
+    assert str(net[0].severity) == str(Sev.BLOCKER)
+    # The NET blocker JOINS containment, it does not replace it: a caller that fixes only
+    # one of the two must still be blocked by the other.
+    assert _blocker_codes(issues) == _CONTAINMENT | {str(Code.CONFLICT_POLICY_NET_V1)}
+    assert "Choose BLOCK_OPPOSITE or KEEP_SEPARATE" in net[0].message
 
 
 def test_unknown_conflict_policy_token_is_rejected_at_parse() -> None:

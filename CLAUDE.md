@@ -270,9 +270,36 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0043_i08_registry_strategy_fks`** (**migration YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden digest'ler **el değmedi** ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**). **Son dalga — ADIM 123 (`G14`
+> Karar 2 = `B3` + Karar 4 = `B0` İMZALANDI; `B0` UYGULANDI): ÜRÜN KODU DEĞİŞTİ ama hiçbir
+> finansal sayı oynamadı.** **ASIL DERS: İMZALANAN MEKANİZMA, İMZALANAN SONUCU ÜRETMİYORDU** —
+> §Ölçüm 5 `B0`'ı iki mekanizmayla tanımlayıp *"küme o an donar"* diyordu; `ast` ile ölçüldü
+> (grep'le değil): `plan.conflict_policy`'yi **yazan** tek fonksiyon
+> (`upsert_allocation_draft`) ile `has_blockers`'ı **çağıran** üç fonksiyon **AYRIK
+> kümeler** → severity flip'i tek başına **hiçbir satırı engellemez**. `B0` bu yüzden **üç**
+> yüzeyle sevk edildi; **asıl freeze** yazma sınırındaki token reddidir
+> (`CROSS_ITEM_CONFLICT_POLICY_NOT_SELECTABLE`, O-02). **REDDİN YERİ ÖLÇÜLDÜ:**
+> `config.py::_norm_conflict` **olmaz** — `_plan_to_config` **saklanan** satırı aynı modelle
+> doğrular, orada reddetmek mevcut NET planların **OKUNMASINI** 500'e çevirirdi; tüm
+> blocker'ları reddetmek de olmaz (enabled her plan containment blocker'ı taşır → paylaşımlı
+> tahsis tamamen kaydedilemez olurdu). **İKİNCİ DERS: seçilebilir listeyi daraltmak saklanan
+> değeri SESSİZCE değiştirebilir** — kontrollü `<select>`'te eşleşen child kalmayınca tarayıcı
+> ilk seçeneği gösterir (kullanıcı *"keep separate"* okur, sunucuda `NET` durur = `B1`'in
+> reddedildiği sessiz fallback, UI tarafında) → `CONFLICT_POLICY_LABELS` **bilerek daha geniş**
+> tutuldu ve saklanan değer **`disabled` option** olarak render ediliyor. **NC-FE-1 boşluğun
+> ÖLÇÜMÜ:** o blok sökülünce **mevcut 18 test YEŞİL kalır**. **DÜRÜST SINIR: `G14` KAPANMADI,
+> #544 KAPATILMADI, ön koşul 20 KIRMIZI KALIR** — `B`'nin migration'ı **YAZILMADI** ve
+> **`C9` öncesi** ayrı slice'tır (**sıra kısıdı imzanın parçası**: ikisi aynı sürümde çıkarsa
+> `B0`'ın drenaj penceresi hiç oluşmaz). Üretim `'NET'` satır sayısı **alınmadı ve ikame
+> edilmedi**; `B0` onu gereksiz kılar. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 123 · `docs/ADIM123_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
-> değmedi**). **Son dalga — ADIM 122 (`G14` Karar 2'nin ÖLÇÜMÜ, DOCS-ONLY):
+> değmedi**). **ADIM 122 (`G14` Karar 2'nin ÖLÇÜMÜ, DOCS-ONLY):
 > `backend/src`/`frontend/src`'te SIFIR satır; §Karar 2'nin imza kutusu BOŞ bırakıldı.**
 > **ASIL DERS: bir karar sorusu, cevabının ön koşulunu SESSİZCE VARSAYABİLİR** — Karar 2'nin
 > üç seçeneği de `'NET'` kümesinin **kapalı** olduğunu varsayıyordu; **değil.** NET bir
@@ -2252,8 +2279,13 @@ Before stopping a working session, produce **ALL** of the following:
 > `_prepare_strategy` içinde, seam'le ilgisiz.
 > **GERÇEK Next (ADIM 117'de güncellendi): `C6` — KOD.** ~~`G11`+`G12` imza~~ → **ikisi de
 > 2026-08-26'da imzalandı** (G11 = (a), G12 = A; `PROJECT_HISTORY.md` §ADIM 117); Karar 1'in TABANI
-> ADIM 114'te imzalanmıştı. Hâlâ imzasız: ~~`G8`~~ (**#847 ile İMZALANDI**, `A1+B2+C1`, 2026-08-26) · `G14` (#544) ·
-> `G15` (leg 3) · `G10` **hiç talep edilmedi**. Sıra: `C6`, sonra `G15`, ön koşul 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
+> ADIM 114'te imzalanmıştı. Hâlâ imzasız: ~~`G8`~~ (**#847 ile İMZALANDI**, `A1+B2+C1`, 2026-08-26) ·
+> ~~`G14`~~ (**#544 — DÖRT kararın DÖRDÜ de İMZALI**: Karar 1 + 3 = 2026-08-26, **Karar 2 = `B3`**
+> ve **Karar 4 = `B0`** = 2026-08-27/ADIM 123; **ama `G14` KAPALI DEĞİL** — Karar 1 kapanışı
+> `B`'nin sevkine bağlar, `B0` indi, **migration `C9` öncesi ayrı slice**) ·
+> ~~`G15`~~ (**ADIM 120'de İMZALANDI**, Seçenek B, leg 3 FLAT) · `G10` **`B` — ERTELE** olarak
+> imzalandı (2026-08-26, red değil; ADIM 121). Sıra: `C6`'nın kalan yarısı, sonra `B`'nin
+> migration'ı, ön koşul 15–18 ve 22, en son `C9`. Sıra ve gerekçe:
 > `docs/audit/final_closure_delta_audit_2026-08-25.md` §10. Eski ölçüm:
 > `docs/audit/closure_w0_shared_portfolio_2026-08-13.md`.
 > **Yarım-cent yuvarlama KARARA BAĞLANDI (2026-08-06):** `initial_sleeve_capital` yeniden

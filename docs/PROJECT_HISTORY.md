@@ -17099,3 +17099,106 @@ değildir (`G15` kuralı); sorgu belgeye yazıldı. **Hiçbir kutu doldurulmadı
 tablo / sayfa / job yok.
 
 `PROJECT_HISTORY.md` §ADIM 122 · `docs/ADIM122_LANDED_KICKOFF.md`.
+
+## ADIM 123 — `G14` KARAR 2 + KARAR 4 İMZALANDI (`B3` + `B0`) ve `B0` UYGULANDI: İMZALANAN MEKANİZMA, İMZALANAN SONUCU ÜRETMİYORDU
+
+**Taban `98498d99` (ADIM 122).** alembic head `0043_i08_registry_strategy_fks` — **migration
+YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` =
+`future_dev` (**el değmedi**). Blocker sayısı **DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+Kabul borcu tavanları **oynamadı**. Golden digest'ler **el değmedi** — bu değişiklik hiçbir
+finansal sonucu oynatmaz (ürün kodu değişti ama motor yolunda değil).
+
+### Ne imzalandı
+
+ADIM 122 `G14` §Karar 2'nin imza kutusunu **bilerek boş** bırakmıştı. Bu slice'ta ürün sahibi
+(`alimirbagirzade`, 2026-08-27) **iki** kutu doldurdu:
+
+- **§Karar 2 = `B3`** — `B` sevk edildiğinde `'NET'` taşıyan satır varsa migration **DURSUN**.
+  `B1` (yeniden yaz) silent-fallback yasağının tanımı; `B2` (`NULL`) daha dürüst ama yine
+  **sessiz** bir kayıp. `B3` kararı **verebilecek olana** (operatör) bırakır.
+- **§Karar 4 = `B0`** (YENİ bölüm) — yazma yolu **şimdi** dondurulur. §Ölçüm 5 bunu
+  *"ayrıca imzalanmalıdır"* diye kaydetmişti; imzası buraya yazıldı.
+
+**SIRA KISIDI İMZANIN PARÇASI:** `B0` **önce**, `B`'nin migration'ı **sonraki** sürümde. İkisi
+aynı sürümde çıkarsa `B0`'ın drenaj penceresi **hiç oluşmaz** — migration deploy anına kadar
+büyüyen bir kümeye çarpar, `B3` durur, deploy kırmızı olur. Kapsam bu yüzden ürün sahibine
+soruldu ve **`B0` şimdi / migration sonra** seçildi.
+
+### ASIL DERS: İMZALANAN MEKANİZMA, İMZALANAN SONUCU ÜRETMİYORDU
+
+§Ölçüm 5 `B0`'ı **iki** mekanizmayla tanımlıyor (`Sev.WARNING` → `Sev.BLOCKER` **ve**
+`CONFLICT_POLICIES`'ten `NET`'i düşürmek) ve *"küme o an **donar**"* diye **sonucu** iddia
+ediyordu. **Sonuç doğru, mekanizma eksik** — uygulama sırasında `ast` ile ölçüldü, grep'le
+değil:
+
+| Fonksiyon | `plan.conflict_policy` **yazar** | `has_blockers` **çağırır** |
+|---|---|---|
+| `upsert_allocation_draft` | **EVET** | **HAYIR** |
+| `validate_allocation_draft` | hayır | evet |
+| `create_allocation_revision` | hayır | evet |
+| `_readiness_state` | hayır | evet |
+
+**İki küme AYRIK.** `'NET'` satırını yazan tek yol `upsert_allocation_draft`'tır ve o yol
+`has_blockers`'a **hiç bakmaz** — bakmaması da doğrudur, taslak tanımı gereği geçersiz
+olabilir. Yani severity flip'i **tek başına hiçbir satırı engellemez**; bugünkü bayrak
+değerinde bu daha da görünmezdir, çünkü enabled bir plan zaten `SHARED_MODE_NOT_IN_BUILD`
+taşır ve `has_blockers` **zaten** `True` döner. Sevk edilen `B0` bu yüzden **üç** yüzeyli:
+
+1. `rules.py` — `Sev.WARNING` → `Sev.BLOCKER` *(imzalı; drenaj **sinyali**)*;
+2. `lib/allocation.ts::CONFLICT_POLICIES` — `NET` düşer *(imzalı; UI'da seçilemez)*;
+3. **YENİ** — `upsert_allocation_draft` gelen `NET` token'ını **yazma sınırında** reddeder
+   (`CROSS_ITEM_CONFLICT_POLICY_NOT_SELECTABLE`, O-02 zarfı, `field_path`+`remediation`).
+   **Asıl freeze budur**; onsuz md. 2 kozmetiktir ve herhangi bir API istemcisi yazmaya
+   devam eder.
+
+**REDDİN YERİ ÖLÇÜLEREK SEÇİLDİ, iki yanlış yerleşim elendi:** `config.py::_norm_conflict`
+**olmaz** — `_plan_to_config` **saklanan satırı** aynı modelle `model_validate` eder, orada
+reddetmek mevcut NET planların **OKUNMASINI** 500'e çevirirdi (`B0` yazmayı dondurur,
+okumayı değil). `upsert_allocation_draft`'te **tüm blocker'ları** reddetmek de **olmaz** —
+enabled her plan containment blocker'ı taşır, paylaşımlı tahsis **tamamen kaydedilemez**
+olurdu. Red bu yüzden yalnız **token**'a dairdir. Guard **mutasyonun ÜSTÜNDE** ve
+`run_idempotent`'in **dışında**: bir refüz ne satır ne de tekrar oynatılabilir bir zarf
+bırakmalıdır.
+
+### İKİNCİ DERS: SEÇİLEBİLİR LİSTEYİ DARALTMAK, SAKLANAN DEĞERİ SESSİZCE DEĞİŞTİREBİLİR
+
+`Portfolio.tsx` kontrollü bir `<select>`; `value={conflictPolicy}` ile render eder ve
+seçenekleri `CONFLICT_POLICIES`'ten üretir. `NET` listeden düşünce **eşleşen child kalmaz**
+ve tarayıcı **ilk seçeneği** gösterir → kullanıcı *"keep separate"* okur, sunucuda `NET`
+durur. **Bu tam olarak `B1`'in reddedildiği sessiz fallback'tir**, üstelik UI tarafında.
+Çözüm: `CONFLICT_POLICY_LABELS` **bilerek daha geniş** tutuldu ve saklanan-ama-seçilemez
+değer **`disabled` bir option** olarak render ediliyor — görünür ve dürüst, ama bir kez
+değiştirildikten sonra geri seçilemez. Kontrol **sunucu-güdümlüdür** (listede olmayan
+herhangi bir token'ı kapsar), ikinci bir liste bakımı doğurmaz.
+
+### Negatif kontroller
+
+**NC-FE-1 (boşluğun ÖLÇÜMÜ):** `disabled` option bloğu sökülünce **yalnız** yeni test kırmızı,
+**mevcut 18 test YEŞİL kalır** → sessiz fallback bugüne kadar hiçbir testin göremeyeceği bir
+kusurdu. **NC-FE-2:** `NET` seçilebilir listeye geri konunca iki yeni test kırmızı, 17 yeşil.
+Backend NC'leri (guard'ı mutasyonun altına taşı; severity'yi geri al) aşağıda §Ölçüm'de.
+Yeni integration testi `pytest.raises`'le yetinmez — satırı **geri okur** ve **rollback
+yapmaz** (rollback, altta duran bir guard'ın yazdığı satırı atar ve testi vacuous geçirirdi,
+ADIM 94 dersi); ayrıca **pozitif kontrol** olarak aynı çağrı desteklenen bir token'la tam
+bir satır yazar.
+
+### Dürüst sınır
+
+- **`G14` KAPANMADI, `#544` KAPATILMADI.** Karar 1 kapanışı `B`'nin sevkine bağlar; `B`
+  (enum'dan `NET`'in düşmesi + CHECK yeniden yazımı) **bu slice'ta YAZILMADI** ve
+  **`C9` öncesi** ayrı bir slice'tır. **Ön koşul 20 kırmızı KALIR** — ve bu yüzden
+  `closure_w0_containment_lift_preconditions_2026-08-17.md` satır 20'ye **dokunulmadı**:
+  *"#544 kapalı → ❌ AÇIK"* hâlâ **doğrudur**, uydurma bir güncelleme yapılmadı.
+- **`final_closure_delta_audit_2026-08-25.md` el değmedi** — denetim belgeleri ölçtükleri
+  anı **dondurur** (ADIM 65 emsali).
+- **Üretim DB'sindeki `'NET'` satır sayısı ALINMADI ve ikame EDİLMEDİ** (erişim yok). §Ölçüm 5
+  md. 2 bunu bir ön koşul kutusu saymıyor; `B0` sayıyı **gereksiz** kılar çünkü kümeyi
+  dondurur. Sorgu belgede duruyor.
+- **`CrossItemConflictPolicy.NET` enum üyesi DURUYOR**, `arbitration.py`'nin refüz kuralı ve
+  `engine.py::conflict_downgraded_from_net` **el değmedi** — saklanan bir NET planın çalışma
+  zamanı davranışı **değişmedi**. `B0` yalnız **yazmayı** dondurur.
+- **`NET_TRACKING_ISSUE` el değmedi** (#544 açık ölçüldü → kusur yok).
+- **ADR-0002'ye amendment YAZILMADI** (bu `A`'nın işi, imzalanan `B` yolu).
+- Kullanıcıya görünen sonuç açıkça kabul edildi: saklanan NET bir planı açıp **başka** bir
+  alanı değiştirerek kaydetmek de reddedilir (gövde `conflict_policy: "NET"`'i geri gönderir).
+  Bu bir yan etki değil, `B3`'ün ihtiyaç duyduğu **drenaj baskısının kendisidir**.

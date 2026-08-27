@@ -270,7 +270,33 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
-> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION VAR** — yeni tablo/kolon yok:
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK** — bu dalga şema
+> değiştirmedi) · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0) ·
+> golden **el değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) ·
+> `frontend/src` **sıfır satır**. **Son dalga — ADIM 125 (`C6` TAMAMLANDI): `G11` (P2) +
+> `G12` (P8) admission blocker'ları sevk edildi**, ikisi de #849'da imzalı. Ön koşul **13/14**
+> kapandı; 15/16 ADIM 119'daydı → **`C6`'nın dört blocker'ı da yerinde.** **`C6`'NIN KAPANMASI
+> LIFT DEĞİLDİR** — dördü de containment'ın arkasında ve sevk edilen build'de **ULAŞILAMAZ**;
+> lift `C9` + `G10` (2026-08-26'da **`B` — ERTELE**). **ASIL DERS: bir slice'ın kapsamı
+> motorun reddettikleri değil, İMZANIN kapsamıdır** — `_unsupported_shapes` **on bir** şekli
+> reddeder, imzalı **iki**si; kısmî kapanış/stacking/hedge için blocker **YAZILMADI** (hâlâ geç
+> patlar, statüko) ve boşluk **bir testle** pinlendi. **İki yazım drift üretir → TEK predicate**
+> (`execution/shared_shapes.py`), motor onu **geri ekler**, parite testi beklenen cümleyi
+> ondan **türetir**. **ÖLÇÜLMÜŞ SÜRPRİZ: sevk edilen fixture'ın kendisi kapıyı ihlal ediyordu**
+> — `_strategy_payload` varsayılanı `next_candle_open`; kapı dört testi (**ikisi negatif
+> kontrol**) kırmızıya çevirdi. Varsayılan **değiştirilmedi**, payload opsiyonel `execution=`
+> aldı; bu, `G11` §Ölçüm 8'in *"yarısına yakını"* tahmininin birinci elden doğrulamasıdır.
+> **ALTI NC, altısı ayırt edici. NC-6 en güçlüsü:** Ready Check yarısının kapsama kapısını
+> kaldırmak **dokunulmamış** `test_shared_allocation_containment.py`'nin İKİ testini kırar.
+> **NC-3 bir EKSİK assertion buldu** — entegrasyon testleri Ready Check yarısını hiç
+> kanıtlamıyordu (admission hepsini yakalıyordu) → rapor-düzeyi assertion eklendi.
+> **DÜRÜST SINIR:** #544/#559 **el değmedi** (`human-only`), ön koşul 20/21 KIRMIZI KALIR;
+> frontend kapıları KOŞULMADI. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+> **Sıradaki mühendislik kalemi `C7`** (A16 manifest split).
+> `PROJECT_HISTORY.md` §ADIM 125 · `docs/ADIM125_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head (o gün) `0044_drop_net_conflict_policy`** (**MIGRATION VAR** — yeni tablo/kolon yok:
 > `portfolio_allocation_plan.conflict_policy` üzerine CHECK kısıtı) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0) · golden **el değmedi** ·
 > `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**). **Son dalga — ADIM 124 (`G14`

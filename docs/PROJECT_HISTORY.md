@@ -17337,3 +17337,122 @@ var olma sebebidir. `0044` değerleri **harfi harfine** yazar: migration bir tar
 - `A` (beş semantiğin tanımlanması) **yapılmadı ve gerekmiyor** — Karar 1 `A` yerine `B`'yi
   imzaladı. ADR-0002'ye **amendment yazılmadı**.
 - Suite'in geçen sayısı ve coverage yüzdesi için otorite **CI'dır**.
+## ADIM 125 — `C6` TAMAMLANDI (`G11` + `G12` SEVK EDİLDİ): MOTORUN TABLOSU İMZANIN KAPSAMINDAN GENİŞTİ, VE BOŞLUK BİR TESTE YAZILDI
+
+**Ne indi.** `C6`'nın kalan iki admission blocker'ı — **`G11`** (P2: erteleyen/dinlenen fill)
+ve **`G12`** (P8: same-direction scaling), ikisi de #849'da **imzalı** (2026-08-26). Yeni
+`domain/backtest/execution/shared_shapes.py` (tek predicate), iki yeni `ReadinessIssueCode`,
+Ready Check tarafı (`readiness/validators.py::shared_mode_execution_issues`) ve admission
+adımı **3d** (`backtest_run.py`). **Hiçbir finansal sayı oynamadı:** `ENGINE_VERSION`
+**değişmedi** (diff'te sıfır eşleşme), golden **el değmedi**, migration **YOK**, OpenAPI
+**değişmedi** (`openapi_export --check` exit 0 — readiness kodları şemada yayımlanmıyor),
+`SHARED_ALLOCATION_STATUS` = `future_dev` (`capability.py`'ye **hiç dokunulmadı**; diff'teki
+tek eşleşme bir docstring **anmasıdır**). Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+`frontend/src`'te **sıfır satır**.
+
+**ASIL DERS: BİR SLICE'IN KAPSAMI, MOTORUN REDDETTİKLERİ DEĞİL, İMZANIN KAPSAMIDIR.**
+`participant.py::_unsupported_shapes` **on bir** şekli reddeder ve kendi docstring'i
+*"`C6`'nın admission'da bloklaması gerekenlerin motor tarafındaki ifadesi"* diyor —
+codemap de *"`C6`'nın admission blocker listesi bu listeyle aynı olmalıdır"* yazıyordu.
+İmzalı olan **ikisi**: `G11` ve `G12`. Kısmî kapanış, `allow_stacking`/`replace_existing`
+stacking ve `close_existing` hedge için **imza yok** → blocker da yazılmadı ve o şekiller
+hâlâ **geç** patlar (koşu başladıktan sonra, run satırı/manifest/job **zaten varken**).
+Bu bir gerileme değil `C6` öncesi statükodur — ama prozada bırakılırsa sessizleşir, o yüzden
+**ölçülür**: `test_the_loop_refuses_more_than_admission_does_and_that_gap_is_deliberate` üç
+şekli tek tek sürer ve *"motor reddeder, admission etmez"*i assert eder. Bir imza gelirse
+o test kırmızıya döner; iniş yolu budur.
+
+**İKİNCİ DERS: AYNI OLGUYU İKİ YERDE SÖYLEMEK DRIFT ÜRETİR — O YÜZDEN İKİ SÖYLEM, TEK
+PREDICATE.** `G11` §Ölçüm 2 ertelenen bir fill'in kendini bir `intent kind` olarak **ilan
+etmediğini** ölçmüştü: koşu başladıktan sonra reddedilecek bir an yok, motor onu
+**construction**'da reddediyor, ve o an satırlar zaten yazılmış. Admission'da aynı şeyi
+söylemek fail-LATE bir çöküşü fail-CLOSED bir redde çevirir — ama **iki liste sürüklenir**.
+Çözüm ikinci bir liste değil, **taşınma** oldu: `StrategyConfig`'ten tek başına bilinebilen
+dört satır `execution/shared_shapes.py`'ye gitti, `_unsupported_shapes` onları **geri
+ekliyor** (`*((True, v.detail) …)`), cümleleri **birebir korunarak**. Parite testi beklenen
+cümleyi o modülden **türetir**, alıntılamaz.
+
+**ÜÇÜNCÜ DERS — ÖLÇÜLDÜ, TAHMİN EDİLMEDİ: SEVK EDİLEN FIXTURE'IN KENDİSİ KAPIYI
+İHLAL EDİYORDU.** `tests/integration/test_backtest_persistence.py::_strategy_payload`'ın
+varsayılanı `entry_timing = exit_timing = "next_candle_open"` — yani `G11`'in reddettiği
+şeklin ta kendisi. Kapı eklenince `test_shared_mode_admission.py`'nin **dört** testi birden
+kırmızıya döndü, **ikisi negatif kontroldü** (*"bu paylaşımlı kompozisyon meşrudur"* diyen
+testler artık reddediliyordu) ve **ikisi** OD-1/OD-6'yı izole etmeyi bırakmıştı (zarfın
+lideri artık `data.execution.entry_timing`'di). Bu, `G11` §Ölçüm 8'in *"vekil sayıya göre
+yapılandırmaların yarısına yakını"* tahmininin bu depodaki **birinci elden** doğrulamasıdır
+ve imzanın *"(a) gerçek bir özelliği kapatır"* cümlesinin bedelidir. Çare **varsayılanı
+değiştirmek DEĞİL** (bir düzine bağımsız-mod fixture'ı ona dayanıyor ve `next_candle_open`
+lookahead'siz kanonik seçimdir) — `_strategy_payload` opsiyonel bir `execution=None` aldı
+(varsayılan **bayt bayt aynı**) ve **yalnız paylaşımlı** harness immediate bir timing'e
+geçti. Yani kapı testleri kırmadı, **hangi kompozisyonların gerçekten meşru olduğunu**
+düzeltti.
+
+**DÖRDÜNCÜ DERS: NEGATİF KONTROL, TESTİN NEYİ KANITLAMADIĞINI DA SÖYLER.** **NC-3** Ready
+Check yarısını sustururken **entegrasyon testlerinin hepsi YEŞİL kaldı** — çünkü admission
+guard'ı onları yakalıyordu. Yani *"Ready Check bunu bildiriyor"* iddiam entegrasyonda
+**hiç kanıtlanmamıştı**; `request_backtest_run` süren bir test çifti kanıtlar, yarısını
+asla. Eksik assertion eklendi (`run_readiness_check`'in **saklanan raporunu** okur, ki sayfa
+onu render eder) ve NC-3 tekrar koşuldu: artık **tam olarak o testi** düşürüyor.
+
+**ALTI NEGATİF KONTROL, ALTISI DA AYIRT EDİCİ.**
+**NC-1** (splice'ı `_unsupported_shapes`'ten çıkar) → dört yeni parite case'i **ve** önceden
+var olan **dört** parametrik refüz case'i kırmızı, `test_shared_shapes.py` **yeşil** → taşınan
+satırlar gerçekten aynı satırlar ve splice taşıyıcı. **NC-2** (emir-tipi satırını kapat) →
+yalnız emir-tipi assertion'ları. **NC-3/NC-3b** (yukarıda). **NC-4** (admission 3d'yi kaldır)
+→ **yalnız** bypass testi kırmızı; gerisi yeşil, çünkü Ready Check onları yakalıyor → 3d ölü
+kod DEĞİL, bayat/regresif/çağıran-tarafından-verilmiş bir readiness state'e karşı **tek**
+savunma. **NC-5** (toggle satırını düşür) → yalnız *"ikisi de"* assertion'ları. **NC-6 — en
+güçlüsü:** Ready Check kapısının `shared_allocation_is_executable()` yarısını kaldırmak, bu
+slice'ın **hiç dokunmadığı** `test_shared_allocation_containment.py`'nin **İKİ** testini
+kırmızıya çeviriyor → o kapı sevk edilen dünyayı koruyan taşıyıcı parçadır, kozmetik değil.
+
+**BİR TASARIM KARARI, ÖLÇÜLEREK: Ready Check yarısı kapsama bayrağıyla AYRICA kapılıdır,
+admission yarısı değildir.** Kapsama açıkken bir `enabled` plan için **tek doğru bulgu**
+containment blocker'ıdır — paylaşımlı mod *bu Strategy için* değil, **hiç** yok — ve arkasına
+üç blocker daha dizmek eyleme geçirilebilir mesajı gömer, üstelik kullanıcıya koşunun
+reddedilme sebebi **olmayan** bir Strategy'yi düzenlemesini söyler. Admission tarafında böyle
+bir kapı gerekmiyor: 1 numaralı sert kapı zaten önce reddediyor (ve OD-1/OD-6 de tam olarak
+bu yüzden kapısızdır).
+
+**BİR OKUMA, AÇIKÇA İŞARETLİ: `G11`'in `field_path` alt-kararı ("ikisi de") BELİRSİZDİ.**
+İki seçenek *"ihlal eden alanın kendisi"* ve *"Portfolio toggle"*'dı; işaretlenen üçüncü kutu
+*"ikisi de (lider blocker alanı gösterir, details tümünü taşır — O-02 emsali)"*. Uygulanan
+okuma: **her ihlal eden ayar kendi issue'sunu alır** (lider odur, O-02 zarfa onu yükseltir),
+**ve listeyi ihlal edilen kapı başına bir toggle satırı kapatır** (`field_path="enabled"`,
+`scope_id` yok) — böylece iki `field_path` de `details`'tedir. Toggle satırı için **yeni kod
+icat EDİLMEDİ**: özetlediği kapının kodunu konuşur, çünkü doc 14 §9.1 taksonomisi ona bir ad
+tanımlamıyor ve tanımlamak *"bu projenin sahip olmadığı taksonomi"* olurdu (`_resolve_allocation`
+docstring'inin kendi kuralı).
+
+**BEŞİNCİ DERS — TAM SUITE'İN YAKALADIĞI, ALT KÜMENİN YAKALAYAMADIĞI: BİR KAPI, KENDİ
+BOŞLUĞUNU KANITLAYAN TESTİ DE KAPATABİLİR.** Odaklı koşular yeşilken tam suite **tek** bir
+testi düşürdü: `test_shared_clock_worker_branch.py::test_a_strategy_shape_the_shared_clock_cannot_drive_fails_the_run_closed`.
+O test **bilerek** stok fixture'ı (yani `next_candle_open` + şema varsayılanı
+`allow_stacking`) kullanıyor ve koşunun **admit edilip worker'da** `RUN_FAILED_ENGINE_ERROR`
+ile fail-closed olmasını pinliyordu. `G11` artık o kompozisyonu **admission'da** reddediyor →
+koşu worker'a hiç ulaşmıyor, yani testin ölçtüğü yarı **ölçülemez** hâle geliyordu.
+Kendi docstring'i bunu önceden söylüyordu: *"`C6`'nın boyutunun dürüst ifadesi"*.
+**Çözüm testi gevşetmek değil, fixture'ı AYIRMAK oldu:** yeni `_loop_refused_payload`
+immediate bir timing verir (**admission-clean**) ama stacking'i şema varsayılanında
+**bırakır** — yani `C6`'nın bilerek bloklamadığı şekil. Test artık *"motorun reddettiği ama
+admission'ın etmediği bir şekil hâlâ GEÇ patlar"*ı kanıtlıyor, yani **withheld boşluğun
+sonucunu** — imzasız bırakmanın bedeli (kullanıcı reddedilmiş değil **çökmüş** bir koşu
+görür) tam olarak orada görünür hâle geldi. Bir gün stacking imzalanırsa o test kırmızıya
+döner; iniş yolu budur. `_shared_safe_payload` **bayt bayt aynı** kaldı (ölçüldü) ve tek
+bağımlı modül (`test_unified_portfolio_provenance.py`) yeşil.
+
+**DÜRÜST SINIRLAR.**
+1. **İki guard da sevk edilen build'de ULAŞILAMAZ** — containment önce reddediyor. OD-1/OD-6
+   ile aynı durum: bunlar `C9` bayrağı kaldırdığında hazır bulunması gereken fail-closed
+   tabandır, ve testler onları **iki-dünya** fixture'ıyla lifted dünyada sürer.
+2. **`C6`'nın DÖRT blocker'ı da indi** (#15/#16 ADIM 119, #13/#14 bu slice) — ama bu
+   `SHARED_ALLOCATION_STATUS`'u **kaldırmaz** ve kaldırmamalıdır; lift `C9`'dur ve ADR §16
+   **Gate 2** (`G10`) ayrı bir insan kapısıdır (2026-08-26'da **`B` — ERTELE** imzalandı).
+3. **İmzasız üç şekil hâlâ geç patlar** (kısmî kapanış, stacking, hedge). Ürün kararı.
+4. **`_unsupported_shapes` satır SIRASI değişti** (taşınan dördü artık sonda). Mesaj
+   birleştirmesi sıra taşır; mevcut testler **substring** eşleştiği için etkilenmedi, ama
+   bir gün sıraya dayanan bir assertion yazılırsa bu not oradadır.
+5. **Frontend'de sıfır satır** → frontend kapıları KOŞULMADI; otorite CI.
+6. **#544 / #559 el değmedi** (`human-only`), ön koşul 20/21 **kırmızı kalır**.
+
+`docs/ADIM125_LANDED_KICKOFF.md` · `docs/CODEMAPS/BACKEND_LAYERS.md` §Kapsama (satır 5–6).

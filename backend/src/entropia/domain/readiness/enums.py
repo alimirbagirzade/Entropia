@@ -190,6 +190,22 @@ class ReadinessIssueCode(StrEnum):
     ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS = (
         "ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS"
     )
+    # G11 (signed 2026-08-26, disposition (a)): a SHARED run whose Strategy defers or
+    # rests a fill — a next-candle / intrabar-touch timing on either side, or a limit /
+    # stop-limit order type. Those fills resolve in ADR 0002 §8.2's P2, a phase the
+    # shared clock does not run, so the pool would commit or hold capital no valuation
+    # snapshot granted. The engine refuses the same shapes at construction; this is the
+    # same statement made early enough to leave no run behind. Predicate:
+    # ``domain/backtest/execution/shared_shapes.py``; texts:
+    # ``domain/allocation/shared_mode_admission.py``. Independent mode is unaffected.
+    ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED = (
+        "ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED"
+    )
+    # G12 (signed 2026-08-26, option A): a SHARED run whose Strategy enables
+    # same-direction scaling. The layer ladder books inside the item's tail phase (P8)
+    # with no PortfolioSnapshot behind it, and modelling it would need a second
+    # arbitration round per bar where ADR 0002 §8 defines one. Same two homes as above.
+    ALLOCATION_SHARED_MODE_SCALING_UNSUPPORTED = "ALLOCATION_SHARED_MODE_SCALING_UNSUPPORTED"
     ALLOCATION_ISSUE = "ALLOCATION_ISSUE"
 
 

@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 124 landed — `G14` Karar 1'in `B` yarısı sevk edildi (`NET` enum'dan düştü + kolon CHECK'i)
 

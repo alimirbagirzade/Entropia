@@ -151,12 +151,31 @@ def _shared_safe_payload(*args: Any, **kwargs: Any) -> dict[str, Any]:
     That second one is `C3`'s recorded finding: the schema default is a shape the adapter
     refuses, so most saved strategies would fall out of a shared run. Turning it into a
     user-visible admission blocker is `C6` and is a PRODUCT decision, not this slice's."""
+    payload = _loop_refused_payload(*args, **kwargs)
+    payload["conflict_position_handling"] = {"same_direction_stacking": "ignore"}
+    return payload
+
+
+def _loop_refused_payload(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Admission-CLEAN, loop-REFUSED: an immediate fill, stacking left at the schema default.
+
+    Since `C6` (ADIM 125) the stock payload can no longer reach the worker on a shared run
+    at all: its ``next_candle_open`` is a SIGNED admission blocker (``G11``), so
+    ``request_backtest_run`` refuses it and the worker's own fail-closed half becomes
+    untestable through the normal path. Measured, not assumed — that is exactly how this
+    module's refusal test started failing.
+
+    ``same_direction_stacking`` is the shape that survives: the adapter refuses it, but no
+    signature covers it, so `C6` deliberately writes no blocker for it and admission lets it
+    through. It is therefore the honest way to reach the worker with a shape the loop cannot
+    drive — and it makes the refusal test below a proof of the WITHHELD gap's consequence
+    rather than of a path admission now closes.
+    """
     payload = _strategy_payload(*args, **kwargs)
     payload["data"]["execution"] = {
         "entry_timing": "current_candle_close",
         "exit_timing": "current_candle_close",
     }
-    payload["conflict_position_handling"] = {"same_direction_stacking": "ignore"}
     return payload
 
 
@@ -193,7 +212,7 @@ async def _attach_strategy(
         row_count=22,
     )
     await session.flush()
-    build = _shared_safe_payload if shared_safe else _strategy_payload
+    build = _shared_safe_payload if shared_safe else _loop_refused_payload
     work_object = await mb_cmd.create_work_object(
         session,
         actor,
@@ -696,14 +715,20 @@ async def test_a_strategy_shape_the_shared_clock_cannot_drive_fails_the_run_clos
 ) -> None:
     """`C3`'s eleven refusals reach the worker as a FAILED run, never a degraded one.
 
-    The stock fixture defers its entry fill (``next_candle_open``) and leaves
-    ``same_direction_stacking`` at its schema default, so the adapter refuses it at
-    construction — before a single bar is admitted. What this pins is the worker's half: the
-    refusal becomes a terminal ``RUN_FAILED_ENGINE_ERROR`` with no Result, rather than an
-    unhandled exception that a retry would replay forever.
+    The fixture leaves ``same_direction_stacking`` at its schema default, so the adapter
+    refuses it at construction — before a single bar is admitted. What this pins is the
+    worker's half: the refusal becomes a terminal ``RUN_FAILED_ENGINE_ERROR`` with no
+    Result, rather than an unhandled exception that a retry would replay forever.
 
-    It is also the honest statement of `C6`'s size: with the schema default as it stands,
-    this is what MOST saved strategies would do on a shared clock."""
+    **Since `C6` (ADIM 125) this is specifically the WITHHELD gap's consequence.** The
+    fixture used to defer its entry fill as well, and that shape is now refused at
+    ADMISSION (``G11``) — a run carrying it never reaches the worker, so it could no
+    longer prove anything here. Stacking is the shape `C6` deliberately does NOT block:
+    the loop refuses it, no signature covers it, so admission lets it through and the
+    failure stays LATE. That is the pre-`C6` status quo for the unsigned rows, and this
+    test is where the cost of leaving it unsigned is visible — a user sees a crashed run,
+    not a refused one. Signing it would turn this test red, which is the intended way in.
+    """
     await _seed_principals(session)
     composition_id = await _composition(session, USER1, count=2, shared_safe=False)
     await _enable_shared_pool(session, USER1, composition_id)

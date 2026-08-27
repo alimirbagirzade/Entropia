@@ -32,12 +32,15 @@ from sqlalchemy import func, select
 from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.commands import mainboard as mb_cmd
+from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.queries import mainboard as mb_query
 from entropia.domain.allocation import capability
 from entropia.domain.allocation.shared_mode_admission import (
+    DEFERRED_FILL_REMEDIATION,
     MIXED_RECORD_TIME_BASIS_REMEDIATION,
     NON_EXECUTING_ITEM_MESSAGE,
     NON_EXECUTING_ITEM_REMEDIATION,
+    SCALING_REMEDIATION,
 )
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
@@ -72,9 +75,24 @@ from tests.integration.test_external_object_run_provenance import _attach_trade_
 
 pytestmark = pytest.mark.integration
 
+_IMMEDIATE_TIMING = {
+    "entry_timing": "current_candle_close",
+    "exit_timing": "current_candle_close",
+}
+
+_SCALING_ON: dict[str, Any] = {
+    "enabled": True,
+    "method": "price_distance_scaling",
+    "price_scaling": {"retracement_distance": "1", "layers": 2},
+    "add_size": "percent_of_initial",
+    "add_size_value": "50",
+}
+
 _OD6 = "ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM"
 _OD1 = "ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS"
 _CONTAINMENT = "ALLOCATION_SHARED_MODE_NOT_IN_BUILD"
+_G11 = "ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED"
+_G12 = "ALLOCATION_SHARED_MODE_SCALING_UNSUPPORTED"
 
 
 @contextmanager
@@ -123,12 +141,22 @@ async def _attach_ready_strategy(
     workspace_id: str,
     *,
     basis: RecordTimeBasis | None = None,
+    execution: dict[str, str] | None = _IMMEDIATE_TIMING,
+    scaling: dict[str, Any] | None = None,
 ) -> None:
     """Attach one READY strategy pinning its own APPROVED market revision.
 
-    Mirrors ``_ready_composition``'s builder rather than adding a rival one; the only
-    thing it adds is ``record_time_basis``, which no existing builder can set and
-    which is the entire subject of OD-1.
+    Mirrors ``_ready_composition``'s builder rather than adding a rival one; what it adds
+    is ``record_time_basis`` (which no existing builder can set, and which is the entire
+    subject of OD-1) and the two knobs `C6`'s signed gates read.
+
+    ``execution`` defaults to an IMMEDIATE timing, unlike ``_strategy_payload``'s own
+    default. Every strategy in this file lives in a SHARED composition, and the seed
+    payload's ``next_candle_open`` is precisely what G11 refuses — so a shared fixture
+    built on the default would be refused for a reason no test in the OD-1 / OD-6 blocks
+    is about, and their negative controls could not be admitted at all. Measured, not
+    assumed: before this default existed, adding the G11 guard turned all four of those
+    tests red.
     """
     market_root, market_rev = await md_repo.create_market_dataset(
         session,
@@ -174,7 +202,9 @@ async def _attach_ready_strategy(
             market_rev.revision_id,
             market_rev.content_hash,
             indicator_revision_id=pkg_rev.revision_id,
-        ),
+            execution=execution,
+        )
+        | ({} if scaling is None else {"scaling_logic": scaling}),
     )
     await mb_cmd.attach_mainboard_item(
         session,
@@ -430,3 +460,211 @@ async def test_containment_still_leads_in_the_shipped_world(session) -> None:
     assert _CONTAINMENT in codes
     assert _OD1 not in codes and _OD6 not in codes
     await _assert_nothing_admitted(session)
+
+
+# --------------------------------------------------------------------------- #
+# G11 (P2 — deferred / resting fills) and G12 (P8 — scaling)                   #
+# --------------------------------------------------------------------------- #
+
+
+async def _one_strategy_shared(session, **strategy: Any) -> str:
+    """A single-Strategy composition with an ENABLED shared plan taking the whole pool."""
+    composition_id = await _empty_composition(session, USER1)
+    await _attach_ready_strategy(session, USER1, composition_id, **strategy)
+    item_ids = (await _item_ids_by_kind(session, USER1))["strategy"]
+    await _enable_shared(
+        session,
+        composition_id,
+        [{"composition_item_id": item_ids[0], "active": True, "equity_share_percent": "100"}],
+    )
+    return composition_id
+
+
+async def test_g11_refuses_a_deferring_entry_timing(session, monkeypatch) -> None:
+    """G11 §Karar disposition (a). The refusal reaches the caller through Ready Check's
+    preflight, which is the surface the signature's "ikisi de" asks for first."""
+    await _seed_principals(session)
+    composition_id = await _one_strategy_shared(
+        session,
+        execution={"entry_timing": "next_candle_open", "exit_timing": "current_candle_close"},
+    )
+
+    with _lifted(monkeypatch), pytest.raises(ReadinessBlockedError) as exc_info:
+        await backtest_cmd.request_backtest_run(
+            session, USER1, composition_id=composition_id, idempotency_key="g11-1"
+        )
+    await session.rollback()
+
+    error = exc_info.value
+    assert error.scope_type == "portfolio_allocation"
+    # O-02: the leader names the SETTING to change, not the toggle — a user with one
+    # offending Strategy fixes the Strategy.
+    assert error.field_path == "data.execution.entry_timing"
+    assert error.remediation == DEFERRED_FILL_REMEDIATION
+    paths = [d["field"] for d in error.details if d["code"] == _G11]
+    # ... and the toggle is still IN the list: "ikisi de".
+    assert paths == ["data.execution.entry_timing", "enabled"]
+    await _assert_nothing_admitted(session)
+
+
+async def test_ready_check_itself_reports_both_gates_on_the_page(session, monkeypatch) -> None:
+    """The READY CHECK half of "ikisi de", proved on its own surface.
+
+    Measured, not assumed: with the admission guard in place, silencing the Ready Check
+    side leaves every other test in this file GREEN — admission catches the run either
+    way (negative control NC-3). So an assertion that only drives ``request_backtest_run``
+    proves the pair, never the half. This one reads the persisted report instead, which
+    is what the Portfolio / Ready Check page renders.
+    """
+    await _seed_principals(session)
+    composition_id = await _one_strategy_shared(
+        session,
+        execution={"entry_timing": "next_candle_open", "exit_timing": "current_candle_close"},
+        scaling=_SCALING_ON,
+    )
+
+    with _lifted(monkeypatch):
+        report = await readiness_cmd.run_readiness_check(
+            session, USER1, composition_id=composition_id
+        )
+    await session.commit()
+
+    assert report["state"] == "not_ready"
+    blockers = [i for i in report["issues"] if i["severity"] == "blocker"]
+    assert {_G11, _G12} <= {i["code"] for i in blockers}
+    g11 = next(i for i in blockers if i["code"] == _G11)
+    # doc 14 §9.1 — a blocker is a code AND an actionable remediation AND a field.
+    assert g11["remediation"] == DEFERRED_FILL_REMEDIATION
+    assert g11["field_path"] == "data.execution.entry_timing"
+    assert g11["scope_id"] is not None
+
+
+async def test_g12_refuses_enabled_scaling(session, monkeypatch) -> None:
+    """G12 §Karar 6 option A. Its own code, so the page can say WHICH gate refused."""
+    await _seed_principals(session)
+    composition_id = await _one_strategy_shared(session, scaling=_SCALING_ON)
+
+    with _lifted(monkeypatch), pytest.raises(ReadinessBlockedError) as exc_info:
+        await backtest_cmd.request_backtest_run(
+            session, USER1, composition_id=composition_id, idempotency_key="g12-1"
+        )
+    await session.rollback()
+
+    error = exc_info.value
+    assert error.field_path == "scaling_logic.enabled"
+    assert error.remediation == SCALING_REMEDIATION
+    blockers = {d["code"] for d in error.details if d["severity"] == "blocker"}
+    assert blockers == {_G12}
+    await _assert_nothing_admitted(session)
+
+
+async def test_g11_g12_negative_control_an_immediate_unscaled_strategy_is_admitted(
+    session, monkeypatch
+) -> None:
+    """NEGATIVE CONTROL: the same composition, differing only in the offending fields.
+
+    A guard that refused every shared run — or that keyed off the plan being enabled
+    rather than the Strategy's shape — would fail here."""
+    await _seed_principals(session)
+    composition_id = await _one_strategy_shared(session)
+
+    with _lifted(monkeypatch):
+        admit = await backtest_cmd.request_backtest_run(
+            session, USER1, composition_id=composition_id, idempotency_key="g11-ok"
+        )
+    await session.commit()
+
+    assert admit["state"] == "queued"
+    assert await _count(session, BacktestRun) == 1
+
+
+async def test_the_admission_guard_holds_when_ready_check_is_bypassed(session, monkeypatch) -> None:
+    """The 3d guard does not depend on the readiness evaluation producing the finding.
+
+    A regressed / replaced / short-circuited allocation resolution is simulated by making
+    the readiness command report the plan as INDEPENDENT while the pinned capital
+    snapshot still asks for shared capital. Ready Check then emits no shape blocker at
+    all — and admission must STILL refuse, because it reads the snapshot and the configs
+    the manifest is about to pin, not the report.
+    """
+    await _seed_principals(session)
+    composition_id = await _one_strategy_shared(
+        session,
+        execution={"entry_timing": "next_candle_open", "exit_timing": "current_candle_close"},
+    )
+
+    real_resolve = readiness_cmd._resolve_allocation
+
+    async def _blind_resolve(*args: Any, **kwargs: Any):
+        _enabled, _issues, capital_mode = await real_resolve(*args, **kwargs)
+        return False, [], capital_mode  # reported independent; the SNAPSHOT still says shared
+
+    monkeypatch.setattr(readiness_cmd, "_resolve_allocation", _blind_resolve)
+
+    with _lifted(monkeypatch):
+        # The preflight really is clean — proving the bypass is effective, not merely
+        # attempted. Without this the test could pass on a report that still blocked.
+        report = await readiness_cmd.run_readiness_check(
+            session, USER1, composition_id=composition_id
+        )
+        await session.commit()
+        assert report["summary"]["blocker_count"] == 0
+
+        with pytest.raises(ReadinessBlockedError) as exc_info:
+            await backtest_cmd.request_backtest_run(
+                session, USER1, composition_id=composition_id, idempotency_key="g11-bypass"
+            )
+    await session.rollback()
+
+    blockers = {d["code"] for d in exc_info.value.details if d["severity"] == "blocker"}
+    assert blockers == {_G11}
+    await _assert_nothing_admitted(session)
+
+
+async def test_containment_still_leads_for_a_g11_violation_in_the_shipped_world(session) -> None:
+    """SHIPPED WORLD. Unlifted, the one finding is containment — shared mode is not
+    unavailable *for this Strategy*, it is unavailable at all, and three more blockers
+    behind that one would bury the actionable message."""
+    await _seed_principals(session)
+    composition_id = await _one_strategy_shared(
+        session,
+        execution={"entry_timing": "next_candle_open", "exit_timing": "current_candle_close"},
+    )
+
+    with pytest.raises(ReadinessBlockedError) as exc_info:
+        await backtest_cmd.request_backtest_run(
+            session, USER1, composition_id=composition_id, idempotency_key="g11-shipped"
+        )
+    await session.rollback()
+
+    codes = {d["code"] for d in exc_info.value.details}
+    assert _CONTAINMENT in codes
+    assert _G11 not in codes and _G12 not in codes
+    await _assert_nothing_admitted(session)
+
+
+async def test_independent_mode_still_admits_the_very_same_strategy(session) -> None:
+    """G11's closing-constraint 4, explicitly required by the signature: the block must close
+    what it names and nothing else.
+
+    The identical Strategy — deferring entry timing AND enabled scaling — is admitted
+    with no allocation plan. Independent mode replays it against its own ledger, where
+    P2 and P8 are both fully modelled (doc 13 §1.1: a complete mode, not a degraded one).
+    If this ever goes red the gate has leaked out of shared capital."""
+    await _seed_principals(session)
+    composition_id = await _empty_composition(session, USER1)
+    await _attach_ready_strategy(
+        session,
+        USER1,
+        composition_id,
+        execution={"entry_timing": "next_candle_open", "exit_timing": "next_candle_open"},
+        scaling=_SCALING_ON,
+    )
+
+    admit = await backtest_cmd.request_backtest_run(
+        session, USER1, composition_id=composition_id, idempotency_key="independent-ok"
+    )
+    await session.commit()
+
+    assert admit["state"] == "queued"
+    assert await _count(session, BacktestRun) == 1

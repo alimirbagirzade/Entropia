@@ -139,6 +139,7 @@ def _strategy_payload(
     costs: dict[str, str] | None = None,
     funding: dict[str, Any] | None = None,
     rationale_family_id: str | None = "rf_1",
+    execution: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     # ``rationale_family_id=None`` OMITS the key entirely rather than storing a null:
     # doc 10 §14 RF-12 is about a Strategy that never got a Family, and
@@ -156,7 +157,14 @@ def _strategy_payload(
             "backtest_range": backtest_range
             or {"start": "2024-01-01T00:00:00Z", "end": "2024-06-01T00:00:00Z"},
             "initial_capital": "10000.00",
-            "execution": {"entry_timing": "next_candle_open", "exit_timing": "next_candle_open"},
+            # ``next_candle_open`` is the lookahead-free canonical choice and stays the
+            # default: every existing caller's payload is byte-identical. It also DEFERS
+            # the fill, which the shared clock cannot model (G11), so a caller that needs
+            # a composition admissible under SHARED capital passes an immediate timing
+            # explicitly rather than having the default quietly changed underneath the
+            # dozen independent-mode fixtures that rely on it.
+            "execution": execution
+            or {"entry_timing": "next_candle_open", "exit_timing": "next_candle_open"},
             "order_config": {"type": "market_order"},
             # ``costs={}`` leaves commission AND spread unset, which is what raises the
             # doc 14 §9.2 EXECUTION_ASSUMPTIONS_DEFAULT *warning* — a composition that

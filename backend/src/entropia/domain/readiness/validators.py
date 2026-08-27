@@ -19,10 +19,20 @@ from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 
-from entropia.domain.allocation.capability import SHARED_ALLOCATION_REMEDIATION
+from entropia.domain.allocation.capability import (
+    SHARED_ALLOCATION_FIELD_PATH,
+    SHARED_ALLOCATION_REMEDIATION,
+    shared_allocation_is_executable,
+)
 from entropia.domain.allocation.enums import AllocationIssueCode as AllocCode
 from entropia.domain.allocation.enums import AllocationIssueSeverity as AllocSev
 from entropia.domain.allocation.rules import AllocationIssue
+from entropia.domain.allocation.shared_mode_admission import (
+    DEFERRED_FILL_MESSAGE,
+    DEFERRED_FILL_REMEDIATION,
+    SCALING_MESSAGE,
+    SCALING_REMEDIATION,
+)
 from entropia.domain.backtest.capabilities import future_dev_selections
 from entropia.domain.backtest.engine import (
     conflict_handling_is_modelled,
@@ -34,6 +44,10 @@ from entropia.domain.backtest.engine import (
 from entropia.domain.backtest.execution.fills import (
     execution_timing_is_modelled,
     order_execution_is_modelled,
+)
+from entropia.domain.backtest.execution.shared_shapes import (
+    SharedShapeKind,
+    unsupported_shared_shapes,
 )
 from entropia.domain.backtest.execution.sizing import (
     leverage_is_modelled,
@@ -196,6 +210,7 @@ def evaluate_readiness(
     issues.extend(signal_market_data_issues)
     issues.extend(strategy_indicator_issues)
     issues.extend(validate_research_sources(research_sources))
+    issues.extend(_shared_mode_execution_issues(items, allocation_enabled=allocation_enabled))
     issues.extend(_map_allocation_issues(allocation_issues))
 
     blockers = sum(1 for i in issues if i.severity == Sev.BLOCKER)
@@ -207,6 +222,118 @@ def evaluate_readiness(
         blocker_count=blockers,
         warning_count=warnings,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Shared-clock execution shapes (G11 / P2, G12 / P8)                           #
+# --------------------------------------------------------------------------- #
+
+#: Which readiness code, message and remediation each signed gate speaks with. The
+#: PREDICATE for both lives in ``domain/backtest/execution/shared_shapes.py`` and is
+#: shared with the engine's construction-time refusal, so the early and late statements
+#: of one fact cannot drift; only the user-facing half is chosen here.
+#:
+#: Indexed with ``[]`` rather than ``.get()`` ON PURPOSE. A kind with no entry here has
+#: no signature behind it, and ``.get()`` would let it through the admission guard in
+#: silence — fail-OPEN, for a table whose whole job is the opposite. The real guard is
+#: earlier: ``test_shared_shapes.py::test_only_the_two_signed_gates_exist`` pins the enum
+#: to these two members, so a third one turns a test red long before it reaches a caller.
+_SHARED_SHAPE_ISSUE: dict[SharedShapeKind, tuple[Code, str, str]] = {
+    SharedShapeKind.DEFERRED_FILL: (
+        Code.ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED,
+        DEFERRED_FILL_MESSAGE,
+        DEFERRED_FILL_REMEDIATION,
+    ),
+    SharedShapeKind.SCALING: (
+        Code.ALLOCATION_SHARED_MODE_SCALING_UNSUPPORTED,
+        SCALING_MESSAGE,
+        SCALING_REMEDIATION,
+    ),
+}
+
+
+def shared_mode_execution_issues(
+    strategies: Sequence[tuple[str, StrategyConfig]],
+) -> list[ReadinessIssue]:
+    """G11 / G12 blockers for the resolved Strategy configs of a SHARED composition.
+
+    Takes ALREADY-PARSED configs because its two callers arrive with them for different
+    reasons — Ready Check parses the pinned payload it validates anyway, and the run
+    admission guard reuses the configs ``resolve_run_manifest_context`` parsed to build
+    the manifest. Neither re-reads the database for this.
+
+    Scoped to ``portfolio_allocation`` rather than ``strategy`` deliberately: the very
+    same Strategy is legal, and fully modelled, in independent mode. What makes the
+    configuration a finding is the POOL, so the pool is the layer that reports it.
+
+    Issue ORDER is the G11 §Karar sub-decision on ``field_path``, "ikisi de", made
+    concrete: every offending SETTING is named first (one issue each, so ``details``
+    carries them all and O-02 promotes the first onto the 422 envelope), then one issue
+    per violated gate anchored on the Portfolio toggle — the other half of the fix, and
+    the only field a user with several offending Strategies can act on once. No new code
+    is invented for the toggle row; it speaks with the same code as the gate it
+    summarises, because doc 14 §9.1's taxonomy defines none for it.
+    """
+    per_field: list[ReadinessIssue] = []
+    kinds_seen: list[SharedShapeKind] = []
+    for item_id, config in strategies:
+        for violation in unsupported_shared_shapes(config):
+            code, message, remediation = _SHARED_SHAPE_ISSUE[violation.kind]
+            if violation.kind not in kinds_seen:
+                kinds_seen.append(violation.kind)
+            per_field.append(
+                ReadinessIssue(
+                    code,
+                    Sev.BLOCKER,
+                    Scope.PORTFOLIO_ALLOCATION,
+                    f"{message} Offending setting: {violation.field_path}.",
+                    remediation=remediation,
+                    field_path=violation.field_path,
+                    scope_id=item_id,
+                )
+            )
+    return per_field + [
+        ReadinessIssue(
+            _SHARED_SHAPE_ISSUE[kind][0],
+            Sev.BLOCKER,
+            Scope.PORTFOLIO_ALLOCATION,
+            f"{_SHARED_SHAPE_ISSUE[kind][1]} Turning shared capital allocation off "
+            "resolves this for every item at once.",
+            remediation=_SHARED_SHAPE_ISSUE[kind][2],
+            field_path=SHARED_ALLOCATION_FIELD_PATH,
+        )
+        for kind in kinds_seen
+    ]
+
+
+def _shared_mode_execution_issues(
+    items: Sequence[ReadinessItemInput], *, allocation_enabled: bool
+) -> list[ReadinessIssue]:
+    """The same blockers over Ready Check's own inputs, when they can mean anything.
+
+    Silent unless shared capital allocation is both REQUESTED and EXECUTABLE. While
+    ``SHARED_ALLOCATION_STATUS`` is ``future_dev`` the one true finding for an enabled
+    plan is the containment blocker — shared mode is not unavailable *for this
+    Strategy*, it is unavailable at all — and stacking three more blockers behind it
+    would bury the actionable one and tell the user to edit a Strategy that is not the
+    reason the run is refused. The run-admission guard is NOT gated this way: it sits
+    behind the containment guard, which refuses first for the same reason.
+
+    A config that does not parse yields nothing here; ``STRATEGY_CONFIG_INVALID``
+    already blocks it, and guessing at an unparseable config would report a second,
+    derived finding for one defect.
+    """
+    if not allocation_enabled or not shared_allocation_is_executable():
+        return []
+    strategies: list[tuple[str, StrategyConfig]] = []
+    for item in items:
+        if not item.available or item.kind != MainboardItemKind.STRATEGY:
+            continue
+        try:
+            strategies.append((item.item_id, StrategyConfig(**item.payload)))
+        except PydanticValidationError:
+            continue
+    return shared_mode_execution_issues(strategies)
 
 
 def _derive_state(blocker_count: int, warning_count: int) -> ReadinessState:
@@ -1197,5 +1324,6 @@ __all__ = [
     "ReadinessEvaluation",
     "evaluate_readiness",
     "is_stale",
+    "shared_mode_execution_issues",
     "validate_research_sources",
 ]

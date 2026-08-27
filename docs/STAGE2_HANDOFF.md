@@ -8914,6 +8914,55 @@ edilmedi** — onu migration deploy anında alır. Geçen sayı ve coverage **CI
 
 `PROJECT_HISTORY.md` §ADIM 124 · `docs/ADIM124_LANDED_KICKOFF.md`.
 
+## Stage ADIM 125 — `C6` tamamlandı: `G11` (P2) + `G12` (P8) admission blocker'ları landed
+
+**PR:** (bu slice) · **migration: YOK** → alembic head **`0044_drop_net_conflict_policy`**
+(değişmedi). **Yeni tablo/kolon YOK.**
+
+`ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** (`openapi_export --check` exit 0,
+ölçüldü — readiness kodları şemada yayımlanmıyor) · golden digest'ler **el değmedi** ·
+`SHARED_ALLOCATION_STATUS` = `future_dev` (`capability.py` **el değmedi**) · kabul borcu
+tavanları **oynamadı** · `frontend/src` **sıfır satır** · blocker **DEĞİŞMEDİ**
+(1 — yalnız A-08), **BLOCKED**.
+
+**Ne indi.** `C6`'nın kalan iki admission blocker'ı, ikisi de **#849'da imzalı** (2026-08-26):
+**`G11`** (P2 — erteleyen `entry_timing`/`exit_timing` ya da bekleyen limit/stop emir tipi) ve
+**`G12`** (P8 — `scaling_logic.enabled`). Yeni tek predicate
+`domain/backtest/execution/shared_shapes.py::unsupported_shared_shapes`; iki yeni
+`ReadinessIssueCode`; iki yüzey (**Ready Check** `readiness/validators.py::shared_mode_execution_issues`
++ **admission** `backtest_run.py::_admit_run_body` adım **3d**), G12'nin *"ikisi de"*
+alt-kararının istediği gibi. **Ön koşul 13/14 böylece kapandı; 15/16 ADIM 119'daydı → `C6`'nın
+dört blocker'ı da yerinde.**
+
+**Motorun tablosu imzanın kapsamından GENİŞTİ, ve boşluk bir teste yazıldı.**
+`participant.py::_unsupported_shapes` on bir şekli reddeder; imzalı olan **iki**si.
+Kısmî kapanış, `allow_stacking`/`replace_existing` stacking ve `close_existing` hedge için
+imza **yok** → blocker da **yazılmadı** ve o şekiller hâlâ **geç** patlar (statüko, gerileme
+değil). `test_the_loop_refuses_more_than_admission_does_and_that_gap_is_deliberate` boşluğu
+ölçer ki sessizleşmesin. Taşınan dört satır **kopyalanmadı**: `_unsupported_shapes` onları
+tek predicate'ten **geri ekler**, parite testi beklenen cümleyi o modülden **türetir**.
+
+**ÖLÇÜLMÜŞ SÜRPRİZ — sevk edilen fixture'ın kendisi kapıyı ihlal ediyordu.**
+`_strategy_payload`'ın varsayılanı `next_candle_open`; kapı eklenince
+`test_shared_mode_admission.py`'nin dört testi (**ikisi negatif kontrol**) kırmızıya döndü.
+Varsayılan **değiştirilmedi** (bir düzine bağımsız-mod fixture'ı ona dayanıyor); payload
+opsiyonel bir `execution=None` aldı ve **yalnız paylaşımlı** harness immediate timing'e geçti.
+Bu, `G11` §Ölçüm 8'in *"yapılandırmaların yarısına yakını"* tahmininin birinci elden
+doğrulamasıdır.
+
+**Altı negatif kontrol, altısı da ayırt edici.** En güçlüsü **NC-6**: Ready Check yarısının
+kapsama kapısını kaldırmak, bu slice'ın **hiç dokunmadığı** `test_shared_allocation_containment.py`'nin
+**iki** testini kırmızıya çeviriyor → o kapı sevk edilen dünyayı koruyan taşıyıcı parçadır.
+**NC-3** bir eksik assertion ortaya çıkardı (entegrasyon testleri Ready Check yarısını hiç
+kanıtlamıyordu, admission hepsini yakalıyordu) → rapor-düzeyi assertion eklendi.
+
+**DÜRÜST SINIR: dört guard da sevk edilen build'de ULAŞILAMAZ** (containment önce reddediyor)
+ve **`C6`'nın kapanması lift DEĞİLDİR** — lift `C9`, ve ADR §16 **Gate 2** (`G10`) ayrı bir
+insan kapısı (2026-08-26'da **`B` — ERTELE** imzalandı). **#544 / #559 el değmedi**
+(`human-only`) → ön koşul 20/21 kırmızı kalır.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 125 · `docs/ADIM125_LANDED_KICKOFF.md`.
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
 > **ADIM 120 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -9458,3 +9507,24 @@ izleniyor" **yazılabilir**, çünkü doğrudur.
 >
 > **SIRA (ADIM 122'de ölçüldü):** `G14` **Karar 2 imzası** → `B` (migration) → `#544`
 > kapanışı → `C6`'nın P2/P8 yarısı → ön koşul 17/18 → **`G10` yeniden talep** → `C9`.
+> **ADIM 125 GÜNCELLEMESİ (2026-08-27) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (`docs-history-guard` bir `## ` başlığının **kökünü** karşılaştırır; yeniden adlandırma
+> bloklanır. Başlık artık tamamen tarihseldir: üç imzanın üçü de verildi, ve **`C6` de indi**.)
+>
+> **BAŞLIĞIN *"sonra `C6`"* MADDESİ KAPANDI.** ADIM 122'nin sıra listesi
+> (`Karar 2 imzası → B → #544 kapanışı → C6'nın P2/P8 yarısı → 17/18 → G10 → C9`)
+> **üç adım ilerledi**: Karar 2 = ADIM 123, `B` = ADIM 124, **`C6`'nın P2/P8 yarısı =
+> ADIM 125**. `#544` kapanışı **atlanmadı, atlanamaz** — `human-only`, kalan tek eylem odur
+> ve `C6`'yı bloklamıyordu.
+>
+> **SIRADAKİ MÜHENDİSLİK KALEMİ ARTIK `C7`** (A16 manifest split). Kalan ön koşul
+> kırmızıları: **17** (OD-2 mark policy), **18** (`CONTENTION_SELECTION_STATUS` flip),
+> **20** (#544 — insan), **21** (#559 — insan), **22** (`C9`'un kendisi).
+>
+> **YENİ TUZAK, DEVRE ALINMALI:** `tests/integration/test_backtest_persistence.py::_strategy_payload`
+> varsayılan olarak `next_candle_open` verir = **`G11` ihlali**. Paylaşımlı bir kompozisyon
+> kuran her fixture `execution={"entry_timing": "current_candle_close", …}` geçmeli, yoksa
+> koşu ilgisiz görünen bir sebeple reddedilir. Varsayılan **bilerek** değiştirilmedi.
+>
+> **`execution/shared_shapes.py`'ye İMZASIZ satır EKLEME** — kısmî kapanış / stacking / hedge
+> bilerek dışarıda ve bir testle pinli; bir satır eklemek bir imza gerektirir.

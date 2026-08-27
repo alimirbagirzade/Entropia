@@ -34,6 +34,7 @@ from entropia.domain.backtest.engine import _build_stepper
 from entropia.domain.backtest.execution.arbitration import ArbitrationDecision
 from entropia.domain.backtest.execution.clock import ItemBarStream, iter_ticks
 from entropia.domain.backtest.execution.intents import ItemIdentity
+from entropia.domain.backtest.execution.shared_shapes import unsupported_shared_shapes
 from entropia.domain.backtest.execution.sizing import sleeve_capital
 from entropia.domain.backtest.execution.state import AllocationExecution
 from entropia.domain.backtest.participant import (
@@ -512,6 +513,92 @@ def test_an_execution_shape_the_shared_clock_cannot_drive_is_refused_at_construc
     base.update(kwargs)
     with pytest.raises(UnsupportedStrategyShapeError, match=expected):
         _participant("a", 0, _STOPPED_OUT, "60", config=oracle_config(**base))
+
+
+_SCALING_ON: dict[str, Any] = {
+    "enabled": True,
+    "method": "price_distance_scaling",
+    "price_scaling": {"retracement_distance": "1", "layers": 2},
+    "add_size": "percent_of_initial",
+    "add_size_value": "50",
+}
+
+_LIMIT_ORDER: dict[str, Any] = {
+    "type": "limit_order",
+    "limit": {
+        "price_rule": "entry_signal_price",
+        "validity": "3_candles",
+        "unfilled_policy": "cancel_order",
+        "partial_fill_policy": "not_allowed",
+    },
+}
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"entry_timing": "next_candle_open"},
+        {"exit_timing": "next_candle_close"},
+        {"order_config": _LIMIT_ORDER},
+        {"scaling": _SCALING_ON},
+    ],
+    ids=["entry_timing", "exit_timing", "order_type", "scaling"],
+)
+def test_the_loop_refuses_the_shapes_admission_refuses_with_the_same_sentence(
+    kwargs: dict[str, Any],
+) -> None:
+    """`C6` PARITY: one predicate, two moments — not two lists that agree today.
+
+    ``G11`` and ``G12`` made these four rows user-visible blockers at ADMISSION, where a
+    refusal leaves no run, manifest or job behind. The loop still refuses them at
+    construction, after those rows already exist. Both refusals now read
+    ``execution/shared_shapes.py``, and this test derives the expected sentence from that
+    module instead of quoting it: a second hand-written copy in either home — or a splice
+    dropped out of ``_unsupported_shapes`` — turns this red rather than leaving the two
+    statements to drift apart silently.
+    """
+    config = _config(**kwargs)
+    violations = unsupported_shared_shapes(config)
+    assert violations, "the fixture must actually violate a signed gate"
+    with pytest.raises(UnsupportedStrategyShapeError) as exc_info:
+        _participant("a", 0, _STOPPED_OUT, "60", config=config)
+    for violation in violations:
+        assert violation.detail in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"exit_logic": {"applies_to_direction": "long_and_short", "close_percentage": "50"}},
+        {"conflict": {"same_direction_stacking": "allow_stacking"}},
+        {
+            "conflict": {
+                "same_direction_stacking": "ignore",
+                "opposite_direction_hedge": "close_existing",
+            }
+        },
+    ],
+    ids=["partial_close", "stacking", "hedge"],
+)
+def test_the_loop_refuses_more_than_admission_does_and_that_gap_is_deliberate(
+    kwargs: dict[str, Any],
+) -> None:
+    """The WITHHELD rows, pinned so the omission cannot go quiet.
+
+    Only ``G11`` and ``G12`` are signed. Partial closes, same-direction stacking and a
+    ``close_existing`` hedge are refused by the loop for reasons just as financial, but
+    no signature covers them, so `C6` emits no blocker for them and a run carrying one
+    still fails LATE. That is the pre-`C6` status quo for these rows, not a regression —
+    and it is a fact, not a preference, so it is measured here rather than described in a
+    docstring nobody re-checks. Signing one of them is a one-row change in
+    ``shared_shapes.py`` plus a mapping entry; this test going red is how that lands.
+    """
+    base: dict[str, Any] = {"direction": "long", "conflict": _SHARED_CONFLICT}
+    base.update(kwargs)
+    config = oracle_config(**base)
+    assert unsupported_shared_shapes(config) == ()
+    with pytest.raises(UnsupportedStrategyShapeError):
+        _participant("a", 0, _STOPPED_OUT, "60", config=config)
 
 
 def test_a_run_with_no_allocation_is_refused_rather_than_sized_off_a_private_ledger() -> None:

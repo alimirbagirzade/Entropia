@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from entropia.domain.allocation import capability
 from entropia.domain.allocation.rules import ALLOCATABLE_ITEM_KINDS
 from entropia.domain.allocation.shared_mode_admission import (
     EXECUTING_ITEM_KINDS,
@@ -25,6 +26,17 @@ from entropia.domain.allocation.shared_mode_admission import (
     non_executing_sleeve_holders,
 )
 from entropia.domain.mainboard.enums import MainboardItemKind
+from entropia.domain.readiness.enums import ReadinessIssueCode as Code
+from entropia.domain.readiness.enums import ReadinessScope as Scope
+from entropia.domain.readiness.enums import ReadinessSeverity as Sev
+from entropia.domain.readiness.issues import ReadinessItemInput
+from entropia.domain.readiness.validators import (
+    evaluate_readiness,
+    shared_mode_execution_issues,
+)
+from entropia.domain.strategy.config import StrategyConfig
+
+from .oracles.harness import oracle_config
 
 
 def _snapshot(*entries: dict[str, Any]) -> dict[str, Any]:
@@ -210,3 +222,165 @@ def test_an_absent_declaration_is_not_a_second_convention() -> None:
 def test_a_malformed_data_time_row_is_ignored() -> None:
     rows: list[Any] = ["not-a-dict", {"market_dataset": "not-a-dict"}, {}]
     assert declared_record_time_bases(rows) == ()
+
+
+# --------------------------------------------------------------------------- #
+# G11 (P2) / G12 (P8) — the issue SHAPE the two signed gates speak with        #
+# --------------------------------------------------------------------------- #
+
+_DEFERRED = Code.ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED
+_SCALING = Code.ALLOCATION_SHARED_MODE_SCALING_UNSUPPORTED
+_TOGGLE = "enabled"
+
+_SCALING_ON: dict[str, Any] = {
+    "enabled": True,
+    "method": "price_distance_scaling",
+    "price_scaling": {"retracement_distance": "1", "layers": 2},
+    "add_size": "percent_of_initial",
+    "add_size_value": "50",
+}
+
+
+def _config(**kwargs: Any) -> StrategyConfig:
+    return oracle_config(direction="long", conflict={"same_direction_stacking": "ignore"}, **kwargs)
+
+
+def _strategy_item(item_id: str, config: StrategyConfig, **overrides: Any) -> ReadinessItemInput:
+    return ReadinessItemInput(
+        item_id=item_id,
+        kind=MainboardItemKind.STRATEGY,
+        root_id=f"root_{item_id}",
+        revision_id=f"rev_{item_id}",
+        available=overrides.pop("available", True),
+        payload=overrides.pop("payload", config.model_dump(mode="json")),
+    )
+
+
+def test_a_clean_shared_composition_produces_no_shape_issues() -> None:
+    """The negative control the whole block is measured against."""
+    assert shared_mode_execution_issues([("mbitem_1", _config())]) == []
+
+
+def test_a_deferring_timing_names_the_setting_the_item_and_the_gate() -> None:
+    issues = shared_mode_execution_issues([("mbitem_1", _config(entry_timing="next_candle_open"))])
+    lead = issues[0]
+    assert lead.code == _DEFERRED
+    assert lead.severity == Sev.BLOCKER
+    # The POOL is what makes this configuration a finding — the same Strategy is legal
+    # and fully modelled in independent mode — so the pool is the layer that reports it.
+    assert lead.scope == Scope.PORTFOLIO_ALLOCATION
+    assert lead.field_path == "data.execution.entry_timing"
+    assert lead.scope_id == "mbitem_1"
+    assert lead.remediation
+
+
+def test_scaling_speaks_with_its_own_code_not_the_fill_one() -> None:
+    """Two signatures, two codes. Collapsing them would make the Ready Check page unable
+    to say WHICH gate refused, and either could be revisited without the other."""
+    issues = shared_mode_execution_issues([("mbitem_1", _config(scaling=_SCALING_ON))])
+    assert [i.code for i in issues] == [_SCALING, _SCALING]
+    assert issues[0].field_path == "scaling_logic.enabled"
+
+
+def test_the_envelope_leader_is_a_setting_and_the_toggle_row_closes_the_list() -> None:
+    """G11 §Karar's ``field_path`` sub-decision, "ikisi de", made concrete.
+
+    O-02 promotes the FIRST blocker onto the 422 envelope, so the first row has to be the
+    setting the user must change; the toggle — the other half of the fix, and the only
+    field that resolves every item at once — closes the list. Both field paths therefore
+    appear in ``details``, which is exactly what "ikisi de" asks for.
+    """
+    issues = shared_mode_execution_issues(
+        [("mbitem_1", _config(entry_timing="next_candle_open", exit_timing="next_candle_close"))]
+    )
+    assert [i.field_path for i in issues] == [
+        "data.execution.entry_timing",
+        "data.execution.exit_timing",
+        _TOGGLE,
+    ]
+    # The toggle row is a COMPOSITION-level statement: no single item is the fault the
+    # reader would act on, so it claims no scope_id and would not blame one item.
+    assert issues[-1].scope_id is None
+    assert issues[-1].code == _DEFERRED
+
+
+def test_the_toggle_row_appears_once_per_violated_gate_not_once_per_violation() -> None:
+    """Three offending settings across two items still summarise to two toggle rows —
+    one per gate. One per violation would repeat the same sentence five times."""
+    issues = shared_mode_execution_issues(
+        [
+            ("mbitem_1", _config(entry_timing="next_candle_open", scaling=_SCALING_ON)),
+            ("mbitem_2", _config(exit_timing="intrabar_touch")),
+        ]
+    )
+    toggle_rows = [i for i in issues if i.field_path == _TOGGLE]
+    assert [i.code for i in toggle_rows] == [_DEFERRED, _SCALING]
+
+
+def test_every_offending_item_is_named_so_a_user_can_find_them_all() -> None:
+    """Reporting only the first offender would send a user round the loop once per item."""
+    issues = shared_mode_execution_issues(
+        [
+            ("mbitem_1", _config(entry_timing="next_candle_open")),
+            ("mbitem_2", _config()),
+            ("mbitem_3", _config(entry_timing="intrabar_touch")),
+        ]
+    )
+    assert [i.scope_id for i in issues if i.scope_id] == ["mbitem_1", "mbitem_3"]
+
+
+# --------------------------------------------------------------------------- #
+# ... and when Ready Check is allowed to say it at all                         #
+# --------------------------------------------------------------------------- #
+
+
+def _codes(items: list[ReadinessItemInput], *, allocation_enabled: bool) -> set[str]:
+    evaluation = evaluate_readiness(
+        items, allocation_enabled=allocation_enabled, allocation_issues=[]
+    )
+    return {str(issue.code) for issue in evaluation.issues}
+
+
+def test_ready_check_is_silent_while_containment_is_on() -> None:
+    """SHIPPED WORLD. The one true finding for an enabled plan today is the containment
+    blocker: shared mode is not unavailable *for this Strategy*, it is unavailable at
+    all. Stacking three more blockers behind it would bury the actionable one and tell
+    the user to edit a Strategy that is not the reason the run is refused."""
+    assert not capability.shared_allocation_is_executable()
+    item = _strategy_item("mbitem_1", _config(entry_timing="next_candle_open"))
+    assert _DEFERRED.value not in _codes([item], allocation_enabled=True)
+
+
+def test_ready_check_reports_the_blockers_once_the_flag_lifts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LIFTED WORLD — the one `C9` will ship. Without this the guard above would be
+    indistinguishable from one that never reports anything at all."""
+    item = _strategy_item("mbitem_1", _config(entry_timing="next_candle_open"))
+    with monkeypatch.context() as patch:
+        patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "active_v1")
+        assert _DEFERRED.value in _codes([item], allocation_enabled=True)
+
+
+def test_an_independent_composition_is_never_asked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """NEGATIVE CONTROL for the lift test: independent mode replays each item on its own
+    ledger, where a deferred fill is fully modelled. Doc 13 §1.1 — a complete mode."""
+    item = _strategy_item("mbitem_1", _config(entry_timing="next_candle_open"))
+    with monkeypatch.context() as patch:
+        patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "active_v1")
+        assert _DEFERRED.value not in _codes([item], allocation_enabled=False)
+
+
+def test_an_unavailable_or_unparseable_item_yields_no_derived_finding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A soft-deleted pin is already ``ITEM_UNAVAILABLE`` and an unparseable config is
+    already ``STRATEGY_CONFIG_INVALID``. Guessing at either would report a second,
+    derived finding for one defect — and would have to guess at fields that are absent."""
+    config = _config(entry_timing="next_candle_open")
+    unavailable = _strategy_item("mbitem_1", config, available=False)
+    unparseable = _strategy_item("mbitem_2", config, payload={"strategy_root_id": "only"})
+    with monkeypatch.context() as patch:
+        patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "active_v1")
+        codes = _codes([unavailable, unparseable], allocation_enabled=True)
+    assert _DEFERRED.value not in codes

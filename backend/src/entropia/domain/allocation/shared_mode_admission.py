@@ -8,13 +8,27 @@ of the questions, not a convenience:
 * ``_unsupported_shapes`` asks *"can the loop model THIS item's resolved config?"*
   (P2 deferred fills, P8 scaling, partial closes). Every one of its rows is knowable
   from a single item.
-* This module asks *"can the loop model this COMPOSITION at all?"* — OD-1 compares
-  two pinned revisions against each other, and OD-6 is about an entry that has no
-  resolved run to inspect. Neither question can be phrased over one item, which is
-  why neither appears in that table and why nothing here is copied from it.
+* The OD-1 / OD-6 half of this module asks *"can the loop model this COMPOSITION at
+  all?"* — OD-1 compares two pinned revisions against each other, and OD-6 is about an
+  entry that has no resolved run to inspect. Neither question can be phrased over one
+  item, which is why neither appears in that table and why nothing here is copied
+  from it.
 
-A reviewer holding the two lists side by side should therefore find them disjoint by
-construction, not overlapping-but-drifted.
+Those two halves are disjoint by construction, and a reviewer holding them side by side
+should find them so rather than overlapping-but-drifted.
+
+The P2 / P8 half is DELIBERATELY the same question, twice
+---------------------------------------------------------
+`C6` added a third group — the ``G11`` (deferred / resting fills) and ``G12`` (scaling)
+blockers — and those ARE rows of the engine's table, on purpose. G11 §Ölçüm 2 measured
+why: a deferred fill never announces itself as an intent kind, so there is no moment
+inside a started run at which it can be refused; the loop's own refusal fires at
+CONSTRUCTION, after the run row, manifest and job already exist. Stating the same fact
+at admission turns a fail-LATE crash into a fail-CLOSED refusal that leaves nothing
+behind. Two statements of one fact drift, so this module holds only the user-facing
+TEXTS for them; the predicates are imported by both readers from
+``domain/backtest/execution/shared_shapes.py``. Nothing about a deferred fill or a
+scaling ladder is decided here.
 
 Both predicates read the IMMUTABLE snapshot / pinned manifest context straight,
 exactly as :func:`..capability.shared_allocation_requested` does, so a refusal never
@@ -83,6 +97,36 @@ MIXED_RECORD_TIME_BASIS_REMEDIATION = (
     "Pin market datasets that share one record time basis for every Strategy in the "
     "composition, or turn the Portfolio Allocation toggle off — independent mode "
     "replays each item on its own axis, where a per-item basis is well defined."
+)
+
+
+DEFERRED_FILL_MESSAGE = (
+    "Shared capital allocation cannot run a Strategy whose fills are deferred or left "
+    "resting. A next-candle timing, an intrabar touch and a limit / stop-limit order all "
+    "resolve in a later phase (P2), and the shared clock does not run that phase: the "
+    "pool would arbitrate an entry the item never opens on this bar, or keep holding a "
+    "position the item has already decided to close. The capital committed either way "
+    "was never granted by a portfolio valuation snapshot (G11, ADR 0002 §8.2 P2)."
+)
+
+DEFERRED_FILL_REMEDIATION = (
+    "Give this Strategy an execution timing that fills on the deciding bar "
+    "(current-candle close or market fill simulation) and a market order type, or turn "
+    "the Portfolio Allocation toggle off — independent mode models deferred and resting "
+    "fills in full, and nothing about them changes there."
+)
+
+SCALING_MESSAGE = (
+    "Shared capital allocation cannot run a Strategy with same-direction scaling enabled. "
+    "The layer ladder books its added layers inside the item's own tail phase (P8), which "
+    "the shared clock does not run, so each added layer would commit pool capital with no "
+    "portfolio valuation snapshot behind it. Modelling it instead would need a SECOND "
+    "arbitration round per bar, and ADR 0002 §8 defines exactly one (G12)."
+)
+
+SCALING_REMEDIATION = (
+    "Disable Logic-Based Scaling on this Strategy, or turn the Portfolio Allocation "
+    "toggle off — scaling is fully supported in independent mode and is unaffected there."
 )
 
 
@@ -171,6 +215,8 @@ def mixed_record_time_bases(data_time: list[dict[str, Any]]) -> tuple[str, ...]:
 
 
 __all__ = [
+    "DEFERRED_FILL_MESSAGE",
+    "DEFERRED_FILL_REMEDIATION",
     "EXECUTING_ITEM_KINDS",
     "MIXED_RECORD_TIME_BASIS_FIELD_PATH",
     "MIXED_RECORD_TIME_BASIS_MESSAGE",
@@ -178,6 +224,8 @@ __all__ = [
     "NON_EXECUTING_ITEM_FIELD_PATH",
     "NON_EXECUTING_ITEM_MESSAGE",
     "NON_EXECUTING_ITEM_REMEDIATION",
+    "SCALING_MESSAGE",
+    "SCALING_REMEDIATION",
     "declared_record_time_bases",
     "mixed_record_time_bases",
     "non_executing_sleeve_holders",

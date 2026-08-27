@@ -47,7 +47,7 @@
 **`G10` bugün yeniden talep EDİLEMEZ**: yeniden talep koşulu md. 2 (`G14`'ün `B` yarısı
 sevk edilmiş + `#544` kapalı) sağlanmıyor.
 
-Sıra: **`G14` Karar 2/3 imzası** → `B` (NET enum'unun kaldırılması, **bir migration**) →
+Sıra: **`G14` Karar 2 imzası** → `B` (NET enum'unun kaldırılması, **bir migration**) →
 `#544` kapanışı → **`C6`'nın P2/P8 yarısı** (`G11`+`G12` imzalı, tek slice'ta birlikte) →
 17/18 (OD-2 mark policy + iki etiket flip) → **`G10` yeniden talep** → `C9`.
 
@@ -72,7 +72,7 @@ slice'ta uyguladı**; Ready Check leg 3 artık **FLAT**. Bu belgenin ilk yazım�
 ## Paste-ready resume prompt
 
 ```
-ENTROPIA — G14 Karar 2/3 imza hazırlığı + `B` yarısının ölçümü (C9 kritik yolu)
+ENTROPIA — G14 Karar 2 imza hazırlığı + `B` yarısının ölçümü (C9 kritik yolu)
 
 ÖNCE DOĞRULA: git fetch && git log --oneline origin/main -6 && gh pr list --state open
   Handoff BAYAT VARSAY. `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md`
@@ -82,13 +82,13 @@ BAĞLAM (ölçüldü, ADIM 121): `G10` (Gate 2) İMZALI = `B — ERTELE`, red de
   talep koşulunun md. 1 ve 3'ü SAĞLANDI; **md. 2 tek açık maddedir** ve `C9`'u tutan
   tek kalem odur: `G14`'ün `B` yarısı (`NET` enum'unun KALDIRILMASI — bir MIGRATION) +
   `#544`'ün kapanması. Karar 1 imzalı (`C` şimdi + `B` `C9` öncesi), `C` #850 ile sevk
-  edildi; **Karar 2 ve Karar 3'ün kutuları BOŞ.**
+  edildi; **Karar 3 de İMZALI (aynı #850). AÇIK OLAN YALNIZ KARAR 2'DİR.**
 
 GÖREV (ikisi de KARAR DEĞİL — yazarın rolü hazırlık):
   1. ÖLÇÜM: `allocation/enums.py` + `rules.py` içinde `NET`'in sevk edilmiş yüzeylerini
      ve ÜRETİMDEKİ `'NET'` satırlarını say (Karar 2 tam olarak bunu soruyor). Sayı
      alınmadan Karar 2 imzalanamaz — `G15` emsali.
-  2. `closure_g14_net_conflict_policy_2026-08-25.md` §Karar 2/3'ün ÖLÇÜM bölümlerini
+  2. `closure_g14_net_conflict_policy_2026-08-25.md` §Karar 2'nin ÖLÇÜM bölümlerini
      tazele; İMZA KUTULARINA DOKUNMA (☐ boş kalır, §Karar 1'in ☑'sine de dokunma).
 
 YASAKLAR: `SHARED_ALLOCATION_STATUS`'a DOKUNMA (`future_dev` kalır). `ENGINE_VERSION`,

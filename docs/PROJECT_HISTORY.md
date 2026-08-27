@@ -17005,7 +17005,7 @@ kapıyı açmaz"* yönünde ölçmüştü; burada **ters yönde** çıktı — k
 |---|---|---|
 | **17** | OD-2 mark policy + `MARK_STALENESS_POLICY` flip | `provenance.py` = **`"undefined_pending_od2"`**; policy yazılmadı |
 | **18** | `CONTENTION_SELECTION_STATUS` flip | `arbitration.py` = **`"recommended_pending_approval"`** |
-| **20** | GH **#544** kapalı | **OPEN**; `G14` Karar 1 imzalı ama `B` yarısı (NET enum'unun kaldırılması) bir **migration** ve yazılmadı, Karar 2/3 **boş** |
+| **20** | GH **#544** kapalı | **OPEN**; `G14` Karar 1 **ve** Karar 3 imzalı (Karar 3'ü #850 getirdi) ama `B` yarısı (NET enum'unun kaldırılması) bir **migration** ve yazılmadı; **açık olan yalnız Karar 2** |
 | **22** | A15 bump + A16 + A19 + A22 | `ENGINE_VERSION` değişmedi; `_PRIOR_ENGINE_VERSION` **yok** |
 
 **15 ve 16 YEŞİL — ve "tanımlı" ile "ulaşılabilir" AYRI ÖLÇÜLDÜ.**
@@ -17038,6 +17038,8 @@ this plan"*), o yüzden **18/4 sayısı oynamaz**.
 **YENİDEN TALEP KOŞULU — md. 1 ✅ · md. 3 ✅ (bu slice'ta yeşile döndü) · md. 2 ❌.**
 Yani `G10`'u tutan **TEK** kalem `G14`'ün `B` yarısı + `#544`'tür. Bu bir **ürün kararı +
 migration**, ve bir ajanın tek başına kapatabileceği bir şey değildir.
+
+**ÜÇÜNCÜ DERS — BU KAYIT KENDİ DERSİNİ KENDİNE UYGULAMAK ZORUNDA KALDI.** İlk yazımı *"`G14` Karar 2 ve Karar 3'ün kutuları boş"* diyordu ve bu **yazıldığı anda yanlıştı**: Karar 3 **#850** (`42352048`) ile imzalanmıştı ve o commit ölçüm tabanı `f0be03f1`'de **zaten vardı**. Gözlem ilk tabandan (`6759a495`) **taşınmıştı** — yani bu slice'ın tamamının hakkında olduğu kusurun (*sayı taşıma*) birebir aynısı, slice'ın kendi metninde. **PR açıkken yakalandı ve düzeltildi** (beş dosya, sekiz geçiş); yakalayan şey bir kapı değil, **bir sonraki oturumun aynı dosyayı yeniden ölçmesi** oldu — ve kapıların bunu **göremeyeceği** de ölçümün parçasıdır: `docs-history-guard` silme arar, `check_classification` numara sayar, ikisi de bir cümlenin doğruluğunu **okumaz**. **Açık olan yalnız Karar 2'dir.**
 
 **DÜRÜST SINIR:** ürün/test kodunda sıfır satır → **hiçbir suite koşulmadı ve hiçbir
 geçen/coverage sayısı iddia edilmiyor**, otorite CI. `#559` ve `#544`'e **dokunulmadı**

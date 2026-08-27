@@ -9340,8 +9340,8 @@ izleniyor" **yazılabilir**, çünkü doğrudur.
 > **BAŞLIĞIN İMZA LİSTESİ ARTIK TEK KALEME İNDİ.** `G8` (#559) **İMZALI** (`A1+B2+C1`, #847)
 > ve `#559` **kapandı**; Karar 1'in tabanı ADIM 114'te imzalandı; `G11`+`G12` #849 ile
 > imzalandı. **Geriye `G14` (#544) kalır** — ve onun da Karar 1'i imzalı (`C` şimdi + `B`
-> `C9` öncesi), `C` yarısı #850 ile **sevk edildi**. **Açık olan: Karar 2 ve Karar 3'ün
-> kutuları (BOŞ) + `B` yarısı (NET enum'unun kaldırılması, bir MIGRATION) + `#544`.**
+> `C9` öncesi), `C` yarısı #850 ile **sevk edildi**. **Açık olan: YALNIZ Karar 2'nin
+> kutusu (BOŞ — Karar 3'ü #850 imzaladı) + `B` yarısı (NET enum'unun kaldırılması, bir MIGRATION) + `#544`.**
 >
 > **BAŞLIĞIN *"→ sonra `C6`"* KISMI HÂLÂ YARIM DOĞRU ve yarısı DEĞİŞTİ:** `C6`'nın dört
 > blocker'ından **ikisi ADIM 119 ile İNDİ** (OD-1 + OD-6 → ön koşul 15/16 **yeşil**, ve
@@ -9356,6 +9356,6 @@ izleniyor" **yazılabilir**, çünkü doğrudur.
 > yazımı onu imzasız sayıyordu, **bayattı**. `G15` bir `C9` ön koşulu **değildir**;
 > **18/4 oynamaz**.
 >
-> **SIRA (ADIM 121'de ölçüldü):** `G14` Karar 2/3 imzası → `B` (migration) → `#544` kapanışı
+> **SIRA (ADIM 121'de ölçüldü):** `G14` **Karar 2** imzası → `B` (migration) → `#544` kapanışı
 > → `C6`'nın P2/P8 yarısı → ön koşul 17/18 (OD-2 mark policy + iki etiket flip) → **`G10`
 > yeniden talep** → `C9`. `G16`/A-08 (#514) **bağımsız** ve nihai RC verdict'ini ayrıca bloklar.

@@ -83,6 +83,7 @@ from entropia.domain.readiness.enums import (
     ReadinessSeverity,
 )
 from entropia.domain.readiness.issues import ReadinessIssue
+from entropia.domain.readiness.validators import shared_mode_execution_issues
 from entropia.domain.strategy.config import StrategyConfig
 from entropia.domain.trash.page import original_location_for
 from entropia.infrastructure.postgres.models import Job, MainboardCompositionSnapshot
@@ -636,6 +637,26 @@ async def _admit_run_body(
                     ).as_dict()
                 ]
             )
+
+    # 3d. G11 (P2 — deferred / resting fills) and G12 (P8 — same-direction scaling),
+    #     both signed 2026-08-26. Runs on the configs ``resolve_run_manifest_context``
+    #     just parsed, so it costs no extra query, and still ahead of ``new_id`` /
+    #     ``build_run_manifest`` — a refusal leaves no run, manifest or job behind.
+    #
+    #     Unlike Ready Check's copy of these findings, this guard is NOT gated on the
+    #     containment flag: it does not need to be, because the containment guard above
+    #     already refuses every shared run while the flag is off. That is also why it is
+    #     UNREACHABLE in the shipped build — like 3b and 3c it is the fail-closed floor
+    #     `C9` has to find in place, and the two-world tests drive it lifted.
+    #
+    #     The engine states the same refusal at participant construction
+    #     (``domain/backtest/participant.py::_unsupported_shapes``) from the SAME
+    #     predicate. That one fires after the run row, manifest and job already exist;
+    #     this one is why they never do.
+    if shared_allocation_requested(snapshot.capital_mode_snapshot):
+        shape_issues = shared_mode_execution_issues(context.strategy_configs)
+        if shape_issues:
+            raise _readiness_blocked([issue.as_dict() for issue in shape_issues])
 
     run_id = new_id("btrun")
     manifest_id = new_id("btman")

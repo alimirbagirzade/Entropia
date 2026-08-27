@@ -83,10 +83,10 @@ olur ya da imzasız kapıların arkasındaki `C2`/`C3`/`C4`'ü bu slice'ta inşa
 | 10 | Tick-strided cancellation checkpoint (A21) | E5 (`C4`) | ❌ | `portfolio_engine.py`'de cancel yok; worker'ın checkpoint'i **item arası** (`backtest_engine.py:301`), tick değil |
 | 11 | Containment gate authorised-caller allowlist'e daraltılmış | E5 (`C4`) | ❌ | gate hâlâ `callers == []` biçiminde (`test_oracle_portfolio_containment_gate.py:223`) |
 | 12 | Bağımsız run'ların döngüye hiç ulaşmadığının davranışsal kanıtı | E5 (`C4`) | ❌ | `C4` inmedi |
-| 13 | Deferred-fill / limit-order admission blocker (P2) | **insan** | ❌ **İMZASIZ** | `G11` brief edilmedi |
-| 14 | Scaling admission blocker (P8) | **insan** | ❌ **İMZASIZ** | `G12`; md. 2 gereği artık zorunlu |
-| 15 | OD-6(a) blocker'ı | E6 | ❌ | `execution/intents.py:19` — *"OD-6, still open"* |
-| 16 | OD-1(a) blocker'ı (mixed `record_time_basis`) | E6 | ❌ | `execution/clock.py:38` — *"does NOT branch on `record_time_basis`"* |
+| 13 | Deferred-fill / limit-order admission blocker (P2) | **insan** | ❌ **İMZASIZ** | `G11` brief edilmedi. **2026-08-26: İMZALANDI** (#849, dispozisyon (a) — entry + exit, erteleyen timing + bekleyen emir tipi). **2026-08-27: KOD İNDİ** (ADIM 125) — `execution/shared_shapes.py::unsupported_shared_shapes` → `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`, Ready Check + admission adım 3d. Containment'ın arkasında, sevk edilen build'de ULAŞILAMAZ. |
+| 14 | Scaling admission blocker (P8) | **insan** | ❌ **İMZASIZ** | `G12`; md. 2 gereği artık zorunlu. **2026-08-26: İMZALANDI** (#849, Seçenek A + ret "ikisi de"). **2026-08-27: KOD İNDİ** (ADIM 125) — aynı predicate → `ALLOCATION_SHARED_MODE_SCALING_UNSUPPORTED`, `field_path=scaling_logic.enabled`. |
+| 15 | OD-6(a) blocker'ı | E6 | ❌ | `execution/intents.py:19` — *"OD-6, still open"*. **2026-08-26: KOD İNDİ** (ADIM 119) — `shared_mode_admission.py::non_executing_sleeve_holders`, admission adım 3b. |
+| 16 | OD-1(a) blocker'ı (mixed `record_time_basis`) | E6 | ❌ | `execution/clock.py:38` — *"does NOT branch on `record_time_basis`"*. **2026-08-26: KOD İNDİ** (ADIM 119) — `shared_mode_admission.py::mixed_record_time_bases`, admission adım 3c. |
 | 17 | OD-2 mark policy + `MARK_STALENESS_POLICY` flip | E6 | ❌ | `provenance.py:80` = `"undefined_pending_od2"` |
 | 18 | `CONTENTION_SELECTION_STATUS` flip | E6 | ❌ | `arbitration.py:195` = `"recommended_pending_approval"` |
 | 19 | R-1: pinlenen config revizyon satırıyla bayt eşleşir | ayrı PR (`C5`) | ✅ **YEŞİL** | `tests/integration/test_allocation_revision_pin.py` (ADIM 72: zaten sevk edilmişti, negatif kontrolle doğrulandı) |
@@ -94,7 +94,10 @@ olur ya da imzasız kapıların arkasındaki `C2`/`C3`/`C4`'ü bu slice'ta inşa
 | 21 | GH **#559** (DST kuralı) kapalı | **insan/ürün** | ❌ **AÇIK** | `state: open`, `state_reason: reopened`, `blocks-mixed-zone-axis` |
 | 22 | A15 bump + A16 manifest + A19 + A22 | E6 (`C9`) | ❌ | `ENGINE_VERSION` değişmedi; manifest dört policy alanını taşımıyor (`test_oracle_portfolio_containment_gate.py:246`) |
 
-**Sayı: 22'de 2 yeşil (#1, #19).** Ek olarak plan §2'nin `C9`'a özel üç kapısı:
+**Sayı: 22'de 2 yeşil (#1, #19).** — *bu sayı `0f0651d`'ye aittir ve DONMUŞTUR;*
+*satırlara sonradan eklenen tarihli notlar kolonu değiştirmez. Taze sayım için*
+*`docs/PROJECT_HISTORY.md`'nin en son ADIM kaydına bak (ADIM 121: 18/22; ADIM 125*
+*ile `C6`'nın dört blocker'ı da indi).* Ek olarak plan §2'nin `C9`'a özel üç kapısı:
 **`G8`** (#559) ❌ · **`G10`** (ADR §16 Gate 2 — flag flip onayı) ❌ *talep edilmedi* ·
 **`G14`** (#544) ❌. Ve **`G16`** (A-08, #514) açık → nihai RC verdict'i zaten bloklu.
 

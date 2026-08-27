@@ -37,12 +37,15 @@ What this adapter refuses, and why refusing is the whole point
 hedge sections OPEN and CLOSE positions with no ``PortfolioSnapshot`` behind them — the
 exact silent-degradation shape the working standard forbids. Rather than run a phase that
 can commit capital outside arbitration, or drop a configured behaviour silently, the
-adapter refuses the shapes that need it AT CONSTRUCTION: see :data:`_UNSUPPORTED_SHAPES`.
+adapter refuses the shapes that need it AT CONSTRUCTION: see :func:`_unsupported_shapes`.
 
 P-C2 §C.3.7 (deferred fills) and §C.3.8 (scaling) each recommend option (a) — block the
-shape at admission — and `C6` is where those become user-visible Ready Check blockers.
-This list is the engine-side half of the same decision: it makes a wrong shared run
-impossible before `C6` exists, instead of merely improbable.
+shape at admission — and `C6` is where those became user-visible Ready Check blockers
+(`G11` and `G12`, both signed 2026-08-26). Their predicates therefore no longer live in
+this file: they moved to ``execution/shared_shapes.py``, which admission and Ready Check
+import too, and :func:`_unsupported_shapes` appends them. The refusal here is unchanged
+in substance — it still makes a wrong shared run impossible at construction — but it is
+now the LATE half of one statement rather than the only one.
 """
 
 from __future__ import annotations
@@ -56,7 +59,6 @@ from entropia.domain.backtest.engine import _EntryDecision, _ItemStepper
 from entropia.domain.backtest.execution.arbitration import ArbitrationDecision
 from entropia.domain.backtest.execution.clock import ItemBarStream, ItemTickView
 from entropia.domain.backtest.execution.constants import _ZERO
-from entropia.domain.backtest.execution.fills import _fill_schedule
 from entropia.domain.backtest.execution.intents import (
     ClosingSize,
     EntrySizing,
@@ -67,6 +69,7 @@ from entropia.domain.backtest.execution.intents import (
     form_intent,
 )
 from entropia.domain.backtest.execution.portfolio_ledger import OpenPosition
+from entropia.domain.backtest.execution.shared_shapes import unsupported_shared_shapes
 from entropia.domain.backtest.execution.sizing import sleeve_capital
 from entropia.domain.backtest.execution.state import _Bar, _RunConfig
 from entropia.domain.backtest.portfolio_engine import (
@@ -75,10 +78,6 @@ from entropia.domain.backtest.portfolio_engine import (
     MandatoryExit,
     PortfolioEngineError,
 )
-
-#: Order types that fill at the timing-chosen price. Everything else RESTS a working order
-#: which only ``_phase_open_fills`` can resolve — a phase the shared path never runs.
-_IMMEDIATE_ORDER_TYPES = frozenset({"market_order", "simulation_only"})
 
 #: ``position_exit_logic.close_percentage`` for a FULL close. Anything else leaves a
 #: remainder the pool has already released the capital for.
@@ -117,11 +116,17 @@ def _unsupported_shapes(ctx: _RunConfig) -> tuple[tuple[bool, str], ...]:
 
     Stated as data rather than as a chain of ``if``s so the set can be READ — it is the
     engine-side statement of which compositions `C6` must block at admission, and a
-    reviewer comparing the two lists should not have to trace control flow to do it."""
-    execution = ctx.config.data.execution
+    reviewer comparing the two lists should not have to trace control flow to do it.
+
+    The rows below are the ones that need a RESOLVED run: an attached
+    ``AllocationExecution``, a resolved indicator plan, the state of the capability
+    gates. The rows knowable from the :class:`StrategyConfig` alone moved to
+    ``execution/shared_shapes.py`` at `C6` and are appended here, because admission has
+    to ask exactly those and a second hand-written copy of them is precisely the drift
+    this table's docstring invites a reviewer to check for. Their sentences are
+    unchanged — only their home is."""
     exit_logic = ctx.config.position_exit_logic
     conflict = ctx.config.conflict_position_handling
-    scaling = ctx.config.scaling_logic
     return (
         (
             not ctx.alloc_on,
@@ -141,32 +146,10 @@ def _unsupported_shapes(ctx: _RunConfig) -> tuple[tuple[bool, str], ...]:
             "and which F-04 forbids in production anyway",
         ),
         (
-            _fill_schedule(execution.entry_timing) != "immediate",
-            f"entry_timing '{execution.entry_timing}' defers or rests the entry fill; it is "
-            "resolved by _phase_open_fills / _phase_tail, so the pool would arbitrate an "
-            "entry the item never opens at this tick (P-C2 §C.3.7 option (a))",
-        ),
-        (
-            _fill_schedule(execution.exit_timing) != "immediate",
-            f"exit_timing '{execution.exit_timing}' defers or rests the exit fill; the pool "
-            "would keep holding a position the item has already decided to close",
-        ),
-        (
-            ctx.config.data.order_config.type not in _IMMEDIATE_ORDER_TYPES,
-            f"order type '{ctx.config.data.order_config.type}' rests a working order that "
-            "only _phase_open_fills can fill",
-        ),
-        (
             exit_logic.close_percentage != _FULL_CLOSE_PERCENT
             and exit_logic.partial_aftermath != "close_all",
             "a partial close leaves the item holding a remainder while _phase_3_mandatory "
             "releases the WHOLE position's capital in the pool",
-        ),
-        (
-            scaling is not None and scaling.enabled,
-            "same-direction scaling runs the layer ladder inside _phase_tail and books "
-            "layers with no PortfolioSnapshot behind them; the loop refuses an admitted "
-            "scale_in for the same reason (P-C2 §C.3.8 option (a))",
         ),
         (
             str(conflict.same_direction_stacking) in _EXECUTING_STACKING_POLICIES,
@@ -186,6 +169,7 @@ def _unsupported_shapes(ctx: _RunConfig) -> tuple[tuple[bool, str], ...]:
             "opposite_direction_hedge 'close_existing' closes the position inside "
             "_phase_tail, so the realized money would never reach E(t)",
         ),
+        *((True, violation.detail) for violation in unsupported_shared_shapes(ctx.config)),
     )
 
 

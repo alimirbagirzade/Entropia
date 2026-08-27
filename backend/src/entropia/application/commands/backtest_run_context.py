@@ -59,11 +59,20 @@ _FUNDING_ROLE = "funding"
 
 @dataclass(frozen=True, slots=True)
 class RunManifestContext:
-    """The three resolved manifest field groups (doc 15 §9.2)."""
+    """The three resolved manifest field groups (doc 15 §9.2), plus one that is NOT one."""
 
     strategy_package: list[dict[str, Any]]
     external_objects: list[dict[str, Any]]
     data_time: list[dict[str, Any]]
+    #: The parsed Strategy configs, ``(item_id, config)`` in ``item_id`` order. NOT a
+    #: manifest group and never handed to ``build_run_manifest``: it is carried so the
+    #: `C6` admission guards (G11 / G12) can judge the shapes this module already
+    #: parsed, instead of re-resolving every mirror pin a second time. Recording them
+    #: INTO the manifest was the alternative and was rejected — ``data_time`` and
+    #: ``strategy_package`` are hashed into ``execution_key``, so a new field there
+    #: would re-partition the reuse namespace of every stored Result for a fact the
+    #: manifest does not need.
+    strategy_configs: list[tuple[str, StrategyConfig]]
 
 
 async def resolve_run_manifest_context(
@@ -82,6 +91,7 @@ async def resolve_run_manifest_context(
     strategy_package: list[dict[str, Any]] = []
     external_objects: list[dict[str, Any]] = []
     data_time: list[dict[str, Any]] = []
+    strategy_configs: list[tuple[str, StrategyConfig]] = []
     raw = item_manifest.get("items", []) if isinstance(item_manifest, dict) else []
     revisions = await mb_repo.get_work_object_revisions(
         session,
@@ -125,10 +135,12 @@ async def resolve_run_manifest_context(
             )
         )
         data_time.append(await _data_time_entry(session, item_id=item_id, config=config))
+        strategy_configs.append((item_id, config))
     return RunManifestContext(
         strategy_package=sorted(strategy_package, key=lambda e: str(e["item_id"])),
         external_objects=sorted(external_objects, key=lambda e: str(e["item_id"])),
         data_time=sorted(data_time, key=lambda e: str(e["item_id"])),
+        strategy_configs=sorted(strategy_configs, key=lambda pair: pair[0]),
     )
 
 

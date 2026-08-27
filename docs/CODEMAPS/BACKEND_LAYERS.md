@@ -125,7 +125,7 @@ request bağımlılığından gelen **TEK transaction**, burada **asla commit yo
 |---|---|---|
 | `admin_panel` | `log_taxonomy`, `role_matrix` | Log olay taksonomisi + kanonik rol-scope matrisi (doc 19) |
 | `agent_lab` | `cursor`, `enums`, `state_machine`, `tool_gateway` | Analysis Lab durum makinesi + gateway sözleşmesi |
-| `allocation` | `capability`, `config`, `enums`, `rules`, `shared_mode_admission` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar. **`shared_mode_admission.py` (ADIM 117):** ADR §13.1 OD-1(a)/OD-6(a)'nın plan-düzeyi admission tablosu — kapsama kalkana kadar ULAŞILAMAZ, ayrıntı §Kapsama tablosunun 3–4. satırları. **CONTAINMENT (ADIM 3):** `capability.py` shared capital'in bu build'de **çalışmadığını** ilan eden TEK kaynak (`SHARED_ALLOCATION_STATUS = "future_dev"`); `rules.py::validate_allocation` enabled planı `SHARED_MODE_NOT_IN_BUILD` BLOCKER'ı ile açar → Portfolio sayfası + revision freeze + Ready Check (`ALLOCATION_SHARED_MODE_NOT_IN_BUILD`) + `commands/backtest_run.py` admission guard aynı verdict'i okur. Independent mod etkilenmez. Kaldırma şartları: `docs/decisions/2026-08-03_shared_portfolio_containment.md` §6. **Portfolio-level cross-item kuralları burada tanımlı ve doc 13 §8.2'de YOK:** `config.py::PortfolioAllocationConfigV1` iki alan · `enums.py::CrossItemConflictPolicy` — **ADIM 124'ten beri İKİ üye** (`BLOCK_OPPOSITE` / `KEEP_SEPARATE`) · `rules.py::validate_allocation` `MAX_TOTAL_EXPOSURE_INVALID` (BLOCKER). **`B` İNDİ (ADIM 124, `G14` Karar 1 / GH #544): `NET` enum'dan DÜŞTÜ.** Migration `0044_drop_net_conflict_policy` `portfolio_allocation_plan.conflict_policy` üzerine `ck_portfolio_allocation_plan_conflict_policy` **EKLER** (kolon o güne dek hiç kısıtlanmamıştı — `enum_column` düz VARCHAR üretir, `create_constraint` varsayılanı `False`) ve `'NET'` taşıyan satır varsa **DURUR** (`B3`). Kısıt hem migration'da hem `PortfolioAllocationPlan.__table_args__`'ta bildirilir (`schema_parity_gate.py` constraint eksenini sahiplenir). Onunla birlikte düşenler: `CONFLICT_POLICY_NET_V1`, `CrossItemConflictPolicyNotSelectableError` (B0'ın hatası — artık ulaşılamaz; red `_parse_config` → `AllocationValidationFailedError`, `details[].field = conflict_policy`), `arbitration.py`'nin NET satırı ve `NET_*` sabitleri. **DOKUNULMAYAN:** `engine.py::conflict_downgraded_from_net` — enum'u değil, Result'ın **immutable manifest snapshot dizesini** okur (tarihsel kayıt) ve `test_the_shipped_sequential_conflict_gate_is_untouched` onu kaynak düzeyinde pinler. Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 124 |
+| `allocation` | `capability`, `config`, `enums`, `rules`, `shared_mode_admission` | Run-scoped paylaşımlı sermaye havuzu tipleri + semantik kurallar. **`shared_mode_admission.py` (ADIM 117):** ADR §13.1 OD-1(a)/OD-6(a)'nın plan-düzeyi admission tablosu — kapsama kalkana kadar ULAŞILAMAZ, ayrıntı §Kapsama tablosunun 3–4. satırları. **CONTAINMENT (ADIM 3):** `capability.py` shared capital'in bu build'de **çalışmadığını** ilan eden TEK kaynak (`SHARED_ALLOCATION_STATUS = "future_dev"`); `rules.py::validate_allocation` enabled planı `SHARED_MODE_NOT_IN_BUILD` BLOCKER'ı ile açar → Portfolio sayfası + revision freeze + Ready Check (`ALLOCATION_SHARED_MODE_NOT_IN_BUILD`) + `commands/backtest_run.py` admission guard aynı verdict'i okur. Independent mod etkilenmez. Kaldırma şartları: `docs/decisions/2026-08-03_shared_portfolio_containment.md` §6. **Portfolio-level cross-item kuralları burada tanımlı ve doc 13 §8.2'de YOK:** `config.py::PortfolioAllocationConfigV1` iki alan · `enums.py::CrossItemConflictPolicy` — **ADIM 124'ten beri İKİ üye** (`BLOCK_OPPOSITE` / `KEEP_SEPARATE`) · `rules.py::validate_allocation` `MAX_TOTAL_EXPOSURE_INVALID` (BLOCKER). **`B` İNDİ (ADIM 124, `G14` Karar 1 / GH #544): `NET` enum'dan DÜŞTÜ.** Migration `0044_drop_net_conflict_policy` `portfolio_allocation_plan.conflict_policy` üzerine `ck_portfolio_allocation_plan_conflict_policy` **EKLER** (kolon o güne dek hiç kısıtlanmamıştı — `enum_column` düz VARCHAR üretir, `create_constraint` varsayılanı `False`) ve `'NET'` taşıyan satır varsa **DURUR** (`B3`). Kısıt hem migration'da hem `PortfolioAllocationPlan.__table_args__`'ta bildirilir (`schema_parity_gate.py` constraint eksenini sahiplenir). Onunla birlikte düşenler: `CONFLICT_POLICY_NET_V1`, `CrossItemConflictPolicyNotSelectableError` (B0'ın hatası — artık ulaşılamaz; red `_parse_config` → `AllocationValidationFailedError`, `details[].field = conflict_policy`), `arbitration.py`'nin NET satırı ve `NET_*` sabitleri. **DOKUNULMAYAN:** `engine.py::conflict_downgraded_from_net` — enum'u değil, Result'ın **immutable manifest snapshot dizesini** okur (tarihsel kayıt) ve `test_the_shipped_sequential_conflict_gate_is_untouched` onu kaynak düzeyinde pinler. Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 124  **`C6` TAMAMLANDI (ADIM 125):** `shared_mode_admission.py` artık G11/G12'nin kullanıcıya görünen METİNLERİNİ de tutar (`DEFERRED_FILL_*`, `SCALING_*`); predicate'leri `domain/backtest/execution/shared_shapes.py`'de ve motorla PAYLAŞILIR. Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 125 |
 
 | `backtest` | `engine`, `manifest`, `funding`, `portfolio_engine`, `portfolio_mode`, `execution/*` | Backtest motoru + çalıştırma manifest'i. **İKİ AYRI YOL taşır ve karıştırılmamalıdır:** (1) **sevk edilen tek-item yolu** — `engine.py::run_engine`, worker'ın `jobs/backtest_engine.py:859`'dan çağırdığı; (2) **unified-clock adası** — `portfolio_engine.py` + `execution/` alt paketi, **üretimde sıfır çağıranı olan** kapsanmış faz döngüsü. Ada haritası aşağıda §Unified-clock portfolio adası. `manifest.py:126` `ENGINE_VERSION`'ın tek kaynağı |
 | `capability` | `baseline`, `enums`, `lifecycle` | Future Dev capability registry durum makinesi + activation gate'leri |
@@ -194,7 +194,7 @@ sembolü "yok" saymak da (#582 gövdesi), bağlı olmayan bir sembolü "çalış
 > bayatladı**. §Conventions zaten *"satır numarası yazma, sembol adı kullan"* diyor —
 > bir sonraki admission slice'ı bu satırları yine kaydırırdı.
 
-#### Kapsama KALKINCA devreye girecek iki plan-düzeyi kapısı (ADIM 117, ADR §13.1)
+#### Kapsama KALKINCA devreye girecek DÖRT admission kapısı (ADIM 119 + ADIM 125)
 
 Bunlar 1 numaralı sert kapının **arkasında** durur, yani `SHARED_ALLOCATION_STATUS`
 `future_dev` iken **ULAŞILAMAZ** — `C9` bayrağı kaldırdığında hazır bulunması gereken
@@ -205,12 +205,36 @@ Check baypas edilse bile reddederler) ve `build_run_manifest`'ten **önce** çal
 |---|---|---|---|
 | 3 | `domain/allocation/shared_mode_admission.py::non_executing_sleeve_holders` | **OD-6(a)** | Motorun simüle etmediği bir kind (Trading Signal / Trade Log) **sleeve tutamaz** → `ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM`, `field_path=entries`, ihlal eden her entry `details`'te |
 | 4 | `domain/allocation/shared_mode_admission.py::mixed_record_time_bases` | **OD-1(a)** | Pinlenmiş market revizyonları **farklı** `record_time_basis` bildiriyorsa reddeder → `ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS`, `field_path=data.market_dataset_revision_id`, **`scope_id` YOK** (cross-item kusur, tek item suçlu değil) |
+| 5 | `execution/shared_shapes.py::unsupported_shared_shapes` → `SharedShapeKind.DEFERRED_FILL` | **G11 / P2** | Erteleyen `entry_timing`/`exit_timing` (`next_candle_open`, `next_candle_close`, `intrabar_touch`) **veya** bekleyen emir tipi (`IMMEDIATE_ORDER_TYPES` dışındaki her şey) → `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`; `field_path` **ihlal eden alan**, `scope_id` ihlal eden item |
+| 6 | aynı fonksiyon → `SharedShapeKind.SCALING` | **G12 / P8** | `scaling_logic.enabled` → `ALLOCATION_SHARED_MODE_SCALING_UNSUPPORTED`, `field_path=scaling_logic.enabled`. **Kendi kodu** — hangi kapının reddettiği sayfada okunabilsin diye G11 ile birleştirilMEDİ |
 
-Bu modül `participant.py::_unsupported_shapes`'in **kardeşidir, kopyası değil**: o tablo
-**tek çözülmüş koşunun** şeklini (P2/P8) sorar, bu modül **kompozisyonun tamamını**
-sorar. İkisi yapı gereği ayrıktır; OD-1 iki revizyonu birbiriyle karşılaştırır, OD-6'nın
-ise inceleyeceği çözülmüş koşusu hiç yoktur. **P2/P8 admission blocker'ları bu dosyaya
-AİT ama HENÜZ YAZILMADI** — `G11`/`G12` imzasız (bkz. `docs/decisions/`).
+**3–4 ile 5–6 AYNI CİNSTEN DEĞİL, ve bu bilinçli.** 3–4 `participant.py::_unsupported_shapes`'in
+**kardeşidir, kopyası değil**: o tablo **tek çözülmüş koşunun** şeklini sorar, OD-1/OD-6
+**kompozisyonun tamamını** sorar (OD-1 iki revizyonu birbiriyle karşılaştırır, OD-6'nın
+inceleyeceği çözülmüş koşusu hiç yoktur) → yapı gereği ayrıktırlar.
+**5–6 ise o tablonun İKİ SATIRININ TA KENDİSİDİR** (ADIM 125): G11 §Ölçüm 2 ertelenen bir
+fill'in kendini bir `intent kind` olarak **ilan etmediğini** ölçtü, yani koşu başladıktan
+sonra reddedilebileceği bir an yok — motor onu **construction**'da reddeder, ama o an run
+satırı/manifest/job **zaten vardır**. Aynı olguyu admission'da söylemek fail-LATE bir çöküşü
+fail-CLOSED bir redde çevirir. İki yazım sürüklenir, o yüzden **tek predicate**
+(`execution/shared_shapes.py`) hem motor hem admission hem Ready Check tarafından
+**import edilir**; `shared_mode_admission.py` yalnız kullanıcıya görünen METİNLERİ tutar.
+Parite `tests/unit/oracles/test_oracle_engine_participant.py::test_the_loop_refuses_the_shapes_admission_refuses_with_the_same_sentence`
+ile pinli (beklenen cümle modülden **türetilir**, alıntılanmaz).
+
+**5–6 kapısı DIŞARIDA BIRAKILAN satırlar da ÖLÇÜLÜ:** motor kısmî kapanışı,
+`allow_stacking`/`replace_existing` stacking'i ve `close_existing` hedge'i de reddeder — bunlar
+için **imza yok**, o yüzden `C6` onlara blocker YAZMAZ ve o şekiller hâlâ **geç** patlar.
+Bu bir gerileme değil, `C6` öncesi statükodur; `::test_the_loop_refuses_more_than_admission_does_and_that_gap_is_deliberate`
+o boşluğu **ölçer** ki sessizleşmesin.
+
+**Ready Check yarısı `shared_allocation_is_executable()` ile AYRICA kapılıdır**
+(`readiness/validators.py::_shared_mode_execution_issues`), admission yarısı değildir.
+Sebep ölçüldü: kapsama açıkken bir `enabled` plan için **tek doğru bulgu** containment
+blocker'ıdır (paylaşımlı mod bu Strategy için değil, **hiç** yok) — arkasına üç blocker daha
+dizmek eyleme geçirilebilir mesajı gömer. Admission tarafında gerek yok: 1 numaralı sert kapı
+zaten önce reddediyor. Negatif kontrol NC-6 bu kapıyı kaldırdığında **dokunulmamış**
+`test_shared_allocation_containment.py`'nin İKİ testi kırmızıya döner.
 
 Tek kaynak `domain/allocation/capability.py:105` (`SHARED_ALLOCATION_STATUS = "future_dev"`).
 **Bu bir eksik DEĞİL, BİLİNÇLİ FAIL-CLOSED KAPSAMADIR** — karar kaydı
@@ -269,10 +293,22 @@ kalır, lift **`C9`** ve ADR §16 **Gate 2** ayrı bir insan kapısıdır (**tal
 ya da dinlenen entry/exit fill'i, limit/stop emir tipi, kısmi kapanış, scaling, `allow_stacking`
 / `replace_existing`, `close_existing` hedge, `PortfolioRules`, allocation'sız koşu ve düşmüş bir
 fail-closed capability kapısı. Bunlar `_phase_tail` / `_phase_open_fills` gerektirir ve
-arbitrasyon olmadan sermaye taahhüt eder → adapter **inşa anında** reddeder. **`C6`'nın
-admission blocker listesi bu listeyle aynı olmalıdır**; `same_direction_stacking` şema
-**varsayılanı** `allow_stacking` olduğu için bu bir ürün kararı doğurur (P-C2 §C.3.7/§C.3.8'in
-**üçüncü** kardeşi, hiçbir belgede kayıtlı değildi).
+arbitrasyon olmadan sermaye taahhüt eder → adapter **inşa anında** reddeder.
+
+**ADIM 125'ten beri bu tablo İKİ EVLİDİR.** Yalnız çözülmüş `StrategyConfig`'ten bilinebilen
+satırlar — erteleyen timing, bekleyen emir tipi, scaling — `execution/shared_shapes.py`'ye
+taşındı ve `_unsupported_shapes` onları **geri ekler** (`*((True, v.detail) …)`); cümleleri
+değişmedi, yalnız evleri değişti. Çözülmüş bir `_RunConfig` isteyenler (allocation'sız koşu,
+plan yok, capability kapısı) burada kaldı, çünkü admission onları **soramaz**. Negatif kontrol
+NC-1: eklemeyi kaldırmak yeni parite testlerini **ve** önceden var olan dört parametrik refüz
+case'ini birlikte kırmızıya çevirir — yani taşınan satırlar gerçekten aynı satırlardır.
+
+**`C6`'nın admission listesi bu listeyle AYNI DEĞİL ve bu ölçülmüş bir tercihtir:** yalnız
+`G11` (P2) ve `G12` (P8) imzalıdır. Kısmî kapanış, `allow_stacking`/`replace_existing` ve
+`close_existing` hedge için imza **yok** → blocker da yok, o şekiller hâlâ geç patlar.
+`same_direction_stacking` şema **varsayılanı** `allow_stacking` olduğu için bu bir ürün
+kararı bekler (P-C2 §C.3.7/§C.3.8'in **üçüncü** kardeşi, hiçbir belgede kayıtlı değildi) —
+ve boşluk artık prozada değil, bir testte tutulur (§Kapsama tablosu 5–6 satırlarının altı).
 
 **Importer allowlist'i `participant.py` ile TEK ADLANDIRILMIŞ modül kadar genişledi** (imzalı
 karar, 2026-08-18, Seçenek A): containment gate + `execution.clock` / `execution.intents` /

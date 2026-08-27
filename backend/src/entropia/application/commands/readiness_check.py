@@ -62,8 +62,10 @@ from entropia.domain.strategy.config import StrategyConfig
 from entropia.domain.trading_signal.config import TradingSignalConfig
 from entropia.domain.trading_signal.enums import PriceSourceMode as SignalPriceSource
 from entropia.infrastructure.postgres.models import (
+    CanonicalTradeRecordBatch,
     EntityRegistry,
     MainboardWorkingItem,
+    NormalizedSignalEventRevision,
     PortfolioAllocationPlanRevision,
     StrategyRevision,
 )
@@ -355,6 +357,29 @@ async def _build_item_inputs(
         if ref is not None:
             mirror_refs.append(ref)
     mirrors = await strat_repo.get_strategy_revisions(session, mirror_refs)
+    # G15: leg 3. Two batched reads over the external items' pinned revisions, keyed by
+    # kind because the two kinds live in different tables. `_resolve_external` becomes a
+    # pure map lookup below, so the per-item read this replaces cannot come back by
+    # accident: there is no `session` in its scope any more. An id with no row is absent
+    # from the map, which is the same `None` the per-item reader returned, so the
+    # `found=False` fail-closed branch is unchanged.
+    #
+    # This batching is only SAFE because Karar 4/Seçenek B gave both readers a TOTAL
+    # order (`created_at DESC, <pk> DESC`). `work_object_revision_id` is not UNIQUE;
+    # before the signature the per-item read had no `ORDER BY` at all and no batch form
+    # could have agreed with it. Do not batch a leg whose winner is undecided.
+    trade_log_pins = [
+        item.pinned_revision_id
+        for item, available in enabled
+        if available and item.item_kind == MainboardItemKind.TRADE_LOG
+    ]
+    signal_pins = [
+        item.pinned_revision_id
+        for item, available in enabled
+        if available and item.item_kind == MainboardItemKind.TRADING_SIGNAL
+    ]
+    trade_log_batches = await readiness_repo.resolve_trade_log_batches(session, trade_log_pins)
+    signal_revisions = await readiness_repo.resolve_signal_revisions(session, signal_pins)
     for item, available in enabled:
         payload: dict[str, Any] = {}
         external: ExternalImportState | None = None
@@ -364,7 +389,7 @@ async def _build_item_inputs(
             if item.item_kind == MainboardItemKind.STRATEGY:
                 payload = await _resolve_strategy_payload(session, payload, mirrors)
             if item.item_kind in _EXTERNAL_KINDS:
-                external = await _resolve_external(session, item)
+                external = _resolve_external(item, trade_log_batches, signal_revisions)
         inputs.append(
             ReadinessItemInput(
                 item_id=item.item_id,
@@ -870,29 +895,33 @@ async def _resolve_research_sources(
     return sources
 
 
-async def _resolve_external(
-    session: AsyncSession, item: MainboardWorkingItem
+def _resolve_external(
+    item: MainboardWorkingItem,
+    trade_log_batches: Mapping[str, CanonicalTradeRecordBatch],
+    signal_revisions: Mapping[str, NormalizedSignalEventRevision],
 ) -> ExternalImportState:
+    """The external-import evidence for one item, read from the prefetched maps (G15).
+
+    Takes NO ``session`` on purpose. Leg 3 used to issue one read per external item —
+    the last live N+1 in Ready Check, left unrepaired until G15 decided which row wins
+    (Karar 4 = Seçenek B, newest). Now that both readers carry a total order, the
+    composition is resolved in two batched reads before the loop and this function is a
+    pure lookup. Absence from a map is the same ``None`` the per-item reader returned,
+    so ``found=False`` is reached on exactly the same inputs as before.
+    """
+    row: CanonicalTradeRecordBatch | NormalizedSignalEventRevision | None
     if item.item_kind == MainboardItemKind.TRADE_LOG:
-        batch = await readiness_repo.resolve_trade_log_batch(session, item.pinned_revision_id)
-        if batch is None:
-            return ExternalImportState(found=False, succeeded=False, accepted_count=0)
-        return ExternalImportState(
-            found=True,
-            succeeded=str(batch.status) == _SUCCEEDED,
-            accepted_count=batch.accepted_count,
-            instrument_id=batch.instrument_id,
-            skipped_reason_codes=_reason_codes(batch.skipped_rows),
-        )
-    revision = await readiness_repo.resolve_signal_revision(session, item.pinned_revision_id)
-    if revision is None:
+        row = trade_log_batches.get(item.pinned_revision_id)
+    else:
+        row = signal_revisions.get(item.pinned_revision_id)
+    if row is None:
         return ExternalImportState(found=False, succeeded=False, accepted_count=0)
     return ExternalImportState(
         found=True,
-        succeeded=str(revision.status) == _SUCCEEDED,
-        accepted_count=revision.accepted_count,
-        instrument_id=revision.instrument_id,
-        skipped_reason_codes=_reason_codes(revision.skipped_rows),
+        succeeded=str(row.status) == _SUCCEEDED,
+        accepted_count=row.accepted_count,
+        instrument_id=row.instrument_id,
+        skipped_reason_codes=_reason_codes(row.skipped_rows),
     )
 
 

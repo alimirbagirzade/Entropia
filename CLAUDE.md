@@ -270,6 +270,40 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
+> DEĞİŞTİ** → `backtest-engine-v18-a16-manifest-policy-provenance` · OpenAPI **değişmedi**
+> (ölçüldü, `--check` exit 0) · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) ·
+> `frontend/src` **sıfır satır**. **Son dalga — ADIM 126 (`C7` = A16 manifest split + A15
+> bump).** Manifest artık dört policy sürümünü taşıyor (`manifest.py::_portfolio_policy`,
+> **`execution_content` İÇİNDE**) ve admission çözülmüş sleeve tutarlarını + FX ref'lerini
+> pinliyor (ikisi de zaten hesaplanıp **atılıyordu**). **GÖREVİN DÖRT ÖNCÜLÜ ÖLÇÜLDÜ, ÜÇÜ
+> ÇÜRÜDÜ:** ADR **§16'da biter** (A15/A16 §14'te) · A15 testi **ZATEN VARDI** ve *bilerek*
+> literal-suz (post-PR-#45 convention) · OpenAPI **kırmızı vermedi ve veremezdi** — run
+> manifest'inin **hiçbir** alanı şemada yok (`execution_key`/`engine_version`/
+> `commission_model` dahil, hepsi **0 kez**) → `make openapi` **KOŞULMADI**. Dördüncü öncül
+> (bump) **ürün sahibine karşı kanıtla soruldu ve YENİDEN ONAYLANDI**. **ASIL DERS: namespace
+> kayması TEK ATIMLIK bir kaynaktır ve burada HARCANDI** — 50 golden'ın **49'u bayt bayt
+> aynı**, oynayan tek digest `contract.execution_key` ve o da yalnız versiyon dizesini
+> hash'lediği için. **Bu yüzden `C7`'nin bump'ı A15'i KAPATMAZ; `C9` TEKRAR bump etmelidir**
+> ve bu artık hatırlanmıyor, **zorlanıyor**: `test_lifting_containment_requires_a_second_
+> engine_version_bump` (dört köşeli predicate — `if lifted:` biçimi bugün *boşuna yeşil*
+> olurdu; NC-5'te ölçüldü). **İKİNCİ DERS: `manifest.py` dört sabiti İMPORT EDEMEZ** —
+> sahipleri `execution/` altında ve imzalı importer allowlist'i **iki** modül adlandırıyor
+> (ADIM 118'in reddettiği hamle) → değerler `portfolio_mode.py::UNIFIED_MANIFEST_KEY`
+> emsaliyle **yeniden yazıldı**, yorumlar modülü **YOL** biçiminde anıyor (noktalı biçim
+> taramayı kendisi tetikler), ve drift **testte** kapatıldı
+> (`test_a16_manifest_policy_parity.py`) — slice'ın adındaki *"split"* budur. **BEŞ NC,
+> beşi ayırt edici; NC-2 bir EKSİK ASSERTION BULDU** (bloğu yalnız `execution_content`'ten
+> silmek **her şeyi yeşil bırakıyordu**, yalnız golden fark ediyordu ve mesajı okuru motora
+> yönlendiriyordu) → eklendi. **compounding mode EKSİK DEĞİLDİ** (zaten `config` içinde,
+> `config_hash`'e giriyor) → **ikinci yazım EKLENMEDİ**, negatif olarak pinlendi. Altı
+> tripwire **ters çevrildi/daraltıldı, hiçbiri silinmedi**; **adlar korundu** (yedi donmuş
+> belge alıntılıyor). **DÜRÜST SINIR: ön koşul 22 KIRMIZI KALIR** — A16 indi, **A15 lift'i
+> bekler**, **A19 + A22 el değmedi**; #544/#559 el değmedi; frontend kapıları KOŞULMADI;
+> coverage **CI'ın otoritesinde**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 126 · `docs/ADIM126_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK** — bu dalga şema
 > değiştirmedi) · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0) ·
 > golden **el değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) ·
@@ -1890,7 +1924,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/ADIM62_LANDED_KICKOFF.md`.
 >
 > Öncesinde **HEAD `5e52465`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) ·
-> **`ENGINE_VERSION` = `backtest-engine-v18-percent-sizing-per-fill-commission` (BUMP)** ·
+> **`ENGINE_VERSION` (o gün) = `backtest-engine-v18-percent-sizing-per-fill-commission` (BUMP)** ·
 > `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 61 (üç canlı finansal kusur
 > KAPANDI, PR #720, 2026-08-14): ÜRÜN KODU DEĞİŞTİ, FİNANSAL SONUÇLAR OYNADI.** #550 sizing
 > **yüzde** oldu (`_percent_of_capital` tek dönüşüm; **`max_position_size_cap` YENİ public** —
@@ -1916,7 +1950,7 @@ Before stopping a working session, produce **ALL** of the following:
 > **hâlâ imzasızdır** ve komisyon **tabanı** açık kalır.
 >
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** · **`ENGINE_VERSION` DEĞİŞTİ** →
-> `backtest-engine-v18-percent-sizing-per-fill-commission` (**#720**, 2026-08-14: #550/#551/#552
+> `backtest-engine-v18-percent-sizing-per-fill-commission` (o gün; **#720**, 2026-08-14: #550/#551/#552
 > KAPANDI) · `SHARED_ALLOCATION_STATUS` = `future_dev`. Test sayıları: **toplanan** için
 > `docs/generated/repository_facts.md`, **geçen** için CI. **Son dalga — P-B (kapanış
 > uzlaştırması, DOCS-ONLY): ürün davranışı DEĞİŞMEDİ. Blocker 1 (yalnız A-08), BLOCKED.**
@@ -2342,7 +2376,12 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 117'de güncellendi): `C6` — KOD.** ~~`G11`+`G12` imza~~ → **ikisi de
+> **GERÇEK Next (ADIM 126'da güncellendi): ön koşul 17/18 — KOD; `C9` EN SONDA.**
+> ~~`C6`~~ ADIM 125'te, ~~`C7`~~ (A16 + A15 bump) ADIM 126'da **indi**. **`C9`'un
+> devraldığı pazarlıksız kalem: `ENGINE_VERSION`'ı lift commit'inde TEKRAR bump et**
+> — `C7`'nin bump'ı A16'nın *kayıt* değişikliği için harcandı ve A15'i KAPATMAZ
+> (`test_lifting_containment_requires_a_second_engine_version_bump` zorlar).
+> Eski not (ADIM 117): ~~`G11`+`G12` imza~~ → **ikisi de
 > 2026-08-26'da imzalandı** (G11 = (a), G12 = A; `PROJECT_HISTORY.md` §ADIM 117); Karar 1'in TABANI
 > ADIM 114'te imzalanmıştı. Hâlâ imzasız: ~~`G8`~~ (**#847 ile İMZALANDI**, `A1+B2+C1`, 2026-08-26) ·
 > ~~`G14`~~ (**#544 — DÖRT kararın DÖRDÜ de İMZALI**: Karar 1 + 3 = 2026-08-26, **Karar 2 = `B3`**

@@ -1,6 +1,6 @@
 {
   "digests": {
-    "contract.execution_key": "7e419351e29b49e23ab50fd2b6ebabe6f283e1a6aec79927bac7a83d834c4de5",
+    "contract.execution_key": "2857366d2d50069865006255825b6c42807a1dc7054000e64d303c18c82e70ce",
     "costs.commission_round_trip": "b07dac573594d63baac2ab5a126c8679fa847b17a9229e54b3a772c8aa706498",
     "costs.commission_scale_ladder": "95dd718888d74f1e9dc07ad60db296af364c35e6d8d4b730e62a6c288bbbd930",
     "costs.funding_batch_2": "e74339c2a36b33df6202f118910f8fed0c2cf9316a3ec234f4056f349e505f2a",
@@ -51,5 +51,5 @@
     "sizing.risk_based": "781dd4a2b1aae253007dbd439580e0ff600d597de32b3b4a4e8039890fb36ba9",
     "sizing.unsupported_method": "105725901e376450e9c428bdc9263f11fb48c5dce80528db0facf63213791a18"
   },
-  "engine_version": "backtest-engine-v18-percent-sizing-per-fill-commission"
+  "engine_version": "backtest-engine-v18-a16-manifest-policy-provenance"
 }

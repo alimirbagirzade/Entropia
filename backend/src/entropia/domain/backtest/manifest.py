@@ -142,7 +142,33 @@ from entropia.shared.manifest import manifest_hash
 # run a revision saved before the sizing cutover until a human re-confirms the magnitude
 # (``STRATEGY_SIZING_SEMANTICS_UNCONFIRMED``); nothing is converted automatically, because
 # the stored number does not say which reading its author meant.
-ENGINE_VERSION = "backtest-engine-v18-percent-sizing-per-fill-commission"
+# v18-a16-manifest-policy-provenance (`C7`, ADR 0002 §10.1/§10.3 + §14 A16/A15): the run
+# manifest now carries the allocation PROVENANCE the canon requires — the resolved sleeve
+# amounts and the per-entry settlement-currency refs (both were already computed at
+# admission and discarded), plus the four policy versions below. Doc 13 §13 and Modül 11
+# §10 have always required them; until now `grep -rn "allocation_policy" backend/` returned
+# nothing, so a Result carried no record of WHICH clock / arbitration / mark-staleness
+# policy produced it.
+#
+# THIS BUMP IS DIFFERENT FROM EVERY BUMP ABOVE IT, AND THE DIFFERENCE IS WRITTEN DOWN
+# RATHER THAN GLOSSED. Each earlier entry names an executed-behaviour change and shifts the
+# namespace so a Result priced under the old behaviour is never idempotently reused. This
+# one changes NO executed behaviour: 49 of the 50 golden scenarios stay byte-identical, and
+# the one that moves (`contract.execution_key`) moves only because it hashes the version
+# string itself. What it shifts the namespace for is a RECORD change — a pre-`C7` Result
+# cannot state its policy provenance, so it is not audit-comparable with one that can.
+#
+# The cost is real and is named here so `C9` cannot inherit it unknowingly: the namespace
+# shift is a one-shot resource, and spending it here does NOT discharge A15. A15 exists so
+# that a CONTAINED-era Result can never be idempotently reused for a UNIFIED-CLOCK re-RUN,
+# and only a bump in the commit that lifts `SHARED_ALLOCATION_STATUS` can do that. `C9`
+# MUST BUMP AGAIN. That obligation is not left to this comment: it is enforced by
+# ``tests/unit/oracles/test_oracle_portfolio_containment_gate.py::
+# test_lifting_containment_requires_a_second_engine_version_bump``. That guard is written
+# as a PREDICATE exercised on all four (flag, version) corners rather than as an ``if``
+# that is vacuously green until the day it matters, so a lift that reuses this string is a
+# red build rather than a silent namespace collision.
+ENGINE_VERSION = "backtest-engine-v18-a16-manifest-policy-provenance"
 
 # K1 (Master Ref Modul 6 §8: "komisyon dagilimi engine manifestinde acik olmalidir"),
 # satisfied by Karar 1's mandatory rider (GH #552, signed 2026-08-25). Until now the
@@ -164,6 +190,51 @@ COMMISSION_MODEL = "per_fill"
 
 METRIC_SET_VERSION = "metric-set-v1"
 OUTPUT_ARTIFACT_PROFILE = "standard-v1"
+
+# ---------------------------------------------------------------------------
+# A16 — the four policy versions (ADR 0002 §10.1, §10.3, §14 A16).
+#
+# WHY THESE ARE LITERALS AND NOT IMPORTS. Each value is also defined by the module that
+# OWNS the policy, under `execution/` — the contained phase loop. This module sits outside
+# that directory, and the containment gate scans production source as TEXT for the dotted
+# `execution.<module> import` spelling; the per-module allowlists it holds are signed
+# (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`) and name exactly
+# two modules. Importing the constants here would widen a signed allowlist by an unsigned
+# third module to fetch four inert strings. So the values are restated, following the
+# `portfolio_mode.py::UNIFIED_MANIFEST_KEY` precedent, which solved this same problem the
+# same way — and, like that module, the comments here deliberately spell the owning modules
+# as PATHS (`execution/clock.py`), because the dotted form would trip the very scan being
+# described.
+#
+# TWO SPELLINGS DRIFT — SO THE SECOND ONE IS DERIVED, NOT TRUSTED. Restating a value is
+# exactly how a repo grows two answers to one question. The drift is closed on the TEST
+# side, where importing the contained layer is free: `tests/unit/test_a16_manifest_policy_
+# parity.py` imports both this module and each owning module and asserts equality, so a
+# change to either spelling that is not made to both is a red build. That is the shape
+# ADIM 125 settled on when a single shared symbol was impossible.
+ENGINE_ALLOCATION_POLICY_VERSION = "portfolio-allocation-v1"  # execution/provenance.py
+CLOCK_POLICY_VERSION = "clock-policy-v1"  # execution/clock.py
+ARBITRATION_POLICY_VERSION = "arbitration-policy-v1"  # execution/arbitration.py
+
+# NOT a version — a DISCLOSURE. ADR 0002 §13 OD-2 (how an open position is marked at a tick
+# with no fresh bar of its own) was decided on 2026-08-05 but is NOT built, and precondition
+# 17 tracks the flip. The manifest states the undecided-in-code status out loud rather than
+# advertising a policy no artifact can show; what is absent is the IMPLEMENTATION, not the
+# decision. When 17 lands, this literal moves and — because the block below is part of
+# `execution_content` — the namespace shifts with it, which is the correct coupling: a run
+# marked under a real staleness bound is not comparable with one marked under none.
+MARK_STALENESS_POLICY = "undefined_pending_od2"
+
+
+#: The block as it appears in the manifest, built once so the two placements below cannot
+#: disagree.
+def _portfolio_policy() -> dict[str, Any]:
+    return {
+        "engine_allocation_policy_version": ENGINE_ALLOCATION_POLICY_VERSION,
+        "clock_policy_version": CLOCK_POLICY_VERSION,
+        "arbitration_policy_version": ARBITRATION_POLICY_VERSION,
+        "mark_staleness_policy": MARK_STALENESS_POLICY,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,6 +344,21 @@ def build_run_manifest(
         "strategy_package_context": strategy_package_context,
         "external_object_context": external_object_context,
         "data_time_context": data_time_context,
+        # A16. INSIDE ``execution_content``, unlike ``commission_model`` below — and the
+        # test that separates them is the one that adjudication itself used (2026-08-25):
+        # does the field buy DISCRIMINATION nothing else already provides? For the
+        # commission model the answer was no; it is a function of the pinned strategy
+        # revisions, which ``_pinned_items`` already hashes, so including it would have
+        # shifted every key while distinguishing nothing. For these four the answer is
+        # yes: no pinned revision, fingerprint or context group encodes the clock,
+        # arbitration or mark-staleness policy, so without them two runs replayed under
+        # DIFFERENT policies would share an ``execution_key`` and the older Result would
+        # be idempotently reused for the newer question (INF-04/INF-05).
+        #
+        # These are engine-wide, so an independent single-Strategy run carries them too.
+        # That is deliberate and fail-closed: over-shifting costs a re-run, under-shifting
+        # returns a stale Result, and only one of those two is silent.
+        "portfolio_policy": _portfolio_policy(),
     }
     execution_key = manifest_hash(execution_content)
     manifest = {
@@ -305,6 +391,10 @@ def build_run_manifest(
         # namespace shift with no version bump behind it, which is precisely what the
         # ``ENGINE_VERSION`` comments above exist to prevent. Adjudicated 2026-08-25.
         "commission_model": COMMISSION_MODEL,
+        # A16, surfaced in the manifest body as well as in ``execution_content`` so a
+        # reader of a persisted Result can see the policy provenance without recomputing
+        # a hash. Same object, built once, so the two placements cannot disagree.
+        "portfolio_policy": _portfolio_policy(),
         "strategy_package_context": strategy_package_context,
         "external_object_context": external_object_context,
         "data_time_context": data_time_context,
@@ -322,8 +412,12 @@ def build_run_manifest(
 
 
 __all__ = [
+    "ARBITRATION_POLICY_VERSION",
+    "CLOCK_POLICY_VERSION",
     "COMMISSION_MODEL",
+    "ENGINE_ALLOCATION_POLICY_VERSION",
     "ENGINE_VERSION",
+    "MARK_STALENESS_POLICY",
     "METRIC_SET_VERSION",
     "OUTPUT_ARTIFACT_PROFILE",
     "ManifestBuildResult",

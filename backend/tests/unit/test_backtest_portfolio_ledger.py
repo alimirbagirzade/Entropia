@@ -1287,9 +1287,15 @@ def _imports_portfolio_ledger(source: str) -> bool:
 
 
 def test_no_ledger_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:
-    """ADR §10.3 places the policy versions in ADIM 20, together with the ``ENGINE_VERSION``
-    bump they must land with. This slice changes no replay, so no ``execution_key`` namespace
-    may shift."""
+    """NARROWED at `C7`: the ALLOCATION policy version ships; the LEDGER's does not.
+
+    `C7` shipped A16's four and bumped ``ENGINE_VERSION`` with them.
+    ``engine_allocation_policy_version`` is one of the four.
+    ``portfolio_ledger_policy_version`` is NOT: it identifies the shared-ledger
+    implementation this contained layer owns, and A16 does not list it. A sequential
+    manifest naming it would claim a single shared ledger held ``P0``/``R0``/``U0``, which
+    is precisely the co-simulation that did not run. That is `C9`'s to ship. The name is
+    kept because it is cited; this docstring carries the correction."""
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
@@ -1298,13 +1304,10 @@ def test_no_ledger_field_ships_in_the_manifest_yet_and_the_engine_version_stands
     # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
     # the tripwire is unchanged by that: it still fails the moment the ADIM 20 wiring
     # shifts the namespace, because it would have to move this line to do so.
-    assert ENGINE_VERSION == "backtest-engine-v18-percent-sizing-per-fill-commission"
-    for field_name in (
-        "engine_allocation_policy_version",
-        "portfolio_ledger_policy_version",
-        LEDGER_POLICY_VERSION,
-    ):
-        assert field_name not in manifest_src
+    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
+    assert "engine_allocation_policy_version" in manifest_src, "A16 requires it (shipped at `C7`)"
+    for absent in ("portfolio_ledger_policy_version", LEDGER_POLICY_VERSION):
+        assert absent not in manifest_src
 
 
 def test_the_quantization_contract_is_pinned_by_a_named_version() -> None:

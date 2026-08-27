@@ -17456,3 +17456,144 @@ bağımlı modül (`test_unified_portfolio_provenance.py`) yeşil.
 6. **#544 / #559 el değmedi** (`human-only`), ön koşul 20/21 **kırmızı kalır**.
 
 `docs/ADIM125_LANDED_KICKOFF.md` · `docs/CODEMAPS/BACKEND_LAYERS.md` §Kapsama (satır 5–6).
+
+## ADIM 126 — `C7` (A16 MANIFEST SPLIT + A15 BUMP): GÖREVİN DÖRT ÖNCÜLÜ ÖLÇÜLDÜ, ÜÇÜ ÇÜRÜDÜ; BUMP ÜRÜN SAHİBİNİN İMZASIYLA YİNE DE ALINDI
+
+**Ne indi.** ADR-0002 §14 **A16**: run manifest artık dört policy sürümünü
+(`engine_allocation_policy_version` · `clock_policy_version` · `arbitration_policy_version` ·
+`mark_staleness_policy`) hem gövdesinde hem **`execution_content`** içinde taşıyor
+(`manifest.py::_portfolio_policy`), ve admission **çözülmüş sleeve tutarlarını** +
+**per-entry FX ref'lerini** pinliyor (`readiness_check.py::_resolve_allocation`).
+**A15**: `ENGINE_VERSION` → `backtest-engine-v18-a16-manifest-policy-provenance`.
+Migration **YOK** · OpenAPI **değişmedi** (ölçüldü, aşağıda) · `SHARED_ALLOCATION_STATUS`
+= `future_dev` (**el değmedi**) · `frontend/src`'te **sıfır satır** · Blocker DEĞİŞMEDİ
+(1 — yalnız A-08), BLOCKED.
+
+**GÖREVİN DÖRT ÖNCÜLÜ ÖLÇÜLDÜ; ÜÇÜ ÇÜRÜDÜ.** Devir promptu emindi; STALE-BY-DEFAULT kuralı
+uygulandı ve dördü de kaynağa karşı ölçüldü:
+
+| Promptun iddiası | Ölçüm |
+|---|---|
+| *"ADR-0002 **§17** A16"* | ADR **§16'da biter**. A15/A16 **§14**'te (kabul matrisi), manifest tasarımı **§10**'da. |
+| *"Kanıt testi … `test_engine_execution_key_namespace_shifts_with_the_engine_version` + **yeni** `_PRIOR_ENGINE_VERSION`"* | Test **ZATEN VAR** (`test_backtest_engine.py:703`) ve **bilerek literal-suz**: *"Deliberately NO literal version assertion (**the post-PR-#45 convention**)"*. Kayması sentetik `"prev-engine"` ile kanıtlanıyor. İstenen `_PRIOR_ENGINE_VERSION` biçimi bu test için **reddedilmiş**. |
+| *"Ön koşul 22 = … C7 bunun A15/A16 yarısıdır"* | Defter satır 22'yi **`C9`**'a veriyor (E6). |
+| *"`ENGINE_VERSION` bump'ı … TESLİMATIN KENDİSİ"* | ADIM 125'in **kendi devir promptu**: *"`ENGINE_VERSION`/golden **el değmez** — oynuyorsa **DUR ve raporla**"*; ADR §10.3 bump'ı *"After ADIM 20"* (= lift) koyuyor ve kaymanın **kendiliğinden** olduğunu söylüyor. |
+
+**BUMP YİNE DE ALINDI — VE BU BİR ÜRÜN KARARIDIR, BENİM DEĞİL.** Karşı kanıt (yukarıdaki
+dört satır + ölçülmüş bedel) ürün sahibine sunuldu; **yeniden onayladı**. Bedel prozada
+bırakılmadı, **kaynağa yazıldı ve bir testle zorlandı**:
+
+**ASIL DERS: NAMESPACE KAYMASI TEK ATIMLIK BİR KAYNAKTIR, VE BURADA HARCANDI.** `manifest.py`
+içindeki her eski bump girdisi bir **davranış** değişikliğini adlandırır. Bu bump hiçbir
+davranış değiştirmiyor — **50 golden'ın 49'u BAYT BAYT AYNI**, oynayan tek digest
+`contract.execution_key` ve o da yalnız **versiyon dizesini hash'lediği için** oynuyor
+(ölçüldü, tahmin edilmedi; `git diff --numstat` baseline'da **2 satır**). A15'in koruduğu
+kusur ise başkadır: *contained-era bir Result'ın **unified-clock** bir re-RUN için idempotent
+yeniden kullanımı*, ve onu **yalnız lift commit'inin kendi bump'ı** kapatır. `C9` **TEKRAR
+BUMP ETMELİDİR**, ve bu artık hatırlanmıyor — **zorlanıyor**:
+`test_lifting_containment_requires_a_second_engine_version_bump`. Kritik olarak bu test bir
+`if lifted: assert …` **DEĞİLDİR** (öyle olsaydı bugün **boşuna yeşil** olurdu, yani
+işlediğine dair hiçbir kanıt taşımazdı): predicate **dört köşede birden** sürülür, sonra
+ağaca uygulanır. NC-5 bunu ölçtü — bayrak `active_v1`'e çevrilince **kırmızı**.
+
+**İKİNCİ DERS: `manifest.py` DÖRT SABİTİ İMPORT EDEMEZ — KISIT, TERCİH DEĞİL.** Dördünün de
+sahibi `execution/` altındadır (contained faz döngüsü) ve containment gate üretim kaynağını
+**METİN olarak** `execution.<modül> import` dizesi için tarar; tuttuğu per-modül allowlist
+**imzalıdır** (`closure_participant_importer_allowlist_2026-08-18.md`) ve **iki** modül
+adlandırır. Dört **inert dize** uğruna imzalı bir allowlist'i üçüncü, imzasız bir modülle
+genişletmek — ADIM 118'in tam olarak **reddettiği** hamle. Bu yüzden değerler
+`portfolio_mode.py::UNIFIED_MANIFEST_KEY` emsaliyle **yeniden yazıldı**, ve o emsalin
+inceliği de kopyalandı: yorumlar sahip modülleri **YOL** biçiminde yazar (`execution/clock.py`),
+çünkü noktalı biçim tarif ettiği taramayı **kendisi tetiklerdi**. Slice'ın adındaki *"split"*
+budur: **davranış contained kalır, beyan dışarı çıkar.**
+
+**ÜÇÜNCÜ DERS (ADIM 125'in dersinin devamı): İKİ YAZIM DRIFT ÜRETİR — TEK SEMBOL İMKÂNSIZSA
+İKİNCİSİ TÜRETİLİR, GÜVENİLMEZ.** Test dosyaları taramanın **dışındadır** (`_SRC` =
+`src/entropia`), yani parite ancak orada kurulabilir:
+`tests/unit/test_a16_manifest_policy_parity.py` iki tarafı da import edip eşitliği assert
+eder. **NC-1 bunun neden gerekli olduğunu ÖLÇTÜ:** tek bir policy literal'ini bozmak parite
+testini kırmızı yapar, ama containment gate · provenance tripwire · clock guard · entegrasyon
+kanıtı **DÖRDÜ DE YEŞİL KALIR** — hepsi alan **ADINA** bakar, **DEĞERİNE** değil.
+
+**DÖRDÜNCÜ DERS: NC BİR EKSİK ASSERTION BULDU (ADIM 125'in şeklinin tekrarı).** NC-2 bloğu
+**yalnız `execution_content`'ten** sildi: parite dosyasının tamamı, gate, provenance, clock ve
+entegrasyon **yeşil kaldı**; fark eden **tek** şey golden baseline oldu ve onun mesajı
+*"engine output changed … fix the code, or bump ENGINE_VERSION"* diyerek okuru **motora**
+yönlendiriyor — oysa oynayan şey manifest alanıydı. `execution_content` hash'lenip atıldığı
+için hiçbir çağıran onu **okuyamaz**; eklenen assertion tek gözlenebilir sonucu sürer:
+policy değerini oynat, `execution_key` **oynamak zorunda**. NC-2 yeniden koşuldu → artık
+**adı doğru olan** test kırmızı veriyor.
+
+**ÖLÇÜLEREK DÜZELTİLEN İKİ İDDİA DAHA.**
+1. **OpenAPI kırmızı vermedi ve VEREMEZDİ.** Prompt *"`openapi_export --check` KIRMIZI
+   VERECEK … `make openapi` ile snapshot'ı güncelle"* diyordu; ölçüm **exit 0**. Sebep
+   sadece "bu alan yayımlanmıyor" değil: `docs/openapi.json` içinde `execution_key` ·
+   `engine_version` · `capital_execution` · `commission_model` (ADIM 114'ün eklediği) ·
+   `mainboard_item_labels` — **hiçbiri 0 kez** geçiyor. Run manifest'i bir **JSONB blob**'dur,
+   bildirilmiş bir response model değil. ADR §10.4 zaten *"Only ADIM 20 … is expected to touch
+   it"* diyor → A16'nın OpenAPI yarısı **`C9`'undur**. **`make openapi` KOŞULMADI** (var olmayan
+   bir drift'i "düzeltmek" snapshot'ı gerçek bir değişiklik olmadan oynatırdı).
+2. **compounding mode EKSİK DEĞİLDİ.** §10.1 *"yalnız `{enabled, plan_id, plan_revision_id,
+   config_hash, config}`"* diyor — **üst düzeyde** doğru, ama `canonical_config` =
+   `config.model_dump(mode="json")` ve `compounding_mode` o modelin bir alanı → **zaten
+   pinliydi ve `config_hash`'e giriyordu**. Bu yüzden `C7` ona **ikinci bir yazım EKLEMEDİ**
+   (tam da parite testinin engellediği drift olurdu); erişilebilir yol assert edildi ve
+   ikizlenmediği **negatif olarak** pinlendi.
+
+**ZATEN HESAPLANIP ATILAN İKİ GRUP.** `_resolve_allocation` `validate_allocation`'ın
+`derived`'ını `_derived` diye **atıyordu** ve `resolve_settlement_currencies`'in sonucunu
+yalnız `item_refs` kurmak için kullanıp bırakıyordu. A16'nın *"resolved sleeve amounts"* +
+*"currency/FX refs"*i **yeniden hesaplanmadı** — aynı nesneler pinlendi, böylece manifest
+kendisini admit eden doğrulamayla **çelişemez**. Entegrasyon kanıtı ADR §14 **A12**'nin
+kanonik fixture'ını kullanır (`R0=1000` · `A0=9000` · `3600/3150/1350` · `U0=900`).
+**Bir tahmin testte çürüdü ve düzeltildi:** pay yüzdesi **6 hane** (`40.000000`), para **2
+hane** (`3600.00`) quantize ediliyor — yani yüzdeyi yankılamak §10.1'i **hiçbir zaman**
+karşılayamazdı; iddia bu ölçümle güçlendi.
+
+**BEŞ NEGATİF KONTROL, HEPSİ AYIRT EDİCİ.** NC-1 (literal drift) → yalnız parite ·
+NC-2 (`execution_content`'ten sil) → **eksik assertion buldu**, eklendi · NC-3 (gövdeden sil)
+→ yalnız parite, **golden YEŞİL** (iki yerleşimin bağımsızlığı böyle ayrıştı: NC-2 golden'ı
+oynatır, NC-3 oynatmaz) · NC-4 (admission yine atsın) → yalnız **entegrasyon** kırmızı, birim
+parite yeşil (sözleşme ile wiring'in ayrı kanıtlandığının ölçümü) · NC-5 (bump'sız lift) →
+`C9` guard'ı kırmızı. Harness her turda yamayı **bellekten** geri yazar ve geri yazmanın
+**bayt bayt** olduğunu assert eder (ADIM 111: ağaçta commit'siz iş var, `git checkout` kullanma).
+
+**TRIPWIRE'LAR TERS ÇEVRİLDİ / DARALTILDI — HİÇBİRİ SİLİNMEDİ.** Altı guard `manifest.py`'yi
+metin olarak okuyordu: containment gate'in policy testi (ters çevrildi), provenance'ın
+*"hiçbir portfolio alanı sevk edilmedi"*i (**ikiye ayrıldı** — A16'nın dördü artık **pozitif**
+assert edilir, `portfolio_manifest_version` / `attribution_policy_version` /
+`portfolio-manifest-v1` hâlâ **yasak**, çünkü onlar olmayan bir ko-simülasyonu iddia ederdi),
+ve dört per-modül guard (arbitration · intents · clock · ledger) — her biri kendi ekseninde
+daraltıldı (ör. ledger'da `engine_allocation_policy_version` artık **var**,
+`portfolio_ledger_policy_version` hâlâ **yok**). **Adlar KORUNDU, bilerek:** üçü toplam yedi
+**donmuş** kanıt belgesinden alıntılanıyor ve gate'in kendi kuralı *"names outlive their own
+wording … renaming them would break those citations to fix a sentence these docstrings already
+correct"* diyor → düzeltme **docstring'e** yazıldı.
+
+**GATE ATEŞLENDİ VE BİR İNSAN CEVAPLADI.** Containment gate'in modül docstring'i kendini
+*"written to FAIL the day someone lifts the flag, **bumps the engine version** or closes the
+last gap … which is precisely when a human must re-read §14"* diye tanımlıyor. Tam olarak o
+oldu: gate kırmızı verdi, §14 yeniden okundu, karar imzalandı, ve **niçin A15'i kapatmadığı**
+gate'in içine yazıldı.
+
+**KAPILAR (yerelde ölçüldü, exit code AYRI okundu).** `ruff check` + `ruff format --check`
+(831 dosya) **temiz** · `mypy src` **405 dosyada sorun yok** · **tam backend suite tek
+çağrıda: 4467 passed / 0 failed, exit 0** (23 dk 42 sn, `--no-cov`) · `openapi_export
+--check` **exit 0** · documentation-truth gate **exit 0** (artefaktlar tazelendi, iki
+**tarihsel** `ENGINE_VERSION` alıntısı `(o gün)` ile hedge'lendi — kapının kendi escape
+hatch'i; geçmiş **yeniden yazılmadı**) · `memory_index --check` **139 kayıt, id'ler tekil**.
+**İlk tam koşu 1 failed vermişti** ve sebebi ölçüldü: suite, olguları **yeniden ürettiğim
+andan ÖNCE** başlamıştı, yani documentation-truth gate bayat bir anlık görüntüyü okudu;
+artefaktlar tazelendikten sonra hem tek başına (38 passed) hem de **temiz bir tam koşuda**
+(4467/0) yeşil. **`-p no:randomly` BİR NO-OP'TU** — `pytest-randomly` bu depoda **kurulu
+değil** (ölçüldü), sıralama zaten deterministik. **Coverage KOŞULMADI** (`--no-cov`) →
+yüzdenin otoritesi **CI**.
+
+**DÜRÜST SINIR.** Ön koşul 22 **KIRMIZI KALIR** ve defter satırı `❌` bırakıldı (kolon
+`0f0651d`'ye ait ve **donmuş**): A16 indi, ama **A15 lift'in kendi bump'ını bekler**, **A19**
+(tarihsel Result'ların etiketlenmesi) ve **A22** (tam suite + coverage kapısı) **el değmedi**.
+`C9` + `G10` (2026-08-26'da **`B` — ERTELE**) ayrı insan kapılarıdır. #544/#559 **el değmedi**.
+`shared_shapes.py`'ye imzasız satır **eklenmedi**; `engine.py::conflict_downgraded_from_net`
+**dokunulmadı**. Frontend'de sıfır satır → frontend kapıları **KOŞULMADI**. Eski Result'lar
+`portfolio_policy` **taşımaz** ve geri doldurulmadı — yokluk, o Result'ın policy provenance'ını
+gerçekten bilmediğimizin dürüst kaydıdır.

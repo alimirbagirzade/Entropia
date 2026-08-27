@@ -1118,8 +1118,14 @@ def test_the_shipped_sequential_conflict_gate_is_untouched() -> None:
 
 
 def test_no_arbitration_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:
-    """ADR §10.3 places ``arbitration_policy_version`` with the ``ENGINE_VERSION`` bump at the
-    containment-lift slice. This slice changes no replay, so no namespace may shift."""
+    """NARROWED at `C7`: ``arbitration_policy_version`` now ships; the BEHAVIOUR does not.
+
+    ADR §10.3 placed the policy version with the ``ENGINE_VERSION`` bump. `C7` shipped both
+    — the version as a manifest RECORD (A16), declared as a literal because this layer is
+    contained and the manifest must not import it. What still must not appear is
+    ``conflict_policy``: that is the arbitration BEHAVIOUR, and a sequential manifest naming
+    it would claim a cross-item resolution that did not run. The name is kept because it is
+    cited; this docstring carries the correction."""
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
@@ -1127,9 +1133,13 @@ def test_no_arbitration_field_ships_in_the_manifest_yet_and_the_engine_version_s
     # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
     # the tripwire is unchanged by that: lifting containment still cannot happen without
     # editing this line.
-    assert ENGINE_VERSION == "backtest-engine-v18-percent-sizing-per-fill-commission"
-    for field_name in ("arbitration_policy_version", "arbitration-policy-v1", "conflict_policy"):
-        assert field_name not in manifest_src
+    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
+    # Shipped at `C7` (A16). Parity with this module's own constant is proved in
+    # ``tests/unit/test_a16_manifest_policy_parity.py``, which may import both sides.
+    for present in ("arbitration_policy_version", "arbitration-policy-v1"):
+        assert present in manifest_src, f"{present!r} left the shipped manifest; A16 needs it"
+    # The behaviour, still contained.
+    assert "conflict_policy" not in manifest_src
 
 
 def test_the_containment_flag_is_untouched() -> None:

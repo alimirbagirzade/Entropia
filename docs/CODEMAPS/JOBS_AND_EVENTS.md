@@ -224,7 +224,7 @@ Silinen yardımcı: `_enqueue_completed_job` (eski "in-transaction stub" satır�
 | Hash | Neyin üzerinden | Sonuç |
 |---|---|---|
 | `manifest_hash` | manifest'in **tamamı** (identity: `run_id`/`created_at`/`correlation_id` + `preflight` dahil) | her run ve her retry **benzersiz** — `backtest_run_manifest.manifest_hash` UNIQUE |
-| `execution_key` | yalnız **reproducibility içeriği** (pinlenmiş item'lar, `capital_execution`, `engine_version`, `metric_set_version`/`output_artifact_profile`, `tick_data` + K-04 üç context) — run kimliği **DIŞLANIR** | aynı hesabı tarif eden iki run **aynı** değeri taşır — `execution_key` indeksli ama **unique DEĞİL** |
+| `execution_key` | yalnız **reproducibility içeriği** (pinlenmiş item'lar, `capital_execution`, `engine_version`, `metric_set_version`/`output_artifact_profile`, `tick_data` + K-04 üç context + **A16 `portfolio_policy`**, ADIM 126) — run kimliği **DIŞLANIR** | aynı hesabı tarif eden iki run **aynı** değeri taşır — `execution_key` indeksli ama **unique DEĞİL** |
 
 `manifest_hash` ile farkı tek cümle: biri "bu hangi run?", diğeri "bu hangi hesap?" sorusunu
 yanıtlar. `preflight` bilerek `execution_key` dışındadır — bir readiness uyarısı manifest_hash'i

@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 121 landed — `G10`'un ön koşul tablosu tazelendi (DOCS-ONLY)
 

@@ -8844,6 +8844,29 @@ kutusudur**. Kalan **defter işi + insan eylemi**.
 `PROJECT_HISTORY.md` §ADIM 121 · `docs/ADIM121_LANDED_KICKOFF.md`.
 
 
+## Stage ADIM 122 — `G14` Karar 2'nin ölçümü: küme kapalı değildi landed
+
+- **PR:** bu dal (`docs/stage-122-landed`) · **Taban:** `9bb14570`
+- **Migration:** yok · **`ENGINE_VERSION`:** değişmedi · **OpenAPI:** değişmedi ·
+  **`SHARED_ALLOCATION_STATUS`:** `future_dev`, **el değmedi**
+- **Değişen:** `closure_g14_net_conflict_policy_2026-08-25.md` **§Ölçüm 5** + defter.
+  `backend/src` / `frontend/src`: **sıfır satır.** İmza kutusu **BOŞ** bırakıldı.
+- **Test:** koşulmadı (ürün/test kodu değişmedi) → geçen/coverage **CI'ın otoritesinde**.
+- **Blocker sayısı DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+
+**Ölçüm:** NET bir **WARNING**'dir, BLOCKER değil (`rules.py`); kapı yalnız BLOCKER sayar
+(`has_blockers`); NET'li plan **`valid=True`** alır; `NET` frontend'de **canlı seçenek**.
+→ **`'NET'` satırları bugün oluşmaya devam ediyor** — Karar 2'nin üç seçeneği de kümenin
+**kapalı** olduğunu varsayıyordu, **değil**.
+
+**`G15` emsali TERSİNE:** orada sayı alınabilirdi; burada **alınsa bile bayatlar** → bir ön
+koşul değil, **anlık görüntü**. Karar 2 **sayı olmadan da imzalanabilir**.
+
+**Dördüncü seçenek kaydedildi, KARARA BAĞLANMADI: `B0` — önce yazma yolunu dondur.**
+Kendi başına bir davranış değişikliğidir → **ayrıca imzalanmalıdır**.
+
+`PROJECT_HISTORY.md` §ADIM 122 · `docs/ADIM122_LANDED_KICKOFF.md`.
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
 > **ADIM 120 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -9359,3 +9382,16 @@ izleniyor" **yazılabilir**, çünkü doğrudur.
 > **SIRA (ADIM 121'de ölçüldü):** `G14` **Karar 2** imzası → `B` (migration) → `#544` kapanışı
 > → `C6`'nın P2/P8 yarısı → ön koşul 17/18 (OD-2 mark policy + iki etiket flip) → **`G10`
 > yeniden talep** → `C9`. `G16`/A-08 (#514) **bağımsız** ve nihai RC verdict'ini ayrıca bloklar.
+
+> **ADIM 122 GÜNCELLEMESİ (2026-08-27) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+>
+> Başlığın imza listesinden geriye **`G14` Karar 2** kaldı ve bu slice onun **ölçümünü**
+> yaptı (imzayı **değil**). Ölçülen: **`'NET'` satırları oluşmaya devam ediyor** (NET bir
+> `Sev.WARNING`; `rules.py::has_blockers` yalnız BLOCKER sayar; plan `valid=True` alır;
+> `CONFLICT_POLICIES`'te `NET` canlı) → Karar 2'nin **kapalı küme** varsayımı **yanlış**.
+> **`G15` emsali tersine işliyor:** sayı alınsa bile bayatlar → **ön koşul değil**, Karar 2
+> sayı olmadan imzalanabilir. Ölçüm bir **dördüncü seçenek** doğurdu (**`B0` — önce yazma
+> yolunu dondur**) ve onu **karara bağlamadı**; `B0` kendi başına bir davranış değişikliğidir.
+>
+> **SIRA (ADIM 122'de ölçüldü):** `G14` **Karar 2 imzası** → `B` (migration) → `#544`
+> kapanışı → `C6`'nın P2/P8 yarısı → ön koşul 17/18 → **`G10` yeniden talep** → `C9`.

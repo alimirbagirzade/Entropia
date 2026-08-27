@@ -272,6 +272,24 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
+> değmedi**). **Son dalga — ADIM 122 (`G14` Karar 2'nin ÖLÇÜMÜ, DOCS-ONLY):
+> `backend/src`/`frontend/src`'te SIFIR satır; §Karar 2'nin imza kutusu BOŞ bırakıldı.**
+> **ASIL DERS: bir karar sorusu, cevabının ön koşulunu SESSİZCE VARSAYABİLİR** — Karar 2'nin
+> üç seçeneği de `'NET'` kümesinin **kapalı** olduğunu varsayıyordu; **değil.** NET bir
+> **`Sev.WARNING`**'dir (BLOCKER değil), `rules.py::has_blockers` **yalnız BLOCKER** sayar,
+> `allocation_plan.py` NET'li planı **`valid=True`** işaretler ve `lib/allocation.ts::CONFLICT_POLICIES`'te
+> `NET` **canlı** → **satırlar bugün oluşmaya devam ediyor**. **`G15` emsali TERSİNE işliyor:**
+> orada sayı alınabilirdi; burada **alınsa bile bayatlar** → bir ön koşul değil **anlık
+> görüntü**, ve Karar 2 **sayı olmadan da imzalanabilir**. Ölçüm bir **dördüncü seçenek**
+> doğurdu — **`B0` = önce yazma yolunu dondur** — ve onu **KARARA BAĞLAMADI** (kendi başına
+> bir davranış değişikliğidir, ayrıca imzalanmalı). **Üretim DB sayımı ALINMADI ve ikame
+> EDİLMEDİ**; sorgu belgede. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. **Suite
+> koşulmadı** → geçen/coverage **CI'ın otoritesinde**.
+> `PROJECT_HISTORY.md` §ADIM 122 · `docs/ADIM122_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
 > değmedi**). **Son dalga — ADIM 121 (`G10`'un ön koşul tablosu tazelendi, DOCS-ONLY):
 > `backend/src`/`frontend/src`'te SIFIR satır.** İki bayat öncül çürütüldü: **`G10` (Gate 2)
 > "hiç talep edilmedi" DEĞİL — talep edildi ve `B — ERTELE` olarak İMZALANDI** (2026-08-26;

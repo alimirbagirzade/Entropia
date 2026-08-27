@@ -17050,3 +17050,52 @@ geçen/coverage sayısı iddia edilmiyor**, otorite CI. `#559` ve `#544`'e **dok
 karara bağlanmadı. Codemap tazelenmedi, bilerek: yeni endpoint / tablo / sayfa / job yok.
 
 `PROJECT_HISTORY.md` §ADIM 121 · `docs/ADIM121_LANDED_KICKOFF.md` · **PR #856**.
+
+## ADIM 122 — `G14` KARAR 2'NİN ÖLÇÜMÜ: BİR SORU, CEVABINI SESSİZCE VARSAYABİLİR — KÜME KAPALI DEĞİLDİ
+
+**DOCS-ONLY — tek karar belgesi (§Ölçüm 5) + defter; `backend/src` / `frontend/src`'te SIFIR
+satır.** Migration yok, `ENGINE_VERSION` değişmedi, OpenAPI değişmedi,
+`SHARED_ALLOCATION_STATUS` = **`future_dev` (el değmedi)**. Kabul borcu tavanları oynamadı.
+Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. **§Karar 2'nin imza kutusu BOŞ ve öyle
+bırakıldı** (negatif kontrol: diff'te imza satırı **0**).
+
+**ASIL DERS: BİR KARAR SORUSU, CEVABININ ÖN KOŞULUNU SESSİZCE VARSAYABİLİR.** Karar 2
+*"`'NET'` taşıyan **mevcut** satırlar ne olacak"* diye soruyor. Üç seçeneğinin (B1 yeniden
+yaz / B2 NULL / B3 migration dursun) üçü de bir şeyi varsayıyor: kümenin **kapalı** olduğunu.
+Ölçüldü — **değil**:
+
+| Ne | Ölçüm | Kanıt (taban `9bb14570`) |
+|---|---|---|
+| NET seçimi kaydı bloklar mı | **HAYIR** | `rules.py` NET için `Sev.WARNING` üretir; komşuları (`MAX_TOTAL_EXPOSURE_INVALID`, `NO_ACTIVE_ENTRY`) `Sev.BLOCKER`'dır |
+| Kapı neyi sayar | **yalnız BLOCKER** | `rules.py::has_blockers` = `any(severity == Sev.BLOCKER)`, üç çağıranı `commands/allocation_plan.py` |
+| Plan **geçerli** sayılır mı | **EVET** | `allocation_plan.py` → `valid = not has_blockers(issues)` → NET'li plan `valid=True` |
+| Kullanıcı seçebilir mi | **EVET** | `lib/allocation.ts::CONFLICT_POLICIES` üç üyeli, `NET` **canlı**; gövde `portfolio.test.tsx`'te pinli |
+
+→ **`'NET'` satırları bugün, sevk edilmiş build'de OLUŞMAYA DEVAM EDİYOR.** Kullanıcı seçer,
+kayıt **başarılı olur**, satır kalıcılaşır, koşuda `engine.py::conflict_downgraded_from_net`
+onu sessizce downgrade eder — ADIM 118'in sevk ettiği bildirim bunu **anlatır, ENGELLEMEZ**.
+
+**İKİNCİ DERS: `G15` EMSALİ BURADA TERSİNE İŞLİYOR.** `G15`'te istenen sayı **alınabilirdi**
+ve alınmadığı için imza bekledi (ADIM 117 onu bilinçli olarak geçersiz kıldı). Burada sayı
+**alınsa bile bayatlar**, çünkü yazma yolu açık → sayı bir **ön koşul değil, ANLIK
+GÖRÜNTÜDÜR**. Bu ayrım karara doğrudan etki eder: **Karar 2 sayı olmadan da imzalanabilir**;
+sayı migration'ın karşılaşacağı işin **büyüklüğünü** söyler, **cinsini** değil. Bir ön koşulu
+"alınamadı" diye işaretlemekle (ADIM 117) "bu bir ön koşul değil" demeyi **karıştırma** —
+ikincisi bir ölçüm sonucudur, bir muafiyet değil.
+
+**ÖLÇÜMÜN DOĞURDUĞU DÖRDÜNCÜ SEÇENEK — KARARA BAĞLANMADI.** Liste kümeyi kapalı varsaydığı
+için onu **kapatan** seçenek listede yoktu: **`B0` — ÖNCE YAZMA YOLUNU DONDUR**
+(`Sev.WARNING` → `Sev.BLOCKER` **ve** `CONFLICT_POLICIES`'ten `NET`'i düşür). Küme o an donar,
+migration sabit bir küme üzerinde çalışır. **Bedeli dürüstçe yazıldı:** bu **kendi başına** bir
+davranış değişikliğidir — bugün `valid=True` alan bir yapılandırma yarın blocker alır, yani
+`C9`'dan **bağımsız** olarak kullanıcıya görünür → **ayrıca imzalanmalıdır**. `G15`'in
+dördüncü seçeneğinin doğuşuyla aynı şekil (ADIM 120: *"bir öneri değildir"*).
+
+**DÜRÜST SINIR:** **üretim DB sayımı ALINMADI ve İKAME EDİLMEDİ** — repo fixture'ları vekil
+değildir (`G15` kuralı); sorgu belgeye yazıldı. **Hiçbir kutu doldurulmadı** (§Karar 2 boş,
+`B0` karara bağlanmadı, §Karar 1/3'ün ☑'lerine dokunulmadı). Ürün/test kodunda sıfır satır →
+**hiçbir suite koşulmadı ve hiçbir geçen/coverage sayısı iddia edilmiyor**, otorite CI.
+`#544` ve `#559`'a **dokunulmadı** (`human-only`). Codemap tazelenmedi: yeni endpoint /
+tablo / sayfa / job yok.
+
+`PROJECT_HISTORY.md` §ADIM 122 · `docs/ADIM122_LANDED_KICKOFF.md`.

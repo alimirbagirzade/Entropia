@@ -580,8 +580,17 @@ def test_the_clock_is_reachable_only_through_the_phase_loop() -> None:
 
 
 def test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:
-    """ADR §10.3 places ``clock_policy_version`` and its neighbours in ADIM 20, together with
-    the ``ENGINE_VERSION`` bump. ADIM 15 changes no replay, so no namespace may shift."""
+    """INVERTED at `C7`: all four A16 policy versions now ship, and the bump landed with them.
+
+    ADR §10.3 placed these in ADIM 20. `C7` brought the RECORD half forward: the manifest
+    declares the four as literals (it must not import this contained layer) and pins them
+    into ``execution_content``, so a Result can finally state which clock produced it. No
+    replay changed — 49 of 50 golden digests are byte-identical.
+
+    Asserted positively so that REMOVING a field is as red as adding one was. Agreement
+    with ``CLOCK_POLICY_VERSION`` as this module defines it is proved in
+    ``tests/unit/test_a16_manifest_policy_parity.py``. The name is kept because it is
+    cited; this docstring carries the correction."""
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
@@ -590,11 +599,15 @@ def test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands(
     # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
     # the tripwire is unchanged by that: it still fails the moment the ADIM 20 wiring
     # shifts the namespace, because it would have to move this line to do so.
-    assert ENGINE_VERSION == "backtest-engine-v18-percent-sizing-per-fill-commission"
+    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
     for field in (
         "clock_policy_version",
         "arbitration_policy_version",
         "mark_staleness_policy",
         "engine_allocation_policy_version",
     ):
-        assert field not in manifest_src
+        assert field in manifest_src, (
+            f"{field!r} left the shipped manifest; A16 was discharged at `C7` and a Result "
+            "that cannot state which clock/arbitration/mark policy produced it is the gap "
+            "that closed"
+        )

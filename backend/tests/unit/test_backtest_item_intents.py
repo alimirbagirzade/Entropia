@@ -967,8 +967,13 @@ def test_the_intent_layer_is_reachable_only_through_the_phase_loop() -> None:
 
 
 def test_no_intent_field_ships_in_the_manifest_yet_and_the_engine_version_stands() -> None:
-    """This slice changes no replay, so no ``execution_key`` namespace may shift. The
-    manifest fields land with the ``ENGINE_VERSION`` bump, not before."""
+    """NARROWED at `C7`: the ARBITRATION policy version ships; the INTENT contract does not.
+
+    `C7` shipped A16's four policy versions and bumped ``ENGINE_VERSION`` for that record
+    change. ``intent_contract_version`` / ``item-intent-v1`` are not among A16's four: they
+    identify the item-intent contract this contained layer owns, and a sequential manifest
+    naming them would claim an intent-driven replay that did not happen. That is `C9`'s to
+    ship. The name is kept because it is cited; this docstring carries the correction."""
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
@@ -976,9 +981,10 @@ def test_no_intent_field_ships_in_the_manifest_yet_and_the_engine_version_stands
     # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
     # the tripwire is unchanged by that: lifting containment still cannot happen without
     # editing this line.
-    assert ENGINE_VERSION == "backtest-engine-v18-percent-sizing-per-fill-commission"
-    for field_name in ("intent_contract_version", "arbitration_policy_version", "item-intent-v1"):
-        assert field_name not in manifest_src
+    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
+    assert "arbitration_policy_version" in manifest_src, "A16 requires it (shipped at `C7`)"
+    for absent in ("intent_contract_version", "item-intent-v1"):
+        assert absent not in manifest_src
 
 
 def _imports_intents(source: str) -> bool:

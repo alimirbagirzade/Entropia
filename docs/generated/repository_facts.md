@@ -24,10 +24,10 @@ static walk. Only a full CI run reports passes.
 | Frontend router paths | 29 |
 | Frontend nav items | 25 |
 | Application modules (`domain/` packages) | 32 `commands` · 38 `queries` · 16 `jobs` (26 packages) |
-| `ENGINE_VERSION` | `backtest-engine-v18-percent-sizing-per-fill-commission` |
+| `ENGINE_VERSION` | `backtest-engine-v18-a16-manifest-policy-provenance` |
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3844 in 362 files |
+| Backend tests **collected** (static, not a pass count) | 3855 in 364 files |
 | Backend `xfail` markers | 0 (0 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 732 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |

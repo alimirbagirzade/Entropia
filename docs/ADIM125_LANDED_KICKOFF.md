@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 125 landed — `C6` tamamlandı: `G11` (P2) + `G12` (P8) admission blocker'ları sevk edildi
 

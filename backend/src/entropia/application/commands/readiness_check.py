@@ -987,13 +987,34 @@ async def _resolve_allocation(
         # (the column is NOT NULL); this only guards a hand-written config.
         if e.item_type is not None
     }
-    issues, _derived = validate_allocation(config, item_refs=item_refs)
+    issues, derived = validate_allocation(config, item_refs=item_refs)
     capital_mode: dict[str, Any] = {
         "enabled": config.enabled,
         "plan_id": plan.plan_id,
         "plan_revision_id": None if revision is None else revision.plan_revision_id,
         "config_hash": _pinned_config_hash(config, revision),
         "config": canonical_config(config) if config.enabled else None,
+        # A16 (ADR 0002 §10.1 / §14): the RESOLVED sleeve amounts and the currency
+        # refs. Both were already computed here and then thrown away — ``derived``
+        # holds the numbers the page previewed, ``settlement`` the currency each
+        # entry settles in. The config pins the share PERCENT; only ``derived``
+        # carries the resolved ``initial_sleeve_capital`` MONEY, which is what
+        # §10.1 asks the manifest to record and what a Result must be re-derivable
+        # from without re-joining a live plan.
+        #
+        # Nothing is recomputed: these are the same objects the issue list above was
+        # built from, so the manifest cannot disagree with the validation that
+        # admitted the run.
+        "derived_amounts": None if derived is None else derived.as_dict(),
+        # The FX/currency refs, per allocated entry. Kept as its own map rather than
+        # folded into ``derived_amounts`` because it is resolved from the INSTRUMENT
+        # side (``resolve_settlement_currencies``), not from the plan arithmetic, and
+        # a null here means "unresolvable", which is a different fact from "absent".
+        "settlement_currencies": (
+            {e.composition_item_id: settlement.get(e.composition_item_id) for e in config.entries}
+            if config.enabled
+            else None
+        ),
     }
     return config.enabled, list(issues), capital_mode
 

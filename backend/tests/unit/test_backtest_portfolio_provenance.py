@@ -543,8 +543,30 @@ def test_the_worker_reaches_provenance_through_the_seam_and_not_by_importing_it(
 
 
 def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None:
-    """The shipped sequential manifest must stay untouched: this slice adds the CONTRACT,
-    not the wiring. Lifting containment is ADIM 20's job (ADR 0002 §12)."""
+    """NARROWED at `C7`, never deleted — and the split is the point of the slice.
+
+    Was: *no portfolio manifest field ships in the shipped manifest*, because ADIM 19
+    added the CONTRACT and left the wiring to ADIM 20. `C7` shipped the A16 half of that
+    wiring, so the blanket assertion stopped being true and is re-aimed rather than
+    dropped. The name is kept: it is cited from seven documents, and this docstring is
+    where the correction belongs.
+
+    What splits the two groups is WHICH LAYER OWNS THE FIELD:
+
+    * The four POLICY versions now ship. They are inert declarations about the build, they
+      are what a Result needs in order to state which policy produced it, and A16 names
+      them. ``domain/backtest/manifest.py`` declares them as literals — it must not import
+      the contained layer to fetch them — and
+      ``tests/unit/test_a16_manifest_policy_parity.py`` is what stops the two spellings
+      drifting.
+
+    * The PORTFOLIO-MANIFEST fields must still NOT ship. ``portfolio_manifest_version`` and
+      ``portfolio-manifest-v1`` identify the unified-clock section built by the contained
+      provenance layer; ``attribution_policy_version`` belongs to a layer A16 does not
+      list. A sequential manifest advertising any of them would claim a co-simulation that
+      did not happen. That is `C9`'s to ship, and until then this assertion is the thing
+      standing between a record change and a claim.
+    """
     shipped = (
         Path(__file__).resolve().parents[2]
         / "src"
@@ -555,16 +577,23 @@ def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None
     ).read_text(encoding="utf-8")
     for field in (
         "portfolio_manifest_version",
-        "engine_allocation_policy_version",
-        "clock_policy_version",
-        "arbitration_policy_version",
         "attribution_policy_version",
-        "mark_staleness_policy",
-        "portfolio-allocation-v1",
         "portfolio-manifest-v1",
     ):
         assert field not in shipped, f"{field!r} leaked into the shipped manifest"
-    # The literal tracks whatever the CURRENT shipped version is; #550/#551/#552 moved it.
-    # What the assertion pins is that lifting containment cannot happen without editing
-    # this line, not the particular string.
-    assert 'ENGINE_VERSION = "backtest-engine-v18-percent-sizing-per-fill-commission"' in shipped
+    # A16, shipped at `C7`. Asserted positively here so that removing them is as red as
+    # adding the unified-clock fields above — the tripwire now bounds the shape from BOTH
+    # sides instead of only from below.
+    for field in (
+        "engine_allocation_policy_version",
+        "clock_policy_version",
+        "arbitration_policy_version",
+        "mark_staleness_policy",
+        "portfolio-allocation-v1",
+    ):
+        assert field in shipped, f"{field!r} left the shipped manifest; A16 requires it"
+    # The literal tracks whatever the CURRENT shipped version is; #550/#551/#552 moved it,
+    # and `C7` moved it again for the A16 record change. What the assertion pins is that
+    # lifting containment cannot happen without editing this line, not the particular
+    # string.
+    assert 'ENGINE_VERSION = "backtest-engine-v18-a16-manifest-policy-provenance"' in shipped

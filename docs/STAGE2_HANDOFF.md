@@ -9517,9 +9517,11 @@ izleniyor" **yazılabilir**, çünkü doğrudur.
 > ADIM 125**. `#544` kapanışı **atlanmadı, atlanamaz** — `human-only`, kalan tek eylem odur
 > ve `C6`'yı bloklamıyordu.
 >
-> **SIRADAKİ MÜHENDİSLİK KALEMİ ARTIK `C7`** (A16 manifest split). Kalan ön koşul
-> kırmızıları: **17** (OD-2 mark policy), **18** (`CONTENTION_SELECTION_STATUS` flip),
-> **20** (#544 — insan), **21** (#559 — insan), **22** (`C9`'un kendisi).
+> **~~SIRADAKİ MÜHENDİSLİK KALEMİ ARTIK `C7`~~ — `C7` ADIM 126'da İNDİ.**
+> Kalan ön koşul kırmızıları: **17** (OD-2 mark policy), **18**
+> (`CONTENTION_SELECTION_STATUS` flip), **21** (#559 — insan), **22** (A15'in lift
+> bump'ı + A19 + A22 — `C9`'un kendisi; A16 yarısı ADIM 126'da indi). **20 kapandı**
+> (#544, 2026-08-27).
 >
 > **YENİ TUZAK, DEVRE ALINMALI:** `tests/integration/test_backtest_persistence.py::_strategy_payload`
 > varsayılan olarak `next_candle_open` verir = **`G11` ihlali**. Paylaşımlı bir kompozisyon
@@ -9528,3 +9530,41 @@ izleniyor" **yazılabilir**, çünkü doğrudur.
 >
 > **`execution/shared_shapes.py`'ye İMZASIZ satır EKLEME** — kısmî kapanış / stacking / hedge
 > bilerek dışarıda ve bir testle pinli; bir satır eklemek bir imza gerektirir.
+
+
+---
+
+## Stage ADIM 126 — `C7` (A16 manifest split + A15 bump) landed (PR pending)
+
+**Migration:** YOK. **Yeni tablo:** YOK. **`ENGINE_VERSION`: DEĞİŞTİ** →
+`backtest-engine-v18-a16-manifest-policy-provenance`. **OpenAPI:** değişmedi (ölçüldü,
+`--check` exit 0 — run manifest'inin hiçbir alanı şemada yayımlanmıyor).
+**`SHARED_ALLOCATION_STATUS`:** `future_dev`, **el değmedi**. **Blocker:** 1 (yalnız A-08),
+BLOCKED.
+
+**Ne indi.** ADR-0002 §14 **A16**: `manifest.py::_portfolio_policy` dört policy sürümünü
+manifest gövdesinde **ve** `execution_content` içinde pinler; `readiness_check.py::
+_resolve_allocation` çözülmüş sleeve tutarlarını (`derived_amounts`) ve per-entry FX
+ref'lerini (`settlement_currencies`) pinler — ikisi de **zaten hesaplanıp atılıyordu**.
+**A15**: `ENGINE_VERSION` bump'ı, **ürün sahibinin imzasıyla** (karşı kanıt sunuldu,
+yeniden onaylandı).
+
+**Testler.** Yeni: `tests/unit/test_a16_manifest_policy_parity.py` (10),
+`tests/integration/test_allocation_manifest_provenance.py` (3). Altı tripwire ters
+çevrildi/daraltıldı, **hiçbiri silinmedi**, adlar korundu (yedi donmuş belge alıntılıyor).
+Golden baseline yeniden üretildi: **50 senaryonun 49'u bayt bayt aynı**, oynayan tek digest
+`contract.execution_key`.
+
+**Devreden pazarlıksız kalem.** **`C9` `ENGINE_VERSION`'ı lift commit'inde TEKRAR bump
+etmelidir** — `C7`'nin bump'ı A16'nın *kayıt* değişikliği için harcandı ve A15'i kapatmaz.
+Zorlayan: `test_oracle_portfolio_containment_gate.py::
+test_lifting_containment_requires_a_second_engine_version_bump` (NC-5'te ölçüldü).
+
+**Dürüst sınır.** Ön koşul **22 KIRMIZI KALIR** (A19 + A22 el değmedi, A15 lift'i bekler);
+`#544`/`#559` el değmedi; frontend'de sıfır satır → frontend kapıları **KOŞULMADI**;
+coverage **CI'ın otoritesinde**. Eski Result'lar `portfolio_policy` **taşımaz**, geri
+doldurulmadı.
+
+`PROJECT_HISTORY.md` §ADIM 126 · `docs/ADIM126_LANDED_KICKOFF.md`.
+
+## Next: **Ön koşul 17 (OD-2 mark policy) + 18 (`CONTENTION_SELECTION_STATUS` flip) → sonra `C9`**

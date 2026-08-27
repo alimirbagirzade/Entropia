@@ -374,14 +374,88 @@ def test_the_containment_flag_and_engine_version_are_both_untouched() -> None:
     # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
     # the tripwire is unchanged by that: lifting containment still cannot happen without
     # editing this line.
-    assert ENGINE_VERSION == "backtest-engine-v18-percent-sizing-per-fill-commission"
+    #
+    # `C7` moved it again, and this time the gate did exactly what its module docstring
+    # says it exists for — *"written to FAIL the day someone lifts the flag, bumps the
+    # engine version or closes the last gap without the rest of the matrix, which is
+    # precisely when a human must re-read §14 rather than trust a green suite."* It fired,
+    # a human re-read §14, and the bump was authorised knowing what it costs: A15 is NOT
+    # discharged by it, because a contained-era Result and a unified-clock Result would
+    # still share a namespace unless `C9` bumps AGAIN. That obligation is enforced, not
+    # remembered — see the test directly below.
+    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
     assert "unified-clock multi-item co-simulation" in SHARED_ALLOCATION_DEPENDENCY
 
 
+#: The version `C7` bumped to. Recorded so the NEXT bump can be required rather than
+#: remembered. This is the one literal in this file that is allowed to be compared against
+#: ``ENGINE_VERSION`` for INEQUALITY, and only in the lifted world.
+_C7_ENGINE_VERSION = "backtest-engine-v18-a16-manifest-policy-provenance"
+
+
+def _lift_reuses_the_c7_namespace(status: str, engine_version: str) -> bool:
+    """True when containment is lifted while the engine still carries `C7`'s version."""
+    return status == "active_v1" and engine_version == _C7_ENGINE_VERSION
+
+
+def test_lifting_containment_requires_a_second_engine_version_bump() -> None:
+    """A15 is NOT discharged by `C7`'s bump, and this is what stops it being assumed to be.
+
+    `C7` bumped ``ENGINE_VERSION`` for a RECORD change (the A16 policy provenance), not for
+    an executed-behaviour change. A15 exists for a different failure: a CONTAINED-era
+    Result must never be idempotently reused for a UNIFIED-CLOCK re-RUN. Only a bump in the
+    commit that lifts ``SHARED_ALLOCATION_STATUS`` can prevent that, because until the lift
+    the two eras produce the same numbers and afterwards they do not.
+
+    The namespace shift is a one-shot resource and `C7` spent one. If `C9` lifts the flag
+    without spending another, a contained-era Result and a unified-clock Result share an
+    ``execution_key`` namespace — silently, with no test to say so. Hence this.
+
+    **Written as a predicate, not as an ``if``.** A bare ``if lifted: assert ...`` is
+    vacuously green today, so it would prove nothing about whether it WORKS until the day
+    it had to. The four corners below exercise the lifted world as an INPUT, which is the
+    same move ``test_shared_clock_branch_predicate.py`` makes for ``_use_unified_clock``:
+    an ``and`` short-circuits, so a test of the compound answer passes with either conjunct
+    broken.
+    """
+    # 1. The predicate itself, on all four corners — this is the non-vacuous half.
+    assert _lift_reuses_the_c7_namespace("active_v1", _C7_ENGINE_VERSION) is True
+    assert _lift_reuses_the_c7_namespace("active_v1", "backtest-engine-v19-unified") is False
+    assert _lift_reuses_the_c7_namespace("future_dev", _C7_ENGINE_VERSION) is False
+    assert _lift_reuses_the_c7_namespace("future_dev", "backtest-engine-v19-unified") is False
+
+    # 2. Applied to the tree as it stands. Today the flag is down, so this passes on the
+    #    third corner. The day `C9` flips it without bumping, it passes on the FIRST — and
+    #    turns red here, in the file a human must re-read before lifting.
+    assert not _lift_reuses_the_c7_namespace(SHARED_ALLOCATION_STATUS, ENGINE_VERSION), (
+        "containment was lifted while ENGINE_VERSION still carries `C7`'s string. A15 "
+        "requires the lift to shift the execution_key namespace itself; `C7`'s bump was "
+        "spent on the A16 manifest record and does not discharge it. Bump ENGINE_VERSION "
+        "in the same commit that lifts the flag, and regenerate the golden baseline."
+    )
+
+
 def test_the_manifest_carries_none_of_the_policy_fields_the_lift_requires() -> None:
-    """ADR §10.1 / §14 A16: a lifted build must record the resolved sleeve amounts, the FX
-    refs and every policy version in the run manifest. The shipped manifest carries none of
-    them — ``execution/provenance.py`` can build the block, but nothing calls it."""
+    """INVERTED at `C7`: A16 is discharged, so this now asserts the fields are PRESENT.
+
+    Was: *the shipped manifest carries none of them*. That was true for as long as A16 was
+    open — ``execution/provenance.py`` could build the block and nothing called it. `C7`
+    closed the gap: ``domain/backtest/manifest.py`` now declares the four policy versions
+    as literals and pins them into both the manifest body and ``execution_content``.
+
+    **The name is deliberately NOT changed**, on this file's own stated convention: it is
+    cited from three frozen evidence documents (``unified_portfolio_oracle_acceptance.md``,
+    ``closure_w0_shared_portfolio_2026-08-13.md``,
+    ``final_closure_ordered_plan_2026-08-13.md``), and renaming it would break those
+    citations to fix a sentence this docstring already corrects.
+
+    **This is a re-aim, not a relaxation.** The gate's job is to fail the day someone
+    closes a gap without the rest of §14, so deleting the assertion when the gap closed
+    would have spent the tripwire. What it guards now is the opposite edge: the fields must
+    stay, and they must stay CORRECT. Their agreement with the modules that own the
+    policies is proved separately in ``tests/unit/test_a16_manifest_policy_parity.py``,
+    because that claim needs to import the contained layer and this package must not.
+    """
     manifest = (_SRC / "domain" / "backtest" / "manifest.py").read_text()
     for field in (
         "engine_allocation_policy_version",
@@ -389,7 +463,10 @@ def test_the_manifest_carries_none_of_the_policy_fields_the_lift_requires() -> N
         "arbitration_policy_version",
         "mark_staleness_policy",
     ):
-        assert field not in manifest
+        assert field in manifest, (
+            f"{field!r} left the shipped manifest; A16 was discharged at `C7` and a "
+            "Result that cannot state its policy provenance is the gap that closed"
+        )
 
 
 def test_every_public_loop_driver_is_named_in_the_caller_scan() -> None:

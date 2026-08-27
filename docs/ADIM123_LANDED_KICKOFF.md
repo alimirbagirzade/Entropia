@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 123 landed — `G14` Karar 2 (`B3`) + Karar 4 (`B0`) imzalandı, `B0` uygulandı
 

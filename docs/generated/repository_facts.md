@@ -15,8 +15,8 @@ static walk. Only a full CI run reports passes.
 
 | Fact | Value |
 |---|---|
-| Alembic head | `0043_i08_registry_strategy_fks` |
-| Alembic revisions | 43 (single head) |
+| Alembic head | `0044_drop_net_conflict_policy` |
+| Alembic revisions | 44 (single head) |
 | Postgres tables | 104 |
 | Foreign keys | 140 |
 | HTTP paths | 177 |
@@ -27,7 +27,7 @@ static walk. Only a full CI run reports passes.
 | `ENGINE_VERSION` | `backtest-engine-v18-percent-sizing-per-fill-commission` |
 | `SHARED_ALLOCATION_STATUS` | `future_dev` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3809 in 361 files |
+| Backend tests **collected** (static, not a pass count) | 3810 in 361 files |
 | Backend `xfail` markers | 0 (0 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 732 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |

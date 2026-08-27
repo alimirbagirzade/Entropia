@@ -747,7 +747,7 @@ Re-measured against `a7261de`:
 | 17 | OD-2 mark policy flip | ❌ | ❌ | `provenance.py:80` = `"undefined_pending_od2"` |
 | 18 | `CONTENTION_SELECTION_STATUS` flip | ❌ | ❌ | `arbitration.py:195` = `"recommended_pending_approval"` |
 | 19 | R-1 allocation revision pin | ✅ | ✅ | `test_allocation_revision_pin.py` |
-| 20 | GH **#544** closed | ❌ open | ⚠️ **was closed-undecided; RE-OPENED 2026-08-25** | §5 C-5 + addendum — **still not a green** |
+| 20 | GH **#544** closed | ❌ open | ⚠️ **was closed-undecided; RE-OPENED 2026-08-25**. **2026-08-27: decision `B` SHIPPED** (`0044_drop_net_conflict_policy` — NET dropped from the enum, column CHECK added, `B3` halt guard). The row asks for the ISSUE to be closed and that is `human-only`. | §5 C-5 + addendum — **still not a green** |
 | 21 | GH **#559** closed | ❌ open | ⚠️ **was closed-undecided; RE-OPENED 2026-08-25** | §4 C-4 + addendum — **still not a green** |
 | 22 | A15 bump + A16 manifest policy fields | ❌ | ❌ | manifest carries **none** of the four (`test_...containment_gate.py:374`) |
 

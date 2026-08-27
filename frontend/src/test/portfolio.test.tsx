@@ -352,7 +352,7 @@ describe("Portfolio / Equity Allocation page", () => {
     fireEvent.change(screen.getByLabelText("Max total exposure %"), {
       target: { value: "150" },
     });
-    // Driven with BLOCK_OPPOSITE since B0 (G14 / GH #544, signed 2026-08-27) dropped NET
+    // Driven with BLOCK_OPPOSITE: NET was removed by `B` (G14 / GH #544, migration 0044)
     // from the selectable list. The claim under test is that the page SENDS the two rule
     // fields; it never depended on which policy token was picked.
     fireEvent.change(screen.getByLabelText("Conflicting signals (same instrument)"), {
@@ -669,16 +669,13 @@ describe("Portfolio / Equity Allocation page", () => {
   });
 });
 
-describe("Portfolio — the NET conflict policy notice (G14 / GH #544)", () => {
+describe("Portfolio — NET is gone, and the guard that outlives it (G14 / GH #544)", () => {
   // The label used to read "Net (V1: executed as Block opposite)" — a SECOND copy of a
-  // finding the server already sends, frozen at the moment it was typed. It went stale
-  // twice over: containment means no shared plan reaches an engine at all, and the
-  // unified-clock phase loop REFUSES NET rather than downgrading it. The fix is not a
-  // better frozen sentence; it is to stop stating the outcome here at all.
-  it("no longer offers NET on a fresh draft (B0)", async () => {
-    // B0 (signed 2026-08-27) froze the write path: NET is not an option a NEW plan can
-    // pick. The enum value is NOT gone — that is `B`, a migration shipping before C9 —
-    // so this asserts the SELECTABLE list, not the wire vocabulary.
+  // finding the server already sends, frozen at the moment it was typed. B0 stopped
+  // offering the value and `B` (migration 0044) removed it from the enum and added the
+  // column CHECK, so there is no longer anything to describe. What is asserted here is the
+  // removal plus the GENERIC guard that motivated none of it and survives all of it.
+  it("does not offer NET, and still offers the two policies that remain", async () => {
     stubApi({
       "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": DRAFT_EMPTY,
       "GET /mainboards/default": MAINBOARD,
@@ -688,6 +685,7 @@ describe("Portfolio — the NET conflict policy notice (G14 / GH #544)", () => {
     fireEvent.click(await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
     const select = screen.getByLabelText("Conflicting signals (same instrument)");
     expect(within(select).queryByRole("option", { name: /^Net\b/ })).toBeNull();
+    expect(within(select).queryByRole("option", { name: "NET" })).toBeNull();
 
     // Positive control: the two supported policies are still offered, so the assertion
     // above measures NET's removal and not a broken render.
@@ -695,42 +693,44 @@ describe("Portfolio — the NET conflict policy notice (G14 / GH #544)", () => {
     expect(within(select).getByRole("option", { name: /^Block opposite/ })).toBeTruthy();
   });
 
-  it("still shows a STORED NET verbatim, disabled — never a silent fallback", async () => {
-    // A plan saved before B0 still carries NET. Without an option for it the controlled
-    // <select> would have no matching child and the browser would show the FIRST option:
-    // the user would read "keep separate" while the server holds NET. That is the exact
-    // silent fallback B1 was rejected for, so it may not reappear in the UI.
+  it("shows an UNRECOGNISED stored token disabled — never a silent fallback", async () => {
+    // The guard is not about NET. A controlled <select> whose value matches no child makes
+    // the browser display the FIRST option: the user would read "keep separate" while the
+    // server holds something else — the exact silent fallback B1 was rejected for. NET was
+    // the case that motivated this and 0044 has made NET unstorable, so the guard is driven
+    // here with a FUTURE retired token instead. Deleting it with its motive would reopen
+    // the fallback for the next value that is retired.
     stubApi({
       "GET /mainboard-compositions/ws_1/portfolio-allocation-draft": {
         ...DRAFT_EMPTY,
-        draft: { ...DRAFT_EMPTY.draft, enabled: true, conflict_policy: "NET" },
+        draft: { ...DRAFT_EMPTY.draft, enabled: true, conflict_policy: "RETIRED_POLICY" },
       },
       "GET /mainboards/default": MAINBOARD,
     });
     renderPage();
 
     const select = await screen.findByLabelText("Conflicting signals (same instrument)");
-    expect(select).toHaveValue("NET");
-    const net = within(select).getByRole("option", { name: /^Net\b/ });
+    expect(select).toHaveValue("RETIRED_POLICY");
+    const stored = within(select).getByRole("option", { name: "RETIRED_POLICY" });
     // Visible and honest, but not re-selectable once the user moves away from it.
-    expect(net).toBeDisabled();
+    expect(stored).toBeDisabled();
   });
 
-  it("renders the server's NET finding verbatim rather than a client paraphrase", async () => {
-    // The server words this against the CURRENT containment flag, which is exactly why the
-    // page may not keep its own copy: a copy would be frozen in one world. Sent here as an
-    // opaque string — if the page paraphrased or truncated it, this fails.
+  it("renders a server conflict-policy finding verbatim rather than paraphrasing it", async () => {
+    // The server words each issue against the CURRENT containment flag, which is exactly
+    // why the page may not keep its own copy: a copy would be frozen in one world. The NET
+    // finding this used to drive is gone with the value, so a live code is used — the
+    // invariant under test is VERBATIM rendering, which never depended on NET.
     const serverNotice =
       "Shared capital allocation does not execute in this build, so no plan carrying " +
-      "this policy reaches an engine at all and the downgrade described below does not " +
-      "happen. NET has no canonical definition.";
+      "this configuration reaches an engine at all.";
     stubApi({
       "PUT /mainboard-compositions/ws_1/portfolio-allocation-draft": {
         ...SAVE_RESULT,
         inline_issues: [
           {
-            code: "CONFLICT_POLICY_NET_V1",
-            severity: "warning",
+            code: "SHARED_MODE_NOT_IN_BUILD",
+            severity: "blocker",
             message: serverNotice,
             field: "conflict_policy",
             composition_item_id: null,
@@ -744,12 +744,12 @@ describe("Portfolio — the NET conflict policy notice (G14 / GH #544)", () => {
 
     fireEvent.click(await screen.findByLabelText(/USE EQUITY ALLOCATION FOR THIS BACKTEST/));
     fireEvent.change(screen.getByLabelText("Conflicting signals (same instrument)"), {
-      target: { value: "NET" },
+      target: { value: "BLOCK_OPPOSITE" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     expect(await screen.findByText("Draft saved")).toBeInTheDocument();
-    expect(screen.getByText("CONFLICT_POLICY_NET_V1")).toBeInTheDocument();
+    expect(screen.getByText("SHARED_MODE_NOT_IN_BUILD")).toBeInTheDocument();
     expect(screen.getByText(serverNotice)).toBeInTheDocument();
   });
 });

@@ -18,11 +18,11 @@
     "criteria_count": 383
   },
   "alembic": {
-    "head": "0043_i08_registry_strategy_fks",
+    "head": "0044_drop_net_conflict_policy",
     "heads": [
-      "0043_i08_registry_strategy_fks"
+      "0044_drop_net_conflict_policy"
     ],
-    "revision_count": 43,
+    "revision_count": 44,
     "single_head": true
   },
   "backend_layers": {
@@ -974,7 +974,7 @@
   },
   "schema_version": 1,
   "tests": {
-    "backend_collected_test_functions": 3809,
+    "backend_collected_test_functions": 3810,
     "backend_test_files": 361,
     "backend_xfail_markers": 0,
     "backend_xfail_strict_markers": 0,

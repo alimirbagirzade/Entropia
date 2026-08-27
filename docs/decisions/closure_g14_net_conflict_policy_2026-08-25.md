@@ -94,6 +94,48 @@ açıklama metni, ve davranışı pinleyen **beş test dosyası** (`test_allocat
 
 ---
 
+### ÖLÇÜM 4 KISMEN ÇÜRÜDÜ — `B` uygulanırken bulundu (2026-08-27, ADIM 124)
+
+Yukarıdaki *"tip … → **VARCHAR + CHECK constraint**"* cümlesi **yanlış**. Sevk edilmiş
+veritabanına karşı ölçüldü:
+
+```
+SELECT data_type FROM information_schema.columns
+ WHERE table_name='portfolio_allocation_plan' AND column_name='conflict_policy';
+-> character varying
+SELECT count(*) FROM pg_constraint con JOIN pg_class rel ON rel.oid=con.conrelid
+ WHERE rel.relname='portfolio_allocation_plan' AND con.contype='c';
+-> 0
+```
+
+Sebep: `enum_column` → `SAEnum(..., native_enum=False)` ve **`create_constraint`
+SQLAlchemy 2.0'da varsayılan olarak `False`**. `validate_strings=True` yalnız **Python
+tarafını** doğrular. Yani kolon **hiç kısıtlanmamıştı**: düz SQL ile herhangi bir dize
+yazılabilirdi, ve **yeniden yazılacak bir CHECK yoktu**.
+
+**Bu, `B`'nin ne olduğunu değiştirir, `B` kararını değil.** Karar 1'in ölçülmüş sonucu
+*"değer artık kaydedilemez … kökten biter"* diyor; Python-only bir kapı "kökten" değildir.
+`0044_drop_net_conflict_policy` bu yüzden **§Ölçüm 4'ün var olduğunu sandığı kısıtı EKLER**,
+hayatta kalan iki değere daraltılmış hâlde. Ürün sahibi bu okumayı 2026-08-27'de onayladı
+(alternatifler: şema değişikliği olmayan literal okuma; ya da imzayı tazelemek — ikisi de
+reddedildi).
+
+**İkinci sonuç — `B3`'ün tasarımı ancak bu okumayla anlamlıdır.** *"Satır varsa migration
+DURSUN"* ifadesi, migration'ın aksi hâlde o satıra **çarpacağını** varsayar. Kısıt
+eklenmeseydi çarpacak bir şey olmazdı ve `B3` saf bir politika jesti olurdu.
+
+**Üçüncü sonuç — kaydedilen, kapatılmayan bir sınıf.** Kolon hiç kısıtlanmadığı için enum
+DIŞI bir değer de **yazılmış olabilir**. Çıplak bir `ADD CONSTRAINT` böyle bir satırda
+kolonu da satırı da adlandırmayan opak bir Postgres hatasıyla düşerdi, o yüzden migration
+onu **ayrıca sayar ve ayrı bir mesajla durur** — aynı fail-closed okuma, bir sınıf geniş.
+Bu ikinci guard **imzanın parçası değildir**; §Ölçüm 4'ün çürümesinin doğrudan sonucudur.
+
+**Aynı yanlış cümle kaynakta da vardı** (`models/allocation.py` modül docstring'i,
+*"Enums use `enum_column` (VARCHAR + CHECK …)"*) — muhtemelen §Ölçüm 4'ün kaynağı odur.
+İkisi de düzeltildi.
+
+---
+
 ## Karar 1 — NET'in geleceği
 
 | # | Seçenek | Ölçülmüş sonucu | Bedeli |

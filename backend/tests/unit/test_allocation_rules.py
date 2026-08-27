@@ -195,7 +195,6 @@ def test_valid_portfolio_rules_add_no_issues_and_shift_the_config_hash() -> None
     )
     issues, _ = validate_allocation(ruled, item_refs=_refs("a"))
     assert Code.MAX_TOTAL_EXPOSURE_INVALID not in _codes(issues)
-    assert Code.CONFLICT_POLICY_NET_V1 not in _codes(issues)
     assert ruled.max_total_exposure_percent == Decimal("150")
     assert str(ruled.conflict_policy) == "BLOCK_OPPOSITE"  # normalized to the wire token
     # The rules are part of the canonical identity: setting them must move the hash.
@@ -212,26 +211,27 @@ def test_nonpositive_max_total_exposure_blocks() -> None:
         assert has_blockers(issues), bad
 
 
-def test_net_policy_is_a_blocker_and_keeps_its_signed_message() -> None:
-    """B0 (G14 / GH #544, signed 2026-08-27) raised NET from WARNING to BLOCKER.
+def test_net_is_rejected_at_parse_and_never_reaches_validation_at_all() -> None:
+    """G14 decision ``B`` (GH #544, migration 0044) removed the value, so the token no longer
+    reaches ``validate_allocation`` -- the config model refuses it first.
 
-    Two axes, deliberately separate. The SEVERITY moved -- that is B0, and it is what
-    makes a stored NET plan read NOT_READY, the drainage signal B3 needs. The MESSAGE did
-    NOT move: it is pinned by Decision 3's own signature, and it already told the caller to
-    choose BLOCK_OPPOSITE or KEEP_SEPARATE. Asserting only the severity would let the
-    signed text rot exactly the way the pre-ADIM-118 notice did.
-    """
+    This REPLACES the B0-era blocker. That blocker existed to make a stored NET plan read
+    NOT_READY, which was the drainage signal B3 needed while the value could still be held;
+    once the migration has run no row carries it and the column CHECK forbids new ones, so a
+    validation issue for it would describe a state the database cannot produce.
+
+    Both halves are asserted. NET is refused exactly like any other unrecognised token (no
+    special case survives), and a plan that does NOT carry it still validates against the
+    containment blocker alone -- the removal must not have widened what blocks a plan."""
+    with pytest.raises(ValidationError):
+        _config(entries=[_entry("a", "100")], conflict_policy="NET")
+
     issues, _ = validate_allocation(
-        _config(entries=[_entry("a", "100")], conflict_policy="NET"),
+        _config(entries=[_entry("a", "100")], conflict_policy="BLOCK_OPPOSITE"),
         item_refs=_refs("a"),
     )
-    net = [i for i in issues if str(i.code) == str(Code.CONFLICT_POLICY_NET_V1)]
-    assert len(net) == 1
-    assert str(net[0].severity) == str(Sev.BLOCKER)
-    # The NET blocker JOINS containment, it does not replace it: a caller that fixes only
-    # one of the two must still be blocked by the other.
-    assert _blocker_codes(issues) == _CONTAINMENT | {str(Code.CONFLICT_POLICY_NET_V1)}
-    assert "Choose BLOCK_OPPOSITE or KEEP_SEPARATE" in net[0].message
+    assert _blocker_codes(issues) == _CONTAINMENT
+    assert not [i for i in issues if "NET" in i.message]
 
 
 def test_unknown_conflict_policy_token_is_rejected_at_parse() -> None:

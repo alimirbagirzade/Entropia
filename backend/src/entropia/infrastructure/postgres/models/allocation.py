@@ -19,8 +19,14 @@ enforced by a UNIQUE on ``workspace_entity_id``):
   + ``config_hash`` (doc 13 §8.1). Never UPDATEd; rerun = new revision.
 
 Money and percent use ``Numeric`` (never float, doc 13 §13). Enums use
-``enum_column`` (VARCHAR + CHECK, ``native_enum=False``) so no PostgreSQL
-``CREATE TYPE`` is emitted (identical to 0005-0011).
+``enum_column`` (``native_enum=False``) so no PostgreSQL ``CREATE TYPE`` is
+emitted (identical to 0005-0011). That helper produces a plain ``VARCHAR`` and
+NOT "VARCHAR + CHECK": ``SAEnum`` leaves ``create_constraint`` at its SQLAlchemy
+2.0 default of False, so ``validate_strings=True`` guards the PYTHON side only
+and the database accepts any string. Measured 2026-08-27 while shipping G14
+decision ``B``; the wrong reading had propagated into that decision's §Ölçüm 4.
+Where a column must be enforced at the root, declare the constraint explicitly in
+``__table_args__`` (below) and create it in the migration.
 """
 
 from __future__ import annotations
@@ -31,6 +37,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -67,6 +74,15 @@ class PortfolioAllocationPlan(TimestampMixin, Base):
     __tablename__ = "portfolio_allocation_plan"
     __table_args__ = (
         UniqueConstraint("workspace_entity_id", name="uq_portfolio_allocation_plan_workspace"),
+        # G14 decision B (GH #544): NET is not a selectable cross-item conflict policy.
+        # Declared HERE rather than via ``enum_column(create_constraint=True)`` because that
+        # helper backs 105 columns repo-wide and flipping it would emit 105 new constraints.
+        # NULL stays legal — it is the absence of a cross-item rule (KEEP_SEPARATE by
+        # definition, doc 13 §8.4), not an unset-and-invalid value.
+        CheckConstraint(
+            "conflict_policy IS NULL OR conflict_policy IN ('BLOCK_OPPOSITE', 'KEEP_SEPARATE')",
+            name="ck_portfolio_allocation_plan_conflict_policy",
+        ),
     )
 
     plan_id: Mapped[str] = mapped_column(String(40), primary_key=True)

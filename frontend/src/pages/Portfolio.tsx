@@ -471,13 +471,14 @@ function DraftEditor({
               </label>
             </div>
             {/* Portfolio-level rules (doc 13 §8.4, cross-item). Both optional —
-                blank = no cap / keep separate (the pre-rules behaviour). The
-                server validates and pre-discloses the NET finding as an inline
-                warning, rendered verbatim below: NET has no canonical definition,
-                the two engines disagree about it, and containment means neither
-                runs today (G14 / GH #544). Verbatim is load-bearing — the server
-                words that warning against the current value of the containment
-                flag, so any copy made here would be frozen in one world. */}
+                blank = no cap / keep separate (the pre-rules behaviour). The NET
+                pre-disclosure this block used to describe is gone with the value
+                itself (G14 decision B, migration 0044, GH #544): the server no
+                longer emits CONFLICT_POLICY_NET_V1 because no plan can carry the
+                policy. Server issues are still rendered VERBATIM below, and that
+                remains load-bearing — the server words each one against the
+                current value of the containment flag, so any copy made here
+                would be frozen in one world. */}
             <div className="section-title-upper" style={{ marginTop: 12 }}>
               Portfolio rules
             </div>
@@ -505,12 +506,14 @@ function DraftEditor({
                       {CONFLICT_POLICY_LABELS[token] ?? token}
                     </option>
                   ))}
-                  {/* A plan stored before B0 still carries NET. Without this option the
+                  {/* Any stored token this build does not offer. Without this option the
                       controlled <select> would have no matching child and the browser
                       would display the first one -- the user would read "keep separate"
-                      while the server holds NET. It renders DISABLED: visible and honest,
-                      but not re-selectable once changed. Server-driven, so any future
-                      retired token is covered without a second list to maintain. */}
+                      while the server holds something else. It renders DISABLED: visible
+                      and honest, but not re-selectable once changed. NET was the case that
+                      motivated it and migration 0044 has since made NET unstorable, so
+                      this now guards only a FUTURE retired or unrecognised token -- which
+                      is why it stays server-driven instead of naming a value. */}
                   {conflictPolicy !== "" &&
                   !(CONFLICT_POLICIES as readonly string[]).includes(conflictPolicy) ? (
                     <option value={conflictPolicy} disabled>

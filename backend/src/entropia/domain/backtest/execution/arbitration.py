@@ -14,8 +14,11 @@ It deliberately does NOT:
 * book anything. It writes no equity, opens no position and mutates no ledger field. It is
   called while the ledger is FROZEN (ADR §8.1) and asserts that, so an arbitration result
   can never be produced against an ``E(t)`` a sibling's fill has already moved;
-* define ``NET``. Canon defines no netting semantics at all, so ``NET`` is **refused**, not
-  downgraded — see :data:`NET_SUPPORT_STATUS`;
+* execute a conflict policy it cannot name. Every shipped policy has a row in
+  :data:`CONFLICT_POLICY_TABLE`; anything else is **refused**, not downgraded. (``NET`` used
+  to be the standing example: it was refused here while the sequential engine downgraded it.
+  G14 decision ``B`` removed the value from ``CrossItemConflictPolicy`` entirely, so the
+  disagreement no longer has a subject — GH #544, migration 0044.);
 * touch Result attribution, the manifest, ``ENGINE_VERSION`` or the containment flag. Every
   decision it produces is a value; whether and how a Result records it is a later slice.
 
@@ -143,48 +146,6 @@ the position (it never gives way); a ``same_tick_intent`` conflict is decided by
 tie-break."""
 
 
-# ------------------------------------------------------------------- NET capability state
-
-NET_SUPPORT_STATUS = "undefined_in_canon"
-"""``NET`` does not execute here, and is not substituted by anything that does.
-
-The shipped sequential engine runs ``NET`` conservatively as ``BLOCK_OPPOSITE`` and discloses
-the downgrade (``engine.py:862-871``, ``CONFLICT_POLICY_NET_V1``). That downgrade is *not*
-carried forward: presenting a block as if it were netting would advertise a semantics canon
-has never defined, which is precisely the finding of GH #544. ADR §9.4 says the unified clock
-removes NET's stated excuse without supplying its meaning — so this layer **refuses** a NET
-run (:class:`UnsupportedConflictPolicyError`) instead of quietly executing a different
-policy. Refusing produces no Result at all, which is strictly safer than producing one whose
-policy label does not describe what ran."""
-
-NET_UNDEFINED_SEMANTICS: tuple[str, ...] = (
-    "netting price — at what price two opposing item positions offset",
-    "position custody — which item's book holds the netted position, and what the other holds",
-    "fee attribution — whether the offset charges one commission, two, or none",
-    "realized PnL attribution — how the netted result is split between the two items",
-    "margin/collateral — what committed capital a netted pair ties up (Master Ref §10.2 "
-    "delegates cross-margin to a portfolio risk model that does not exist)",
-)
-"""The five things that must be defined before ``NET`` can be implemented (GH #544 §"What
-must be decided"; ADR §9.4, §9.5). Each is a product decision, not an engineering choice —
-any of them guessed here would produce numbers a user could not audit against canon."""
-
-NET_TRACKING_ISSUE = "GH #544"
-
-NET_MESSAGE = (
-    "The NET cross-item conflict policy has no canonical definition: neither doc 13 nor "
-    "Master Ref Modül 11 §6.3 defines a netting price, position custody, fee attribution, "
-    "realized-PnL attribution or margin treatment for an offset pair. The unified-clock "
-    "co-simulation removes NET's stated dependency but supplies none of that meaning."
-)
-
-NET_REMEDIATION = (
-    "Choose BLOCK_OPPOSITE (an opposing entry is blocked and traced) or KEEP_SEPARATE (both "
-    "items hold their own books against the shared pool). NET re-opens only when its five "
-    f"undefined semantics are decided and recorded ({NET_TRACKING_ISSUE})."
-)
-
-
 # ---------------------------------------------------------------------- OD-3 disclosure
 
 CONTENTION_SELECTION_POLICY = "pin_order_admission"
@@ -266,20 +227,6 @@ CONFLICT_POLICY_TABLE: Mapping[str, ConflictPolicyRule] = MappingProxyType(
                 "transferred (doc 13 §8.4 step 6, §13)."
             ),
         ),
-        CrossItemConflictPolicy.NET.value: ConflictPolicyRule(
-            policy=CrossItemConflictPolicy.NET.value,
-            supported=False,
-            opposite_same_instrument="undefined",
-            same_direction_same_instrument="undefined",
-            separate_position_books=True,
-            shares_capital=True,
-            canon=(
-                "No canonical definition exists. Doc 13's own draft-write contract carries no "
-                "conflict_policy field at all; the enum value arrived with migration "
-                "0035_portfolio_rules. ADR §9.4, GH #544."
-            ),
-            undefined_semantics=NET_UNDEFINED_SEMANTICS,
-        ),
     }
 )
 """Every cross-item conflict policy, what it does, and whether it executes.
@@ -303,11 +250,17 @@ class ArbitrationError(ValueError):
 class UnsupportedConflictPolicyError(ArbitrationError):
     """The pinned conflict policy cannot be executed honestly.
 
-    Two cases, both fail-closed. ``NET`` is undefined in canon (:data:`NET_MESSAGE`) and is
-    refused rather than substituted. An UNKNOWN token — a tampered, foreign or future
-    snapshot — is refused too: the shipped sequential engine fails such a token closed *to
-    blocking*, which is a degraded execution of a policy nobody can name, and producing a
-    Result under it would label the run with a policy that never ran."""
+    Two cases, both fail-closed. An UNKNOWN token — a tampered, foreign or future snapshot —
+    is refused: the shipped sequential engine fails such a token closed *to blocking*, which
+    is a degraded execution of a policy nobody can name, and producing a Result under it
+    would label the run with a policy that never ran. A KNOWN but ``supported=False`` row is
+    refused for the same reason rather than substituted by a policy that does run.
+
+    NO SHIPPED ROW IS UNSUPPORTED TODAY. ``NET`` was the only one and G14 decision ``B``
+    removed the value (GH #544, migration 0044), so the second branch guards a row that does
+    not yet exist. It is kept because ``supported`` is a field on every row: deleting the
+    branch would let a future unsupported policy execute silently, turning a fail-closed
+    guard into a fail-open one."""
 
 
 class MandatoryIntentNotArbitrableError(ArbitrationError):
@@ -513,8 +466,11 @@ def resolve_policy(token: str | None) -> ConflictPolicyRule:
             f"Result. Known policies: {sorted(CONFLICT_POLICY_TABLE)}."
         )
     if not rule.supported:
+        undefined = "; ".join(rule.undefined_semantics) or "not stated"
         raise UnsupportedConflictPolicyError(
-            f"{NET_MESSAGE} Undefined: {'; '.join(rule.undefined_semantics)}. {NET_REMEDIATION}"
+            f"The {rule.policy} cross-item conflict policy has no canonical definition, so it "
+            f"cannot be executed honestly. Undefined: {undefined}. Choose a supported policy "
+            f"instead: {sorted(t for t, r in CONFLICT_POLICY_TABLE.items() if r.supported)}."
         )
     return rule
 
@@ -899,11 +855,6 @@ __all__ = [
     "CONTENTION_SELECTION_STATUS",
     "EXPOSURE_CONSTRAINT",
     "MAX_POSITION_CONSTRAINT",
-    "NET_MESSAGE",
-    "NET_REMEDIATION",
-    "NET_SUPPORT_STATUS",
-    "NET_TRACKING_ISSUE",
-    "NET_UNDEFINED_SEMANTICS",
     "PORTFOLIO_CONFLICT_BLOCKED",
     "SLEEVE_CONSTRAINT",
     "SOLVENCY_CONSTRAINT",

@@ -17305,6 +17305,26 @@ var olma sebebidir. `0044` değerleri **harfi harfine** yazar: migration bir tar
 **DÜRÜST SINIRLAR.**
 - **`G14` KAPANMADI ve #544 KAPATILMADI** (`human-only`). Ön koşul 20 **kırmızı kalır**:
   satırın istediği şey issue'nun kapanmasıdır, kodun inmesi değil. Kalan tek eylem insana ait.
+  **GÜNCELLEME — o insan eylemi AYNI GÜN GERÇEKLEŞTİ, sevkten SONRA:** #544
+  `2026-08-27T13:05:47Z`'de **ürün sahibi (`alimirbagirzade`) tarafından KAPATILDI** (timeline
+  ile ölçüldü: issue'nun beşinci durum değişimi; 08-07 kapandı → 08-13 açıldı → 08-18 kapandı →
+  08-25 açıldı → 08-27 kapandı), ve kapanış gerekçesi issue'ya yorum olarak yazıldı
+  (`#issuecomment-5441715204`; bir önceki *"Progress, not closure — this issue stays open"*
+  yorumunu açıkça **supersede eder**, metni ürün sahibi verdi, ajan **yalnız** yayımladı —
+  issue durumuna DOKUNULMADI). Yukarıdaki iki cümle **sevk anının** kaydıdır ve bilerek
+  duruyor: bu satır onları düzeltmez, **tarihlendirir**.
+- **ÖN KOŞUL 20 BU KAYITTA YEŞİLE ÇEVRİLMEDİ, bilerek.** ADIM 90'ın kuralı bir kapıyı
+  düşürmeden önce **üçünü birden** ölçmeyi ister (issue durumu · issue'da **yazılı** karar ·
+  `docs/decisions/` imza kutusu); üçü de bugün mevcut görünüyor ama **defterin kendisi bu
+  slice'ta yeniden ölçülmedi** ve ayrıştıklarında otorite imza kutusudur. Çevirmek ayrı bir
+  ölçüm slice'ıdır, kapanış ritüelinin yan ürünü değil.
+- **ÖLÇÜLMÜŞ KÜÇÜK DRIFT: #544'te `human-only` ETİKETİ YOK.** Yukarıdaki parantez (ve
+  `CLAUDE.md`'nin aynı cümlesi) onu taşıyordu; bugün ölçülen etiketler **`blocks-adim-19`** ve
+  **`product-decision`**. Kısıt yine de gerçektir — `product-decision`'ın kendi tanımı *"agent
+  karar veremez"* der — ama **etiketin adı yanlıştı**; `human-only` **#514**'ün etiketidir
+  (ADIM 51 — bugün ölçüldü: #514 gerçekten `human-only` taşır ve **AÇIK**). Parantez
+  tarihsel kayıt olarak **burada** duruyor, `CLAUDE.md`'nin ince
+  satırından **düşürüldü** (oraya bayat bir etiket adı taşımanın değeri yok).
 - **"`B0` üretime çıktı mı" ÖN KOŞULU LİTERAL OLARAK ÖLÇÜLEMEDİ.** Bu repoda **0 git tag,
   0 GitHub release, deploy eden 0 workflow** var (ölçüldü) → *"üretime çıkmak"* gözlenebilir
   bir olay **değil**. Gözlenebilir tek sevk olayı main'e inmektir ve `B0` (#858) ile bu

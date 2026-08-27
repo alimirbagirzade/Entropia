@@ -321,8 +321,12 @@ Before stopping a working session, produce **ALL** of the following:
 > delik açılmadığı ölçüldü (`resolve_policy` bilinmeyen token'da zaten fırlatıyor →
 > fail-closed → fail-closed), ve `supported=False` **dalı korundu** (silmek fail-open olurdu).
 > **TUZAK:** alembic revision id `varchar(32)`'yi aşarsa şema adımlarından SONRA patlar (33 →
-> 29 karakter). **DÜRÜST SINIR: `G14` KAPANMADI, #544 KAPATILMADI (`human-only`), ön koşul 20
-> KIRMIZI KALIR** — satır issue'nun kapanmasını ister. *"`B0` üretime çıktı mı"* **literal
+> 29 karakter). **DÜRÜST SINIR (SEVK ANI): `G14` KAPANMADI, #544 KAPATILMADI, ön koşul 20
+> KIRMIZI KALIR** — satır issue'nun kapanmasını ister. **SONRADAN DEĞİŞTİ, AYNI GÜN: #544
+> `2026-08-27T13:05:47Z`'de ürün sahibi tarafından KAPATILDI** ve gerekçe issue'ya yazıldı
+> (`#issuecomment-5441715204`). **Ön koşul 20 defterde YEŞİLE ÇEVRİLMEDİ** — ADIM 90 üç ölçüm
+> ister (issue durumu · yazılı karar · imza kutusu), defter bu slice'ta ölçülmedi.
+> *"`B0` üretime çıktı mı"* **literal
 > olarak ölçülemedi**: repoda **0 tag / 0 release / deploy eden 0 workflow** → *"üretim"*
 > gözlenebilir bir olay değil; `B0` (#858) ile bu migration **ayrı** PR'lardır (sıra kısıdı
 > harfi harfine karşılandı) ama **drenaj penceresi kanıtlanamaz ve iddia edilmiyor**. Üretimdeki

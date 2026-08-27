@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 120 landed — `G15` imzalandı (Seçenek B) ve aynı slice'ta uygulandı; leg 3 artık FLAT
 

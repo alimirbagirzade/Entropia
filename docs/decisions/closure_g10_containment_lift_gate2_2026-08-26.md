@@ -51,23 +51,33 @@ fill nasıl admit edilir). Gate 2 hiçbir semantik sormaz; **sıra** sorar. Bu y
 
 ## Ölçüm 3 — Talep anındaki ön koşul durumu (2026-08-26, `bda4aba8`)
 
-`P-C2 §C.7`'nin 22 ön koşulu **iki kez** ölçüldü:
+> **BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ (ADIM 120, 2026-08-27).** Başlık *talep
+> anını* adlandırır ve o an tarihseldir; `docs-history-guard` bir `## ` başlığının
+> **kökünü** karşılaştırır ve **yeniden adlandırmayı bloklar** (ADIM 61/111). Aşağısı
+> artık bir **ölçüm ZİNCİRİDİR** ve son tabanı **`f0be03f1`**'dir.
+
+`P-C2 §C.7`'nin 22 ön koşulu art arda **dört** tabana karşı ölçüldü. Eski ölçümler
+**silinmedi, tarihiyle bırakıldı** — her biri o an doğruydu ve **bayatladı**:
 
 - `bda4aba8` (#847 inmeden önce): **12 yeşil / 10 kırmızı**. Bağımsız ikinci türetim — o
   sırada henüz açık olan PR #847'nin `closure_c9_containment_lift_verdict_2026-08-26.md`
   belgesi de **12** diyordu.
 - `ae18f46b` (#847 indikten + `#559` kapatıldıktan sonra): **13 yeşil / 9 kırmızı** — ön koşul **21** döndü.
 - `6759a495` (#849 indikten sonra): **16 yeşil / 6 kırmızı** — ön koşul **13**, **14** ve **2** döndü.
+- **`f0be03f1` (#850 + #851 + #853 indikten sonra, 2026-08-27): 18 yeşil / 4 kırmızı** —
+  ön koşul **15** ve **16** döndü (ADIM 119). **Kalan dört kırmızı: 17 · 18 · 20 · 22.**
 
-Kırmızı 10'un **sınıflandırması düzeltildi** ve bu, kapının cevabını doğrudan etkiler:
+Kırmızıların **sınıflandırması düzeltildi** ve bu, kapının cevabını doğrudan etkiler
+(satırlar `f0be03f1`'e karşı **yeniden** ölçüldü, sayı taşınmadı):
 
 | ön koşul | sınıf | durum |
 |---|---|---|
 | 13 (`G11`) · 14 (`G12`) | ~~ÜRÜN KARARI~~ **YEŞİL** | ikisi de **imzalandı** (ürün sahibi, 2026-08-26; #849 → `6759a495`) |
 | 2 (`_phase_tail` ayrılamaz) | ~~ÜRÜN KARARI~~ **DÜŞTÜ** | `G12` = **`A` (admission'da blokla)** + alt-karar *"ikisi de"* (Ready Check blocker **ve** admission reddi). Scaling paylaşımlı koşuda hiç admit edilmiyorsa `_phase_tail`'in **ayrılması gerekmiyor** — ön koşul karşılanmadı, **konusuz kaldı** |
-| 20 (`G14`) | **KARAR + MÜHENDİSLİK** | Karar 1 açık PR #847'de imzalı (`C` şimdi + `B` `C9` öncesi); `B` bir **migration**, yazılmadı; Karar 2/3 boş |
-| 21 (`G8`) | **ESASEN YEŞİL, defter işi kaldı** | `A1+B2+C1` imzalı **ve sevk edilmiş** (#847 → `ae18f46b`; `shared/dst.py::is_nonexistent_local_time`, iki okuyucu da çağırıyor). Ön koşulun **lafzı** *"GH #559 kapalı"* diyor ve issue hâlâ `OPEN/REOPENED` — ama ADIM 90 kuralı gereği üç düzlem ayrıştığında **otorite imza kutusudur**, ve o kutu dolu. Kalan tek iş issue'nun kapatılması: **insan eylemi**, G8 belgesinin kendi md. 4'ü |
-| 15 (OD-6) · 16 (OD-1) · 17 (OD-2) · 18 (OD-3) | **MÜHENDİSLİK** | kararları **2026-08-05'te ADR §13.1 ile imzalı**; blocker'lar/mark policy yazılmadı, 17-18 zaten §13.1 tarafından ADIM 20'ye verilmiş |
+| 20 (`G14`) | **KARAR + MÜHENDİSLİK** | Karar 1 imzalı (`C` şimdi + `B` `C9` öncesi) — imzayı **#847** (`ae18f46b`) getirdi, ~~o sırada açıktı~~ **merge edildi**; `C` yarısı **#850** (`42352048`, ADIM 118) ile **sevk edildi**. `B` yarısı (NET enum'unun kaldırılması) bir **migration** ve **yazılmadı**; **Karar 3 de İMZALI** (aynı #850; `☑ Onaylanan metin: rules.py::_net_policy_warning`) — **açık olan YALNIZ Karar 2'dir** (`'NET'` taşıyan mevcut satırların dispozisyonu) ve `#544` **OPEN**. **Bu satır, yeniden talep koşulunun md. 2'si — ve tek gerçek blocker odur.** |
+| 21 (`G8`) | **ESASEN YEŞİL, defter işi kaldı** | `A1+B2+C1` imzalı **ve sevk edilmiş** (#847 → `ae18f46b`; `shared/dst.py::is_nonexistent_local_time`, iki okuyucu da çağırıyor). Ön koşulun **lafzı** *"GH #559 kapalı"* diyor; **2026-08-27'de yeniden ölçüldü: issue `CLOSED/COMPLETED` (2026-08-26T11:29:21Z)** → lafız da sağlandı. **AMA G8 md. 4 sağlanMADI:** issue'nun **tek** yorumu 2026-08-25 tarihli ve o, kapatmadan ÖNCE kuralın yazılmasını isteyen yorumdur — kapanış yorumu **seçilen şıkkı (`A1+B2+C1`) ve dosyayı adlandırmıyor** (#558 emsali). Ön koşul yine de yeşildir (ADIM 90: üç düzlem ayrışınca **otorite imza kutusudur**, ve o kutu dolu + kod sevk edildi); eksik olan **defter işidir ve insan eylemidir** |
+| 15 (OD-6) · 16 (OD-1) | ~~MÜHENDİSLİK~~ **YEŞİL** | ADIM 119 (#851 → `82c98660`) ikisini de sevk etti **ve wired**: `allocation/shared_mode_admission.py::non_executing_sleeve_holders` / `::mixed_record_time_bases`, `commands/backtest_run.py` admission'ında `_readiness_blocked` ile O-02 zarfı (`ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM` / `ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS`). **Tanımlı olmak yetmez, ulaşılabilir olduğu ayrıca ölçüldü.** |
+| 17 (OD-2) · 18 (OD-3) | **MÜHENDİSLİK** | kararları **2026-08-05'te ADR §13.1 ile imzalı**; mark policy yazılmadı ve iki etiket flip'ini §13.1 zaten **ADIM 20'ye verdi** — `f0be03f1`'de yeniden okundu: `MARK_STALENESS_POLICY = "undefined_pending_od2"`, `CONTENTION_SELECTION_STATUS = "recommended_pending_approval"` |
 | 22 (A15/A16) | **`C9`'UN KENDİ TESLİMATI** | — |
 
 **Bu tablo bir düzeltmedir.** #847 ile main'e inen `docs/audit/closure_c9_containment_lift_verdict_2026-08-26.md`'nin *"kırmızıların 10'unun 10'u da ya bir insan
@@ -115,9 +125,11 @@ Gate 2 şu üçü birden sağlandığında **yeniden istenir**:
    konusuz bıraktı);
 2. `G14`'ün `B` yarısı (`NET` enum'unun kaldırılması + Karar 2'nin migration şıkkı) **sevk
    edilmiş**, `#544` kapalı (ön koşul 20);
-3. ~~`G8` merge edilmiş~~ **SAĞLANDI** (`ae18f46b`); geriye yalnız `#559`'un kapatılması
-   kaldı — G8 belgesinin md. 4'ü kapanış yorumunun seçilen şıkkı ve dosyayı adlandırmasını
-   ister (#558 emsali). **İnsan eylemi; ajan bu issue'yu kapatmaz.**
+3. ~~`G8` merge edilmiş~~ **SAĞLANDI** (`ae18f46b`); ~~geriye yalnız `#559`'un kapatılması kaldı~~
+   **`#559` de KAPANDI** (`CLOSED/COMPLETED`, 2026-08-26T11:29:21Z) → **md. 3 tamamen sağlandı.**
+   Açık kalan **tek** artık defter işidir: G8 md. 4 kapanış yorumunun seçilen şıkkı ve dosyayı
+   adlandırmasını ister (#558 emsali) ve o yorum **yazılmadı**. **İnsan eylemi; ajan bu issue'ya
+   dokunmaz.** Bu artık ön koşul 21'i kırmızıya çevirmez — yeniden talep koşulunu da bloklamaz.
 
 O noktada kalan kırmızılar 15/16/17/18/22 olur; beşi de **mühendislik** ve beşi de
 `C9`'un ya doğrudan teslimatı ya da onun hemen öncesindeki iştir. Gate 2 orada
@@ -127,7 +139,9 @@ uygulanabilir bir işe verilir ve §16'nın kapısı ilk kez amacına hizmet ede
 
 - **`G16` / A-08 (#514) ayrı ve bağımsızdır.** Gate 2 verilse de nihai RC verdict'i o insan
   denetimi açıkken sonuçlanamaz; ajan o issue'yu ne açar ne kapar (`human-only`).
-- **Hiçbir ön koşulu kapatmaz.** 16/22 ölçümü bu belgeden bağımsızdır ve tabanı `6759a495`'tir.
+- **Hiçbir ön koşulu kapatmaz.** Ön koşul ölçümü bu belgeden bağımsızdır; **son taban
+  `f0be03f1` ve sayı 18/22'dir** (§Ölçüm 3'ün zinciri). Buradaki sayı **türetilmiş bir
+  rapordur, otorite değildir** — kararı okuyan her oturum onu koda karşı yeniden ölçmelidir.
 - **Ön koşul 20 hâlâ kırmızıdır ve öyle sayılmıştır.** `G14` Karar 1 imzalı (`C` şimdi +
   `B` `C9` öncesi) ama `B` sevk edilmedi, Karar 2 (mevcut `'NET'` satırları) ve Karar 3
   (`C`'nin metni) **boş**, `#544` açık. İmzalı bir Karar 1, kapatılmış bir kapı değildir.

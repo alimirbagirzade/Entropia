@@ -16956,3 +16956,97 @@ Görev *"C6 inmediyse DUR"* diyordu. Oturum başında **inmemişti** (ölçüld�
 `backend/src`'te sıfır hit; #851 açıktı) ve bu **ürün sahibine gösterildi**; cevabı *"TAM devam"*
 oldu. Slice yazılırken **#851 indi**, yani sıra **fiilen** de sağlandı. `C6`'nın G11/G12 yarısı
 (admission blocker'ları) **hâlâ inmemiştir** — ADIM 119'un kendi başlığı bunu söylüyor.
+
+## ADIM 121 — `G10`'un ÖN KOŞUL TABLOSU TAZELENDİ: BİR İMZA YÜZEYİNİN ÖLÇÜMÜ, ALTINDAKİ İMZADAN DAHA HIZLI BAYATLAR
+
+**DOCS-ONLY — tek dosyada ürün semantiği, `backend/src`'te SIFIR satır.** Migration yok,
+`ENGINE_VERSION` değişmedi, OpenAPI değişmedi, `SHARED_ALLOCATION_STATUS` = **`future_dev`
+(el değmedi)**. Kabul borcu tavanları oynamadı. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
+BLOCKED.
+
+**Görev `G10` (ADR §16 Gate 2) talebi hazırlamaktı; talep YAZILMADI çünkü ÖNCÜLÜN İKİSİ DE
+ÇÜRÜDÜ** — ve ikisi de ölçümle çürüdü, akıl yürütmeyle değil.
+
+1. **`G10` "hiç talep edilmedi" DEĞİL — talep edildi ve İMZALANDI.**
+   `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md` (#852 → `d0397035`)
+   `☑ Seçim: B — ERTELE` · `☑ İmza: alimirbagirzade` · `2026-08-26` taşıyor. **Bu bir RED
+   DEĞİLDİR**, ertelemedir; belgenin kendi §Yeniden talep koşulu üç maddesini sayar.
+   İkinci bir talep belgesi yazmak **çift iş** olurdu (ADIM 86) ve çakışma **dosya yolunda**
+   ölçülür (ADIM 91) — ölçüldü, yazılmadı.
+2. **Sayı da bayattı.** Belgenin §Ölçüm 3'ü `6759a495`'te **16/6** diyordu; oturum
+   sırasında **#850 · #851 · #853** indi ve **#851 (ADIM 119)** ön koşul **15 ve 16'yı**
+   yeşile çevirdi.
+
+**ASIL DERS: BİR KARARIN GEÇERLİLİĞİ İLE ALTINDAKİ ÖLÇÜMÜN GÜNCELLİĞİ AYRI ÖMÜRLERDİR.**
+`G10`'un imzası **2026-08-26**'da verildi ve **hâlâ geçerlidir** (gerekçesi *"9 kırmızı
+dururken sırası değil"*); aynı belgenin ön koşul tablosu **aynı gün içinde** bayatladı,
+çünkü üç PR merge oldu. Bir imza yüzeyinin ölçüm bölümü, kararın kendisinden **daha kısa
+yaşar** — ve bayat kalırsa bir sonraki oturum *yeniden talep koşulunu* yanlış sayıyla
+okur. Bu slice o bölümü tazeler ve **§Karar bloğuna DOKUNMAZ** (negatif kontrol: diff'te
+`☑ **Seçim`/`☑ **İmza` satırı **0**).
+
+**İKİNCİ DERS: KAPALI BİR ISSUE, KENDİ KAPANIŞ ŞARTINI SAĞLADIĞINI KANITLAMAZ — ÜÇ DÜZLEM,
+ÜÇÜNCÜ KEZ.** `#559` artık `CLOSED/COMPLETED` (2026-08-26T11:29:21Z) → ön koşul 21'in
+**lafzı** sağlandı. Ama `closure_g8_dst_fold_gap` md. 4 kapanış yorumunun **seçilen şıkkı
+(`A1+B2+C1`) ve dosyayı adlandırmasını** şart koşuyor (#558 emsali) ve ölçüldü: issue'nun
+**tek** yorumu **2026-08-25** tarihli ve o, kapatmadan ÖNCE kuralın yazılmasını isteyen
+yorumdur. **Kapanış yorumu YOK.** Ön koşul yine de **yeşildir** — ADIM 90 kuralı: üç düzlem
+(issue durumu / yazılı karar / imza kutusu) ayrıştığında **otorite imza kutusudur**, ve o
+kutu dolu **artı** kod sevk edilmiş (`shared/dst.py::is_nonexistent_local_time`). Eksik olan
+**defter işidir ve İNSAN eylemidir**; ajan o issue'ya dokunmaz. ADIM 90 bu şekli *"kapanış
+kapıyı açmaz"* yönünde ölçmüştü; burada **ters yönde** çıktı — kapanış eksik ama kapı
+**zaten açıktı**. Kural aynı, sonucu ters: **düzlemleri ayrı ayrı ölç, birinden diğerini
+çıkarma.**
+
+**TAZE SAYIM — `f0be03f1`'e karşı, satır satır koda karşı okundu (sayı TAŞINMADI):
+18 yeşil / 4 kırmızı.** Kalan dördü adıyla:
+
+| # | Ön koşul | Ölçülen |
+|---|---|---|
+| **17** | OD-2 mark policy + `MARK_STALENESS_POLICY` flip | `provenance.py` = **`"undefined_pending_od2"`**; policy yazılmadı |
+| **18** | `CONTENTION_SELECTION_STATUS` flip | `arbitration.py` = **`"recommended_pending_approval"`** |
+| **20** | GH **#544** kapalı | **OPEN**; `G14` Karar 1 **ve** Karar 3 imzalı (Karar 3'ü #850 getirdi) ama `B` yarısı (NET enum'unun kaldırılması) bir **migration** ve yazılmadı; **açık olan yalnız Karar 2** |
+| **22** | A15 bump + A16 + A19 + A22 | `ENGINE_VERSION` değişmedi; `_PRIOR_ENGINE_VERSION` **yok** |
+
+**15 ve 16 YEŞİL — ve "tanımlı" ile "ulaşılabilir" AYRI ÖLÇÜLDÜ.**
+`allocation/shared_mode_admission.py::non_executing_sleeve_holders` /
+`::mixed_record_time_bases` yalnız var olmakla kalmıyor; `commands/backtest_run.py`
+admission'ında çağrılıyor ve `_readiness_blocked` ile O-02 zarfı yayımlıyor
+(`ALLOCATION_SHARED_MODE_NON_EXECUTING_ITEM` /
+`ALLOCATION_SHARED_MODE_MIXED_RECORD_TIME_BASIS`). Enum'a bir kod eklemek satırı yeşil
+göstermeye yeter, **çağrı yerini görmez** — ikisi ayrı grep'lendi.
+
+**ÖLÇÜLMÜŞ BELİRSİZLİK, SESSİZCE SEÇİLMEDİ.** Ön koşul **13/14** (ve dolayısıyla **2**)
+için iki savunulabilir okuma var ve fark 3 satırdır:
+*(a) gevşek* — §C.7'nin sahip sütunu ikisi için de **`human`** ve sayım notu ikisini de
+*"6 human/product gates"* arasında sayar → imza satırı düşürür (**18/4**, `G10` belgesinin
+okuması); *(b) sıkı* — satırların **lafzı** bir *blocker* adlandırır ve emsal **#5**'tir,
+o da sahip `human` olduğu hâlde hem kararı **hem** kodu (P10 appended) istedi (**15/7**).
+**Verdict iki okumada da AYNI: 22/22 DEĞİL** → bu slice birini kanonik ilan etmedi, ikisini
+de kaydetti. Bir sayıyı seçmek bir **adjudication**'dır ve bu bir ölçüm slice'ının kararı
+değildir (ADIM 42 kuralının kardeşi).
+
+**SIRA KAPISI DA ÖLÇÜLDÜ VE TUTMADI:** `C6` **dört** admission blocker ister (OD-1 · OD-6 ·
+P2 · P8); ADIM 119 **ikisini** sevk etti, **P2/P8 yarısı hiçbir PR'da değil** — #851'in
+kendi gövdesi *"❌ ADIM 119"* der ve `G11` §Ölçüm 5'in bağı ikisinin **tek slice'ta
+birlikte** uygulanmasını şart koşar. `G15` **BU KAYIT YAZILIRKEN İMZALANDI** — #855
+(`d1285776`, **ADIM 120**) `Seçenek B`'yi imzaladı ve **aynı slice'ta uyguladı**; leg 3
+artık **FLAT**. İlk yazım *"G15 hâlâ imzasızdır"* diyordu ve o ölçüm **doğruydu,
+bayatladı** — düzeltildi. **`G15` bir `C9` ön koşulu DEĞİLDİR** (plan §2: *"nothing in
+this plan"*), o yüzden **18/4 sayısı oynamaz**.
+
+**YENİDEN TALEP KOŞULU — md. 1 ✅ · md. 3 ✅ (bu slice'ta yeşile döndü) · md. 2 ❌.**
+Yani `G10`'u tutan **TEK** kalem `G14`'ün `B` yarısı + `#544`'tür. Bu bir **ürün kararı +
+migration**, ve bir ajanın tek başına kapatabileceği bir şey değildir.
+
+**ÜÇÜNCÜ DERS — BU KAYIT KENDİ DERSİNİ KENDİNE UYGULAMAK ZORUNDA KALDI.** İlk yazımı *"`G14` Karar 2 ve Karar 3'ün kutuları boş"* diyordu ve bu **yazıldığı anda yanlıştı**: Karar 3 **#850** (`42352048`) ile imzalanmıştı ve o commit ölçüm tabanı `f0be03f1`'de **zaten vardı**. Gözlem ilk tabandan (`6759a495`) **taşınmıştı** — yani bu slice'ın tamamının hakkında olduğu kusurun (*sayı taşıma*) birebir aynısı, slice'ın kendi metninde. **PR açıkken yakalandı ve düzeltildi** (beş dosya, sekiz geçiş); yakalayan şey bir kapı değil, **bir sonraki oturumun aynı dosyayı yeniden ölçmesi** oldu — ve kapıların bunu **göremeyeceği** de ölçümün parçasıdır: `docs-history-guard` silme arar, `check_classification` numara sayar, ikisi de bir cümlenin doğruluğunu **okumaz**. **Açık olan yalnız Karar 2'dir.**
+
+**DÜRÜST SINIR:** ürün/test kodunda sıfır satır → **hiçbir suite koşulmadı ve hiçbir
+geçen/coverage sayısı iddia edilmiyor**, otorite CI. `#559` ve `#544`'e **dokunulmadı**
+(`human-only` disiplini). `docs/audit/` altındaki üç tarihsel belge (`closure_w0_…`,
+`final_closure_delta_audit_…`, `closure_c9_…verdict…`) **bilerek güncellenmedi** — üçü de
+`doc-status: historical` ve bu depoda denetim belgeleri **ölçtükleri anı DONDURUR** (ADIM
+65); `G8` md. 5 onların tazelenmesini istiyor ve bu **çözülmemiş bir gerilimdir**, burada
+karara bağlanmadı. Codemap tazelenmedi, bilerek: yeni endpoint / tablo / sayfa / job yok.
+
+`PROJECT_HISTORY.md` §ADIM 121 · `docs/ADIM121_LANDED_KICKOFF.md` · **PR #856**.

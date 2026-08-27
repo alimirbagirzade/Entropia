@@ -270,6 +270,24 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
+> değmedi**). **Son dalga — ADIM 121 (`G10`'un ön koşul tablosu tazelendi, DOCS-ONLY):
+> `backend/src`/`frontend/src`'te SIFIR satır.** İki bayat öncül çürütüldü: **`G10` (Gate 2)
+> "hiç talep edilmedi" DEĞİL — talep edildi ve `B — ERTELE` olarak İMZALANDI** (2026-08-26;
+> **red değil**), ve belgenin kendi sayısı aynı gün bayatladı. **Taze sayım `f0be03f1`:
+> 18/22 yeşil**, kalan dört kırmızı **17 · 18 · 20 · 22**; ön koşul 15/16 ADIM 119 ile yeşil
+> ve yalnız *tanımlı* değil **wired** (`shared_mode_admission.py::non_executing_sleeve_holders`
+> / `::mixed_record_time_bases` → `backtest_run.py` admission, O-02 zarfı). **Yeniden talep
+> koşulu: md. 1 ✅ · md. 3 ✅ · md. 2 ❌ → `G10`'u tutan TEK kalem `G14`'ün `B` yarısı (bir
+> MIGRATION) + `#544`.** İkinci bulgu: `#559` `CLOSED` ama `G8` md. 4'ün istediği **kapanış
+> yorumu yok** — ön koşul 21 yine de yeşil (ADIM 90: düzlemler ayrışınca **otorite imza
+> kutusudur**); kalan **insan eylemi**. §Karar bloğuna **dokunulmadı** (negatif kontrol:
+> diff'te imza satırı **0**). Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. **Suite
+> koşulmadı** → geçen/coverage **CI'ın otoritesinde**.
+> `PROJECT_HISTORY.md` §ADIM 121 · `docs/ADIM121_LANDED_KICKOFF.md` · **PR #856**.
+>
+>
 > **alembic head `0043_i08_registry_strategy_fks`** (migration YOK) · `ENGINE_VERSION` **değişmedi** ·
 > OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 120
 > (`G15` İMZALANDI = Seçenek B, ve AYNI SLICE'TA UYGULANDI):** Ready Check leg 3'ün kazananı artık

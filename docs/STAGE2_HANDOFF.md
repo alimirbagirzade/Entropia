@@ -8816,6 +8816,34 @@ yalnız batch formu ters → yalnız *"iki form anlaşır"* assertion'ı.
 **Deferred:** `A` (UNIQUE + migration, sayı bekliyor) · **#854** · `C6`'nın **G11/G12 yarısı
 hâlâ inmedi** (ADIM 119 yalnız OD-1/OD-6'yı sevk etti).
 
+## Stage ADIM 121 — `G10`'un ön koşul tablosu tazelendi (DOCS-ONLY) landed
+
+- **PR:** **#856** (dal `docs/stage-120-landed`) · **Taban:** `f0be03f1`
+- **Migration:** yok · **`ENGINE_VERSION`:** değişmedi · **OpenAPI:** değişmedi ·
+  **`SHARED_ALLOCATION_STATUS`:** `future_dev`, **el değmedi**
+- **Değişen:** `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md`
+  (yalnız ÖLÇÜM bölümleri) + defter. `backend/src` / `frontend/src`: **sıfır satır.**
+- **Test:** koşulmadı (ürün/test kodunda değişiklik yok) → **geçen/coverage sayısı iddia
+  edilmiyor**, otorite CI.
+- **Blocker sayısı DEĞİŞMEDİ** (1 — yalnız A-08), verdict **BLOCKED**.
+
+**İki bayat öncül ölçümle çürütüldü:** (1) `G10` *"hiç talep edilmedi"* **değil** — talep
+edildi ve **`B — ERTELE`** olarak **imzalandı** (2026-08-26, ürün sahibi); bu bir **red
+değildir**. (2) Belgenin kendi ön koşul sayısı (`6759a495` → 16/6) **aynı gün bayatladı**;
+#850 · #851 · #853 indi ve **ADIM 119** ön koşul **15/16'yı yeşile** çevirdi.
+
+**Taze sayım `f0be03f1`: 18 yeşil / 4 kırmızı** — kalanlar **17** · **18** · **20** · **22**.
+**Yeniden talep koşulu: md. 1 ✅ · md. 3 ✅ · md. 2 ❌** → `G10`'u tutan **tek** kalem
+`G14`'ün `B` yarısı + `#544`'tür.
+
+**Deftere geçen ikinci bulgu:** `#559` `CLOSED/COMPLETED` ama `G8` md. 4'ün istediği
+**kapanış yorumu yok** (tek yorum 2026-08-25 tarihli ve kapatmadan ÖNCE kuralın yazılmasını
+istiyor). Ön koşul 21 yine de **yeşil** — ADIM 90: düzlemler ayrışınca **otorite imza
+kutusudur**. Kalan **defter işi + insan eylemi**.
+
+`PROJECT_HISTORY.md` §ADIM 121 · `docs/ADIM121_LANDED_KICKOFF.md`.
+
+
 ## Next: **İMZALAR — `G8` (#559) · `G14` (#544) · Karar 1 (komisyon tabanı) → sonra `C6`**
 
 > **ADIM 120 GÜNCELLEMESİ (2026-08-26) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
@@ -9306,3 +9334,28 @@ izleniyor" **yazılabilir**, çünkü doğrudur.
 > **KAYITSIZ İNEN SLICE SAYIMI: #820 hâlâ kayıtsız.** ADIM 108 onun kaydını **uydurmadı** (ADIM 97
 > emsali); §6.1b'yi ilk yazan — yani ADIM 108'in kapattığı bulguyu **açan** — odur ve kaydını
 > **sahibi** yazmalıdır. Bu hattın diğer kayıtsız satırlarını **present-tense okuma, ÖLÇ.**
+> **ADIM 121 GÜNCELLEMESİ (2026-08-27) — BAŞLIK DEĞİŞTİRİLMEDİ, GÖVDE GÜNCELLENDİ.**
+> (`docs-history-guard` bir `## ` başlığının **kökünü** karşılaştırır; yeniden adlandırma bloklanır.)
+>
+> **BAŞLIĞIN İMZA LİSTESİ ARTIK TEK KALEME İNDİ.** `G8` (#559) **İMZALI** (`A1+B2+C1`, #847)
+> ve `#559` **kapandı**; Karar 1'in tabanı ADIM 114'te imzalandı; `G11`+`G12` #849 ile
+> imzalandı. **Geriye `G14` (#544) kalır** — ve onun da Karar 1'i imzalı (`C` şimdi + `B`
+> `C9` öncesi), `C` yarısı #850 ile **sevk edildi**. **Açık olan: Karar 2 ve Karar 3'ün
+> kutuları (BOŞ) + `B` yarısı (NET enum'unun kaldırılması, bir MIGRATION) + `#544`.**
+>
+> **BAŞLIĞIN *"→ sonra `C6`"* KISMI HÂLÂ YARIM DOĞRU ve yarısı DEĞİŞTİ:** `C6`'nın dört
+> blocker'ından **ikisi ADIM 119 ile İNDİ** (OD-1 + OD-6 → ön koşul 15/16 **yeşil**, ve
+> yalnız tanımlı değil **wired**: `commands/backtest_run.py` admission'ında O-02 zarfıyla).
+> Kalan **P2/P8** yarısı hiçbir PR'da değil ve **tek slice'ta birlikte** uygulanmalıdır
+> (`G11` §Ölçüm 5'in bağı).
+>
+> **`G10` ARTIK "TALEP EDİLMEDİ" DEĞİLDİR.** Bu belgenin başka yerlerinde geçen *"hiç talep
+> edilmedi"* satırlarını **present-tense okuma** — 2026-08-26'da talep edildi, cevabı
+> **ERTELE** oldu, ve yeniden talep koşulu `closure_g10_containment_lift_gate2_2026-08-26.md`
+> §Yeniden talep koşulu'ndadır. **`G15` #855 (ADIM 120) ile İMZALANDI** (`Seçenek B`, leg 3 **FLAT**) — bu notun ilk
+> yazımı onu imzasız sayıyordu, **bayattı**. `G15` bir `C9` ön koşulu **değildir**;
+> **18/4 oynamaz**.
+>
+> **SIRA (ADIM 121'de ölçüldü):** `G14` Karar 2/3 imzası → `B` (migration) → `#544` kapanışı
+> → `C6`'nın P2/P8 yarısı → ön koşul 17/18 (OD-2 mark policy + iki etiket flip) → **`G10`
+> yeniden talep** → `C9`. `G16`/A-08 (#514) **bağımsız** ve nihai RC verdict'ini ayrıca bloklar.

@@ -639,6 +639,38 @@ def test_the_golden_baseline_records_the_engine_version_it_was_taken_at() -> Non
     )
 
 
+def test_the_golden_baseline_partitions_into_the_scenarios_c9_may_move() -> None:
+    """ADR §14 **A13**, measured — and the ADR's own number for it is stale.
+
+    A13 is the review instrument for the `C9` lift: when ``ENGINE_VERSION`` is bumped and
+    this baseline is regenerated, exactly the ``portfolio.*`` scenarios may move and every
+    other digest must be byte-identical. That claim is only checkable if the two groups have
+    known sizes at the moment the bump happens, which is why the partition is pinned HERE, in
+    the slice before the bump, rather than asserted afterwards against whatever came out.
+
+    **The ADR's A13 row says "37 non-portfolio"; the tree says 41.** Measurement M-2 in the
+    plan already flagged the discrepancy and told `C8` not to carry the number forward but to
+    re-take it. Re-taken here: 41 + 9 = 50. The ADR row is historical and is left as written;
+    this test is the live figure, and it is a TEST rather than a note precisely so that a
+    scenario added between now and `C9` updates the reviewer's baseline loudly instead of
+    silently widening what the bump is allowed to change.
+
+    This pins sizes and membership, not values — the digests themselves are pinned by
+    ``test_engine_output_matches_the_recorded_golden_digests`` and must NOT be duplicated
+    here, or the lift would have two places to update and one of them would be forgotten."""
+    recorded: dict[str, str] = json.loads(GOLDEN_PATH.read_text())["digests"]
+    portfolio = {name for name in recorded if name.startswith("portfolio.")}
+    other = set(recorded) - portfolio
+
+    assert len(portfolio) == 9, sorted(portfolio)
+    assert len(other) == 41, len(other)
+    assert len(recorded) == 50
+    # Membership, not just arity: a scenario renamed OUT of the ``portfolio.`` namespace
+    # would keep both counts right while quietly moving a digest from the group the lift may
+    # not touch into the group it may.
+    assert not any(name.startswith("portfolio.") for name in other)
+
+
 def _regenerate() -> None:
     GOLDEN_PATH.write_text(
         json.dumps(

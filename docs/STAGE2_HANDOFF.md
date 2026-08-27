@@ -9568,3 +9568,47 @@ doldurulmadı.
 `PROJECT_HISTORY.md` §ADIM 126 · `docs/ADIM126_LANDED_KICKOFF.md`.
 
 ## Next: **Ön koşul 17 (OD-2 mark policy) + 18 (`CONTENTION_SELECTION_STATUS` flip) → sonra `C9`**
+
+## Stage ADIM 127 — `C8` (üretim worker'ı üzerinde oracle'lar) landed (PR pending)
+
+**Taban** `origin/main` @ `90f2686e` · **alembic head `0044_drop_net_conflict_policy`
+(MIGRATION YOK)** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0) ·
+golden dosyası **el değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) ·
+**`backend/src` + `frontend/src`'te SIFIR SATIR**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+
+**Ne indi:** yeni `backend/tests/integration/test_shared_clock_production_oracles.py` (5 case)
++ `test_backtest_engine_golden.py`'ye bir A13 partition pini. Toplanan test **3855 → 3861**,
+dosya **364 → 365** (`repository_facts` tazelendi).
+
+**Asıl bulgu:** planın durdurma koşulu **A4 NOT EVALUABLE**'ın *gerekçesi* (W0: *"needs the
+real engine behind the loop"*) `C3`/`C4` ile kapanmıştı → yeniden ölçüldü. Mevcut `reversed`
+testi A4'ü ÖLÇMÜYOR (o `prepared_items`'ı permüte eder; ordinal'ler
+`manifest["mainboard_items"]`'tan gelir). Manifest permüte edilince: `equity_curve` +
+`filtered_events` **bayt bayt aynı**, per-item attribution **multiset aynı**, `trade_ledger`
+**multiset aynı / sıra farklı**, `signal_events` **tam üç alan** oynuyor (`pin_ordinal`,
+`seq`, satır ULID'i). → **A4 PARA için sağlanıyor; mainboard sırası yalnız aynı-instant iki
+satırın SIRASINDA gözlenebilir.** `trade_ledger`'ın sebebi ölçüldü: `TradeRow` item etiketi
+taşımaz ve iki trade aynı instant'ta kapanır.
+
+**A13 ölçüldü: 41 non-portfolio + 9 `portfolio.*` = 50** (ADR §14'ün *"37"*'si bayat; M-2
+zaten uyarıyordu). Reconciliation ve sleeve parity **ilk kez Postgres'ten** okundu.
+
+**Dürüst sınır:** **A4 `covered` İŞARETLENMEDİ** (kompozisyon çekişmesizdi; çekişmede
+`(pin_ordinal, item_id)` tasarım gereği karar verir — testle pinlendi) · **A6/A7 ve A9/A10
+worker düzeyine ÇIKARILMADI** (unit düzeyde kanıtlı, `covered` iddia edilmiyor) · ön koşul 22
+KIRMIZI KALIR · frontend kapıları KOŞULMADI · coverage ve geçen sayının otoritesi **CI**.
+
+**Negatif kontroller:** 3 ayırt edici (NC-1 A4 · NC-2 reconciliation · NC-3 sleeve parity —
+üçünde de dokunulmamış 14 C4 testi **yeşil**), NC-4 beklendiği gibi C4'ün absent-yarısını da
+kırmızıya çevirdi (o yarının zaten kapsandığının ölçümü), **NC-5 kurulamadı** (golden testi
+adlar üzerinde total → her yeniden adlandırma ikisini birden kırmızı yapar; sınır yazıldı).
+**NC-1'in dört denemesi reddedildi** — üçü mevcut guard'lara çarpıp koşuyu tamamen düşürdü
+(ADIM 105'in "doğru sebep, yanlış kapsam" şekli).
+
+`PROJECT_HISTORY.md` §ADIM 127 · `docs/ADIM127_LANDED_KICKOFF.md`.
+
+## Next: **A6/A7 + A9/A10 worker oracle'ları ve A4'ün çekişmeli sınırı → sonra ön koşul 17/18 → en son `C9`**
+
+`C9` için pazarlıksız devir DEĞİŞMEDİ: `ENGINE_VERSION`'ı lift commit'inde **TEKRAR** bump et
+(`C7`'nin bump'ı A15'i kapatmaz; `test_lifting_containment_requires_a_second_engine_version_bump`
+zorlar). Paste-ready resume prompt: `docs/ADIM127_LANDED_KICKOFF.md` sonu.

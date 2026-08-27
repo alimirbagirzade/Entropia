@@ -17597,3 +17597,167 @@ yüzdenin otoritesi **CI**.
 **dokunulmadı**. Frontend'de sıfır satır → frontend kapıları **KOŞULMADI**. Eski Result'lar
 `portfolio_policy` **taşımaz** ve geri doldurulmadı — yokluk, o Result'ın policy provenance'ını
 gerçekten bilmediğimizin dürüst kaydıdır.
+
+## ADIM 127 — `C8` (ÜRETİM WORKER'I ÜZERİNDE ORACLE'LAR): A4'ÜN "ÖLÇÜLEMEZ" GEREKÇESİ ÇÜRÜMÜŞTÜ, VE ÖLÇÜLDÜĞÜNDE CEVAP "AYNI" DEĞİL "AYNI PARA, BAŞKA SIRA" ÇIKTI
+
+**Taban:** `origin/main` @ `90f2686e` (ADIM 126 / `C7`, PR #863) · **Dal:**
+`claude/c8-production-oracles-compat-47a82d` · **alembic head
+`0044_drop_net_conflict_policy` (MIGRATION YOK)** · `ENGINE_VERSION` **DEĞİŞMEDİ** ·
+OpenAPI **değişmedi** (`--check` exit 0, ölçüldü) · golden digest dosyası **el değmedi** ·
+`SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) · **`backend/src` ve
+`frontend/src`'te SIFIR SATIR**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+
+`C8` planın kendi sözüyle bir **oracle slice**'ıdır (*"Production files: none expected"*).
+Ön koşul kapısı (`C4` + `C6` + `C7`) ölçülerek yeşil bulundu: `manifest.py` içinde
+`clock_policy_version` var, yani `C7` inmiş.
+
+### Sevk edilen
+
+Yeni `backend/tests/integration/test_shared_clock_production_oracles.py` (5 case) ve
+`test_backtest_engine_golden.py`'ye **bir** A13 partition pini. Toplanan test **3855 → 3861**,
+dosya **364 → 365** (`repository_facts` tazelendi — ADIM 60'ın dersi).
+
+### ASIL BULGU: BİR "ÖLÇÜLEMEZ" KAYDI, GEREKÇESİYLE BİRLİKTE BAYATLAR
+
+Plan `C8`'in durdurma koşulunu **A4 NOT EVALUABLE** diye yazıyor. O kayıt **ADIM 76'da**
+alındı ve W0 gerekçeyi de yazmıştı: *"needs the real engine behind the loop"*. **Gerekçe
+`C3` (#777) ve `C4` (#799/#805) ile kapandı** — motor artık döngünün arkasında ve worker onu
+çağırıyor. Yani durdurma koşulu **statüko değil, tarihli bir ölçümdü**; yeniden ölçüldü.
+
+**İkinci öncül de çürüdü: mevcut `reversed` testi A4'ü ÖLÇMÜYOR.** O test
+`prepared_items`'ı permüte eder, oysa `_shared_clock_inputs`'un **kendi docstring'i**
+*"`pin_ordinal` MANIFEST'ten gelir ve asla bir liste konumundan gelmez"* der ve kaynak bunu
+doğrular: ordinal'ler `manifest["mainboard_items"]` **enumerate** edilerek üretilir
+(`backtest_engine.py::_shared_clock_inputs`). Liste konumunu permüte etmek **daha zayıf** bir
+iddiadır. Bu slice `manifest["mainboard_items"]`'ı permüte eder — ordinal'lerin **tek**
+kaynağını.
+
+### ÖLÇÜLEN CEVAP: "AYNI DIGEST" DEĞİL, "AYNI PARA, BAŞKA SIRA"
+
+İlk ölçüm (50/50 sleeve) *"yalnız `signal_events` oynuyor"* dedi. **Fixture UNEQUAL yapılınca
+(60/40) `trade_ledger` de oynadı** — ve bu, testin kendi vacuity deliğini kapatan ölçümdür:
+**iki eşit sleeve'de, sleeve'leri PIN KONUMUNA göre dağıtan bir implementasyon görünmez
+kalırdı.** Deliği negatif kontrol süreci buldu, prosa değil.
+
+Alan alan ölçüldü (`(item_id, occurred_at, event_type)` ile eşleyerek):
+
+- `equity_curve` ve `filtered_events` → **bayt bayt aynı**;
+- her item'ın attribution satırı (`realized_pnl`, `fees`, `funding`, `other_costs`,
+  `net_contribution`, `initial_sleeve`) → **multiset olarak aynı** — 60% item'a 60% sleeve,
+  40%'a 40% (sleeve'ler **takas OLMADI**);
+- `trade_ledger` → **multiset aynı** (aynı trade'ler, aynı fiyat, aynı PnL), **sıra farklı**;
+- `signal_events` → **tam üç alan** oynuyor: `.detail.diagnostics.pin_ordinal` (permüte
+  edilen büyüklüğün kendisi), `.seq` (onu izler), `.signal_event_id` (satır başına ULID,
+  **her** iki koşu arasında farklı — `_artifact_checksums`'ın `diagnostics`'i dışarıda
+  bırakmasıyla aynı sebep).
+
+**`trade_ledger`'ın sırasının oynamasının sebebi ölçüldü, varsayılmadı: `TradeRow` item
+etiketi TAŞIMAZ** (`_walk_trades` tag'i satırın *yanında* döndürmek zorundadır, tam da satır
+onu tutamadığı için) ve buradaki iki trade **aynı instant'ta** kapanır → iki satırı
+sıralayabilecek tek şey pin sırasıdır. Test bu öncülü de assert eder (`len({exit_time}) == 1`):
+eğer trade'ler aynı instant'ı paylaşmasaydı, sırası oynayan bir ledger **merged axis'in
+kendisinin permüte olduğu** anlamına gelirdi — çok daha kötü bir bulgu.
+
+**Dolayısıyla verdict ikiye ayrıldı, çünkü tek cümleyle söylemek YANLIŞ olurdu:** *"digest'ler
+aynı"* yanlıştır, *"digest'ler oynadı"* yanıltıcıdır. **A4 PARA İÇİN ÖLÇÜLDÜ VE SAĞLANIYOR;
+mainboard sırası yalnızca aynı-instant iki satırın SIRASINDA gözlenebilir kalır, hiçbir
+satırın İÇERİĞİNDE değil.**
+
+### DÜRÜST SINIR — A4 `covered` İŞARETLENMEDİ
+
+Bu slice A4'ü **kapatmıyor** ve kabul defterinde `covered` işaretlemiyor. Sebep, ADIM 48'in
+kaydettiği "işaretle ama kapsama" şeklinden kaçınmak: ölçülen kompozisyon **ÇEKİŞMESİZ**
+(her intent `admitted`, binding constraint yok). **Ortak ödeme gücü yetmediğinde
+`(pin_ordinal, item_id)` BELGELENMİŞ tie-break'tir** (`CONTENTION_SELECTION_POLICY ==
+"pin_order_admission"`), yani orada mainboard sırası **tasarım gereği** karar verir ve A4 o
+durum hakkında bir iddia değildir. Bu okuma bir yoruma bırakılmadı, **testle pinlendi**
+(`test_the_pin_ordinal_tie_break_is_the_documented_boundary_of_item_order_invariance`) ve
+pin **yönüyle** assert edilir: ordinal `item_id`'yi **domine etmelidir**, çünkü önce
+`item_id`'ye bakan bir tie-break de deterministik olurdu ve A4'ü koşulsuz doğru gösterirdi.
+
+### İKİ INVARIANT, İLK KEZ POSTGRES'TEN OKUNDU
+
+`C3` reconciliation ve sleeve parity'yi **kendi kurduğu** harness üzerinde kanıtlamıştı
+(`unit/oracles/test_oracle_engine_participant.py`). İkisi de **hiç bir satırdan** okunmamıştı:
+
+- **Reconciliation** — `sum(net_contribution) == final_equity − P0` **ve** satır içi
+  `net == realized − fees − funding − other`. İkinci bacak olmadan, doğru toplamı yazıp
+  maliyet kovalarını yanlış bölen bir projeksiyon birinci bacağı geçerdi. Vacuity muhafızı
+  önce koşar (hiç trade olmayan bir koşuda her figür sıfırdır ve sabit basan bir projeksiyon
+  ikisini de geçer).
+- **Sleeve parity** — `initial_sleeve == allocatable_initial * share/100`. **Rezervi test
+  edilebilir kılan şeydir:** `reserve_cash_percent="0"` ile allocatable taban `P0`'a eşittir
+  ve rezervi tamamen yok sayan bir implementasyon da özdeşliği sağlar. %10 rezervle ikisi
+  ayrışır, ve rezervin gerçekten alıkonduğu **ayrıca** assert edilir.
+
+### A19 — İKİ TARAF, TEK VERİTABANINDA
+
+Her iki yarı da **zaten sevk edilmişti**, ama **ayrı düzlemlerde**: unified Result'ta
+yokluk (`test_shared_clock_worker_branch.py:585`), legacy Result'ta varlık (containment
+suite'i + two-world gate). İki ayrı modüldeki iki geçen test, ikisinin de **asıl olduğu**
+özelliği söylemez: marker Result'ları **BÖLER**. Bölme ancak iki Result **aynı anda var
+olurken** ayırt edilebiliyorsa bölmedir — bu test onu kurar. **NC-4 bunu dürüstçe ölçtü:**
+unified projeksiyon da marker'ı basınca **C4'ün kendi absent-yarısı da kırmızıya döndü**, yani
+o yarı gerçekten zaten kapsanıyordu; bu slice'ın kattığı şey **eşleştirmedir**.
+
+### A13 — ADR'NİN SAYISI BAYAT, ÖLÇÜLEN 41/9
+
+ADR §14 A13 satırı *"37 non-portfolio"* der. **Ölçüldü: 41 non-portfolio + 9 `portfolio.*` =
+50.** Plan'ın M-2 ölçümü zaten uyarıyordu (*"37 DEĞİL"*) ve sayıyı taşımamayı, yeniden
+ölçmeyi söylüyordu. Pin bir **not değil test**tir, çünkü `C9` bump'ı yaptığında gözden
+geçirenin *"hangi digest'ler oynayabilir"* tabanı **yüksek sesle** güncellenmelidir. Pin
+**boyut ve üyelik** sabitler, **değer değil** — digest'lerin kendisi
+`test_engine_output_matches_the_recorded_golden_digests`'te pinlidir ve **ikilenmemelidir**,
+yoksa lift'in güncelleyeceği iki yer olur ve biri unutulur.
+
+### Negatif kontroller — ÜÇÜ AYIRT EDİCİ, İKİSİ REDDEDİLDİ, BİRİ KURULAMADI
+
+Her kontrolde harness yedekler → yamalar → **yamanın uygulandığını assert eder** → hedefi ve
+**dokunulmamış 14 C4 worker testini** koşar → geri yükler → ağacı doğrular.
+
+| # | Kusur | Sonuç |
+|---|---|---|
+| NC-1 | pin'den türetilen bir alan per-item rapora sızar (`pin_rank`) | **AYIRT EDİCİ** — yalnız A4 kırmızı, 14 C4 testi **yeşil** |
+| NC-2 | `net_contribution` artık `fees`'i düşmüyor | **AYIRT EDİCİ** — yalnız reconciliation kırmızı, 14 C4 testi yeşil |
+| NC-3 | `allocatable_initial` sessizce `P0`'a döner | **AYIRT EDİCİ** — yalnız sleeve parity kırmızı, 14 C4 testi yeşil |
+| NC-4 | unified projeksiyon da sequential marker'ı basar | yalnız A19 kırmızı **+ C4'ün absent-yarısı** — beklenen, §A19'a bak |
+| NC-5 | golden'da bir `portfolio.*` adı namespace dışına taşınır | **AYIRT EDİCİ DEĞİL** — aşağıya bak |
+
+**ASIL DERS (ADIM 105'in şeklinin ÜÇ KEZ tekrarı): DOĞRU SEBEP, YANLIŞ KAPSAM.** NC-1'in
+**dört** denemesi reddedildi ve dördü de öğretici: sleeve share'ini ordinal'e bağlamak
+share'lerin 100'e toplanmasını bozdu → **koşu tamamen düştü** (`RUN_FAILED_ENGINE_ERROR`) ve
+14 C4 testinin 6'sını da devirdi; `granted_units`'i ordinal'e göre kayırmak, trade ledger'ı pin
+sırasına dizmek ve sleeve'leri pin konumundan dağıtmak da **mevcut guard'lara** çarptı. Bir
+kontrolün **iki** işi vardır — assertion'ın canlı olduğunu **ve boşluğun gerçek** olduğunu
+göstermek — ve ikincisi ancak mevcut suite o kusur altında **yeşil kalırsa** kanıtlanır.
+**Yan kazanç ölçüldü: sleeve/share tutarlılığı ve projeksiyonun bütünlüğü zaten sevk edilmiş
+guard'larla korunuyor** — üç NC denemesi tam da onlara çarptığı için düştü.
+
+**NC-5 kurulamadı ve sebebi kaydedildi:** golden digest testi **adlar üzerinde total**dir,
+bu yüzden herhangi bir yeniden adlandırma **ikisini birden** kırmızıya çevirir. A13 pini
+bugün bağımsız olarak yanlışlanabilir **değildir**; değeri `C9`'un baseline'ı yeniden
+ürettiği **an**da bir tripwire olmasıdır (o an digest testi yeşil, partition testi
+partition değiştiyse kırmızı). İddia edilmiyor, **ölçüldü ve sınırı yazıldı**.
+
+### Dürüst sınır
+
+- **A4 `covered` İŞARETLENMEDİ** — çekişmeli hâl ölçülmedi (yukarıya bak). Kabul defterine
+  dokunulmadı, hiçbir tavan oynatılmadı.
+- **A6/A7 (compound ↔ fixed sleeve) ve A9/A10 (blokeli payın devredilmemesi, solvency
+  reddi) bu slice'ta worker düzeyine ÇIKARILMADI.** Üçü de bugün **unit** düzeyde kanıtlı
+  (`test_oracle_portfolio_capital.py`, `test_backtest_cross_item_arbitration.py`,
+  `test_backtest_portfolio_ledger.py`); worker üzerinden **oracle'ları yazılmadı** ve
+  `covered` iddia edilmiyor. A3/A5/A14/A18/A21 `C4`'te **zaten** worker üzerinde pinli.
+- **Ön koşul 22 KIRMIZI KALIR**; `C9` lift'i bu slice'ın konusu değil ve `capability.py`'ye
+  **dokunulmadı**.
+- **`ENGINE_VERSION` ikinci bump borcu DEĞİŞMEDİ** — ADIM 126'nın kaydettiği gibi `C9`
+  tekrar bump etmelidir; bu slice bump yapmadı ve o testi zayıflatmadı.
+- **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- Yerelde: `ruff check` **exit 0**, `ruff format --check` **exit 0**, `mypy src` **exit 0**
+  (405 dosya), `openapi_export --check` **exit 0**, yeni modül **5 passed**, golden modülü
+  **3 passed**, dokunulmamış `test_shared_clock_worker_branch.py` **14 passed**.
+  **Tam suite tek çağrıda `--no-cov` ile koşuldu; coverage yüzdesinin ve geçen sayının tek
+  otoritesi bir CI koşusudur** (`addopts` `--cov-fail-under=90`).
+- **Hiçbir issue açılmadı/kapatılmadı** (#514/#544/#559 el değmedi); **hiçbir imza kutusu
+  doldurulmadı**.
+- Codemap **tazelenmedi ve gerekmedi** — yeni endpoint / tablo / sayfa / job yok.

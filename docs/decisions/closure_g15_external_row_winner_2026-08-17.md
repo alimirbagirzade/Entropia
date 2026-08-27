@@ -1,6 +1,12 @@
 # Ready Check leg 3 — hangi external-import satırı kazanır? (G15)
 
-> **Bu belge KARAR BEKLİYOR.** G15, `final_closure_ordered_plan_2026-08-13.md` §2'nin
+> **KARARA BAĞLANDI — 2026-08-26, §İMZA SATIRI: Seçenek B (en yeni kazanır), aynı
+> slice'ta uygulandı (ADIM 119).** Aşağısı imzadan ÖNCE yazılmış hazırlık metnidir ve
+> ölçümleri o günün tabanına aittir; **hiçbiri geriye dönük düzeltilmedi** (bir denetim
+> belgesi ölçtüğü anı dondurur). Ne seçildiğinin ve neyin sevk edildiğinin otoritesi
+> §İMZA SATIRI'dır.
+>
+> **Bu belge KARAR BEKLİYORDU.** G15, `final_closure_ordered_plan_2026-08-13.md` §2'nin
 > *"imzalanacak bir bloğu olmayan iki kapı"*sından biridir (diğeri G4). Bu belge o eksik
 > bloğu **yaratır**; **hiçbir seçeneği seçmez**. `closure_product_decisions_2026-08-13.md`
 > §Karar 1/2/3 ile aynı yapıdadır ve aynı disiplini uygular: seçenek elenmez, "önerilen"
@@ -537,36 +543,120 @@ hâle getirdi; aralarındaki seçim bir **doğruluk/hız/borç** takasıdır ve 
 **ÖN KOŞUL — önce bu sayı alınmalı (§Ölçüm 3):**
 
 Üretimde aynı `work_object_revision_id`'yi paylaşan satır sayısı:
-`canonical_trade_record_batch`: ______   `normalized_signal_event_revision`: ______
-`[ ] sayıldı ve 0`   `[ ] sayıldı ve > 0 (önce üretici bulunmalı)`   `[ ] sayılamadı`
+`canonical_trade_record_batch`: **—**   `normalized_signal_event_revision`: **—**
+`[ ] sayıldı ve 0`   `[ ] sayıldı ve > 0 (önce üretici bulunmalı)`   `[x] sayılamadı`
 
 > **A ve C bu sayı alınmadan imzalanamaz.** B ve D sayıdan bağımsız imzalanabilir.
 
+**Sayılamadı — 2026-08-26'da YENİDEN ölçüldü, tahmin edilmedi.** §Ölçüm 3'ün üç gerekçesi
+**aynen geçerlidir** ve ikisi bu oturumda birinci elden doğrulandı: (1) ortamda üretim
+bağlantı dizesi **yok** (`env` taraması boş); (2) erişilebilir tek Postgres bir **dev/test
+yığınıdır** ve ana `entropia` veritabanı `0039_backtest_run_cancellation`'da, yani alembic
+**head'de bile değil** — oradan okunacak bir üretim sayısı yoktur; (3) `repository_facts.md`
+şema/route/test sayıları üretir, **satır** sayısı değil.
+**İkame yığın UYDURULMADI:** farklı provision edilmiş bir veritabanından okunacak bir `0`,
+*"duplikasyon yok"* değil *"başka bir yerde duplikasyon yok"* demektir ve bu belgenin
+§"Betiğin doğrulanması" bölümünün negatif kontrolle satın aldığı ayrımı **çöpe atardı**
+(ADIM 109 emsali: yapılamayan bir ölçümün doğru çıktısı, yapılmış gibi görünen bir sayı
+değil, yapılamadığının kaydıdır).
+
+**Bu imza ön koşulu GEÇERSİZ KILMIYOR — ona İHTİYAÇ DUYMUYOR.** Seçilen seçenek **B**'dir ve
+belgenin kendi kuralı *"B ve D sayıdan bağımsız imzalanabilir"* der. **A ve C imzalanmadı**,
+dolayısıyla ADIM 117'deki gibi bilinçli bir geçersiz kılmaya gerek kalmadı. Sayı bir gün
+alınırsa **A hâlâ açıktır** ve ucuzdur: §Ölçüm 3'ün üçüncü bloğu (kısıt hâlâ var mı) bu
+oturumda **yeniden ölçüldü** — `0010_trading_signal` ve `0011_trade_log` bu iki tabloya
+dokunan **tek** iki migration'dır, hiçbiri `unique=True` kurmaz, iki modelde de kolon
+`nullable=True, index=True`'dur. **UNIQUE kısıt bugün de YOKTUR.**
+
 **Karar 4 — Ready Check leg 3'ün okuduğu satır:**
 
-`[ ] A (UNIQUE kısıtı beyan et — migration)`  `[ ] B (belirlenimli kazanan: ORDER BY created_at DESC, <pk> DESC)`
+`[ ] A (UNIQUE kısıtı beyan et — migration)`  `[x] B (belirlenimli kazanan: ORDER BY created_at DESC, <pk> DESC)`
 `[ ] C (mevcut davranış kanonik — imzalı sapma)`  `[ ] D (kapsam kapısı — G15 AÇIK kalır)`
 `[ ] A + B`  `[ ] B, sonra A`
 
-Alt-karar — **B imzalanırsa** kazanan: `[ ] en yeni (created_at DESC)` `[ ] en eski (created_at ASC)`
-> *En yeni* seçilirse imza metni doc 05'in *"'latest' revision sessizce kullanılamaz"* kuralıyla
-> **neden çelişmediğini** yazmalıdır (§Ç3): oradaki kural `work_object_revision`'ın **pinine**
-> dairdir, buradaki sıra ona **bağlı** record batch'ine.
+Alt-karar — **B imzalanırsa** kazanan: `[x] en yeni (created_at DESC)` `[ ] en eski (created_at ASC)`
+
+> **§Ç3 — "en yeni" NEDEN doc 05'in K2'siyle çelişmiyor (imza metninin borcu, ödendi).**
+> K2 *"'latest' revision **sessizce** kullanılamaz"* der ve **PİN** hakkındadır: bir iş
+> nesnesinin **yeni bir work_object_revision'ı** doğduğunda, kullanıcının seçtiği pinin
+> yerine sessizce geçemez (K3 bunu *"otomatik geçmez; açık pin gerekir"* diye tekrarlar).
+> Buradaki sıra **başka bir eksendedir**: çağıran zaten **pinlenmiş** bir revision id'siyle
+> gelir ve soru *"o revision'a asılı record batch'lerden hangisi"*dir. Pin **hiç** oynamaz;
+> B, K2'nin yasakladığı refleksi uygulamaz, onun **altındaki** katmanı belirlenimli yapar.
+> Somut sınama: B **hiçbir** koşulda `.where(work_object_revision_id == revision_id)`
+> yüklemini gevşetmez — başka bir revision'ın satırı asla kazanamaz.
 
 Alt-karar — **A imzalanırsa** kapsam: `[ ] yalnız yeni satırlar (partial unique index)` `[ ] var olan duplikasyon önce temizlenir`
+> *(A imzalanmadı — bu alt-karar açık kalır.)*
 
 **Hüküm onayı (a)** — bu belgenin ölçtüğü hüküm kabul ediliyor mu (*leg 3'ün per-item okuması
 **bugün üretimde belirlenimsizdir**; bu bir batch'leme riski değil, sevk edilmiş bir davranıştır*)?
-`[ ] evet` `[ ] hayır (gerekçe: ______)`
+`[x] evet` `[ ] hayır (gerekçe: ______)`
 
 **Hüküm onayı (b)** — *duplikasyonun bugün **bilinen bir üreticisi yoktur, ama zorlanmış
-bir değişmezi de yoktur*** tespiti kabul ediliyor mu? `[ ] evet` `[ ] hayır (gerekçe: ______)`
+bir değişmezi de yoktur*** tespiti kabul ediliyor mu? `[x] evet` `[ ] hayır (gerekçe: ______)`
 
 **Ayrı kalem onayı** — §Ölçüm 4'ün pin-taşıma kusuru (*aynı batch yeniden pinlendiğinde eski
 revision `found=False` çözer → `EXTERNAL_IMPORT_UNRESOLVED`*) **ayrı bir kalem** olarak mı
-izlensin? `[ ] evet, issue açılsın` `[ ] hayır, G15 ile birlikte ele alınsın` `[ ] kusur değil (gerekçe: ______)`
+izlensin? `[x] evet, issue açılsın` `[ ] hayır, G15 ile birlikte ele alınsın` `[ ] kusur değil (gerekçe: ______)`
+> **Açıldı: #854** (2026-08-26). G15'in hiçbir seçeneği bu kusuru çözmez — A'nın UNIQUE
+> kısıtı çözmez (satır sayısı 2 değil **0**'dır), B'nin `ORDER BY`'ı çözmez (sıralanacak
+> satır yoktur). Ayrı eksen, ayrı kalem.
 
-karar veren: ________________  tarih: ____________
+karar veren: **ürün sahibi (alimirbagirzade)**  tarih: **2026-08-26**
+
+---
+
+### İmzanın SEVK EDİLDİĞİ hâli (ADIM 119)
+
+Bu imza **aynı slice'ta uygulandı**. Sevk edilenler:
+
+| Sembol | Ne oldu |
+|---|---|
+| `repositories/readiness.py::resolve_trade_log_batch` | `ORDER BY created_at DESC, record_batch_id DESC LIMIT 1` |
+| `repositories/readiness.py::resolve_signal_revision` | `ORDER BY created_at DESC, normalized_revision_id DESC LIMIT 1` |
+| `repositories/readiness.py::resolve_trade_log_batches` | **YENİ** — `DISTINCT ON (work_object_revision_id)`, aynı toplam sıra |
+| `repositories/readiness.py::resolve_signal_revisions` | **YENİ** — Trading Signal yarısı |
+| `commands/readiness_check.py::_build_item_inputs` | döngüden **ÖNCE** iki batch okuma |
+| `commands/readiness_check.py::_resolve_external` | **`session` parametresi KALDIRILDI** — saf map lookup |
+| `docs/performance/query_budgets.json` | `queries_large` 18 → **8**, `per_item` 1 → **0** (ölçüldü, tahmin değil) |
+
+**`_resolve_external`'ın `session`'ı bilerek alındı:** N+1'in geri gelmesi artık bir
+dikkatsizlik meselesi değil, **yapısal olarak imkânsız** — fonksiyonun kapsamında bir
+session yok.
+
+**`per_item` 1 → 0 bir performans düzeltmesi DEĞİL, imzanın SONUCUDUR.** Beş dalgadır
+bilerek 1'de duruyordu; batch'lemeyi açan şey ölçüm değil bu imzadır. Kural aynen duruyor
+ve `query_budgets.json`'ın `note`'una yazıldı: **kazananı kararsız olan bir bacağı
+batch'leyerek `per_item` düşürme.**
+
+**Üç negatif kontrol koştu, üçü de ayırt edici** (`test_readiness_external_row_winner.py`):
+
+1. **batch kaldırıldı** (döngüde tek okuma/item) → **slope assertion** kırmızı:
+   `1.0 queries per external work object item (recorded 0) — 8 at n=1 vs 18 at n=11`.
+   Kazanan testleri **yeşil kaldı**. *(İlk iki denemem `queries_large` üzerinde kırmızı
+   verdi — o assertion slope'u **gölgeliyor**; gölge, tavanlar geçici olarak 999'a
+   çıkarılarak **kaldırıldı** ve slope'un kendisi ölçüldü.)*
+2. **per-item kazanan ters çevrildi** (newest → oldest, yalnız trade_log) → yalnız iki
+   Trade Log testi, yalnız **kazanan** assertion'ında kırmızı
+   (`picked btch_older; Seçenek B says the newest wins`). Trading Signal testleri ve
+   bütçe testi **yeşil kaldı** — iki tablo, iki ayrı ifade.
+3. **yalnız BATCH formu ters çevrildi** → yalnız *"iki form aynı satırı döndürür"*
+   assertion'ı kırmızı; per-item kazanan assertion'ı **yeşil geçti**. Üç iddia
+   (kazanan · sıranın TOPLAM olması · iki formun ANLAŞMASI) bu yüzden **ayrı ayrı**
+   pinlidir.
+
+**DÜRÜST SINIR:**
+
+- **Üretim duplikasyon sayısı hâlâ ALINMADI** (yukarıda gerekçeli). B bunu gerektirmiyor,
+  ama **A açık kalıyor** ve sayı alınınca ucuzdur.
+- **B belirsizliği KARARA BAĞLAR, KALDIRMAZ.** Duplikasyon oluşmaya devam edebilir;
+  artık sessizce **tolere edilir** ve kazananı tanımlıdır. Bunu bir UNIQUE kısıt sanma —
+  değildir, ölçüldü.
+- **Ready Check cevabı, duplikasyon VARSA, oynayabilir** — bilerek: bugünkü rastgele
+  cevap belirlenimli bir cevaba döner. Duplikasyon yoksa hiçbir cevap oynamaz.
+- **§Ölçüm 4'ün pin-taşıma kusuru bu slice'ta ÇÖZÜLMEDİ** — ayrı kalem olarak imzalandı ve **#854** açıldı.
+- **Frontend'e sıfır satır dokunuldu** → frontend kapıları koşulmadı.
 
 ---
 

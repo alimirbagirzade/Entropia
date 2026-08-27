@@ -139,21 +139,114 @@ async def list_enabled_items_with_root_state(
 async def resolve_trade_log_batch(
     session: AsyncSession, revision_id: str
 ) -> CanonicalTradeRecordBatch | None:
-    """The canonical trade-record batch pinned to a Trade Log revision, if any."""
-    stmt = select(CanonicalTradeRecordBatch).where(
-        CanonicalTradeRecordBatch.work_object_revision_id == revision_id
+    """The canonical trade-record batch pinned to a Trade Log revision, if any.
+
+    G15/Karar 4 = **Seçenek B**: the winner is the NEWEST batch —
+    ``ORDER BY created_at DESC, record_batch_id DESC LIMIT 1``. ``work_object_revision_id``
+    is **not** UNIQUE (measured: ``indisunique = f`` on both leg-3 tables, and no
+    ``contype IN ('u','p')`` beyond the PKs), so before the signature this read was an
+    ``ORDER BY``-less ``.first()`` and was **non-deterministic in production** — the same
+    input returned two different rows across three calls, and the two rows produced
+    OPPOSITE Ready Check inputs (2 accepted records vs 0). The order below is **total**:
+    ``record_batch_id`` breaks every ``created_at`` tie, so exactly one row wins.
+
+    **This is not doc 05's forbidden "silent latest".** K2 forbids letting a *newer
+    work-object revision* silently supersede a pinned one; that rule is about the PIN.
+    The order here ranks the record batches hanging off a revision the caller has
+    **already pinned** — a different axis. The pin is still whatever the user chose.
+    """
+    stmt = (
+        select(CanonicalTradeRecordBatch)
+        .where(CanonicalTradeRecordBatch.work_object_revision_id == revision_id)
+        .order_by(
+            CanonicalTradeRecordBatch.created_at.desc(),
+            CanonicalTradeRecordBatch.record_batch_id.desc(),
+        )
+        .limit(1)
     )
     return (await session.execute(stmt)).scalars().first()
+
+
+async def resolve_trade_log_batches(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, CanonicalTradeRecordBatch]:
+    """Resolve many Trade Log revisions' pinned batch in ONE query (G15 leg 3).
+
+    The batch counterpart of :func:`resolve_trade_log_batch`, mirroring
+    :func:`market_data.find_approved_tick_revisions_for_instruments`: an empty input
+    short-circuits without a round trip and duplicate ids collapse. A revision with no
+    batch is equally ABSENT from the map — the same ``None`` the per-item reader returns —
+    so the caller's fail-closed branch stays byte-identical.
+
+    ``DISTINCT ON (work_object_revision_id)`` returns *exactly* the row the per-item
+    ``ORDER BY created_at DESC, record_batch_id DESC LIMIT 1`` returns, because that order
+    is **total**. That equivalence is what Seçenek B bought: before the signature the
+    per-item read carried no ``ORDER BY`` at all, so no batch form could agree with it.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = (
+        select(CanonicalTradeRecordBatch)
+        .where(CanonicalTradeRecordBatch.work_object_revision_id.in_(ids))
+        .distinct(CanonicalTradeRecordBatch.work_object_revision_id)
+        .order_by(
+            CanonicalTradeRecordBatch.work_object_revision_id,
+            CanonicalTradeRecordBatch.created_at.desc(),
+            CanonicalTradeRecordBatch.record_batch_id.desc(),
+        )
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    # The column is nullable on the model, but ``IN ()`` never matches NULL, so every row
+    # reaching here carries one. The narrowing is for the type checker; it is NOT a second
+    # guard and cannot drop a row the SQL admitted.
+    return {row.work_object_revision_id: row for row in rows if row.work_object_revision_id}
 
 
 async def resolve_signal_revision(
     session: AsyncSession, revision_id: str
 ) -> NormalizedSignalEventRevision | None:
-    """The normalized signal-event revision pinned to a Trading Signal revision."""
-    stmt = select(NormalizedSignalEventRevision).where(
-        NormalizedSignalEventRevision.work_object_revision_id == revision_id
+    """The normalized signal-event revision pinned to a Trading Signal revision.
+
+    G15/Karar 4 = **Seçenek B**, the Trading Signal half of the same rule — see
+    :func:`resolve_trade_log_batch` for why the order is total and why "newest" here is
+    not doc 05's forbidden silent-latest.
+    """
+    stmt = (
+        select(NormalizedSignalEventRevision)
+        .where(NormalizedSignalEventRevision.work_object_revision_id == revision_id)
+        .order_by(
+            NormalizedSignalEventRevision.created_at.desc(),
+            NormalizedSignalEventRevision.normalized_revision_id.desc(),
+        )
+        .limit(1)
     )
     return (await session.execute(stmt)).scalars().first()
+
+
+async def resolve_signal_revisions(
+    session: AsyncSession, revision_ids: Sequence[str]
+) -> dict[str, NormalizedSignalEventRevision]:
+    """Resolve many Trading Signal revisions' normalized revision in ONE query (G15 leg 3).
+
+    The Trading Signal half of :func:`resolve_trade_log_batches`; same contract, same
+    absence semantics, same total order.
+    """
+    ids = list(dict.fromkeys(revision_ids))
+    if not ids:
+        return {}
+    stmt = (
+        select(NormalizedSignalEventRevision)
+        .where(NormalizedSignalEventRevision.work_object_revision_id.in_(ids))
+        .distinct(NormalizedSignalEventRevision.work_object_revision_id)
+        .order_by(
+            NormalizedSignalEventRevision.work_object_revision_id,
+            NormalizedSignalEventRevision.created_at.desc(),
+            NormalizedSignalEventRevision.normalized_revision_id.desc(),
+        )
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    return {row.work_object_revision_id: row for row in rows if row.work_object_revision_id}
 
 
 __all__ = [
@@ -164,5 +257,7 @@ __all__ = [
     "list_enabled_items_with_root_state",
     "list_issues",
     "resolve_signal_revision",
+    "resolve_signal_revisions",
     "resolve_trade_log_batch",
+    "resolve_trade_log_batches",
 ]

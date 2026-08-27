@@ -36,10 +36,9 @@ from unittest.mock import patch
 
 import pytest
 
-from entropia.domain.backtest.execution import arbitration
 from entropia.domain.allocation.enums import CrossItemConflictPolicy
+from entropia.domain.backtest.execution import arbitration
 from entropia.domain.backtest.execution.arbitration import (
-    ConflictPolicyRule,
     ARBITRATION_POLICY_VERSION,
     ARBITRATION_REASONS,
     CONFLICT_POLICY_TABLE,
@@ -51,6 +50,7 @@ from entropia.domain.backtest.execution.arbitration import (
     PORTFOLIO_CONFLICT_BLOCKED,
     SLEEVE_CONSTRAINT,
     SOLVENCY_CONSTRAINT,
+    ConflictPolicyRule,
     DuplicateIntentError,
     ItemArbitrationProfile,
     LedgerNotFrozenError,
@@ -248,9 +248,11 @@ def test_the_unsupported_row_branch_still_guards_a_policy_that_does_not_execute(
     # The shipped table is a MappingProxyType on purpose, so the module attribute is
     # swapped rather than mutated -- the immutability itself is part of what ships.
     widened = MappingProxyType({**CONFLICT_POLICY_TABLE, "FUTURE_POLICY": unsupported})
-    with patch.object(arbitration, "CONFLICT_POLICY_TABLE", widened):
-        with pytest.raises(UnsupportedConflictPolicyError) as excinfo:
-            resolve_policy("FUTURE_POLICY")
+    with (
+        patch.object(arbitration, "CONFLICT_POLICY_TABLE", widened),
+        pytest.raises(UnsupportedConflictPolicyError) as excinfo,
+    ):
+        resolve_policy("FUTURE_POLICY")
     message = str(excinfo.value)
     assert "FUTURE_POLICY" in message
     assert "what it does" in message

@@ -452,9 +452,7 @@ def test_no_net_notice_survives_in_either_world(
     """The value cannot be validated, so nothing can report on it -- lifted or contained."""
     from entropia.domain.allocation import rules as rules_mod
 
-    monkeypatch.setattr(
-        rules_mod, "shared_allocation_is_executable", lambda: shared_is_executable
-    )
+    monkeypatch.setattr(rules_mod, "shared_allocation_is_executable", lambda: shared_is_executable)
     issues, _derived = validate_allocation(_plan(enabled=True), item_refs=_refs())
     assert not [i for i in issues if "NET" in i.message]
     assert not [i for i in issues if "CONFLICT_POLICY_NET" in str(i.code)]

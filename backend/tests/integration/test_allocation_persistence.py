@@ -502,4 +502,3 @@ async def test_a_stored_net_row_is_unreadable_which_is_why_the_migration_halts(
     with pytest.raises(Exception) as exc_info:
         await alloc_query.get_allocation_draft(session, USER1, composition_id=composition_id)
     assert "NET" in str(exc_info.value) or "conflict_policy" in str(exc_info.value)
-

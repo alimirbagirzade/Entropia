@@ -18113,3 +18113,142 @@ siler (ADIM 90 emsali); bir docstring ya da string literali onu İDDİA EDEMEZ.*
 test) · `docs/audit/closure_w0_containment_lift_preconditions_2026-08-17.md` (satır 17/18
 notları; **donmuş `❌` kolonu EL DEĞMEDİ**, 22 kırmızı) · `README.md` +
 `docs/generated/repository_facts.{md,json}` (üretilmiş).
+
+---
+
+## ADIM 130 — §10'UN SIRASI ÖLÇÜLDÜ VE SIRADAKİ KALEM BİR KOD DEĞİL BİR KAPI ÇIKTI: `G10`'UN ERTELEME GEREKÇESİ TAHLİYE EDİLDİ, VE "G10 UNSIGNED → DO NOT OPEN THIS PR" STOP CONDITION'INI ZORLAYAN HİÇBİR ŞEY YOKTU
+
+**Taban:** `origin/main` @ `80f6cc7d` (ADIM 129, PR #866) · **Dal:**
+`claude/entropia-c9-onkosul-17-c35ba6` · **alembic head `0044_drop_net_conflict_policy`
+(MIGRATION YOK)** · `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el
+değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) · `capability.py`
+**EL DEĞMEDİ** (o `C9`) · `backend/src` ve `frontend/src`'te **SIFIR SATIR**. Blocker
+DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+
+### §10'un sırası ölçüldü: dokuz maddenin yedisi kapanmış, biri `C9`, biri insan
+
+Görev *"§10'daki sırayı ÖLÇ ve sıradaki kalemi al"* diyordu. Sıra madde madde ağaca karşı
+ölçüldü — belgenin kendi iddiaları **hipotez** sayıldı:
+
+| § md. | Kalem | Ölçüm |
+|---|---|---|
+| 1 | `G8` + `G14` kararları yazılsın | ✅ `G8` #847 (ADIM 118); `G14`'ün **dört** kararı da imzalı (ADIM 118/123), `B` sevk edildi (ADIM 124) |
+| 2 | `G11` + `G12` imzala | ✅ #849; kodu ADIM 125 |
+| 3 | Komisyon TABANI (Karar 1) | ✅ ADIM 114 |
+| 4 | `C6`'yı kur | ✅ ADIM 125 |
+| 5 | `G15` + leg 3 batch | ✅ ADIM 120 |
+| 6 | Ön koşul 15–18, sonra 22 | 15/16 ✅ ADIM 119 · **17/18 ürün sahibi tarafından `C9`'a DEVREDİLDİ** (2026-08-28, `C` — ADIM 129) · 22: A16 ✅ ADIM 126, `build_portfolio_manifest` wiring ✅ ADIM 116, **kalanı (A15'in İKİNCİ bump'ı + A22 suite kapısı) `C9`'un kendisi** |
+| **7** | **`G10`'u talep et** | **BU SLICE** |
+| 8 | `C9` | EN SON — sıralı planın W8'i: *"Alone. Nothing else may be open."* |
+| 9 | A-08 | ayrı insan hattı, #514 **AÇIK** |
+
+**Sonuç: §10'da `C9`-dışı, insan-dışı tek açık kalem md. 7'dir.** Ve §10 onun hakkında
+kendi uyarısını yazmıştı: *"It cannot be the last step discovered."*
+
+### Ölçüm 1 — `G10`'un erteleme gerekçesi TAHLİYE EDİLDİ (ve iki gün boyunca kimse fark etmedi)
+
+`G10` 2026-08-26'da **`B` — ERTELE** olarak imzalandı: red değil, **yazılı bir yeniden
+talep koşuluyla** erteleme. ADIM 121 o koşulu ölçmüş ve *"md. 1 ✅ · md. 3 ✅ · md. 2 ❌"*
+bulmuştu. Md. 2 = *"`G14`'ün `B` yarısı sevk edilmiş, `#544` kapalı"*.
+
+Bugün ölçüldü — **md. 2 2026-08-27'de kapandı**:
+
+- `B` sevk edildi: `backend/alembic/versions/0044_drop_net_conflict_policy.py` (ADIM 124,
+  #859) — `NET` enum'dan düştü, kolona CHECK eklendi, `B3`'ün halt guard'ı ile. Bugün
+  `domain/allocation/enums.py` `NET`'i yalnız *kaldırıldı* diye **anıyor**, üye olarak
+  taşımıyor.
+- `#544` **CLOSED / COMPLETED** (`2026-08-27T13:05:47Z`).
+- `G14`'ün dört kararı da imzalı — **bölüm bazında** okundu, dosya düzeyinde grep'le
+  değil (ADIM 119'un tuzağı): Karar 1 (2026-08-26), Karar 2 `B3` (2026-08-27), Karar 3
+  (2026-08-26), Karar 4 `B0` (2026-08-27).
+
+Yani `B — ERTELE`'nin dayandığı gerekçe — ürün sahibinin verbatim sözüyle *"**9 kırmızı**
+dururken sırası değil"* — artık ayakta değil: **kırmızı sayısı 3** (17/18/22) ve **üçü de
+`C9`'un kendi teslimatı**. Onayın önünde `C9`-dışı hiçbir iş kalmadı.
+
+### ASIL BULGU — bir stop condition'ı **hiç kimse** zorlamıyordu
+
+Sıralı planın `C9` satırının stop condition'ı harfi harfine şudur:
+
+> *"Any of the 22 preconditions unmet, or **G10 unsigned** → do not open this PR."*
+
+Ölçüldü: `backend/` ağacının **tamamında** `G10` ya da `Gate 2` geçen **SIFIR** satır
+vardı. Yani `C9` bayrağı çevirebilir, `ENGINE_VERSION`'ı bump edebilir, golden'ı yeniden
+üretebilir ve **her test yeşil kalırdı** — Gate 2 hâlâ ertelenmişken.
+
+Bu, `G10` belgesinin **kendi yazdığı** riskin gerçekleşmiş hâlidir: `B` şıkkının bedeli
+*"kapı açık kalır ve talep edildiği **kaydedilmezse** yine 'hiç sorulmadı' diye okunur"*
+diye kaydedilmişti. Bir belgeye kaydetmek onu yalnızca **hatırlatır**; ADIM 126'nın A15
+dersi tam olarak buydu — *"bu artık hatırlanmıyor, **zorlanıyor**"*.
+
+### Sevk edilen kapı
+
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_lifting_containment_requires_gate2_approval`
+— `test_lifting_containment_requires_a_second_engine_version_bump`'ın **kardeşi**, aynı
+dosyada, aynı dört-köşeli predicate şekliyle (`if lifted:` biçimi bugün *boşuna yeşil*
+olurdu). Kapı `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md`'yi
+**okur**; docs okuyan kapı bu repoda yerleşik idiomdur (`test_a11y_audit_prep_contract.py`
+worksheet'i, `test_acceptance_semantic_map.py` kabul defterini, `test_loadgen.py`
+performans tabanını okur).
+
+**İki yerde kardeşinden İLERİ gider, ve ikisi de gerekliydi:**
+
+1. **Kısa devre kapatıldı.** `status == "active_v1" and not _gate2_is_approved(doc)`
+   ifadesinde `and` kısa devre yapar → bayrak aşağıdayken **gerçek belge hiç
+   ayrıştırılmazdı** ve fail-closed yarısı lift gününe kadar uyur kalırdı. Belge bu yüzden
+   **koşulsuz**, her koşuda ayrıştırılıyor. (NC-1 tam bu satırda kırmızı verdi — yani
+   düzeltme ölçülmüş bir gereklilikti, üslup tercihi değil.)
+2. **Lifted dünya GERÇEK belgeye karşı sürülüyor**, yalnız sentetiklere karşı değil —
+   `capability.py`'ye dokunmadan mümkün, çünkü status burada bir **girdidir**.
+
+**Kapı fail-closed'dur (K-07 şekli):** bölüm silinmiş, iki şık birden işaretlenmiş ya da
+şıklardan biri kaybolmuşsa test *sessizce geçmez*, **patlar**. `False` döndürmek
+"ertelendi" ile birebir aynı görünürdü ve bozulmuş bir kayıt üzerinde suite'i yeşil
+tutardı — kapının var olma sebebi tam olarak budur.
+
+**Onay verildiğinde testte değiştirilecek literal YOKTUR** — kutuda `A` işaretlenir, kapı
+kendiliğinden susar. NC-5 bunu pozitif kontrol olarak ölçtü.
+
+### Negatif kontroller — dördü de AYIRT EDİCİ, ve üçü FARKLI assertion'da
+
+Her turda **tüm dosya** koşuldu; sekiz kardeş test **her turda yeşil kaldı**.
+
+| NC | Kusur | Kırmızı olan assertion |
+|---|---|---|
+| NC-1 | talep bölümü silindi | **md. 3** — gerçek belgenin koşulsuz ayrıştırılması (fail-closed) |
+| NC-2 | iki şık birden işaretli | aynı, ambiguity dalı |
+| NC-3 | predicate Gate 2'yi hiç okumuyor | **köşe 2** — `("active_v1", approved) is False` |
+| NC-4 | onay hiç geri çevrilemiyor | **köşe 1** — `("active_v1", deferred) is True` |
+| NC-5 | *(pozitif)* sahip `A`'yı işaretler | **hiçbiri** — exit 0, kapı susar |
+
+NC-1'in yeri öğreticidir: kısa devre kapatılmasaydı o kontrol **yeşil geçerdi**, çünkü
+`SHARED_ALLOCATION_STATUS == "future_dev"` iken belge hiç okunmazdı.
+
+### DÜRÜST SINIR
+
+- **`G10` İMZALANMADI.** Kutu **BOŞ** bırakıldı — ajan onu dolduramaz; bu bir insan
+  kararıdır ve ürün sahibine soruldu. Bu slice kapıyı **talep etti ve zorlanabilir kıldı**,
+  **vermedi**.
+- **Hiçbir ön koşul yeşile çevrilmedi.** 17/18/22 **KIRMIZI KALIR**; üçü de `C9`'undur.
+- **`capability.py`, ADR §13.1/§14, golden, migration, OpenAPI, `MARK_STALENESS_POLICY`,
+  `CONTENTION_SELECTION_STATUS` — hiçbirine dokunulmadı.**
+- **Dört denetim belgesi (`final_closure_delta_audit_…`, `closure_w0_…preconditions`,
+  `closure_c9_…verdict`, `unified_portfolio_oracle_acceptance`) `doc-status: historical`
+  ölçüldü ve EL DEĞMEDİ** — bayat olabilirler ama yanlış değildirler; ölçtükleri anı
+  dondururlar (ADIM 65 kuralı). Bu arada **`unified_portfolio_oracle_acceptance.md`'nin
+  A16/A17/A21 satırlarının bugün karşı-olgusal olduğu görüldü** (A16 ADIM 126'da indi, A17'nin
+  strict xfail'i ADIM 66'da kalktı, A21'in tick-tabanlı checkpoint'i indi) — **düzeltilmedi,
+  çünkü donmuş bir kayıttır**; `C9` onu otorite sanmasın diye burada adlandırıldı.
+- **`G8` md. 4'ün istediği #559 kapanış yorumu hâlâ yazılmadı** (insan eylemi; ajan issue'ya
+  dokunmaz). Yeniden talep koşulunu bloklamaz.
+- **frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- `repository_facts` tazelendi: toplanan test **3867 → 3868** (ADIM 60'ın dersi); tek delta
+  bu slice'ın tek yeni testidir, önceden var olan drift **yoktu**.
+
+### Dokunulan dosyalar
+
+`backend/tests/unit/oracles/test_oracle_portfolio_containment_gate.py` (bir yeni kapı + iki
+helper + `re`/`pytest` importları) · `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md`
+(md. 2 tahliye kaydı, ikinci talep bölümü + **BOŞ** imza kutusu, iki bayat maddenin
+`Was "…"` işaretlenmesi) · `README.md` + `docs/generated/repository_facts.{md,json}`
+(üretilmiş).

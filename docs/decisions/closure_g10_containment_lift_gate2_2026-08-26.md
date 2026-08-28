@@ -123,17 +123,84 @@ Gate 2 şu üçü birden sağlandığında **yeniden istenir**:
 
 1. ~~`G11` ve `G12` imzalı~~ **SAĞLANDI** (#849 → `6759a495`; `G12` = `A`, ön koşul 2'yi de
    konusuz bıraktı);
-2. `G14`'ün `B` yarısı (`NET` enum'unun kaldırılması + Karar 2'nin migration şıkkı) **sevk
-   edilmiş**, `#544` kapalı (ön koşul 20);
+2. ~~`G14`'ün `B` yarısı (`NET` enum'unun kaldırılması + Karar 2'nin migration şıkkı) **sevk
+   edilmiş**, `#544` kapalı (ön koşul 20)~~ **SAĞLANDI — 2026-08-27; 2026-08-28'de bu belge
+   için YENİDEN ÖLÇÜLDÜ, taşınmadı.** `B` sevk edildi:
+   `backend/alembic/versions/0044_drop_net_conflict_policy.py` (ADIM 124, #859) — `NET`
+   enum'dan düştü, kolona CHECK kısıtı eklendi, `B3`'ün halt guard'ı ile; bugün
+   `domain/allocation/enums.py` `NET`'i yalnız *kaldırıldı* diye **anıyor**, üye olarak
+   taşımıyor. `#544` **CLOSED / COMPLETED** (`2026-08-27T13:05:47Z`). `G14`'ün **dört**
+   kararının dördü de imzalı — **bölüm bazında** okundu, dosya düzeyinde grep'le değil
+   (ADIM 119'un tuzağı): Karar 1 `C`+`B` (2026-08-26), Karar 2 `B3` (2026-08-27),
+   Karar 3 metin (2026-08-26), Karar 4 `B0` (2026-08-27).
 3. ~~`G8` merge edilmiş~~ **SAĞLANDI** (`ae18f46b`); ~~geriye yalnız `#559`'un kapatılması kaldı~~
    **`#559` de KAPANDI** (`CLOSED/COMPLETED`, 2026-08-26T11:29:21Z) → **md. 3 tamamen sağlandı.**
    Açık kalan **tek** artık defter işidir: G8 md. 4 kapanış yorumunun seçilen şıkkı ve dosyayı
    adlandırmasını ister (#558 emsali) ve o yorum **yazılmadı**. **İnsan eylemi; ajan bu issue'ya
    dokunmaz.** Bu artık ön koşul 21'i kırmızıya çevirmez — yeniden talep koşulunu da bloklamaz.
 
-O noktada kalan kırmızılar 15/16/17/18/22 olur; beşi de **mühendislik** ve beşi de
-`C9`'un ya doğrudan teslimatı ya da onun hemen öncesindeki iştir. Gate 2 orada
-uygulanabilir bir işe verilir ve §16'nın kapısı ilk kez amacına hizmet eder.
+~~O noktada kalan kırmızılar 15/16/17/18/22 olur; beşi de **mühendislik**~~ — **o nokta
+2026-08-27'de GELDİ, ve tahmin iki yönden de yanlış çıktı.** Kalan kırmızılar **17/18/22**:
+15 ve 16 ADIM 119'da sevk edildi (`domain/allocation/shared_mode_admission.py`). Ve kalan
+üçü de artık *"`C9`'un hemen öncesindeki iş"* değil, **`C9`'un KENDİSİ**: 17 ve 18 için ürün
+sahibi 2026-08-28'de `C` dedi (*"şimdi çözme, `C9`'a adıyla devret"* — ADIM 129), 22'nin
+kalanı ise `C9`'un kendi A15 bump'ı ile A22 suite kapısıdır. Yani Gate 2 **artık
+uygulanabilir bir işe verilir** ve §16'nın kapısı ilk kez amacına hizmet eder.
+
+---
+
+## Yeniden talep — Gate 2, **İKİNCİ** istek (2026-08-28, ADIM 130)
+
+> **Bu bölüm bir ÖLÇÜMDÜR, bir onay değil.** Aşağıdaki kutu **BOŞ bırakılmıştır** ve ajan
+> onu dolduramaz. Kaydettiği tek şey şudur: §Yeniden talep koşulunun **üç maddesi de**
+> tahliye edildi, yani `B — ERTELE`'nin dayandığı gerekçe artık ayakta değil.
+
+### Üç maddenin ölçümü (`80f6cc7d`, 2026-08-28)
+
+| # | Koşul | Durum | Ölçüm |
+|---|---|---|---|
+| 1 | `G11` + `G12` imzalı | ✅ | #849 (`6759a495`); kodu ADIM 125 ile indi (`execution/shared_shapes.py`) |
+| 2 | `G14`'ün `B` yarısı sevk edilmiş + `#544` kapalı | ✅ **YENİ** | `0044_drop_net_conflict_policy` + `enums.py`'de `NET` üye değil; `#544` `CLOSED/COMPLETED` `2026-08-27T13:05:47Z` |
+| 3 | `G8` merge + `#559` kapalı | ✅ | `ae18f46b`; `#559` `CLOSED/COMPLETED` `2026-08-26T11:29:21Z` |
+
+**md. 2, ilk talebin tek eksiğiydi ve iki gün sonra kapandı.** Bu belgenin §Bu belgenin
+kapsamadıkları bölümündeki *"Yeniden talep koşulunun md. 2'si sağlanmamıştır"* cümlesi o
+yüzden **bayattır** ve orada işaretlenmiştir — silinmemiştir.
+
+### Ürün sahibinin ilk gerekçesi, bugünkü dünyaya karşı
+
+`B` şıkkının gerekçesi verbatim şuydu: *"Şimdi verme — **9 kırmızı** dururken sırası değil.
+Onay, uygulanacak bir şey olduğunda anlamlı."* Bugün kırmızı sayısı **3**'tür (17/18/22) ve
+**üçü de `C9`'un kendi teslimatıdır** — yani onayın önünde artık `C9`-dışı hiçbir iş yok.
+Gerekçenin kendi koşulu karşılandı.
+
+### Karar kutusu — **BOŞ**
+
+☐ **A — ŞİMDİ ver** (Gate 2 onaylandı; `C9` / ADIM 20 PR'ı açılabilir)
+☐ **B — YİNE ERTELE** (gerekçe aşağıya yazılır; kapı açık kalır)
+☐ **C — REDDET** (`C9` programı durdurulur; containment kalıcı olur)
+
+☐ **İmza:** ______________   ☐ **Tarih:** ____-__-__
+
+> **Gerekçe (imzacı doldurur):**
+
+### Bu talebin ZORLANIYOR olması (ADIM 130'un mühendislik yarısı)
+
+İlk talep, `B` şıkkının kendi bedelini şöyle yazmıştı: *"kapı açık kalır ve talep edildiği
+**kaydedilmezse** yine 'hiç sorulmadı' diye okunur."* Bir belgeye kaydetmek bunu yalnızca
+**hatırlatır**. Ölçüldü (2026-08-28): `backend/` ağacının **tamamında** `G10` ya da
+"Gate 2" geçen **sıfır** satır vardı — yani sıralı planın `C9` stop condition'ı
+(*"Any of the 22 preconditions unmet, or **G10 unsigned** → do not open this PR"*) hiçbir
+kapı tarafından zorlanmıyordu: `C9` bayrağı çevirebilir ve **her test yeşil kalırdı**.
+
+Artık zorlanıyor:
+`tests/unit/oracles/test_oracle_portfolio_containment_gate.py::test_lifting_containment_requires_gate2_approval`
+bu **dosyayı okur** ve `SHARED_ALLOCATION_STATUS == "active_v1"` iken Gate 2 onaylı değilse
+kırmızı verir. Kapı **fail-closed**'dur: kutu okunamazsa (bölüm silinmiş, iki şık birden
+işaretlenmiş, dosya taşınmış) test *sessizce geçmez*, **patlar** — K-07 idiomu.
+
+**Onay verildiğinde yapılacak tek şey yukarıdaki kutuda `A`'yı işaretlemektir**; kapı bunu
+kendiliğinden okur ve susar. Testte değiştirilecek bir literal yoktur.
 
 ## Bu belgenin kapsamadıkları (dürüst sınır)
 
@@ -142,10 +209,18 @@ uygulanabilir bir işe verilir ve §16'nın kapısı ilk kez amacına hizmet ede
 - **Hiçbir ön koşulu kapatmaz.** Ön koşul ölçümü bu belgeden bağımsızdır; **son taban
   `f0be03f1` ve sayı 18/22'dir** (§Ölçüm 3'ün zinciri). Buradaki sayı **türetilmiş bir
   rapordur, otorite değildir** — kararı okuyan her oturum onu koda karşı yeniden ölçmelidir.
-- **Ön koşul 20 hâlâ kırmızıdır ve öyle sayılmıştır.** `G14` Karar 1 imzalı (`C` şimdi +
+- ~~**Ön koşul 20 hâlâ kırmızıdır ve öyle sayılmıştır.** `G14` Karar 1 imzalı (`C` şimdi +
   `B` `C9` öncesi) ama `B` sevk edilmedi, Karar 2 (mevcut `'NET'` satırları) ve Karar 3
-  (`C`'nin metni) **boş**, `#544` açık. İmzalı bir Karar 1, kapatılmış bir kapı değildir.
-- **Ertelemenin gerekçesi ZAYIFLADI ama DÜŞMEDİ.** #847 + #849 dört kırmızı düşürdü ve
+  (`C`'nin metni) **boş**, `#544` açık. İmzalı bir Karar 1, kapatılmış bir kapı değildir.~~
+  **BAYAT (2026-08-28'de ölçüldü, ADIM 130).** `B` sevk edildi (`0044_drop_net_conflict_policy`,
+  ADIM 124), dört kararın dördü de imzalı, `#544` `CLOSED/COMPLETED`. **Cümlenin KURALI
+  yine de doğruydu ve korunuyor** — imzalı bir Karar, kapatılmış bir kapı değildir; bu
+  belgedeki `B — ERTELE` imzası da tam olarak odur.
+- ~~**Ertelemenin gerekçesi ZAYIFLADI ama DÜŞMEDİ.** #847 + #849 dört kırmızı düşürdü ve
   `G11`/`G12` artık imzalı. §Karar'ın `B` şıkkı *"kalan **karar** kapıları kapanınca"* der —
   **`G14` hâlâ açıktır**: Karar 1 imzalı (`C` şimdi + `B` `C9` öncesi) ama `B` sevk edilmedi,
-  Karar 2 ve 3 **boş**, `#544` açık. Yeniden talep koşulunun md. 2'si sağlanmamıştır.
+  Karar 2 ve 3 **boş**, `#544` açık. Yeniden talep koşulunun md. 2'si sağlanmamıştır.~~
+  **BAYAT (2026-08-28).** `G14`'ün dört kararı da imzalı ve `B` sevk edildi → §Karar'ın `B`
+  şıkkının *"kalan **karar** kapıları kapanınca"* koşulu **karşılandı**; yeniden talep
+  koşulunun md. 2'si **sağlanmıştır**. Talep §Yeniden talep — Gate 2, **İKİNCİ** istek
+  bölümündedir ve kutusu **boştur**.

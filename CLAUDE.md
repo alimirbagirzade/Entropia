@@ -272,8 +272,36 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> = `future_dev` (**el değmedi**) · `capability.py` **el değmedi** · **`backend/src` ve
+> `frontend/src`'te SIFIR SATIR**. **Son dalga — ADIM 130 (`G10` YENİDEN TALEP EDİLDİ ve
+> stop condition'ı ZORLANABİLİR kılındı).** §10'un dokuz maddelik sırası ölçüldü: **`C9`-dışı
+> ve insan-dışı tek açık kalem md. 7'ydi** (*"Request `G10`"*). `G10` 2026-08-26'da **`B` —
+> ERTELE** olarak imzalanmıştı (red değil); üç maddelik yeniden talep koşulunun **md. 2'si
+> 2026-08-27'de kapandı** (`B` sevk edildi = `0044_drop_net_conflict_policy` · `#544`
+> `CLOSED/COMPLETED`) → erteleme gerekçesi (*"9 kırmızı dururken sırası değil"*) **ayakta
+> değil**: kırmızı **3** (17/18/22) ve **üçü de `C9`'un kendi teslimatı**. **ASIL BULGU:
+> sıralı planın `C9` stop condition'ı — *"G10 unsigned → do not open this PR"* — HİÇBİR kapı
+> tarafından zorlanmıyordu** (`backend/` ağacında `G10`/`Gate 2` geçen **sıfır** satır) →
+> `test_oracle_portfolio_containment_gate.py::test_lifting_containment_requires_gate2_approval`
+> (kardeşi `…requires_a_second_engine_version_bump` ile aynı dört-köşeli şekil, **fail-closed**).
+> **Kardeşinden iki yerde ileri:** `and` kısa devresi kapatıldı — gerçek belge **koşulsuz**
+> ayrıştırılır, yoksa fail-closed yarısı **lift gününe kadar uyurdu** (NC-1 tam o satırda
+> kırmızı verdi) — ve lifted dünya **gerçek** belgeye karşı sürülür (`capability.py`'ye
+> dokunmadan; status bir **girdidir**). Beş NC: dördü ayırt edici, **üçü FARKLI assertion'da**,
+> her turda sekiz kardeş yeşil; NC-5 pozitif — sahip `A`'yı işaretlerse kapı **kendiliğinden
+> susar**, testte literal yok. **DÜRÜST SINIR: `G10` İMZALANMADI, kutu BOŞ** (insan kararı) ·
+> hiçbir ön koşul yeşile çevrilmedi · dört denetim belgesi `doc-status: historical` ölçüldü ve
+> **el değmedi** — bu arada `unified_portfolio_oracle_acceptance.md`'nin **A16/A17/A21
+> satırlarının bugün karşı-olgusal** olduğu görüldü, **bilerek düzeltilmedi** (donmuş kayıt,
+> **otorite DEĞİL**) · frontend kapıları KOŞULMADI · coverage **CI'ın otoritesinde**. Toplanan
+> test 3867 → **3868**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 130 · `docs/ADIM130_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > = `future_dev` (**el değmedi**) · `capability.py` **el değmedi** · `frontend/src` **sıfır
-> satır**. **Son dalga — ADIM 129 (ön koşul 17 + 18 ÖLÇÜLDÜ, İKİSİ DE KIRMIZI KALDI).**
+> satır**. **ADIM 129 (ön koşul 17 + 18 ÖLÇÜLDÜ, İKİSİ DE KIRMIZI KALDI).**
 > Ürün kodu değişti ama **yalnız PROZA** — bir **ölü** sabitin metni; hiçbir sayı/digest
 > oynamadı. **ASIL BULGU: bir iddianın ÜÇ yazımı vardı, #852 yalnız BİRİNİ düzeltti** →
 > `arbitration.py` üç satır arayla hem *"OD-3 is DECIDED"* hem *"OD-3 … is unresolved"*
@@ -2485,8 +2513,17 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 129'da güncellendi): ön koşul 17 ve 18 ÖLÇÜLDÜ, İKİSİ DE
-> KIRMIZI KALDI — ve ikisi de artık `C9`'a ait.** 17 = KOD ama literal
+> **GERÇEK Next (ADIM 130'da güncellendi): SIRADAKİ KALEM KOD DEĞİL, `G10` İMZASI.**
+> §10'un dokuz maddesi ölçüldü; `C9`-dışı ve insan-dışı tek açık kalem **md. 7** ("Request
+> `G10`") idi ve talep **yazıldı** —
+> `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md` §*Yeniden talep — Gate 2,
+> **İKİNCİ** istek*, kutu **BOŞ** (ajan dolduramaz). Üç maddelik yeniden talep koşulunun
+> **üçü de tahliye edildi** (md. 2 = `G14`'ün `B` yarısı + `#544`, 2026-08-27). **`C9` PR'ı o
+> kutu `A` olmadan açılamaz ve bunu artık bir test zorluyor**
+> (`test_lifting_containment_requires_gate2_approval`, fail-closed; onay verilince
+> kendiliğinden susar, testte literal yok).
+> **Ön koşul 17 ve 18 (ADIM 129'da ÖLÇÜLDÜ) İKİSİ DE
+> KIRMIZI KALIR — ve ikisi de artık `C9`'a ait.** 17 = KOD ama literal
 > `execution_content` içinde, çevirmek **her `execution_key`'i kaydırır** → o namespace
 > kayması `C9`'un lift bump'ıdır (ADIM 126'nınki harcandı). 18 = yalnız etiket, **onayı
 > 2026-08-05'te alınmış**, ama flip sonrası **değeri hiçbir belge adlandırmıyor** ve

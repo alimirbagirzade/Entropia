@@ -9679,3 +9679,61 @@ pytest **1** döndürmüştü — yeşil olan wrapper'ın `echo`'suydu.
 `C9` için pazarlıksız devir DEĞİŞMEDİ: `ENGINE_VERSION`'ı lift commit'inde **TEKRAR** bump et
 (`C7`'nin bump'ı A15'i kapatmaz; `test_lifting_containment_requires_a_second_engine_version_bump`
 zorlar). Paste-ready resume prompt: `docs/ADIM128_LANDED_KICKOFF.md` sonu.
+
+## Stage ADIM 130 — `G10` yeniden talep edildi ve stop condition'ı ZORLANABİLİR kılındı landed (PR pending)
+
+> **Not (ölçüm, anlatı değil):** **ADIM 129'un buraya bir girdisi YOK** — o slice ritüelin
+> md. 1'ini atlamış. Kaydı `docs/PROJECT_HISTORY.md` §ADIM 129 ve
+> `docs/ADIM129_LANDED_KICKOFF.md`'dedir; burada **yeniden anlatılmıyor** (ADIM 97: başka
+> bir slice'ın kaydını uydurma).
+
+**Migration YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el
+değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) · `capability.py`
+**EL DEĞMEDİ** · `backend/src` ve `frontend/src`'te **SIFIR SATIR**. Blocker DEĞİŞMEDİ
+(1 — yalnız A-08), **BLOCKED**. Toplanan test **3867 → 3868**.
+
+`final_closure_delta_audit_2026-08-25.md` §10'un dokuz maddelik sırası ağaca karşı ölçüldü:
+**`C9`-dışı ve insan-dışı tek açık kalem md. 7'ydi** (*"Request `G10`"*), ve §10 onun için
+kendi uyarısını yazmıştı: *"It cannot be the last step discovered."*
+
+**Ölçüm:** `G10` 2026-08-26'da **`B` — ERTELE** olarak imzalandı (red değil), yazılı bir üç
+maddelik yeniden talep koşuluyla. ADIM 121 *"md. 2 ❌"* ölçmüştü; **md. 2 2026-08-27'de
+kapandı** — `B` sevk edildi (`0044_drop_net_conflict_policy`, ADIM 124) ve `#544`
+`CLOSED/COMPLETED`. `G14`'ün dört kararı da imzalı (**bölüm bazında** okundu). Yani
+`B`'nin gerekçesi — *"9 kırmızı dururken sırası değil"* — artık ayakta değil: kırmızı **3**
+(17/18/22) ve **üçü de `C9`'un kendi teslimatı**.
+
+**ASIL BULGU:** sıralı planın `C9` stop condition'ı (*"G10 unsigned → do not open this
+PR"*) **hiçbir kapı tarafından zorlanmıyordu** — `backend/` ağacının tamamında `G10`/
+`Gate 2` geçen **sıfır** satır vardı. Sevk edilen kapı:
+`test_oracle_portfolio_containment_gate.py::test_lifting_containment_requires_gate2_approval`
+(kardeşi `…requires_a_second_engine_version_bump` ile aynı dört-köşeli şekil). **Kardeşinden
+iki yerde ileri gider:** `and` kısa devresi kapatıldı (gerçek belge **koşulsuz**
+ayrıştırılır, yoksa fail-closed yarısı lift gününe kadar uyurdu — **NC-1 tam o satırda
+kırmızı verdi**), ve lifted dünya **gerçek** belgeye karşı sürülür (`capability.py`'ye
+dokunmadan, çünkü status bir **girdidir**). Kapı **fail-closed**: bölüm silinmiş / iki şık
+işaretli / şık eksik → **patlar**, sessizce geçmez.
+
+**Beş negatif kontrol; dördü ayırt edici ve ÜÇÜ FARKLI assertion'da** (NC-1 → md. 3'ün
+koşulsuz ayrıştırması · NC-3 → köşe 2 · NC-4 → köşe 1), her turda **sekiz kardeş test
+yeşil**; NC-5 pozitif kontrol: sahip `A`'yı işaretlerse kapı **kendiliğinden susar**,
+testte değiştirilecek literal yoktur.
+
+**DÜRÜST SINIR:** **`G10` İMZALANMADI — kutu BOŞ** (insan kararı, ajan dolduramaz) · hiçbir
+ön koşul yeşile çevrilmedi (17/18/22 KIRMIZI KALIR, üçü de `C9`'un) · dört denetim belgesi
+`doc-status: historical` ölçüldü ve **el değmedi** — bu arada
+`unified_portfolio_oracle_acceptance.md`'nin **A16/A17/A21 satırlarının bugün
+karşı-olgusal** olduğu görüldü ve **bilerek düzeltilmedi** (donmuş kayıt), `C9` onu otorite
+sanmasın diye adlandırıldı · `G8` md. 4'ün #559 kapanış yorumu hâlâ yazılmadı (insan) ·
+frontend kapıları KOŞULMADI.
+
+`PROJECT_HISTORY.md` §ADIM 130 · `docs/ADIM130_LANDED_KICKOFF.md`.
+
+## Next: **`G10` İMZASI (insan) → `A` verilirse `C9` / ADIM 20, YALNIZ**
+
+Kutu: `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md`
+§*Yeniden talep — Gate 2, **İKİNCİ** istek* — **BOŞ**. Ajan dolduramaz; `C9` PR'ı o kutu
+`A` olmadan **açılamaz** ve artık bunu bir test zorluyor. `A` verilirse `C9`'un pazarlıksız
+kalemleri (ikinci `ENGINE_VERSION` bump → ön koşul 17 → 18 → A22 → **yalnız koş**):
+`docs/ADIM130_LANDED_KICKOFF.md` §*Sıradaki kalem*. Paste-ready resume prompt aynı dosyanın
+sonunda.

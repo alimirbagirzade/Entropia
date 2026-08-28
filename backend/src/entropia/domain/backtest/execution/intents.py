@@ -509,7 +509,7 @@ class ItemIntent:
         return str(value) if value is not None else None
 
 
-def _price_for(view: ItemTickView) -> tuple[Decimal | None, PriceAuthority]:
+def price_for(view: ItemTickView) -> tuple[Decimal | None, PriceAuthority]:
     """The price this item's intent is formed at, and where it came from.
 
     A fresh bar's close is the decision price the engine already uses. With no fresh bar
@@ -519,7 +519,13 @@ def _price_for(view: ItemTickView) -> tuple[Decimal | None, PriceAuthority]:
 
     When one item carries two bars at the same instant the clock surfaces both (axis dedup
     is of the axis, never of an item's data); the LAST is taken, matching the engine's
-    strictly-forward replay and the clock's own cursor."""
+    strictly-forward replay and the clock's own cursor.
+
+    PUBLIC because OD-2(a)'s mark binding reads it: ``portfolio_engine`` offers the same
+    ``(price, authority)`` pair to ``PortfolioLedger.valuation`` at ``PV``. The alternative
+    was a second transcription of this rule at the binding site, which is exactly the drift
+    ADIM 126 measured. The bound that judges the pair still lives with the policy
+    (``MARK_STALE_AFTER_MS``), not here — this function labels, it does not decide."""
     if view.bars:
         return view.bars[-1].close, "fresh_bar_close"
     if view.last_closed is not None:
@@ -616,7 +622,7 @@ def _build(
             f"Identity '{identity.item_id}' was given item '{view.item_id}'s tick view; an "
             "intent may only ever be formed from its own item's data."
         )
-    reference_price, authority = _price_for(view)
+    reference_price, authority = price_for(view)
     desired_size, effective_price = _sized(
         decision.kind, decision.direction, reference_price, sizing
     )
@@ -848,5 +854,6 @@ __all__ = [
     "form_intents",
     "form_mandatory_intent",
     "idle_decision",
+    "price_for",
     "snapshot_identities",
 ]

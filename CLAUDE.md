@@ -271,6 +271,45 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** (`backtest-engine-v18-unified-clock-portfolio` — Karar 3 = `A`) · OpenAPI
+> **değişmedi** · golden **EL DEĞMEDİ ve OYNAMADI** (50 digest bayt bayt aynı) ·
+> `SHARED_ALLOCATION_STATUS` **el değmedi** · `capability.py` **el değmedi** ·
+> `MARK_STALE_AFTER_MS` **el değmedi** (Karar 2 = `A`) · importer allowlist'i **el değmedi** ·
+> `frontend/src`'te **sıfır satır**. **Son dalga — ADIM 135 (OD-2(a) MARK YOLU ÜRETİME
+> BAĞLANDI, karar `(b)` = yalnız diagnostics).** ADIM 133'ün açtığı **üç kutu da imzalandı**
+> (`alimirbagirzade`, 2026-08-28): **1 = `(b)`, 2 = `A` dokunma, 3 = `A` bump gerekmez** — ve
+> `(b)` **aynı slice'ta uygulandı**. Sevk edilen: `intents::price_for` **public** (tek çağıranı
+> vardı; yeniden yazmak drift üretirdi) · `portfolio_engine::_marks_at` (**yeni finansal hesap
+> YOK** — üç değer de bugün hesaplanıp atılıyordu) · `_run_tick` `PV`'de, `publish_snapshot`'ın
+> hemen ardında, **donmuş pencerenin İÇİNDE** `ledger.valuation(...)` çağırıyor (yasal, çünkü
+> `valuation` **saf**) · `PortfolioTick.valuation` **zorunlu alan** ·
+> `portfolio_projection::_mark_staleness` → `diagnostics["mark_staleness"]` (dört anahtar).
+> **ASIL BULGU: ADIM 132 politikayı sevk etmişti ama SAYACI HİÇBİR KOŞU ÜRETEMİYORDU** —
+> `attribute()` sıfır çağıranlı, `MarkPrice` üretimde hiç kurulmuyordu, oysa manifest **her**
+> koşuda `mark_staleness_status: "built"` diyordu; `(b)` o asimetriyi **manifest'e dokunmadan**
+> kapattı. Fixture contrivance istemedi ve sebebi Ölçüm 6: harness **saatlik** bar replay eder,
+> bound **900 sn** → taze barsız pozisyon **zaten** bound'un dört katı yaşlı. **İKİNCİ BULGU:
+> `E(t)` testim BOŞTU ve onu NC-3 buldu** — fixture'ın tek pozisyonu **unmarkable**'dı, yani
+> `unrealized ∈ {0, None}`, katlanacak bir şey yoktu ve *"mark E(t)'ye girmez"* iddiası
+> **yanlışlanamazdı**; fixture fiyatı **oynayan** bir long'a çevrildi (`unrealized` 100/200/300
+> ölçüldü) + **vacuity muhafızı** eklendi, sonra NC-3 **tam olarak 1 testi** kırmızıya çevirdi.
+> **Ders: geçen bir NC testin iyi olduğunu değil YOLUN HİÇ KOŞULMADIĞINI söyler — ve
+> düzeltilecek yer çoğu zaman assertion değil FIXTURE'dır.** Üç NC de ayırt edici (3/8 · 3/8 ·
+> **1/8**) ve **üçünde de önceden var olan projeksiyon suite'i 23/23 YEŞİL** = boşluğun
+> *iddiası* değil **ölçümü**. **Karar 3 = `A` AMPİRİK doğrulandı, varsayılmadı:** 50 digest'in
+> 50'si aynı → bump edilecek namespace kayması **yok**. **DÜRÜST SINIR: OD-2(a) YALNIZ
+> diagnostics olarak akıyor**, `E(t)`'ye dokunmuyor ve dokunmadığı **testle pinli**;
+> provenance'a **yazılmadı** (`(c1)`/`(c2)` seçilmedi) · **ADR §13.1'in OD-2 satırı EL DEĞMEDİ**
+> (*"`run_portfolio` marks nothing"* artık karşı-olgusal — düzeltmek **adjudication**'dır) ·
+> ADIM 133'ün üç bayat docstring'i **düzeltilmedi** · frontend kapıları **koşulmadı** · tam
+> suite uçtan uca **koşulmadı** → geçen sayı ve coverage **CI'ın otoritesinde**. Toplanan test
+> **3868 → 3876**. **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 135 · `docs/ADIM135_LANDED_KICKOFF.md`. **NUMARA TAŞINDI**
+> (134 → 135): PR sıra beklerken #871 o adı merge edilmiş olarak aldı; yakalayan
+> **`docs-history-guard`** oldu, gözlem değil.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > = `active_v1` (**EL DEĞMEDİ**) · **`backend/src` ve `frontend/src`'te SIFIR SATIR**.
 > **Son dalga — ADIM 134 (GH #854 pin taşıma kusuru ilk kez koşuldu; DÜZELTİLMEDİ).**

@@ -120,11 +120,14 @@ from entropia.domain.backtest.execution.intents import (
     ItemIntent,
     PortfolioSnapshot,
     form_mandatory_intent,
+    price_for,
 )
 from entropia.domain.backtest.execution.portfolio_ledger import (
+    MarkPrice,
     OpenPosition,
     PortfolioEquityPoint,
     PortfolioLedger,
+    PortfolioValuation,
     ledger_for_items,
 )
 
@@ -227,7 +230,13 @@ class PortfolioTick:
     snapshot existed and carries ``phase="P3"`` with no snapshot identity, the second was formed
     against it and carries ``phase="P4"``. ``equity_point`` is ``None`` when ``E(t)`` did not
     move — the ledger appends a point only when it does. ``closes`` pairs one-to-one with
-    ``mandatory`` by ``item_id``: what each of those exits realized."""
+    ``mandatory`` by ``item_id``: what each of those exits realized.
+
+    ``valuation`` is OD-2(a)'s marked view of THIS tick, taken inside the frozen window beside
+    the snapshot. It is REPORTED, never fed back: ``E(t)`` is realized-only by canon, so a mark
+    cannot move a number here (``portfolio_ledger`` module docstring). It is carried per tick
+    rather than recomputed at the end because P10 closes every open position, so a terminal
+    valuation would always observe an empty book and report nothing."""
 
     t_ms: int
     timestamp: str
@@ -237,6 +246,7 @@ class PortfolioTick:
     intents: tuple[ItemIntent, ...]
     report: ArbitrationReport
     equity_point: PortfolioEquityPoint | None
+    valuation: PortfolioValuation
     closes: tuple[BookedClose, ...] = ()
 
 
@@ -542,6 +552,32 @@ def _phase_7_apply(tick: ClockTick, report: ArbitrationReport, ctx: _RunContext)
         ctx.by_item[decision.item_id].settle(views[decision.item_id], admitted=decision)
 
 
+def _marks_at(views: Sequence[ItemTickView]) -> dict[str, MarkPrice]:
+    """Offer every item's current price as a mark, with the clock's own provenance.
+
+    Nothing here is a new financial computation: the pair comes from ``intents.price_for``
+    — the same function that prices an intent — and the age from ``ItemTickView`` which
+    already measures it. Both were being discarded before OD-2(a) was bound.
+
+    An item with no price at all is simply not offered. It then lands in ``unmarked_items``
+    exactly as an offered-but-unusable mark would, but NOT in ``stale_refused_items``, which
+    is correct: absence of a price is not a staleness event, and counting it as one would
+    inflate the very counter OD-2(a) asks for.
+
+    Marks are offered for every view, not only for open positions; ``valuation`` reads the
+    ones it needs by ``item_id`` and ignores the rest. Filtering here would couple this
+    function to the ledger's book and buy nothing."""
+    marks: dict[str, MarkPrice] = {}
+    for view in views:
+        price, authority = price_for(view)
+        if price is None:
+            continue
+        marks[view.item_id] = MarkPrice(
+            price=price, authority=authority, staleness_ms=view.staleness_ms
+        )
+    return marks
+
+
 def _run_tick(tick: ClockTick, ctx: _RunContext) -> PortfolioTick:
     """One full cycle of ADR §8.1.
 
@@ -553,6 +589,10 @@ def _run_tick(tick: ClockTick, ctx: _RunContext) -> PortfolioTick:
     mandatory, closes = _phase_3_mandatory(tick, ctx)
 
     snapshot = ctx.ledger.publish_snapshot(tick.t_ms)
+    # OD-2(a), bound here and nowhere else. ``valuation`` is PURE — it assigns nothing and
+    # never touches ``_frozen_at`` — so calling it inside the frozen window is legal and
+    # leaves the freeze discipline exactly as it was.
+    valuation = ctx.ledger.valuation(tick.t_ms, marks=_marks_at(tick.views))
 
     # Cleared, not overwritten: a price left over from an earlier tick could only ever be read
     # by mistake, and reading one would open a position at a stale bar.
@@ -579,6 +619,7 @@ def _run_tick(tick: ClockTick, ctx: _RunContext) -> PortfolioTick:
         intents=intents,
         report=report,
         equity_point=point,
+        valuation=valuation,
         closes=closes,
     )
 

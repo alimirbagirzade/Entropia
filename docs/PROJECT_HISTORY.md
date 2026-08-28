@@ -18691,3 +18691,122 @@ bayattı, bugün C9 indiği için **merkezî öncül de karşı-olgusal**. Yine 
 kendi kaydı *"#582 bir insan izleme kaydıdır"* diyor.
 
 `docs/ADIM134_LANDED_KICKOFF.md`.
+---
+
+## ADIM 135 — OD-2(a) MARK YOLU ÜRETİME BAĞLANDI (KARAR `(b)`): SEVK EDİLMİŞ BİR POLİTİKA İLK KEZ KOŞUYOR, VE `E(t)` TESTİMİ BİR NEGATİF KONTROL ÇÜRÜTTÜ
+
+**Taban:** `origin/main` @ `a716f8ad` (ADIM 135 — GH #854). **NUMARA TAŞINDI:** bu kayıt
+`ADIM 135` yazıldı, ama PR sıra beklerken **#871 o adı merge edilmiş olarak aldı** → **ADIM 135**.
+Kural değişmedi: *merge edilmiş ad kazanır, numaralar yeniden atanmaz* — dal ve commit mesajları
+`stage-134` yazar. Çakışmayı gözle değil **`docs-history-guard`** yakaladı (#590/#604 deseni).
+**Diff:** üç ürün dosyası + bir yeni test dosyası + karar belgesinin imzaları.
+Migration **yok** · **`ENGINE_VERSION` DEĞİŞMEDİ** (`backtest-engine-v18-unified-clock-portfolio`,
+Karar 3 = `A`) · golden **el değmedi ve OYNAMADI** (50 digest, bayt bayt aynı) · OpenAPI
+**değişmedi** · `SHARED_ALLOCATION_STATUS` **el değmedi** · `capability.py` **el değmedi** ·
+`MARK_STALE_AFTER_MS` **el değmedi** (Karar 2 = `A`) · importer allowlist'i **el değmedi** ·
+`frontend/src`'te **sıfır satır**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Ne indi
+
+ADIM 133 üç kutu açmıştı; **üçü de 2026-08-28'de imzalandı** (`alimirbagirzade`):
+**Karar 1 = `(b)` yalnız diagnostics · Karar 2 = `A` dokunma · Karar 3 = `A` bump gerekmez.**
+İmza `AskUserQuestion` ile alındı; her şıkkın **ölçülmüş bedeli** (golden hareketi, bump,
+OpenAPI, migration) sunuldu. Serbest metinli gerekçe **alınmadı ve UYDURULMADI** — belgede
+saklanan alıntı **şıkkın kendisine sunulan metnidir** (ADIM 129/131 biçimi).
+
+Sevk edilen dört değişiklik, üçü de karar belgesinin **ölçülmüş kısıtlarına** birebir uydu:
+
+1. `execution/intents.py::_price_for` → **`price_for`** (public, `__all__`'da). Ölçüldü:
+   **tek çağıranı vardı ve aynı modüldeydi** → yeniden yazmak yerine açmak, ADIM 126'nın
+   *"iki yazım drift üretir"* dersinin uygulanması.
+2. `portfolio_engine.py::_marks_at` (YENİ) — `tick.views`'tan `(price, authority)` +
+   `staleness_ms`. **Yeni finansal hesap YOK**: üç değer de bugün hesaplanıp **atılıyordu**.
+3. `portfolio_engine.py::_run_tick` — `publish_snapshot`'ın hemen ardından, **donmuş
+   pencerenin İÇİNDE**, `ctx.ledger.valuation(tick.t_ms, marks=_marks_at(tick.views))`.
+   Yasal, çünkü `valuation` **saftır** (`self`'e atama yok, `_frozen_at`'e dokunmaz).
+   `PortfolioTick` yeni **zorunlu** `valuation` alanı taşıyor (tek kurulum yeri bu modül).
+4. `execution/portfolio_projection.py::_mark_staleness` (YENİ) → `diagnostics["mark_staleness"]`:
+   `ticks_fully_marked` · `ticks_with_unmarked_positions` · `unmarked_items` ·
+   `stale_refused_items`. Kararın istediği **dört şey**, fazlası değil.
+
+### ASIL BULGU — `PV`'de bağlama bir tercih değildi, ve terminal bağlama boş olurdu
+
+ADIM 133'ün Ölçüm 4'ü koşturularak kanıtlanmıştı (P10 her pozisyonu kapatır → terminal
+`valuation()` **her zaman** boş kitap görür). Bu slice o kısıtı **uyguladı**: bağlama tick
+başınadır. Ölçüm 5'in kısıtı da tutuldu — taşıyıcı `ledger.valuation()`, `attribute()` değil,
+çünkü `PortfolioAttribution` OD-2(a)'nın **kendi sayacını** (`stale_refused_items`) taşımıyor.
+
+**Ve sayaç artık ulaşılabilir:** ADIM 132 politikayı sevk etmişti ama `attribute()`'un **sıfır
+çağıranı** vardı, `MarkPrice` üretimde **hiç kurulmuyordu** → ADR §13.1'in istediği *"diagnostic
+counter"* hiçbir koşuda **üretilemiyordu**, oysa manifest **her** koşuda
+`mark_staleness_status: "built"` diyordu. `(b)` o asimetriyi **manifest'e dokunmadan** kapattı:
+beyan artık doğru, çünkü koşu gerçekten mark ediyor.
+
+**Fixture contrivance İSTEMEDİ, ve sebebi Ölçüm 6:** harness **saatlik** bar replay eder, bound
+**900 sn** → taze barı olmayan bir pozisyon **zaten** bound'un dört katı yaşlıdır. Ölçüm 6'nın
+*"30m ve üstünde 9'un 5'i sıfır bar taşır"* bulgusunun öbür yüzü budur.
+
+### İKİNCİ BULGU — `E(t)` testim BOŞTU, ve onu bir negatif kontrol buldu
+
+`test_the_mark_never_moves_e_of_t`'nin ilk yazımı `_holder_and_ticker` fixture'ında koşuyordu.
+**NC-3** (`PortfolioValuation.equity`'ye `+ unrealized` ekle) **YEŞİL geçti.** Sebep ölçüldü:
+o fixture'da tutulan tek pozisyon **UNMARKABLE**, yani `unrealized_pnl ∈ {0, None}` — katlanacak
+bir şey yok, bozma görünmez. Testin *"mark E(t)'ye girmez"* iddiası **hiçbir zaman
+yanlışlanamazdı**.
+
+Düzeltme fixture'ın kendisiydi: `_marked_holder` — **taze barlı, fiyatı OYNAYAN** bir long
+(`unrealized` 100/200/300 ölçüldü) + testin içine bir **vacuity muhafızı** (*"fixture canlı
+mı?"* önce assert edilir). Sonra NC-3 **tam olarak 1 testi** kırmızıya çevirdi.
+**Ders (ADIM 100/128'in üçüncü şekli): geçen bir negatif kontrol, testin iyi olduğunu değil
+YOLUN HİÇ KOŞULMADIĞINI söyler — ve düzeltilecek yer çoğu zaman assertion değil FIXTURE'dır.**
+
+### Negatif kontroller — üçü de ayırt edici, üçünde de eski suite YEŞİL
+
+| NC | Kusur | Yeni dosyada kırmızı | Önceden var olan projeksiyon suite |
+|---|---|---|---|
+| NC-1 | `valuation(t_ms)` — mark hiç teklif edilmiyor | **3/8** (sayaç · pozitif kontrol · vacuity muhafızı) | **23/23 YEŞİL** |
+| NC-2 | `staleness_ms=None` — yaş ekseni köreltildi | **3/8** (sayaç · fail-closed · tick partition) | **23/23 YEŞİL** |
+| NC-3 | mark `E(t)`'ye katlanıyor | **1/8** — yalnız `..._never_moves_e_of_t` | **23/23 YEŞİL** |
+
+Eski suite'in üç kusurun **üçünde de** yeşil kalması, boşluğun *iddiası* değil **ölçümüdür**:
+bu davranışların hiçbirini mevcut hiçbir test göremiyordu.
+
+### Ölçülen kapılar
+
+`ruff check` **All checks passed** · `ruff format --check` **834 files** · `mypy src`
+**405 dosya, 0 hata** · `pytest tests/unit` **exit 0** (yeni dosya **8 passed**) ·
+`pytest tests/integration -k "shared_clock or unified or portfolio or containment"`
+**51 passed, exit 0** · `generate_repository_facts.py --check` **exit 0** ·
+`memory_index --check` **exit 0**. Toplanan test **3868 → 3876**, test dosyası **366 → 367**.
+
+**Karar 3 = `A` AMPİRİK OLARAK DOĞRULANDI, varsayılmadı:** golden'ın **50 digest'inin 50'si de
+bayt bayt aynı** kaldı → bump edilecek bir namespace kayması **yok**. Bu, ADIM 133 Ölçüm 9'un
+*"unified yol golden'da yok"* öngörüsünün birinci elden doğrulamasıdır.
+
+### DÜRÜST SINIR
+
+- **OD-2(a) artık akıyor — ama YALNIZ diagnostics olarak.** `E(t)`'ye **dokunmuyor** (ADR §5 +
+  `portfolio_ledger` modül docstring'i) ve dokunmadığı **testle pinli**. Provenance'a
+  yazılmadı: `(c1)`/`(c2)` **seçilmedi**.
+- **ADR-0002 §13.1'in OD-2 satırı EL DEĞMEDİ.** *"Not built. `run_portfolio` marks nothing"* —
+  ikinci yarısı artık **karşı-olgusal**, ama sevk edilmiş bir ADR karar tablosunu yeniden
+  yazmak **adjudication**'dır (ADIM 42/128) ve bu slice'ın işi değil.
+- **ADIM 133 Ölçüm 1'in üç bayat docstring'i ve iki *"not yet built"* iddiası DÜZELTİLMEDİ.**
+  Ölçüldüler, kayıtlılar, ayrı bir docs slice'ıdır.
+- **`MARK_STALE_AFTER_MS` = 900 sn KALDI** (Karar 2 = `A`). Bunun ölçülmüş sonucu: 30m/1h/2h/4h/1D
+  koşularında `stale_refused_items` **düzenli olarak dolacak**. Bu bir kusur değil, **imzalı
+  fail-closed politikadır**; `B`'ye geçmek `carry_forward_bounded_v2` + ikinci bump ister.
+- **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- **Tam backend suite uçtan uca koşulmadı** (unit tamamı + integration alt kümesi koştu) →
+  **geçen sayının ve coverage'ın otoritesi CI'dır**.
+- **A-08 (#514) AÇIK, el değmedi → RC verdict `BLOCKED`.** Bu slice onu etkilemez.
+
+**Dosyalar:** `backend/src/entropia/domain/backtest/execution/intents.py` ·
+`backend/src/entropia/domain/backtest/portfolio_engine.py` ·
+`backend/src/entropia/domain/backtest/execution/portfolio_projection.py` ·
+`backend/tests/unit/test_oracle_od2_mark_binding.py` (yeni) ·
+`docs/decisions/closure_od2_mark_production_binding_2026-08-28.md` (**imzalandı**) ·
+`docs/generated/repository_facts.*` + `README.md` (üretilmiş) · `docs/STAGE2_HANDOFF.md` ·
+`docs/PROJECT_HISTORY.md` · `CLAUDE.md` · `docs/ADIM135_LANDED_KICKOFF.md` (yeni) ·
+`docs/ADIM134_LANDED_KICKOFF.md` (`current` → `historical`).

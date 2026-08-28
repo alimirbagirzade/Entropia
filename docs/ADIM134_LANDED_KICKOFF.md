@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 134 landed — GH #854 pin taşıma kusuru koşuldu; düzeltmesi İMZA bekliyor
 
 ## Neredeyiz

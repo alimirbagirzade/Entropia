@@ -18252,3 +18252,84 @@ helper + `re`/`pytest` importları) · `docs/decisions/closure_g10_containment_l
 (md. 2 tahliye kaydı, ikinci talep bölümü + **BOŞ** imza kutusu, iki bayat maddenin
 `Was "…"` işaretlenmesi) · `README.md` + `docs/generated/repository_facts.{md,json}`
 (üretilmiş).
+
+---
+
+## ADIM 131 — `G10` (ADR §16 GATE 2) İMZALANDI: `A` — ŞİMDİ VER · KAPI, TEK BİR LİTERAL DEĞİŞMEDEN SUSTU
+
+**Taban:** `origin/main` @ `a9f9edcc` (ADIM 130, PR #867) · **Dal:**
+`docs/stage-131-landed` · **alembic head `0044_drop_net_conflict_policy` (MIGRATION YOK)** ·
+`ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** ·
+`SHARED_ALLOCATION_STATUS` = **`future_dev` (EL DEĞMEDİ — bu slice LIFT DEĞİLDİR)** ·
+`capability.py` **EL DEĞMEDİ** · `backend/src`, `backend/tests` ve `frontend/src`'te
+**SIFIR SATIR**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+
+### Ne indi
+
+Tek dosya: `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md`. ADIM 130'un
+**boş** bıraktığı ikinci talep kutusunda **`A` — ŞİMDİ ver** işaretlendi; imza
+`alimirbagirzade`, tarih 2026-08-28. **ADR §16 Gate 2 ARTIK ONAYLI** ve `C9` / ADIM 20
+PR'ının önündeki **karar** kapısı kalktı.
+
+Karar oturum içinde, ADIM 130'un ölçümü sunulduktan sonra verildi. **Serbest metinli bir
+gerekçe alınmadı ve UYDURULMADI** — imzacı üç şıktan birini seçti; belgede saklanan alıntı
+**şıkkın kendisine sunulan metnidir**, imzacının cümlesi değildir (ADIM 129'un `C`
+kararında da aynı biçim kullanıldı).
+
+### ASIL ÖLÇÜM — ADIM 130'un NC-5'i üretimde doğrulandı
+
+ADIM 130 kapıyı sevk ederken bir iddia yazmıştı: *"Onay verildiğinde yapılacak tek şey
+kutuda `A`'yı işaretlemektir; kapı bunu kendiliğinden okur ve susar. Testte değiştirilecek
+bir literal yoktur."* Bu, orada bir **negatif kontrolde** (NC-5) ölçülmüştü. Burada
+**gerçek imzayla** doğrulandı:
+
+- `pytest tests/unit/oracles/test_oracle_portfolio_containment_gate.py` → **9 passed,
+  exit 0**;
+- `git diff --stat` → **tek dosya**, ve o dosya karar belgesidir. Test dosyası **byte
+  olarak el değmedi**.
+
+**Ve yeşil olması tek başına yeterli sayılmadı.** `SHARED_ALLOCATION_STATUS` hâlâ
+`future_dev` olduğu için kapı, onay okunmadan da yeşil kalırdı — yani yeşil, iki farklı
+dünyanın ortak çıktısıdır. Bu yüzden onayın **gerçekten okunduğu** doğrudan ölçüldü:
+
+```
+_gate2_is_approved(<gerçek belge>)             -> True
+_lift_without_gate2("active_v1", <gerçek belge>) -> False   (ADIM 130'da True idi)
+```
+
+Bu, deponun *"yeşil exit code kanıt değildir"* dersinin bu slice'taki karşılığıdır: kapının
+**susması** ile kapının **onayı görmesi** ayrı iddialardır ve ikincisi ayrıca ölçülür.
+
+### DÜRÜST SINIR — onay `C9`'u BAŞLATIR, BİTİRMEZ
+
+- **Hiçbir ön koşul yeşile çevrilmedi.** **17 / 18 / 22 KIRMIZI KALIR** ve üçü de `C9`'un
+  kendi teslimatıdır. §Karar tablosunun `A` satırının kendi yazdığı bedel yerinde duruyor:
+  *"bir sonraki okuyucu 'onaylı' görüp kalan kırmızıları hafife alabilir."*
+- **Bu slice bir LIFT DEĞİLDİR.** `SHARED_ALLOCATION_STATUS` `future_dev`,
+  `capability.py` el değmedi, `ENGINE_VERSION` bump edilmedi, golden el değmedi.
+- **`C9`'un pazarlıksız beş kalemi DEĞİŞMEDİ** (`docs/ADIM131_LANDED_KICKOFF.md`
+  §*Sıradaki kalem*): ikinci `ENGINE_VERSION` bump'ı
+  (`test_lifting_containment_requires_a_second_engine_version_bump` zorlar) → ön koşul 17
+  (literal `execution_content` içinde; çevirmek her `execution_key`'i kaydırır, o kayma
+  bump'la **aynı** commit'e aittir) → ön koşul 18 (kod yok, ama flip sonrası DEĞERİ hiçbir
+  belge adlandırmıyor ve `capability.py` #4 ↔ OD-3(a) çelişkisi **`C9`'a adıyla devredildi**)
+  → A22 (tam suite `--cov-fail-under=90`, tek çağrı, exit code AYRI okunur) → **`C9` YALNIZ
+  koşar, başka hiçbir PR açık olamaz** (sıralı planın W8'i).
+- **A-08 (#514) AYRI HATTIR ve `AÇIK`.** Gate 2 onaylandı diye RC verdict'i sonuçlanamaz;
+  ajan o issue'ya dokunmaz (`human-only`). **Blocker sayısı bu slice'ta DEĞİŞMEDİ.**
+- **`G8` md. 4'ün istediği `#559` kapanış yorumu hâlâ yazılmadı** (insan eylemi).
+- Dört denetim belgesi (`final_closure_delta_audit_…`, `closure_w0_…preconditions`,
+  `closure_c9_…verdict`, `unified_portfolio_oracle_acceptance`) `doc-status: historical` ve
+  **EL DEĞMEDİ**. ADIM 130'un adlandırdığı sınır geçerli: `unified_portfolio_oracle_
+  acceptance.md`'nin **A16/A17/A21** satırları bugün karşı-olgusaldır ve **otorite
+  DEĞİLDİR**.
+- **frontend kapıları KOŞULMADI** (frontend'de sıfır satır); **tam backend suite bu slice'ta
+  KOŞULMADI** (ürün/test kodunda sıfır satır) → geçen sayı ve coverage **CI'ın
+  otoritesinde**. Toplanan test **3868 (DEĞİŞMEDİ)**.
+
+### Dokunulan dosyalar
+
+`docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md` (imza + bölüm başlığı +
+çerçeve cümlesi) · `docs/PROJECT_HISTORY.md` · `docs/STAGE2_HANDOFF.md` ·
+`docs/ADIM131_LANDED_KICKOFF.md` (yeni) · `docs/ADIM130_LANDED_KICKOFF.md`
+(`current` → `historical`) · `CLAUDE.md`.

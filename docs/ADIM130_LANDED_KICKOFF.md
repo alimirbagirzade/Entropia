@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 130 — `G10` yeniden talep edildi ve ZORLANABİLİR kılındı · sıradaki kalem
 

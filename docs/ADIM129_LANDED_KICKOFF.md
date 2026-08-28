@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 129 — ön koşul 17/18 ölçüldü, ikisi de KIRMIZI kaldı · sıradaki kalem
 

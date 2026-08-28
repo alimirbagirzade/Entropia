@@ -64,8 +64,11 @@ docstrings already correct.
 from __future__ import annotations
 
 import pathlib
+import re
 from collections.abc import Mapping
 from decimal import Decimal
+
+import pytest
 
 from entropia.domain.allocation.capability import (
     SHARED_ALLOCATION_DEPENDENCY,
@@ -432,6 +435,141 @@ def test_lifting_containment_requires_a_second_engine_version_bump() -> None:
         "requires the lift to shift the execution_key namespace itself; `C7`'s bump was "
         "spent on the A16 manifest record and does not discharge it. Bump ENGINE_VERSION "
         "in the same commit that lifts the flag, and regenerate the golden baseline."
+    )
+
+
+#: ADR 0002 §16 makes flag-flip approval (`G10`, "Gate 2") a GATE, and the ordered plan's
+#: `C9` row spells its stop condition literally: *"Any of the 22 preconditions unmet, or
+#: **G10 unsigned** -> do not open this PR."* Measured at ADIM 130: the whole `backend/`
+#: tree contained ZERO occurrences of `G10` or "Gate 2", so that stop condition was
+#: enforced by NOBODY — `C9` could lift the flag with Gate 2 still deferred and every
+#: test would stay green. Reading the decision record from a test is this repo's existing
+#: idiom for exactly this shape (`tests/contract/test_a11y_audit_prep_contract.py` reads a
+#: worksheet, `tests/unit/test_acceptance_semantic_map.py` reads the acceptance ledger).
+_GATE2_DECISION = (
+    pathlib.Path(__file__).resolve().parents[4]
+    / "docs"
+    / "decisions"
+    / "closure_g10_containment_lift_gate2_2026-08-26.md"
+)
+
+#: The SECOND request's box. The first request is signed `B — ERTELE` and is history; the
+#: gate must read the live box, not the archived one, so it is anchored to that heading.
+_GATE2_REQUEST_HEADING = "## Yeniden talep — Gate 2,"
+_GATE2_OPTION = re.compile(r"^([\u2611\u2610]) \*\*([ABC]) — ", re.MULTILINE)
+
+
+def _gate2_is_approved(document: str) -> bool:
+    """Is Gate 2 APPROVED in this decision record?
+
+    **Fail-closed, deliberately (K-07's shape).** Every way of not being able to answer —
+    the section deleted, the option lines renamed, two options ticked at once — raises
+    instead of returning ``False``. Returning ``False`` would look identical to "deferred"
+    and would keep the suite green on a mangled record, which is the failure mode a gate
+    exists to prevent. Only a record that parses cleanly and ticks exactly `A` is approval.
+    """
+    _, marker, rest = document.partition(_GATE2_REQUEST_HEADING)
+    if not marker:
+        raise AssertionError(
+            f"{_GATE2_DECISION.name} no longer contains a {_GATE2_REQUEST_HEADING!r} "
+            "section. Gate 2's live request box is what this gate reads; without it the "
+            "`C9` stop condition is unenforced again."
+        )
+    section = rest.split("\n## ")[0]
+    options = _GATE2_OPTION.findall(section)
+    letters = [letter for _, letter in options]
+    if letters != ["A", "B", "C"]:
+        raise AssertionError(
+            "Gate 2's request box no longer offers exactly A/B/C in order; parsed "
+            f"{letters!r}. The box shape is the gate's input — change it and this gate "
+            "must be changed with it, deliberately."
+        )
+    ticked = [letter for mark, letter in options if mark == "\u2611"]
+    if len(ticked) > 1:
+        raise AssertionError(
+            f"Gate 2's request box ticks more than one option ({ticked!r}). An ambiguous "
+            "signature is not a signature."
+        )
+    return ticked == ["A"]
+
+
+def _lift_without_gate2(status: str, document: str) -> bool:
+    """True when containment is lifted while Gate 2 has not been approved."""
+    return status == "active_v1" and not _gate2_is_approved(document)
+
+
+def _request_box(*ticked: str) -> str:
+    """A synthetic Gate 2 request box, for exercising the predicate on both worlds."""
+    lines = [
+        ("\u2611" if letter in ticked else "\u2610")
+        + " **"
+        + letter
+        + " — "
+        + letter.lower()
+        + "**"
+        for letter in "ABC"
+    ]
+    return _GATE2_REQUEST_HEADING + " ikinci istek\n\n" + "\n".join(lines) + "\n"
+
+
+def test_lifting_containment_requires_gate2_approval() -> None:
+    """ADR §16 Gate 2 (`G10`), enforced instead of remembered.
+
+    `G10` was requested on 2026-08-26 and signed **`B` — ERTELE**: deferred, not refused,
+    with a written re-request condition of three clauses. Two were already discharged then;
+    the third (`G14`'s `B` half shipped and `#544` closed) was discharged on 2026-08-27 by
+    ADIM 124. So the deferral's own condition is spent — and nothing anywhere would have
+    noticed, because no test knew Gate 2 existed.
+
+    **Written as a predicate, not as an ``if``** — the same move
+    :func:`test_lifting_containment_requires_a_second_engine_version_bump` makes, and for
+    the same reason: ``if lifted: assert ...`` is vacuously green today and would prove
+    nothing about whether it works on the one day it must.
+
+    It goes one step further than its sibling in two places, both of which were needed:
+
+    * ``and`` short-circuits, so applying the predicate to a tree whose flag is down would
+      never parse the real record — the fail-closed half would lie dormant until the lift.
+      The real document is therefore parsed UNCONDITIONALLY, today, on every run.
+    * The lifted world is then exercised against the REAL record rather than only against
+      synthetic ones, which is possible without touching ``capability.py`` (that file is
+      `C9`'s) because the status is an INPUT here.
+
+    This gate does not decide anything. If the owner ticks `A`, it goes quiet on its own —
+    there is no literal in this file to update.
+    """
+    approved_doc = _request_box("A")
+    deferred_doc = _request_box()
+
+    # 1. The predicate on all four corners — the non-vacuous half.
+    assert _lift_without_gate2("active_v1", deferred_doc) is True
+    assert _lift_without_gate2("active_v1", approved_doc) is False
+    assert _lift_without_gate2("future_dev", deferred_doc) is False
+    assert _lift_without_gate2("future_dev", approved_doc) is False
+
+    # 2. Fail-closed, proven rather than asserted in prose: three ways of being unable to
+    #    answer, none of which may quietly read as "deferred" (or as "approved").
+    for mangled in (
+        "no request box at all",  # the section was deleted
+        _request_box("A", "B"),  # two options ticked at once
+        _request_box().replace("\u2610 **B — b**\n", ""),  # an option went missing
+    ):
+        with pytest.raises(AssertionError):
+            _gate2_is_approved(mangled)
+
+    # 3. The real record, parsed UNCONDITIONALLY so the fail-closed half runs today rather
+    #    than for the first time on the day of the lift.
+    document = _GATE2_DECISION.read_text(encoding="utf-8")
+    approved = _gate2_is_approved(document)
+
+    # 4. The lifted world against the REAL record — no flag is flipped to ask this.
+    assert _lift_without_gate2("active_v1", document) is (not approved)
+
+    # 5. And the tree as it stands.
+    assert not _lift_without_gate2(SHARED_ALLOCATION_STATUS, document), (
+        "containment was lifted while ADR §16 Gate 2 (`G10`) is not approved. The ordered "
+        "plan's `C9` stop condition is explicit: G10 unsigned -> do not open this PR. Tick "
+        f"option A in the request box of {_GATE2_DECISION.name} first — this gate reads it."
     )
 
 

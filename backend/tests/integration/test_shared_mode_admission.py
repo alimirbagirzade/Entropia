@@ -429,13 +429,17 @@ async def test_od1_negative_control_agreeing_bases_are_admitted(session, monkeyp
 # --------------------------------------------------------------------------- #
 
 
-async def test_containment_still_leads_in_the_shipped_world(session) -> None:
+async def test_containment_still_leads_in_the_shipped_world(session, monkeypatch) -> None:
     """Unlifted, a violating composition is refused by CONTAINMENT, not by OD-1/OD-6.
 
     The two new guards sit behind the containment guard on purpose. If a later edit
     moved either of them in front, this test would report the new code and go red —
     which is the point: containment is the sharper statement while the flag is off.
     """
+    # CONTAINED WORLD, forced since ADIM 20 (`C9`). This case characterizes the
+    # containment blanket, which the lift removed as the shipped default but did not
+    # delete: `future_dev` is still a legal status and still behaves exactly this way.
+    monkeypatch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
     await _seed_principals(session)
     composition_id = await _two_strategy_composition(
         session, bases=(RecordTimeBasis.BAR_OPEN, RecordTimeBasis.BAR_CLOSE)
@@ -621,10 +625,16 @@ async def test_the_admission_guard_holds_when_ready_check_is_bypassed(session, m
     await _assert_nothing_admitted(session)
 
 
-async def test_containment_still_leads_for_a_g11_violation_in_the_shipped_world(session) -> None:
+async def test_containment_still_leads_for_a_g11_violation_in_the_shipped_world(
+    session, monkeypatch
+) -> None:
     """SHIPPED WORLD. Unlifted, the one finding is containment — shared mode is not
     unavailable *for this Strategy*, it is unavailable at all, and three more blockers
     behind that one would bury the actionable message."""
+    # CONTAINED WORLD, forced since ADIM 20 (`C9`). This case characterizes the
+    # containment blanket, which the lift removed as the shipped default but did not
+    # delete: `future_dev` is still a legal status and still behaves exactly this way.
+    monkeypatch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
     await _seed_principals(session)
     composition_id = await _one_strategy_shared(
         session,

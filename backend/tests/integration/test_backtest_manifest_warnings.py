@@ -22,6 +22,7 @@ from entropia.application.commands import allocation_plan as alloc_cmd
 from entropia.application.commands import backtest_run as backtest_cmd
 from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.queries import allocation_plan as alloc_query
+from entropia.domain.allocation import capability
 from entropia.domain.identity import Actor
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
 from entropia.shared.errors import ReadinessBlockedError
@@ -105,7 +106,7 @@ async def test_rc03_warning_is_retained_in_the_manifest_not_only_counted(session
     assert row["message"]
 
 
-async def test_shared_allocation_warning_path_is_now_fail_closed(session) -> None:
+async def test_shared_allocation_warning_path_is_now_fail_closed(session, monkeypatch) -> None:
     """The allocation warning RC-03 used to ride on is unreachable by design.
 
     ``ALLOCATION_UNALLOCATED_CASH`` is a WARNING, but it can only exist on an
@@ -113,6 +114,10 @@ async def test_shared_allocation_warning_path_is_now_fail_closed(session) -> Non
     composition is NOT_READY and no run is admitted. Pinned here so removing the
     containment restores a CHECKED behaviour rather than a forgotten one.
     """
+    # CONTAINED WORLD, forced since ADIM 20 (`C9`). This case characterizes the
+    # containment blanket, which the lift removed as the shipped default but did not
+    # delete: `future_dev` is still a legal status and still behaves exactly this way.
+    monkeypatch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
     await _seed_principals(session)
     composition_id, _root, _rev = await _ready_composition(session, USER1)
     await _enable_partial_allocation(session, USER1, composition_id)

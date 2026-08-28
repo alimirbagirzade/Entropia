@@ -153,14 +153,20 @@ CONTENTION_SELECTION_POLICY = "pin_order_admission"
 item_id)`` order until the pool's committable capital is exhausted, then reject the rest
 whole."""
 
-CONTENTION_SELECTION_STATUS = "recommended_pending_approval"
-"""**OD-3 is DECIDED; this label has not caught up, and that lag is deliberate.** ADR §13.1
-(2026-08-05) resolved OD-3 to option (a) — exactly the rule
-:data:`CONTENTION_SELECTION_POLICY` already implements — and §13.1 then assigns *this label's*
-flip to ADIM 20, because moving a policy label before the manifest that carries it exists
-would advertise a decision no artifact records. So the value below still reads
-``"recommended_pending_approval"`` on purpose; it describes the LABEL's state, not the
-decision's.
+CONTENTION_SELECTION_STATUS = "approved"
+"""**OD-3 is DECIDED and, as of ADIM 20, this label has caught up.** ADR §13.1 (2026-08-05)
+resolved OD-3 to option (a) — exactly the rule :data:`CONTENTION_SELECTION_POLICY` already
+implements — and §13.1 assigned *this label's* flip to ADIM 20 (containment-lift precondition
+18), because moving a policy label before the manifest that carries it exists would advertise
+a decision no artifact records. That manifest now exists (A16, ADIM 126), so the label moved.
+
+**Nothing about the BEHAVIOUR changed at this flip** — that is the whole point of the lag.
+``pin_order_admission`` has been the shipped rule since ADIM 19; only its disclosure was
+waiting. Contrast ``MARK_STALENESS_POLICY``, flipped in the same slice for the opposite
+reason: there the label waited for a behaviour that did not yet exist.
+
+The post-flip value was named by the PO on 2026-08-28; no document had named it. It reports
+the DECISION's state, which is what the field is for.
 
 Canon decides the RESPONSE to a solvency shortfall — reject, never a partial fill, never a
 borrow (Modül 11 §5.3) — and this module implements exactly that. It does not decide *which*
@@ -180,17 +186,17 @@ under it can always be told from one produced under a different resolution."""
 # OD-3 as an open decision blocking the lift. It was reading the source correctly at its
 # own base and the source was what had gone stale.
 #
-# MEASURED AND DELIBERATELY NOT RESOLVED HERE. The old text said the tie-break is what
-# "the containment's own removal condition #4 already commits to". Condition #4
-# (`allocation/capability.py`) reads "conflict/exposure arbitration is SYMMETRIC with
-# deterministic id-based tie-breaking", and ADR §13's own vocabulary assigns "fully
-# symmetric, order-free" to option (b) — the alternative §13.1 did NOT take. So the two
-# halves of condition #4 pull apart under scarcity, where `pin_order_admission` favours the
-# low pin, and asserting that #4 "commits to" this rule picks one half of a contested
-# sentence. The note below therefore states what was decided and what was weighed, and
-# leaves the reconciliation to whoever owns condition #4 — it is not this module's to make.
-# Put to the PO on 2026-08-28, who chose to defer it to `C9` by name rather than rewrite
-# either side; precondition 18 therefore stays red and this label stays unflipped.
+# RESOLVED AT ADIM 20, AND THE RESOLUTION WAS A REWRITE OF THE OTHER SIDE. The contradiction
+# measured here was real: condition #4 (`allocation/capability.py`) read "conflict/exposure
+# arbitration is SYMMETRIC with deterministic id-based tie-breaking", while ADR §13's own
+# vocabulary assigns "fully symmetric, order-free" to option (b) — the alternative §13.1 did
+# NOT take. Under scarcity `pin_order_admission` favours the low pin, so the two halves of #4
+# pulled apart and asserting that #4 "commits to" this rule picked one half of a contested
+# sentence. Deferred to `C9` by name by the PO on 2026-08-28; resolved by the PO at ADIM 20 in
+# favour of the SIGNED decision: condition #4's wording was corrected to describe
+# `pin_order_admission`, because reversing arbitration to (b) would have overturned §13.1 and
+# moved shipped financial behaviour. The "blocked item's share is never transferred" half of
+# #4 was untouched — it was never in tension and A9/A10 pin it.
 CONTENTION_SELECTION_NOTE = (
     "OD-3 (ADR 0002 §13) is DECIDED: §13.1 resolved it to (a) on 2026-08-05 and this module "
     "implements it. What has not caught up is CONTENTION_SELECTION_STATUS, whose flip §13.1 "

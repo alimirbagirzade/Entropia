@@ -35,6 +35,7 @@ from entropia.domain.backtest.execution.portfolio_ledger import (
     LEDGER_INSOLVENT,
     LEDGER_LAYER_REASONS,
     LEDGER_POLICY_VERSION,
+    MARK_STALE_AFTER_MS,
     MAX_POSITION_CONSTRAINT,
     MAX_POSITION_NOTIONAL_EXCEEDED,
     MONEY_QUANTUM,
@@ -680,19 +681,50 @@ def test_an_unmarkable_position_is_reported_rather_than_valued_at_zero() -> None
     assert valuation.gross_exposure_percent == Decimal("11.00")
 
 
-def test_a_stale_mark_is_usable_and_its_staleness_is_recorded_not_judged() -> None:
-    """The clock MEASURES staleness and applies no bound (``ItemTickView.staleness_ms``); the
-    ledger carries the measurement through and chooses no policy either. A ``stale_after``
-    threshold is the OD-2 decision, and inventing one here would ship it unrecorded."""
+def test_a_carried_forward_mark_values_a_position_only_within_the_od2_bound() -> None:
+    """OD-2(a), BUILT (ADIM 20): carry the last closed bar's close forward under a declared
+    ``stale_after`` bound, with a diagnostic counter.
+
+    This test replaces ``..._staleness_is_recorded_not_judged``, which asserted the OPPOSITE
+    and was correct until the bound landed: before ADIM 20 the ledger recorded staleness and
+    refused to judge it, because judging without recording the policy would have shipped the
+    OD-2 decision unrecorded. It is now recorded — ``carry_forward_bounded_v1`` in the run
+    manifest — so the judgment is finally honest to make.
+
+    Both sides of the bound are exercised. Asserting only the refusal would pass under a
+    policy that refused EVERY carry-forward, which is the fail-closed zero-bound the PO
+    explicitly did not choose (it would nullify the carry-forward (a) selected)."""
     ledger = _ledger()
     ledger.set_position("item_a", direction="long", size=Decimal("10"), entry_price=Decimal("100"))
-    stale = MarkPrice(price=Decimal("105"), authority="stale_last_close", staleness_ms=86_400_000)
+    within = MarkPrice(
+        price=Decimal("105"), authority="stale_last_close", staleness_ms=MARK_STALE_AFTER_MS
+    )
+    beyond = MarkPrice(
+        price=Decimal("105"), authority="stale_last_close", staleness_ms=MARK_STALE_AFTER_MS + 1
+    )
     unavailable = MarkPrice(price=Decimal("105"), authority="unavailable")
 
-    assert stale.is_usable
+    # carry-forward still happens — the bound is a bound, not a ban.
+    assert within.is_usable
+    assert not within.is_stale_refused
+    assert ledger.valuation(7, {"item_a": within}).unrealized_pnl == Decimal("50.00")
+
+    # one millisecond past it, the position is REPORTED, never valued at zero.
+    assert not beyond.is_usable
+    assert beyond.is_stale_refused
+    aged = ledger.valuation(7, {"item_a": beyond})
+    assert aged.unrealized_pnl is None
+    assert aged.marked_gross_exposure is None
+    assert aged.unmarked_items == ("item_a",)
+    assert aged.stale_refused_items == ("item_a",)
+
+    # the counter is NARROWER than "unmarked": an unavailable authority is not an age event,
+    # so counting it as one would over-report staleness.
     assert not unavailable.is_usable
-    assert ledger.valuation(7, {"item_a": stale}).unrealized_pnl == Decimal("50.00")
-    assert ledger.valuation(7, {"item_a": unavailable}).unmarked_items == ("item_a",)
+    assert not unavailable.is_stale_refused
+    absent = ledger.valuation(7, {"item_a": unavailable})
+    assert absent.unmarked_items == ("item_a",)
+    assert absent.stale_refused_items == ()
 
 
 def test_a_non_positive_mark_price_cannot_value_a_position() -> None:
@@ -1304,7 +1336,7 @@ def test_no_ledger_field_ships_in_the_manifest_yet_and_the_engine_version_stands
     # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
     # the tripwire is unchanged by that: it still fails the moment the ADIM 20 wiring
     # shifts the namespace, because it would have to move this line to do so.
-    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
+    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
     assert "engine_allocation_policy_version" in manifest_src, "A16 requires it (shipped at `C7`)"
     for absent in ("portfolio_ledger_policy_version", LEDGER_POLICY_VERSION):
         assert absent not in manifest_src

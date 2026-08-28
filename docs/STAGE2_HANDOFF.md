@@ -59,6 +59,29 @@ Alembic head: `0007_create_package_precheck` (unchanged — 2f is read-only, no 
 - 2f **`explicitly_shared` is readable by any authenticated actor** (mirrors `identity/policy.py::can_view`; no share-grant table yet). When a per-principal share list lands, tighten both `can_view` and `queries/library.py::_visibility_conditions` together.
 - 2f deferred refinements: **market/timeframe-scope facets** (need a defined facet vocabulary + indexed columns) and **user-driven sort** (V1 is fixed newest-first by `entity_id`; performance sorts need linked runs from Stage 5); the catalog **list** row surfaces the *pinned* family name while **detail** resolves the live name (fold live name into list rows when an indexed family projection exists).
 
+## Stage 132 — `C9` / ADIM 20: containment lift landed (PR pending)
+
+`SHARED_ALLOCATION_STATUS` **`future_dev` → `active_v1`**; `ENGINE_VERSION` →
+`backtest-engine-v18-unified-clock-portfolio` (A15's SECOND bump — `C7`'s was spent on the
+A16 record change). **No migration.** OpenAPI unchanged. Golden regenerated and **measured**:
+exactly 2 lines moved (`contract.execution_key` + the version label), so **49 of 50 digests
+are byte-identical** and no financial number moved.
+
+Preconditions **17** (OD-2 mark policy BUILT — `MARK_STALE_AFTER_MS` bound + diagnostic
+counter, literal flipped in both writings), **18** (`CONTENTION_SELECTION_STATUS` =
+`approved`; `capability.py` removal condition #4 reworded to the signed OD-3(a)) and **22**
+(A22 full suite green, coverage 94.03%) closed here → **22/22**.
+
+Three PO decisions, none taken by the agent: the `stale_after` value (900 s, **borrowed** from
+canon's only declared staleness bound and recorded as borrowed), condition #4's reconciliation
+(**contract** corrected to the code, not the reverse), and the post-flip label value.
+
+**Honest boundary:** the mark path has **zero production callers** — OD-2 is shipped and
+versioned in the manifest, but not wired to a reachable path. **A-08 (#514) is untouched and
+OPEN; blocker count UNCHANGED (1); RC verdict stays BLOCKED.**
+
+Full record: `docs/PROJECT_HISTORY.md` §ADIM 132 · `docs/ADIM132_LANDED_KICKOFF.md`.
+
 ## Stage 2d — Rationale Families (doc 10) ✅ landed (#4)
 
 Shared-edit exception (DOMAIN_MODEL §6): all four roles create/edit/rename/soft-delete any family + edit any assignment via `can_manage_rationale_families` / `can_edit_rationale_assignments` (NOT owner policy). `rationale_family_root` (detail + `display_color`) + immutable `rationale_family_revision` + `package_rationale_assignment` edge (`target_kind = package_revision | working_item_revision`), all entity_registry-anchored; `create_family` is async/FK-safe. Atomic all-or-nothing batch with `expected_table_version` + per-row `expected_head_revision_id` → `PACKAGE_RATIONALE_ASSIGNMENT_CONFLICT`; each changed assignment makes a new package revision (carrying contracts forward; package owner unchanged); identical resubmit = idempotent no-op; output mismatch = non-blocking `OUTPUT_TYPE_NOT_LISTED` warning. Assignment table renders the family's **current** name live (rename without re-pinning). 6 ACTIVE seed families behind `SEED_RATIONALE` (incl. `Embedded System / TA Resolver`). Migration `0006_rationale_families`. **Consumed by:** 2e Strategy required-family picker (ACTIVE roots only) + 2f Package Library family filter (`rationale_family_id` join).

@@ -1129,11 +1129,12 @@ def test_no_arbitration_field_ships_in_the_manifest_yet_and_the_engine_version_s
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
-    # The literal moves only when something OUTSIDE the contained work bumps the version;
-    # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
-    # the tripwire is unchanged by that: lifting containment still cannot happen without
-    # editing this line.
-    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
+    # MOVED AT ADIM 20 (`C9`), AS THE ACT OF LIFTING. Every earlier bump came from OUTSIDE
+    # the contained work (#550/#551/#552, then `C7`'s A16 record change) and this line was
+    # the tripwire saying containment could not be lifted without editing it. It was edited,
+    # deliberately, in the lift commit — and the assertion below it did NOT loosen: the
+    # sequential manifest still must not name the portfolio BEHAVIOUR.
+    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
     # Shipped at `C7` (A16). Parity with this module's own constant is proved in
     # ``tests/unit/test_a16_manifest_policy_parity.py``, which may import both sides.
     for present in ("arbitration_policy_version", "arbitration-policy-v1"):
@@ -1142,31 +1143,37 @@ def test_no_arbitration_field_ships_in_the_manifest_yet_and_the_engine_version_s
     assert "conflict_policy" not in manifest_src
 
 
-def test_the_containment_flag_is_untouched() -> None:
-    """No slice before the last one lifts containment (ADR §12). Shared allocation still
-    refuses to execute, so nothing here can produce a Result."""
+def test_the_containment_flag_is_lifted() -> None:
+    """Renamed at ADIM 20 from ``..._is_untouched``.
+
+    Its old sentence — *"no slice before the last one lifts containment (ADR §12)"* — was
+    true of every slice that came before and is now spent: `C9` IS the last one. The pin is
+    kept rather than deleted because this module's arbitration work was written under
+    containment, and a reader arriving here needs to know that assumption no longer holds."""
     from entropia.domain.allocation.capability import (
         SHARED_ALLOCATION_STATUS,
         shared_allocation_is_executable,
     )
 
-    assert SHARED_ALLOCATION_STATUS == "future_dev"
-    assert shared_allocation_is_executable() is False
+    assert SHARED_ALLOCATION_STATUS == "active_v1"
+    assert shared_allocation_is_executable() is True
 
 
-def test_the_od3_selection_rule_is_labelled_as_pending_approval() -> None:
-    """OD-3 is DECIDED (ADR §13.1, 2026-08-05, option (a)); the LABEL lags on purpose.
+def test_the_od3_selection_rule_is_labelled_as_approved() -> None:
+    """OD-3 is DECIDED (ADR §13.1, 2026-08-05, option (a)) and at ADIM 20 the LABEL caught up.
 
-    Was "OD-3 is open (ADR §13)" — the pre-#852 sentence, kept here after #852 corrected
-    the same claim in the source docstring. The name of the test is deliberately unchanged:
-    what it pins is that the label still reads ``recommended_pending_approval``, and that is
-    still true and still correct. Only the reason changed. Canon decides the RESPONSE to a
-    shortfall — reject, never partial, never borrow — and that is implemented; it does not
-    decide WHICH of several affordable intents is refused, so §13.1's resolution travels in
-    every report as a named, versioned policy rather than being silently adopted. The flip
-    of the label itself is ADIM 20's (containment-lift precondition 18)."""
+    Renamed from ``..._is_labelled_as_pending_approval``, which pinned the LAG. The lag was
+    real and deliberate — §13.1 assigned this flip to ADIM 20 so that no label would advertise
+    a decision before a manifest carried it — and it ended when the lift landed
+    (containment-lift precondition 18).
+
+    **The policy assertion below is the load-bearing one and it did NOT move.** OD-3's flip is
+    a disclosure change, not a behaviour change: ``pin_order_admission`` has been the shipped
+    rule since ADIM 19. If a future edit ever moves ``CONTENTION_SELECTION_POLICY`` while this
+    status still reads ``approved``, that is a silently-adopted resolution — which is the exact
+    failure §13.1 wrote the label to prevent."""
     assert CONTENTION_SELECTION_POLICY == "pin_order_admission"
-    assert CONTENTION_SELECTION_STATUS == "recommended_pending_approval"
+    assert CONTENTION_SELECTION_STATUS == "approved"
     ledger = _ledger()
     snapshot = ledger.publish_snapshot(_T)
     report = arbitrate(
@@ -1176,7 +1183,7 @@ def test_the_od3_selection_rule_is_labelled_as_pending_approval() -> None:
         profiles=_profiles(),
         policy=_BLOCK,
     )
-    assert report.selection_status == "recommended_pending_approval"
+    assert report.selection_status == "approved"
     assert report.by_item("item_a").diagnostics["selection_policy"] == CONTENTION_SELECTION_POLICY
 
 

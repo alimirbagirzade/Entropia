@@ -977,11 +977,12 @@ def test_no_intent_field_ships_in_the_manifest_yet_and_the_engine_version_stands
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
-    # The literal moves only when something OUTSIDE the contained work bumps the version;
-    # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
-    # the tripwire is unchanged by that: lifting containment still cannot happen without
-    # editing this line.
-    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
+    # MOVED AT ADIM 20 (`C9`), AS THE ACT OF LIFTING. Every earlier bump came from OUTSIDE
+    # the contained work (#550/#551/#552, then `C7`'s A16 record change) and this line was
+    # the tripwire saying containment could not be lifted without editing it. It was edited,
+    # deliberately, in the lift commit — and the assertion below it did NOT loosen: the
+    # sequential manifest still must not name the portfolio BEHAVIOUR.
+    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
     assert "arbitration_policy_version" in manifest_src, "A16 requires it (shipped at `C7`)"
     for absent in ("intent_contract_version", "item-intent-v1"):
         assert absent not in manifest_src

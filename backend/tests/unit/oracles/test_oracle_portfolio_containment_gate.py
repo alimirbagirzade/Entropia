@@ -366,34 +366,36 @@ def test_the_result_projection_exists_but_no_production_path_reaches_it_either()
     assert "shared_allocation_is_executable" in worker
 
 
-def test_the_containment_flag_and_engine_version_are_both_untouched() -> None:
-    """§6 condition 6 / ADR §14 A15: the lift REQUIRES an ``ENGINE_VERSION`` bump, so no
-    sequential-era Result can be idempotently reused for a unified-clock re-run. Neither the
-    flag nor the version has moved, and the dependency the capability names is still the
-    co-simulation this package's oracles exercise only through a test-owned driver."""
-    assert SHARED_ALLOCATION_STATUS == "future_dev"
-    assert shared_allocation_is_executable() is False
-    # The literal moves only when something OUTSIDE the contained work bumps the version;
-    # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
-    # the tripwire is unchanged by that: lifting containment still cannot happen without
-    # editing this line.
-    #
-    # `C7` moved it again, and this time the gate did exactly what its module docstring
-    # says it exists for — *"written to FAIL the day someone lifts the flag, bumps the
-    # engine version or closes the last gap without the rest of the matrix, which is
-    # precisely when a human must re-read §14 rather than trust a green suite."* It fired,
-    # a human re-read §14, and the bump was authorised knowing what it costs: A15 is NOT
-    # discharged by it, because a contained-era Result and a unified-clock Result would
-    # still share a namespace unless `C9` bumps AGAIN. That obligation is enforced, not
-    # remembered — see the test directly below.
-    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
-    assert "unified-clock multi-item co-simulation" in SHARED_ALLOCATION_DEPENDENCY
-
-
 #: The version `C7` bumped to. Recorded so the NEXT bump can be required rather than
 #: remembered. This is the one literal in this file that is allowed to be compared against
 #: ``ENGINE_VERSION`` for INEQUALITY, and only in the lifted world.
 _C7_ENGINE_VERSION = "backtest-engine-v18-a16-manifest-policy-provenance"
+
+
+def test_the_containment_flag_and_engine_version_are_both_lifted() -> None:
+    """§6 condition 6 / ADR §14 A15 — **the lift happened at ADIM 20 (`C9`), and this pin is
+    the record of it.**
+
+    Renamed from ``..._are_both_untouched``. Every earlier slice found this test asserting
+    that NOTHING had moved, and that was the tripwire's whole value: the module docstring says
+    it is *"written to FAIL the day someone lifts the flag, bumps the engine version or closes
+    the last gap without the rest of the matrix, which is precisely when a human must re-read
+    §14 rather than trust a green suite."* It fired on exactly that day. A human re-read §14,
+    Gate 2 was signed (`G10`, 2026-08-28), and the pin was moved as the ACT of lifting rather
+    than loosened to get a green suite — it still pins two exact literals and still fails on
+    any drift of either.
+
+    A15 is discharged HERE and not before: `C7`'s bump was spent on a RECORD change (A16), so
+    a contained-era Result and a unified-clock Result would have shared an ``execution_key``
+    namespace had `C9` not bumped again. The sibling test below enforces exactly that and is
+    what makes this line's new value non-negotiable rather than cosmetic."""
+    assert SHARED_ALLOCATION_STATUS == "active_v1"
+    assert shared_allocation_is_executable() is True
+    # ADR §10.3's proposed name, taken verbatim rather than invented — the version string is
+    # a namespace, and inventing one here would have made the namespace this slice's opinion.
+    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
+    assert ENGINE_VERSION != _C7_ENGINE_VERSION
+    assert "unified-clock multi-item co-simulation" in SHARED_ALLOCATION_DEPENDENCY
 
 
 def _lift_reuses_the_c7_namespace(status: str, engine_version: str) -> bool:

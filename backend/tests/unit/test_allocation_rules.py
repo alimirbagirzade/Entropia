@@ -39,7 +39,12 @@ def _blocker_codes(issues) -> set[str]:
     return {str(i.code) for i in issues if str(i.severity) == str(Sev.BLOCKER)}
 
 
-_CONTAINMENT = {str(Code.SHARED_MODE_NOT_IN_BUILD)}
+# EMPTY SINCE ADIM 20 (`C9`). This was ``{SHARED_MODE_NOT_IN_BUILD}``: while containment was
+# on, every ENABLED plan led with that blocker, so each test below asserted it as the expected
+# set and meant "and nothing else". The lift removed the blocker, so the same assertions now
+# mean the same thing against an empty set — the name is kept because what each call site is
+# saying is still "no blocker OTHER than containment", and containment no longer contributes.
+_CONTAINMENT: set[str] = set()
 
 
 def _config(**overrides) -> PortfolioAllocationConfigV1:

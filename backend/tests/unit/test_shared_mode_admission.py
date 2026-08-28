@@ -341,14 +341,22 @@ def _codes(items: list[ReadinessItemInput], *, allocation_enabled: bool) -> set[
     return {str(issue.code) for issue in evaluation.issues}
 
 
-def test_ready_check_is_silent_while_containment_is_on() -> None:
-    """SHIPPED WORLD. The one true finding for an enabled plan today is the containment
-    blocker: shared mode is not unavailable *for this Strategy*, it is unavailable at
-    all. Stacking three more blockers behind it would bury the actionable one and tell
-    the user to edit a Strategy that is not the reason the run is refused."""
-    assert not capability.shared_allocation_is_executable()
-    item = _strategy_item("mbitem_1", _config(entry_timing="next_candle_open"))
-    assert _DEFERRED.value not in _codes([item], allocation_enabled=True)
+def test_ready_check_is_silent_while_containment_is_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CONTAINED WORLD — no longer the shipped one, so it is forced.
+
+    The docstring used to open with "SHIPPED WORLD"; ADIM 20 lifted the flag and that word
+    moved to the sibling below. The behaviour pinned here is unchanged and still reachable:
+    while containment is on, the one true finding for an enabled plan is the containment
+    blocker — shared mode is not unavailable *for this Strategy*, it is unavailable at all.
+    Stacking three more blockers behind it would bury the actionable one and tell the user to
+    edit a Strategy that is not the reason the run is refused."""
+    with monkeypatch.context() as patch:
+        patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
+        assert not capability.shared_allocation_is_executable()
+        item = _strategy_item("mbitem_1", _config(entry_timing="next_candle_open"))
+        assert _DEFERRED.value not in _codes([item], allocation_enabled=True)
 
 
 def test_ready_check_reports_the_blockers_once_the_flag_lifts(

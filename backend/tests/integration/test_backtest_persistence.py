@@ -34,6 +34,7 @@ from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.jobs.backtest_engine import run_backtest
 from entropia.application.queries import backtest_run as backtest_query
 from entropia.application.queries import mainboard as mb_query
+from entropia.domain.allocation import capability
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import (
     ApprovalState,
@@ -831,7 +832,9 @@ async def _run_diagnostics(session, result_id: str) -> dict[str, Any]:
     return dict(row.content)
 
 
-async def test_shared_allocation_run_is_refused_and_leaves_nothing_behind(session) -> None:
+async def test_shared_allocation_run_is_refused_and_leaves_nothing_behind(
+    session, monkeypatch
+) -> None:
     """ADIM 3 containment: a shared-capital composition never reaches the worker.
 
     This test used to assert the OPPOSITE — that the worker capitalised the run
@@ -845,6 +848,10 @@ async def test_shared_allocation_run_is_refused_and_leaves_nothing_behind(sessio
     at admission. The sizing arithmetic itself stays covered by the pure engine
     tests in ``tests/unit/test_backtest_engine_allocation.py``.
     """
+    # CONTAINED WORLD, forced since ADIM 20 (`C9`). This case characterizes the
+    # containment blanket, which the lift removed as the shipped default but did not
+    # delete: `future_dev` is still a legal status and still behaves exactly this way.
+    monkeypatch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
     await _seed_principals(session)
     composition_id, _root, _rev = await _ready_composition(session, USER1)
     await _enable_allocation(session, USER1, composition_id, amount="50000.00")

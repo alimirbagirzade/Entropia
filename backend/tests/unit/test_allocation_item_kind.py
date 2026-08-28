@@ -75,12 +75,10 @@ def test_every_shipped_kind_is_allocatable(kind: MainboardItemKind) -> None:
     issues, derived = validate_allocation(_config(_entry("a", "100")), item_refs={"a": _ref(kind)})
 
     assert _kind_issues(issues) == []
-    # ADIM 3 containment: an ENABLED plan always leads with SHARED_MODE_NOT_IN_BUILD
-    # (shared capital does not execute in this build). This test is about the ITEM
-    # KIND gate, so it asserts no OTHER blocker fires.
-    assert {str(i.code) for i in issues if str(i.severity) == "blocker"} == {
-        str(Code.SHARED_MODE_NOT_IN_BUILD)
-    }
+    # ADIM 3's containment made an ENABLED plan always lead with SHARED_MODE_NOT_IN_BUILD;
+    # ADIM 20 (`C9`) lifted it, so the expected set is now EMPTY. The assertion's meaning is
+    # unchanged — this test is about the ITEM KIND gate and says no OTHER blocker fires.
+    assert {str(i.code) for i in issues if str(i.severity) == "blocker"} == set()
     assert derived is not None
 
 

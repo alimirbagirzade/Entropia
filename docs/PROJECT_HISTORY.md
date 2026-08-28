@@ -18333,3 +18333,116 @@ Bu, deponun *"yeşil exit code kanıt değildir"* dersinin bu slice'taki karşı
 çerçeve cümlesi) · `docs/PROJECT_HISTORY.md` · `docs/STAGE2_HANDOFF.md` ·
 `docs/ADIM131_LANDED_KICKOFF.md` (yeni) · `docs/ADIM130_LANDED_KICKOFF.md`
 (`current` → `historical`) · `CLAUDE.md`.
+
+---
+
+## ADIM 132 — `C9` / ADIM 20: THE LIFT — CONTAINMENT KALKTI; VE LIFT'İN KENDİSİ BİR SÖZLEŞME HATASI YARATTI, ONU KAPATAN TESTİ İSE BİR ÖNCEKİ SLICE YAZMIŞTI
+
+**Taban:** `origin/main` @ `305cccec` (ADIM 131, PR #868) · **Dal:** `feat/stage-132-c9-containment-lift`
+
+`SHARED_ALLOCATION_STATUS` = **`active_v1`**. `ENGINE_VERSION` → **`backtest-engine-v18-unified-clock-portfolio`**
+(ADR §10.3'ün kendi önerdiği ad — icat edilmedi). Migration **YOK**. OpenAPI **değişmedi**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Giriş koşulu iki kez ölçüldü, ve ilk ölçüm SLICE'I DURDURDU
+
+Oturum `a9f9edcc` üzerinde başladı ve `G10` **imzasız** ölçüldü — imza merge edilmemiş
+**#868**'in içindeydi. Kapının kendi sevk edilmiş sabitleriyle:
+`_gate2_is_approved(gerçek belge) -> False`, `_lift_without_gate2("active_v1", …) -> True` →
+`test_...requires_gate2_approval` kırmızı verirdi. **`C9` başlatılmadı**; #868 merge edildikten
+sonra (`305cccec`) aynı ölçüm `True`/`False` verdi ve slice başladı. **Ders: bir imza "var" ile
+"bu ağaçta var" ayrı iddialardır** — #868'in gövdesi `-> True` diyordu ve kendi dalında haklıydı.
+
+### Ürün sahibinin ÜÇ kararı (hiçbiri ajan tarafından verilmedi)
+
+1. **`stale_after` = 900 sn, ÖDÜNÇ ve ödünç olduğu kaynakta yazılı.** ADR §13.1 OD-2(a)
+   *"declared bound"* der ve **sayı vermez**; kanonun tek deklare staleness değeri
+   `stale_after_seconds: 900` ve o **araştırma kaydı** içindir — ADR §795 bunu pozisyon
+   mark'lamaktan **açıkça ayırır**. `portfolio_ledger_accounting.md` §6'nın *"refuses to invent
+   a `stale_after` bound"* sınırı bu yüzden korundu: sayı **analoji olarak** alındı ve
+   `MARK_STALE_AFTER_MS`'in docstring'i ödünç olduğunu söylüyor. Fail-closed sıfır sınır
+   **reddedildi** (OD-2(a)'nın seçtiği carry-forward'ı etkisiz kılardı).
+2. **REMOVAL CONDITION #4 metni imzalı OD-3(a)'ya uyduruldu.** #4 *"arbitration is SYMMETRIC"*
+   diyordu; ADR §13'ün kendi sözlüğü *"fully symmetric, order-free"*'yi §13.1'in **almadığı**
+   (b) şıkkına atar ve kıtlıkta `pin_order_admission` **düşük pin'i kayırır**. Arbitration'ı
+   (b)'ye çevirmek §13.1'i tersine çevirir ve **sevk edilmiş finansal davranışı oynatırdı** →
+   **kod değil SÖZLEŞME düzeltildi**; *"blocked item's share never transferred"* yarısı **el
+   değmedi** (hiç çelişmiyordu, A9/A10 pinliyor). Eski metin silinmedi, kaydedildi.
+3. **Flip sonrası değer `approved`.** Hiçbir belge adlandırmamıştı.
+
+### ASIL BULGU — lift bir SÖZLEŞME HATASI yarattı, ve testi bir önceki slice yazmıştı
+
+`shared_allocation_capability_view` `status`/`available`'ı bayraktan türetiyor ama üç proza
+alanını **koşulsuz sabit** döndürüyordu. Lift edilince yayımlanan blok **aynı anda iki şey**
+söylemeye başladı: `available: true` + *"Shared capital allocation is not available in this
+build."* + *"Turn the Portfolio Allocation toggle off …"*. Bu bir sürpriz **değildi**:
+`test_the_capability_texts_do_not_follow_the_flag` (ADIM 76) tam bunu characterization olarak
+kaydetmiş ve docstring'ine *"When `C9` makes these three strings flag-aware, THIS test is the
+one that must be updated, and its failure is the reminder"* yazmıştı. Kırmızı verdi, hatırlatma
+alındı: view artık **dünya başına metin seçer** (`SHARED_ALLOCATION_ACTIVE_*`), ve yeni test
+çelişkinin **YOKLUĞUNU** assert eder (yalnız yeni metni assert etmek, sabitleri geri koyan bir
+regresyonu okumadan güncellenebilir bir string karşılaştırmasına indirgerdi).
+
+### İKİNCİ BULGU — golden ÖLÇÜLDÜ, körlemesine üretilmedi
+
+Kural açıktı: *"golden'ı kırmızı olduğu için yeniden üretme"* (#720 emsali). Ölçüm: oynayan
+**tek** digest `contract.execution_key`, ve onu oynatan **iki** girdinin ikisi de imzalı —
+A15'in ikinci bump'ı ve ön koşul 17'nin `execution_content` içindeki literali. Yeniden üretim
+sonrası dosyada **tam 2 satır** değişti (digest + sürüm etiketi): **50 digest'in 49'u bayt bayt
+aynı**, yani lift namespace'i kaydırdı ve **hiçbir finansal sayıyı oynatmadı**.
+
+### 40 kırmızı, hepsi tek tek ölçüldü
+
+Bayrağı çevirmek 40 test düşürdü. Sınıflar ve karşılıkları:
+
+- **İki-dünya fixture'ları AYNALANDI, silinmedi.** `_lifted()` üretimin dünyası oldu → her
+  modüle `_contained()` eklendi. İki dünya da hâlâ test ediliyor; `future_dev` legal bir
+  statü olmayı sürdürüyor ve blocker/zarf/admission guard'ı hâlâ o dünyada kanıtlı.
+- **`ENGINE_VERSION` literal pinleri (5)** kasıtla taşındı; her birinin *"davranış sequential
+  manifest'te GÖRÜNMEMELİ"* yarısı **korundu**.
+- **Mutluluk yolları lifted dünyaya yazıldı.** `test_full_flow_draft_validate_revision` ve
+  `test_portfolio_rules_round_trip_and_revision_carry` artık revizyonun **gerçekten
+  donduğunu** kanıtlıyor — adlarının hep ima ettiği ama containment'ın hiç bırakmadığı şey.
+- **Ready Check fixture'ı G11'e takıldı** ve bu ADIM 125'in birinci elden doğrulanmasıdır:
+  sevk edilen `_strategy_payload` varsayılanı `next_candle_open` (deferred fill) ve `G11`
+  onu paylaşımlı modda **reddediyor**. Varsayılan **değiştirilmedi**; opt-in bir
+  `_shared_ready_strategy_item()` eklendi.
+
+### Üç ayırt edici negatif kontrol
+
+Taban **0 kırmızı**, geri yükleme **doğrulandı** (bellekteki anlık görüntüden, `git checkout`
+ile değil — ADIM 111). NC-1 (`is_usable` sınırı yok sayar) → **yalnız iki OD-2 testi**;
+NC-2 (sayaç `unavailable`'ı da sayar) → **yalnız ledger testi**, yani *"sayaç `unmarked`'tan
+DAR olmalı"* **bağımsız bir eksendir** ve attribution onu görmez; NC-3 (metin sabite döner) →
+**yalnız capability testi**.
+
+### Dürüst sınırlar
+
+- **Mark yolunun üretimde SIFIR çağıranı var** — `attribute()` `backend/src`'te hiçbir yerden
+  çağrılmıyor, `valuation()` yalnız onun içinden, `MarkPrice` yalnız testlerde kuruluyor.
+  OD-2 politikası **sevk edildi ve manifest'te versiyonlu** (R-5), ama ulaşılabilir bir yola
+  **bağlanmadı**; bağlamak sevk edilen Result içeriğini değiştirirdi ve ürün sahibi bunu
+  kapsam dışı bıraktı. Ön koşul 17 *"mark policy built + label flipped"* ister ve o karşılandı.
+- **`E(t)` realized-only kaldı.** ADR §5'in *"marked so that `E(t)` is portfolio-wide"* prozası
+  gevşektir; sevk edilen `portfolio_ledger.py` docstring'i kesindir (*"a mark never touches
+  it"*) ve otorite odur. Mark **yanında** raporlanır.
+- **Frontend'de sıfır satır** → frontend kapıları KOŞULMADI.
+- **A-08 (#514) AÇIK ve el değmedi** (`human-only`); **blocker sayısı DEĞİŞMEDİ (1)**, verdict
+  **BLOCKED**. `C9` indi diye RC sonuçlanmaz.
+- 22 ön koşulun tamamı kapandı (**22/22**), ama bu **RC verdict'i değil** `C9`'un kapısıdır.
+
+### Ölçümler
+
+`ruff` / `ruff format` / `mypy` (405 dosya) temiz. **A22: tam suite tek çağrı, exit code ayrı
+okundu → `PYTEST_EXIT=0`, 0 FAILED, coverage %94.03** (kapı ≥%90). Toplanan test **3868**
+(değişmedi — testler yeniden yazıldı/adlandırıldı, net yeni düğüm yok).
+Documentation-truth kapısı **OK**: `repository_facts` yeniden üretildi, `CLAUDE.md`'nin **22**
+tarihsel anması deponun kendi kabul ettiği `(o gün)` hedge'iyle işaretlendi ve gerçekten
+present-tense olan tek codemap iddiası (`BACKEND_LAYERS.md`) düzeltildi.
+
+**Dosyalar:** `capability.py` · `manifest.py` · `execution/portfolio_ledger.py` ·
+`execution/provenance.py` · `execution/arbitration.py` · 20 test dosyası ·
+`engine_golden_digests.json` · `docs/generated/*` · `README.md` · `CLAUDE.md` ·
+`docs/CODEMAPS/BACKEND_LAYERS.md` · `docs/PROJECT_HISTORY.md` · `docs/STAGE2_HANDOFF.md` ·
+`docs/ADIM132_LANDED_KICKOFF.md` (yeni) · `docs/ADIM131_LANDED_KICKOFF.md`
+(`current` → `historical`).

@@ -28,6 +28,7 @@ from entropia.domain.backtest.execution.attribution import (
 )
 from entropia.domain.backtest.execution.portfolio import _pearson as shipped_pearson
 from entropia.domain.backtest.execution.portfolio_ledger import (
+    MARK_STALE_AFTER_MS,
     MarkPrice,
     PortfolioLedger,
     ledger_for_items,
@@ -158,19 +159,44 @@ def test_an_unusable_mark_authority_counts_as_unmarked() -> None:
     assert report.by_item("ci_a").unrealized is None
 
 
-def test_a_stale_mark_is_usable_and_its_staleness_is_not_thresholded_here() -> None:
-    """OD-2 is open: this module does not invent a staleness cutoff. A stale-but-usable
-    mark values the position; the POLICY question is disclosed in the manifest."""
+def test_attribution_applies_the_od2_bound_it_does_not_keep_its_own() -> None:
+    """OD-2 is BUILT (ADIM 20) and this module inherits it rather than re-deciding it.
+
+    Replaces ``..._staleness_is_not_thresholded_here``, whose premise (*"OD-2 is open"*) the
+    lift retired. The point being pinned is that attribution has NO second answer: it reuses
+    ``MarkPrice.is_usable``, so the bound cannot drift between the ledger's valuation and the
+    per-item rows. A within-bound carry-forward still values the row; a beyond-bound one makes
+    the row unmarked and drops ``total_contribution``, because a position that cannot be
+    marked is reported, never valued at zero."""
     ledger = _ledger()
     ledger.set_position("ci_a", direction="long", size=Decimal("2"), entry_price=Decimal("100.00"))
-    report = attribute(
+
+    within = attribute(
         ledger=ledger,
         t_ms=1_000,
-        marks={"ci_a": MarkPrice(Decimal("110.00"), "stale_last_close", staleness_ms=86_400_000)},
+        marks={
+            "ci_a": MarkPrice(
+                Decimal("110.00"), "stale_last_close", staleness_ms=MARK_STALE_AFTER_MS
+            )
+        },
         pin_ordinals=_ORDINALS,
     )
-    assert report.unmarked_items == ()
-    assert report.by_item("ci_a").unrealized == Decimal("20.00")
+    assert within.unmarked_items == ()
+    assert within.by_item("ci_a").unrealized == Decimal("20.00")
+
+    beyond = attribute(
+        ledger=ledger,
+        t_ms=1_000,
+        marks={
+            "ci_a": MarkPrice(
+                Decimal("110.00"), "stale_last_close", staleness_ms=MARK_STALE_AFTER_MS + 1
+            )
+        },
+        pin_ordinals=_ORDINALS,
+    )
+    assert beyond.unmarked_items == ("ci_a",)
+    assert beyond.by_item("ci_a").unrealized is None
+    assert beyond.by_item("ci_a").total_contribution is None
 
 
 # --------------------------------------------------------------------------- #

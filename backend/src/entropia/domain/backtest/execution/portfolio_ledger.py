@@ -27,10 +27,11 @@ It deliberately does NOT:
 * define cross-item conflict or ``NET`` netting — ADR §9.4 / GH #544. ``net_exposure`` here is
   a **measurement**, never an offset: no cap, no solvency figure and no margin requirement is
   computed from it (see :class:`PortfolioValuation`);
-* decide how a position with no fresh bar is marked — **OD-2, decided (a) in ADR §13.1 and
-  not yet built** (carry forward under a declared ``stale_after`` bound with a diagnostic
-  counter; §13.1 gives that to ADIM 20). A mark is *given* to :meth:`valuation` with the
-  authority it came from; an unmarkable position is REPORTED, never valued at zero;
+* invent the ``stale_after`` bound. **OD-2 is decided (a) in ADR §13.1 and BUILT HERE as of
+  ADIM 20** — carry forward under a *declared* bound with a diagnostic counter — but the
+  bound's value is :data:`MARK_STALE_AFTER_MS`, which is BORROWED from canon rather than
+  chosen here (see that constant). A mark is *given* to :meth:`valuation` with the authority
+  it came from; an unmarkable position is REPORTED, never valued at zero;
 * model margin or leverage. Canon defines no maintenance-margin formula and Master Ref §10.2
   delegates ``leverage_mode=cross`` to a portfolio risk model that does not exist. The ledger
   therefore uses the shipped convention — **committed capital == entry-basis notional**
@@ -360,25 +361,69 @@ class OpenPosition:
         return _money((mark - self.entry_price) * self.size * self.sign)
 
 
+MARK_STALE_AFTER_MS = 900_000
+"""OD-2(a)'s declared ``stale_after`` bound, in milliseconds (15 minutes).
+
+**THE VALUE IS BORROWED, AND THE BORROW IS DECLARED HERE RATHER THAN HIDDEN.** ADR §13.1
+resolved OD-2 to (a) — *"carry the last closed bar's close forward with a declared
+``stale_after`` bound and a diagnostic counter"* — and named no number. Canon carries exactly
+one declared staleness bound, ``stale_after_seconds: 900`` (Master Ref §Stale record), and it
+governs RESEARCH records, which ADR §795 explicitly distinguishes from marking a *position*
+(*"Modül 15 §10 covers research staleness only"*). Adopting it is therefore an ANALOGY, not a
+derivation — it is taken so that this module does not invent a financial parameter that no
+canon fixes, which is the boundary ``portfolio_ledger_accounting.md`` §6 recorded when it
+*"refuse[d] to invent a ``stale_after`` bound"*. Chosen by the PO on 2026-08-28 over a
+fail-closed zero bound, which would have nullified the carry-forward (a) deliberately chose.
+
+**The bound is part of the policy VERSION.** ``MARK_STALENESS_POLICY`` reads
+``carry_forward_bounded_v1`` and travels in every run manifest (R-5: every OD recorded as a
+versioned policy). Changing this number therefore REQUIRES a new policy version and an
+``ENGINE_VERSION`` bump — otherwise two Results produced under different bounds would share a
+namespace and be indistinguishable, which is the precise failure R-5 exists to prevent."""
+
+
 @dataclass(frozen=True, slots=True)
 class MarkPrice:
     """A price offered for marking one item's position, with where it came from.
 
     ``authority`` and ``staleness_ms`` are the clock's own facts (``ItemTickView``), carried
-    so a valuation is auditable. They are RECORDED, not judged: whether a stale price may mark
-    a position, and for how long, is **OD-2 — answered (a) in ADR §13.1 and not yet built**;
-    this type deliberately applies no bound, because the ``stale_after`` bound (a) calls for
-    arrives with ADIM 20's mark policy. ``unavailable`` — and
-    a non-positive price — mean the position cannot be marked at all, which is REPORTED rather
-    than valued at zero."""
+    so a valuation is auditable. **As of ADIM 20 they are also JUDGED** — against
+    :data:`MARK_STALE_AFTER_MS`, OD-2(a)'s declared bound. Before that flip this type applied
+    no bound on purpose, because applying one would have shipped the OD-2 decision unrecorded;
+    now the decision IS recorded, in the manifest, as ``carry_forward_bounded_v1``.
+
+    ``unavailable`` — and a non-positive price — mean the position cannot be marked at all.
+    So does a carry-forward that has aged past the bound. All three are REPORTED rather than
+    valued at zero, which is what keeps an unmarkable position out of a marked exposure
+    instead of silently shrinking it."""
 
     price: Decimal
     authority: PriceAuthority
     staleness_ms: int | None = None
 
     @property
+    def is_stale_refused(self) -> bool:
+        """Is this an otherwise-good price refused for AGE ALONE? (OD-2's diagnostic counter.)
+
+        Deliberately narrower than ``not is_usable``: an ``unavailable`` authority or a
+        non-positive price is not a staleness event, and counting it as one would inflate the
+        diagnostic that OD-2(a) asks for. ``staleness_ms is None`` means the item has no
+        closed bar yet, so there is no age to bound — the mark is judged on its authority
+        alone, exactly as before this policy landed."""
+        if self.authority == "unavailable" or self.price <= _ZERO:
+            return False
+        return self.staleness_ms is not None and self.staleness_ms > MARK_STALE_AFTER_MS
+
+    @property
     def is_usable(self) -> bool:
-        return self.authority != "unavailable" and self.price > _ZERO
+        """May this price value a position under OD-2(a)'s bounded carry-forward?
+
+        The bound is read from the module constant rather than passed in, so no call site can
+        forget it — the same discipline ``shared_allocation_is_executable`` enforces for the
+        containment flag."""
+        if self.authority == "unavailable" or self.price <= _ZERO:
+            return False
+        return not self.is_stale_refused
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,7 +455,13 @@ class PortfolioValuation:
     ``net_exposure`` is a MEASUREMENT. Nothing in this module offsets a long against a short —
     no cap, no headroom and no solvency figure is computed from it. Netting semantics are
     undefined in canon (ADR §9.4, GH #544) and defining them here would ship ``NET`` by
-    accident."""
+    accident.
+
+    ``stale_refused_items`` is OD-2(a)'s **diagnostic counter**, kept as the names rather than
+    a bare count so a reviewer can see WHICH position aged out, not merely how many did. It is
+    a SUBSET of ``unmarked_items``: every stale-refused item is also unmarked, but an item can
+    be unmarked without being stale (no mark offered, ``unavailable`` authority, non-positive
+    price). Reading the count off ``unmarked_items`` would therefore over-report staleness."""
 
     t_ms: int
     equity: Decimal
@@ -421,6 +472,7 @@ class PortfolioValuation:
     marked_gross_exposure: Decimal | None
     marked_net_exposure: Decimal | None
     unmarked_items: tuple[str, ...]
+    stale_refused_items: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -744,17 +796,22 @@ class PortfolioLedger:
         Pure: it writes nothing. ``E(t)`` is realized-only by canon, so an unrealized figure
         is reported *beside* it and never folded in (module docstring). A position with no
         usable mark makes ``unrealized_pnl`` and both ``marked_*`` figures ``None`` and lands
-        in ``unmarked_items`` — an unmarkable position is never valued at zero."""
+        in ``unmarked_items`` — an unmarkable position is never valued at zero. A mark refused
+        for AGE alone (OD-2(a)'s bound, :data:`MARK_STALE_AFTER_MS`) additionally lands in
+        ``stale_refused_items``, which is that decision's diagnostic counter."""
         offered = marks or {}
         unrealized = _ZERO
         marked_gross = _ZERO
         marked_net = _ZERO
         unmarked: list[str] = []
+        stale_refused: list[str] = []
         for item_id in sorted(self.positions):
             position = self.positions[item_id]
             mark = offered.get(item_id)
             if mark is None or not mark.is_usable:
                 unmarked.append(item_id)
+                if mark is not None and mark.is_stale_refused:
+                    stale_refused.append(item_id)
                 continue
             unrealized += position.unrealized(mark.price)
             value = _money(mark.price * position.size)
@@ -772,6 +829,7 @@ class PortfolioLedger:
             marked_gross_exposure=marked_gross if complete else None,
             marked_net_exposure=marked_net if complete else None,
             unmarked_items=tuple(unmarked),
+            stale_refused_items=tuple(stale_refused),
         )
 
     def _exposure_percent(self, gross: Decimal) -> Decimal:
@@ -979,6 +1037,7 @@ __all__ = [
     "LEDGER_INSOLVENT",
     "LEDGER_LAYER_REASONS",
     "LEDGER_POLICY_VERSION",
+    "MARK_STALE_AFTER_MS",
     "MAX_POSITION_CONSTRAINT",
     "MAX_POSITION_NOTIONAL_EXCEEDED",
     "MONEY_QUANTUM",

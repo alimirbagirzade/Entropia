@@ -80,7 +80,7 @@ This repository is built **stage by stage** from a canonical specification (see
 | `ENGINE_VERSION` | `backtest-engine-v18-unified-clock-portfolio` |
 | `SHARED_ALLOCATION_STATUS` | `active_v1` |
 | Capability matrix | 62 rows (40 `active_v1`, 22 `future_dev`) |
-| Backend tests **collected** (static, not a pass count) | 3868 in 366 files |
+| Backend tests **collected** (static, not a pass count) | 3870 in 367 files |
 | Backend `xfail` markers | 0 (0 strict) |
 | Frontend unit test **call sites** (static; `.each` expands at run time) | 732 in 72 files |
 | E2E test **call sites** (static) | 84 in 22 specs |

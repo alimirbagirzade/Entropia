@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 133 — OD-2 BAĞLAMA KARARI AÇILDI: ölçüm indi, **imza inmedi**
 

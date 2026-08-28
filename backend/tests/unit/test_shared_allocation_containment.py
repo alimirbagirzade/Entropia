@@ -14,8 +14,13 @@ Infra-free: every function under test is pure.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import Decimal
 
+import pytest
+
+from entropia.domain.allocation import capability
 from entropia.domain.allocation.capability import (
     SHARED_ALLOCATION_FIELD_PATH,
     SHARED_ALLOCATION_MESSAGE,
@@ -219,13 +224,45 @@ def test_every_item_independently_resolves_the_full_pool() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_shared_mode_is_declared_non_executable() -> None:
-    assert SHARED_ALLOCATION_STATUS == "future_dev"
-    assert shared_allocation_is_executable() is False
+@contextmanager
+def _contained(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Force the ``future_dev`` world for the duration of the block.
+
+    Added at ADIM 20 (`C9`). Everything under this heading characterizes THE CONTAINMENT,
+    and until the lift the containment was simply what production shipped, so these tests
+    needed no fixture. The lift made ``active_v1`` the shipped value — but it did not delete
+    the contained branch: ``future_dev`` is still a legal ``SharedAllocationStatus``, the
+    blocker, the message and the admission guard all still exist, and they are still what a
+    build that sets the constant back would do. So these tests keep testing them, explicitly,
+    instead of being deleted along with the default.
+
+    Mirrors ``test_shared_allocation_two_world_gate.py::_contained``; patching the module
+    global reaches every reader because ``rules.py`` and ``backtest_run.py`` hold a reference
+    to the FUNCTION, whose ``__globals__`` is this module's dict."""
+    with monkeypatch.context() as patch:
+        patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
+        yield
 
 
-def test_enabled_plan_leads_with_the_containment_blocker() -> None:
-    issues, derived = validate_allocation(_plan(enabled=True), item_refs=_refs())
+def test_shared_mode_is_declared_executable_since_the_lift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Renamed at ADIM 20 from ``test_shared_mode_is_declared_non_executable``.
+
+    Both worlds are asserted rather than only the new one: the shipped value moved, and the
+    contained branch still answers correctly when it is selected."""
+    assert SHARED_ALLOCATION_STATUS == "active_v1"
+    assert shared_allocation_is_executable() is True
+
+    with _contained(monkeypatch):
+        assert shared_allocation_is_executable() is False
+
+
+def test_enabled_plan_leads_with_the_containment_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _contained(monkeypatch):
+        issues, derived = validate_allocation(_plan(enabled=True), item_refs=_refs())
 
     assert str(issues[0].code) == str(AllocCode.SHARED_MODE_NOT_IN_BUILD)
     assert str(issues[0].severity) == "blocker"
@@ -267,12 +304,18 @@ def test_admission_guard_predicate_agrees_with_the_engine() -> None:
     assert shared_allocation_requested({"enabled": False}) is False
 
 
-def test_ready_check_raises_the_typed_blocker_with_remediation() -> None:
-    allocation_issues, _derived = validate_allocation(_plan(enabled=True), item_refs=_refs())
-
-    evaluation = evaluate_readiness(
-        [], allocation_enabled=True, allocation_issues=allocation_issues
-    )
+def test_ready_check_raises_the_typed_blocker_with_remediation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # BOTH halves must run contained: ``validate_allocation`` is what EMITS the allocation
+    # blocker and ``evaluate_readiness`` is what TRANSLATES it. Forcing only the second half
+    # produced an empty list and no assertion failure worth reading — the translation had
+    # nothing to translate.
+    with _contained(monkeypatch):
+        allocation_issues, _derived = validate_allocation(_plan(enabled=True), item_refs=_refs())
+        evaluation = evaluate_readiness(
+            [], allocation_enabled=True, allocation_issues=allocation_issues
+        )
 
     contained = [
         i
@@ -299,14 +342,25 @@ def test_ready_check_stays_clean_in_independent_mode() -> None:
     )
 
 
-def test_capability_view_is_the_single_source_the_ui_renders() -> None:
-    """UI <-> Ready Check <-> engine parity: one set of texts, one status."""
-    view = shared_allocation_capability_view()
+def test_capability_view_is_the_single_source_the_ui_renders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """UI <-> Ready Check <-> engine parity: one set of texts, one status.
 
-    assert view["status"] == SHARED_ALLOCATION_STATUS
-    assert view["available"] is shared_allocation_is_executable()
-    assert view["message"] == SHARED_ALLOCATION_MESSAGE
-    assert view["remediation"] == SHARED_ALLOCATION_REMEDIATION
-    assert view["field_path"] == SHARED_ALLOCATION_FIELD_PATH
-    assert view["dependency"]
-    assert view["key"] == "portfolio.shared_capital_allocation"
+    The prose fields follow the flag since ADIM 20, so the CONTAINED texts are asserted in
+    the contained world — which is where they are the ones that ship."""
+    with _contained(monkeypatch):
+        view = shared_allocation_capability_view()
+
+        assert view["status"] == "future_dev"
+        assert view["available"] is False
+        assert view["message"] == SHARED_ALLOCATION_MESSAGE
+        assert view["remediation"] == SHARED_ALLOCATION_REMEDIATION
+        assert view["dependency"]
+
+    # ... and in the shipped (lifted) world the view still answers from the same one source.
+    lifted = shared_allocation_capability_view()
+    assert lifted["status"] == SHARED_ALLOCATION_STATUS == "active_v1"
+    assert lifted["available"] is shared_allocation_is_executable() is True
+    assert lifted["field_path"] == SHARED_ALLOCATION_FIELD_PATH
+    assert lifted["key"] == "portfolio.shared_capital_allocation"

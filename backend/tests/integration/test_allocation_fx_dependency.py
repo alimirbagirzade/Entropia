@@ -41,7 +41,11 @@ _READINESS_FX_CODE = "ALLOCATION_FX_DEPENDENCY"
 # ADIM 3: every ENABLED plan now leads with the shared-capital containment blocker
 # (domain/allocation/capability.py). The FX assertions below narrow to "no OTHER
 # blocker", which is what they were always testing.
-_CONTAINMENT_CODE = "SHARED_MODE_NOT_IN_BUILD"
+# EMPTY SINCE ADIM 20 (`C9`). This was ``{"SHARED_MODE_NOT_IN_BUILD"}``: while containment
+# was on, every ENABLED plan led with that blocker, so the cases below asserted it as the
+# expected blocker set and meant "and nothing else". The lift removed the blanket refusal, so
+# the same assertions now compare against an empty set and mean exactly what they always did.
+_CONTAINMENT_BLOCKERS: set[str] = set()
 
 
 async def _seed_principals(session) -> None:
@@ -190,16 +194,18 @@ async def test_matching_settlement_currency_passes(session) -> None:
     # does not execute in this build. This test is about the FX check, so it asserts
     # the containment is the ONLY blocker and that no FX finding fires.
     assert not any(i["code"] == _FX_CODE for i in report["issues"])
-    assert {i["code"] for i in report["issues"] if i["severity"] == "blocker"} == {
-        _CONTAINMENT_CODE
-    }
+    assert {
+        i["code"] for i in report["issues"] if i["severity"] == "blocker"
+    } == _CONTAINMENT_BLOCKERS
 
-    # A blocker-carrying draft can never become an immutable plan revision (§8.5) —
-    # under containment that now includes an otherwise-clean shared plan.
-    with pytest.raises(AllocationHasBlockersError):
-        await alloc_cmd.create_allocation_revision(
-            session, USER1, composition_id=composition_id, expected_row_version=1
-        )
+    # §8.5 is unchanged — a blocker-carrying draft can never become an immutable plan
+    # revision — but since ADIM 20 (`C9`) an otherwise-clean shared plan no longer carries
+    # one, so the freeze SUCCEEDS. Asserting the success rather than deleting the block is
+    # what keeps this case proving that the FX check passed: a currency mismatch would still
+    # refuse here, and the sibling test below pins that refusal.
+    await alloc_cmd.create_allocation_revision(
+        session, USER1, composition_id=composition_id, expected_row_version=1
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -222,9 +228,9 @@ async def test_unresolved_settlement_currency_skips_check(session) -> None:
     # An item with no resolvable instrument yields no FX finding — never a
     # fabricated difference. The containment blocker is the only blocker.
     assert not any(i["code"] == _FX_CODE for i in report["issues"])
-    assert {i["code"] for i in report["issues"] if i["severity"] == "blocker"} == {
-        _CONTAINMENT_CODE
-    }
+    assert {
+        i["code"] for i in report["issues"] if i["severity"] == "blocker"
+    } == _CONTAINMENT_BLOCKERS
 
 
 # --------------------------------------------------------------------------- #

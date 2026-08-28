@@ -286,8 +286,9 @@ edilebilecek tek yer `entry()`'nin içidir → **arbitrasyondan ÖNCE**, arkası
 `_EngineParticipant` inşa etmez ve hiçbir satır `run_portfolio`/`iter_portfolio` çağırmaz —
 worker hâlâ `for prepared in prepared_items:` döngüsünü koşar ve `combine_item_runs` ile
 katlar. Onu değiştirmek **`C4`**'tür (bayrak korumalı dal + tick-adımlı iptal kontrol noktası
-+ daraltılmış tripwire) ve **containment'ı AÇMAZ**: `SHARED_ALLOCATION_STATUS` `future_dev`
-kalır, lift **`C9`** ve ADR §16 **Gate 2** ayrı bir insan kapısıdır (**talep edilmedi**).
++ daraltılmış tripwire) ve **containment'ı AÇMADI**: o gün `SHARED_ALLOCATION_STATUS`
+`future_dev` kaldı. **BU PARAGRAF TARİHSELDİR — lift ADIM 20 (`C9`) ile İNDİ**: ADR §16
+**Gate 2** 2026-08-28'de imzalandı (`G10`, `A`) ve bayrak `active_v1`'dir.
 
 **Adapter'ın REDDETTİKLERİ codemap'e aittir** (`participant.py::_unsupported_shapes`): ertelenen
 ya da dinlenen entry/exit fill'i, limit/stop emir tipi, kısmi kapanış, scaling, `allow_stacking`

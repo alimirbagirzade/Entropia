@@ -599,7 +599,7 @@ def test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands(
     # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
     # the tripwire is unchanged by that: it still fails the moment the ADIM 20 wiring
     # shifts the namespace, because it would have to move this line to do so.
-    assert ENGINE_VERSION == "backtest-engine-v18-a16-manifest-policy-provenance"
+    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
     for field in (
         "clock_policy_version",
         "arbitration_policy_version",

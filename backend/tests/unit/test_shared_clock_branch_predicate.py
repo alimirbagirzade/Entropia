@@ -51,26 +51,46 @@ def _lifted(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         yield
 
 
-def test_the_lift_fixture_actually_moves_the_world(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A two-world test whose fixture does not move the world is a one-world test twice."""
-    assert shared_allocation_is_executable() is False
-    with _lifted(monkeypatch):
-        assert shared_allocation_is_executable() is True
-    assert shared_allocation_is_executable() is False
+@contextmanager
+def _contained(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """The mirror of :func:`_lifted`, added at ADIM 20 — see the note on the test below."""
+    with monkeypatch.context() as patch:
+        patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
+        yield
 
 
-def test_the_shipped_world_never_takes_the_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_containment_fixture_actually_moves_the_world(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A two-world test whose fixture does not move the world is a one-world test twice.
+
+    Renamed at ADIM 20: production ships lifted, so :func:`_contained` is the half that
+    moves the world now."""
+    assert shared_allocation_is_executable() is True
+    with _contained(monkeypatch):
+        assert shared_allocation_is_executable() is False
+    assert shared_allocation_is_executable() is True
+
+
+def test_the_contained_world_never_takes_the_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Both cells of the ``future_dev`` row, including the one that ASKS for shared capital.
 
-    This is the containment, restated at the branch: a request can set every field it likes
-    in ``capital_execution`` and still not reach the loop, because the other conjunct is a
+    Renamed from ``test_the_shipped_world_never_takes_the_branch``: since ADIM 20 the shipped
+    world DOES take the branch, which is the whole point of the lift. What this test still
+    pins is the contained row — a request can set every field it likes in
+    ``capital_execution`` and still not reach the loop, because the other conjunct is a
     build-time constant no request can move."""
+    with _contained(monkeypatch):
+        assert _use_unified_clock(_INDEPENDENT) is False
+        assert _use_unified_clock(_SHARED) is False
+        # And the reason is the FLAG, not the snapshot — asserted rather than inferred, so
+        # this test cannot silently become a test of ``shared_allocation_requested`` alone.
+        assert shared_allocation_requested(_SHARED) is True
+        assert shared_allocation_is_executable() is False
+
+    # The shipped world is the other row, and it takes the branch exactly when asked to.
+    assert _use_unified_clock(_SHARED) is True
     assert _use_unified_clock(_INDEPENDENT) is False
-    assert _use_unified_clock(_SHARED) is False
-    # And the reason is the FLAG, not the snapshot — asserted rather than inferred, so this
-    # test cannot silently become a test of ``shared_allocation_requested`` alone.
-    assert shared_allocation_requested(_SHARED) is True
-    assert shared_allocation_is_executable() is False
 
 
 def test_lifting_the_flag_alone_does_not_take_the_branch(

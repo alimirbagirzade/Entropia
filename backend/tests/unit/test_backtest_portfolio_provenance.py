@@ -33,6 +33,7 @@ from entropia.domain.backtest.execution.clock import CLOCK_POLICY_VERSION
 from entropia.domain.backtest.execution.intents import INTENT_CONTRACT_VERSION, ItemIdentity
 from entropia.domain.backtest.execution.portfolio_ledger import (
     LEDGER_POLICY_VERSION,
+    MARK_STALE_AFTER_MS,
     PortfolioEquityPoint,
     build_sleeve_plan,
 )
@@ -304,12 +305,22 @@ def test_every_policy_knob_is_pinned_in_the_manifest() -> None:
     assert versions["money_rounding"] == "ROUND_HALF_EVEN"
 
 
-def test_the_open_mark_staleness_decision_is_disclosed_not_defaulted() -> None:
-    """ADR 0002 §13 OD-2 is unanswered. The manifest must say so, not pick a policy."""
+def test_the_built_mark_staleness_policy_is_disclosed_with_its_bound() -> None:
+    """ADR 0002 §13 OD-2 is answered (a) AND built (ADIM 20). The manifest must now name the
+    policy it actually ran under — the mirror of the assertion it replaces, which pinned the
+    disclosure of an ABSENCE and was correct until precondition 17 landed.
+
+    The tracking pointer is deliberately KEPT: OD-2 is where this policy came from, and a
+    reader who greps the manifest for the decision must still land on the ADR."""
     versions = _manifest().policy_versions()
-    assert versions["mark_staleness_policy"] == MARK_STALENESS_POLICY == "undefined_pending_od2"
-    assert versions["mark_staleness_status"] == MARK_STALENESS_STATUS == "open_decision"
+    assert versions["mark_staleness_policy"] == MARK_STALENESS_POLICY == "carry_forward_bounded_v1"
+    assert versions["mark_staleness_status"] == MARK_STALENESS_STATUS == "built"
     assert "OD-2" in versions["mark_staleness_tracking"]
+
+    # The version is only honest if the bound it names is the one the ledger actually applies.
+    # Nothing else ties the manifest's claim to the behaviour; without this, the two could
+    # drift and every Result would carry a version that described a bound it never ran under.
+    assert MARK_STALE_AFTER_MS == 900_000
 
 
 # --------------------------------------------------------------------------- #
@@ -451,7 +462,7 @@ def test_the_conflict_policy_and_time_alignment_are_recorded() -> None:
     assert content["conflict_policy"]["policy"] == "KEEP_SEPARATE"
     assert content["conflict_policy"]["supported"] is True
     assert content["conflict_policy"]["selection_policy"] == "pin_order_admission"
-    assert content["conflict_policy"]["selection_status"] == "recommended_pending_approval"
+    assert content["conflict_policy"]["selection_status"] == "approved"
     assert content["time_alignment"]["tick_count"] == 3
     assert content["time_alignment"]["first_t_ms"] == 1_000
     assert content["time_alignment"]["last_t_ms"] == 3_000
@@ -596,4 +607,4 @@ def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None
     # and `C7` moved it again for the A16 record change. What the assertion pins is that
     # lifting containment cannot happen without editing this line, not the particular
     # string.
-    assert 'ENGINE_VERSION = "backtest-engine-v18-a16-manifest-policy-provenance"' in shipped
+    assert 'ENGINE_VERSION = "backtest-engine-v18-unified-clock-portfolio"' in shipped

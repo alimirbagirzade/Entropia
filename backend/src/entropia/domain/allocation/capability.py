@@ -82,9 +82,25 @@ rather than deferred to a name this repo does not yet define:
    then exactly ONE portfolio valuation snapshot ``E(t)`` is published and every
    active item sizes ``Ci(t) = max(0, E(t) - R0) * wi / 100`` against THAT
    snapshot (doc 13 §8.3);
-4. conflict/exposure arbitration is symmetric with deterministic id-based
-   tie-breaking, and a blocked item's share is never transferred (doc 13 §8.4.6,
-   §13);
+4. conflict/exposure arbitration follows ONE declared, deterministic rule and a
+   blocked item's share is never transferred (doc 13 §8.4.6, §13). That rule is
+   ADR 0002 §13.1's OD-3 **(a)** — ``pin_order_admission``: on joint insolvency,
+   admit in ``(pin_ordinal, item_id)`` order until the pool's committable capital
+   is exhausted, then reject the rest whole
+   (``execution/arbitration.py::CONTENTION_SELECTION_POLICY``).
+
+   **This clause was REWRITTEN at ADIM 20, deliberately, and the earlier wording is
+   recorded rather than tidied away.** It read "arbitration is SYMMETRIC with
+   deterministic id-based tie-breaking". That contradicted the shipped rule: ADR §13's
+   own vocabulary assigns "fully symmetric, order-free" to option **(b)**, which §13.1
+   did NOT take, and under scarcity ``pin_order_admission`` favours the low pin — so
+   the two halves of the old sentence pulled apart exactly where it mattered. The
+   contradiction was measured at ADIM 129, put to the PO on 2026-08-28 (who deferred it
+   to ``C9`` by name), and resolved here at the lift in favour of the SIGNED decision:
+   reversing arbitration to (b) would have overturned §13.1 and moved shipped financial
+   behaviour, so the CONTRACT was corrected to the code rather than the code to the
+   contract. The "blocked item's share is never transferred" half is untouched — it was
+   never in tension, and oracles A9/A10 pin it;
 5. doc 13 §14 acceptance test 11 passes, and the composite equity curve is
    time-ordered by construction;
 6. ``ENGINE_VERSION`` is bumped — the execution_key namespace MUST shift so no
@@ -102,8 +118,12 @@ SharedAllocationStatus = Literal["active_v1", "future_dev"]
 SHARED_ALLOCATION_CAPABILITY_KEY = "portfolio.shared_capital_allocation"
 """Stable key for the containment, so a log/audit line can name it exactly."""
 
-SHARED_ALLOCATION_STATUS: SharedAllocationStatus = "future_dev"
-"""``future_dev`` = shared capital allocation NEVER executes in this build.
+SHARED_ALLOCATION_STATUS: SharedAllocationStatus = "active_v1"
+"""``active_v1`` = shared capital allocation EXECUTES in this build (ADIM 20).
+
+Lifted at ADIM 20 (`C9`) once removal conditions 1-6 above were met and ADR §16
+Gate 2 (`G10`) was signed. ``future_dev`` was the contained value and means the
+opposite: shared capital never executes.
 
 Read this through :func:`shared_allocation_is_executable`; never re-derive the
 answer at a call site.
@@ -170,26 +190,64 @@ def shared_allocation_requested(capital_execution: Any) -> bool:
     return isinstance(capital_execution, dict) and bool(capital_execution.get("enabled"))
 
 
+SHARED_ALLOCATION_ACTIVE_MESSAGE = (
+    "Shared capital allocation runs on the unified clock: one outer loop over the "
+    "merged timestamp axis, one shared ledger holding P0 and the fixed nominal "
+    "reserve R0, and exactly one portfolio valuation snapshot E(t) per timestamp "
+    "that every active item sizes its sleeve against (doc 13 §8.3, §8.4, §13)."
+)
+
+SHARED_ALLOCATION_ACTIVE_REMEDIATION = ""
+"""No remediation: in the lifted world there is nothing for the operator to fix.
+
+Empty rather than a cheerful sentence — this field is a CALL TO ACTION and the UI
+renders it as one. Inventing text here would put an instruction on a screen where
+no action is required."""
+
+SHARED_ALLOCATION_ACTIVE_DEPENDENCY = ""
+"""No outstanding dependency: the co-simulation the contained text was waiting for
+is what ADIM 20 shipped."""
+
+
 def shared_allocation_capability_view() -> dict[str, Any]:
     """The capability block the API publishes so the UI renders SERVER state.
 
     The browser must not decide availability for itself (a hidden or disabled
     control is presentation, never authorization) — it renders this verbatim while
     the blocker above is what actually refuses the work.
+
+    **The three prose fields FOLLOW THE FLAG as of ADIM 20, and that was part of the
+    lift rather than a tidy-up.** Before the lift they were unconditional constants,
+    which was correct while only one world shipped. Lifting made the published block
+    say two things at once — ``available: true`` beside *"not available in this
+    build"* and a remediation telling the operator to turn the feature off. Today's
+    Portfolio page happens to be safe (``Portfolio.tsx`` gates all three strings
+    behind ``!capability.available``), but this block is the published CONTRACT and a
+    second consumer reading ``message`` without checking ``available`` would print a
+    falsehood. ``test_shared_allocation_two_world_gate.py`` characterized exactly this
+    and named `C9` as the slice that must fix it.
     """
+    executable = shared_allocation_is_executable()
     return {
         "key": SHARED_ALLOCATION_CAPABILITY_KEY,
         "status": SHARED_ALLOCATION_STATUS,
-        "available": shared_allocation_is_executable(),
-        "message": SHARED_ALLOCATION_MESSAGE,
-        "remediation": SHARED_ALLOCATION_REMEDIATION,
-        "dependency": SHARED_ALLOCATION_DEPENDENCY,
+        "available": executable,
+        "message": (SHARED_ALLOCATION_ACTIVE_MESSAGE if executable else SHARED_ALLOCATION_MESSAGE),
+        "remediation": (
+            SHARED_ALLOCATION_ACTIVE_REMEDIATION if executable else SHARED_ALLOCATION_REMEDIATION
+        ),
+        "dependency": (
+            SHARED_ALLOCATION_ACTIVE_DEPENDENCY if executable else SHARED_ALLOCATION_DEPENDENCY
+        ),
         "field_path": SHARED_ALLOCATION_FIELD_PATH,
     }
 
 
 __all__ = [
     "LEGACY_SEQUENTIAL_RESULT_NOTE",
+    "SHARED_ALLOCATION_ACTIVE_DEPENDENCY",
+    "SHARED_ALLOCATION_ACTIVE_MESSAGE",
+    "SHARED_ALLOCATION_ACTIVE_REMEDIATION",
     "SHARED_ALLOCATION_CAPABILITY_KEY",
     "SHARED_ALLOCATION_DEPENDENCY",
     "SHARED_ALLOCATION_FIELD_PATH",

@@ -80,9 +80,30 @@ def _lifted(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     reader: ``rules.py`` and ``backtest_run.py`` hold a reference to the *function*
     ``shared_allocation_is_executable``, whose ``__globals__`` IS this module's dict, so
     they observe the patch without importing anything from here.
+
+    **Since ADIM 20 this is the world production is ALREADY in**, so it no longer moves
+    anything. It is kept rather than deleted because these tests compare two worlds and
+    deleting it would leave them naming only one; :func:`_contained` is now the half that
+    does the moving.
     """
     with monkeypatch.context() as patch:
         patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "active_v1")
+        yield
+
+
+@contextmanager
+def _contained(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Force the ``future_dev`` world — the mirror of :func:`_lifted`, added at ADIM 20.
+
+    **This file's direction reversed at the lift, and that is the honest way to record it.**
+    Every test here was written to compare the shipped contained world against a *patched*
+    lifted one. `C9` lifted the flag, so the patched world became the shipped one and the
+    contained world became the one that has to be forced. The comparisons themselves are
+    unchanged — the same two worlds, the same assertions, the opposite fixture — which is
+    what keeps this a two-world gate instead of quietly decaying into a one-world one.
+    """
+    with monkeypatch.context() as patch:
+        patch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
         yield
 
 
@@ -100,22 +121,27 @@ def _validate(*, enabled: bool, plan_overrides: dict[str, Any] | None = None) ->
 # --------------------------------------------------------------------------- #
 # Anti-vacuity — without this, every test below could be a silent no-op        #
 # --------------------------------------------------------------------------- #
-def test_the_lift_fixture_actually_moves_the_world(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_containment_fixture_actually_moves_the_world(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A two-world test whose fixture does not move the world is a one-world test twice.
+
+    Renamed at ADIM 20 from ``test_the_lift_fixture_actually_moves_the_world``: the fixture
+    that does the moving is now :func:`_contained`, because production ships lifted.
 
     Asserted through the PUBLIC reader the production call sites use, not through the
     constant, so a future indirection (a cache, a settings object) cannot make the fixture
     inert while this file keeps passing.
     """
-    assert shared_allocation_is_executable() is False
+    assert shared_allocation_is_executable() is True
 
-    with _lifted(monkeypatch):
-        assert capability.SHARED_ALLOCATION_STATUS == "active_v1"
-        assert shared_allocation_is_executable() is True
+    with _contained(monkeypatch):
+        assert capability.SHARED_ALLOCATION_STATUS == "future_dev"
+        assert shared_allocation_is_executable() is False
 
-    # ... and the world is restored, so no test after this one inherits a lifted flag.
-    assert capability.SHARED_ALLOCATION_STATUS == "future_dev"
-    assert shared_allocation_is_executable() is False
+    # ... and the world is restored, so no test after this one inherits a contained flag.
+    assert capability.SHARED_ALLOCATION_STATUS == "active_v1"
+    assert shared_allocation_is_executable() is True
 
 
 # --------------------------------------------------------------------------- #
@@ -134,9 +160,9 @@ def test_the_flag_gates_exactly_one_readiness_issue(monkeypatch: pytest.MonkeyPa
     """
     invalid = {"reserve_cash_percent": Decimal("140")}
 
-    contained = _validate(enabled=True, plan_overrides=invalid)
-    with _lifted(monkeypatch):
-        lifted = _validate(enabled=True, plan_overrides=invalid)
+    lifted = _validate(enabled=True, plan_overrides=invalid)
+    with _contained(monkeypatch):
+        contained = _validate(enabled=True, plan_overrides=invalid)
 
     blocker = str(AllocCode.SHARED_MODE_NOT_IN_BUILD)
     assert contained[0] == blocker, "the containment blocker must LEAD (it is the one to fix)"
@@ -175,9 +201,9 @@ def test_the_request_predicate_is_flag_independent(monkeypatch: pytest.MonkeyPat
         None,
         "not-a-dict",
     )
-    contained = [shared_allocation_requested(s) for s in snapshots]
-    with _lifted(monkeypatch):
-        lifted = [shared_allocation_requested(s) for s in snapshots]
+    lifted = [shared_allocation_requested(s) for s in snapshots]
+    with _contained(monkeypatch):
+        contained = [shared_allocation_requested(s) for s in snapshots]
 
     assert contained == lifted
     assert contained == [True, False, True, False, False, False, False]
@@ -211,11 +237,13 @@ def test_the_admission_guard_refuses_in_exactly_one_of_the_four_cells(
     shared, independent = _capital_execution(enabled=True), _capital_execution(enabled=False)
 
     #        (is_executable, requested, refuses)
-    assert cell(shared) == (False, True, True)
-    assert cell(independent) == (False, False, False)
-    with _lifted(monkeypatch):
-        assert cell(shared) == (True, True, False)
-        assert cell(independent) == (True, False, False)
+    # Production ships LIFTED since ADIM 20: it refuses nothing, which is exactly why the
+    # preconditions and not the flag are what protect the numbers.
+    assert cell(shared) == (True, True, False)
+    assert cell(independent) == (True, False, False)
+    with _contained(monkeypatch):
+        assert cell(shared) == (False, True, True)
+        assert cell(independent) == (False, False, False)
 
 
 # --------------------------------------------------------------------------- #
@@ -364,43 +392,46 @@ def test_a_stored_sequential_result_reads_identically_in_both_worlds(
 # --------------------------------------------------------------------------- #
 # Reader 3 — the capability block (allocation_plan.py:59) — a MEASURED DEFECT  #
 # --------------------------------------------------------------------------- #
-def test_the_capability_texts_do_not_follow_the_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    """CHARACTERIZATION — this pins a defect, and ``C9`` owns fixing it.
+def test_the_capability_texts_now_follow_the_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """**Fixed at ADIM 20 — and the previous version of this test is why it got fixed.**
 
-    ``shared_allocation_capability_view`` derives ``status`` and ``available`` from the
-    flag but returns ``message``, ``remediation`` and ``dependency`` as unconditional
-    constants. Measured in the lifted world, the published block says both things at once:
+    It was ``test_the_capability_texts_do_not_follow_the_flag``, a characterization test on
+    the ``#559`` precedent. It recorded that ``shared_allocation_capability_view`` derived
+    ``status`` and ``available`` from the flag while returning ``message``, ``remediation``
+    and ``dependency`` as unconditional constants, so a lifted build published:
 
         ``available: true`` + "Shared capital allocation is not available in this build."
-        + "Turn the Portfolio Allocation toggle off ..." + "re-opens when the
-        unified-clock multi-item co-simulation lands" (the thing that just landed)
+        + "Turn the Portfolio Allocation toggle off ..." + a dependency on "the
+        unified-clock multi-item co-simulation" (the thing that just landed)
 
-    Today's Portfolio page is safe from it: ``Portfolio.tsx:358`` gates all three strings
-    behind ``!capability.available``, so nothing contradictory is rendered. But the block
-    is the published CONTRACT — ``allocation_plan.py`` returns it verbatim by design, on
-    the stated principle that the browser renders SERVER state and never re-derives
-    availability — and any second consumer that reads ``message`` without first checking
-    ``available`` would print a falsehood.
+    Its docstring named `C9` as the slice that must make the three strings flag-aware and
+    said its own failure would be the reminder. It failed on exactly that day and the
+    reminder was taken: the view now selects per world.
 
-    Pinned as a characterization test, on the ``#559`` precedent: it records what ships so
-    the fix is a deliberate, reviewable change rather than a silent one. When ``C9`` makes
-    these three strings flag-aware, THIS test is the one that must be updated, and its
-    failure is the reminder that the texts are part of the lift.
-    """
-    contained = shared_allocation_capability_view()
-    with _lifted(monkeypatch):
-        lifted = shared_allocation_capability_view()
+    The contradiction is asserted as ABSENT rather than merely asserting the new text, so a
+    regression that restores the unconditional constants is red here and not only in a
+    string comparison someone could update without reading."""
+    lifted = shared_allocation_capability_view()
+    with _contained(monkeypatch):
+        contained = shared_allocation_capability_view()
 
-    # The two fields that DO follow the flag.
+    # The two fields that always followed the flag.
     assert (contained["status"], contained["available"]) == ("future_dev", False)
     assert (lifted["status"], lifted["available"]) == ("active_v1", True)
 
-    # The three that do not — and the contradiction they produce, stated as an assertion.
-    assert lifted["message"] == contained["message"] == SHARED_ALLOCATION_MESSAGE
-    assert lifted["remediation"] == contained["remediation"] == SHARED_ALLOCATION_REMEDIATION
-    assert lifted["dependency"] == contained["dependency"]
-    assert lifted["available"] is True and "not available in this build" in lifted["message"]
-    assert "toggle off" in lifted["remediation"]
+    # The three that now do. Each must DIFFER between the worlds — equality here is the
+    # exact defect this test was created to record.
+    for field in ("message", "remediation", "dependency"):
+        assert lifted[field] != contained[field], f"{field!r} stopped following the flag"
+
+    # The contained world still says the contained thing, verbatim.
+    assert contained["message"] == SHARED_ALLOCATION_MESSAGE
+    assert contained["remediation"] == SHARED_ALLOCATION_REMEDIATION
+
+    # ... and the lifted world no longer contradicts its own `available: true`.
+    assert "not available in this build" not in lifted["message"]
+    assert "toggle off" not in lifted["remediation"]
+    assert lifted["dependency"] == ""
 
 
 # --------------------------------------------------------------------------- #
@@ -421,7 +452,7 @@ def test_containment_is_not_runtime_configurable() -> None:
         for line in source.splitlines()
         if line.startswith("SHARED_ALLOCATION_STATUS") and "=" in line
     ]
-    assert assignments == ['SHARED_ALLOCATION_STATUS: SharedAllocationStatus = "future_dev"']
+    assert assignments == ['SHARED_ALLOCATION_STATUS: SharedAllocationStatus = "active_v1"']
     for knob in ("getenv", "environ", "os.env", "settings", "Settings"):
         assert knob not in source, f"{knob!r} would make the containment a deployment knob"
 

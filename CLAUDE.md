@@ -270,6 +270,39 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
+> DEĞİŞTİ** → `backtest-engine-v18-unified-clock-portfolio` (A15'in İKİNCİ bump'ı) ·
+> **`SHARED_ALLOCATION_STATUS` = `active_v1` — CONTAINMENT KALKTI** · golden **2 satır**
+> oynadı (50 digest'in **49'u bayt bayt aynı**) · OpenAPI değişmedi. **Son dalga — ADIM 132
+> (`C9` / ADIM 20: THE LIFT).** `G10` (ADR §16 Gate 2) #868'de imzalıydı; ön koşul **17
+> (OD-2 mark policy İNŞA EDİLDİ)**, **18 (`CONTENTION_SELECTION_STATUS` = `approved`)** ve
+> **22 (A22 tam suite yeşil, coverage %94.03)** bu slice'ta kapandı → **22/22**. Ürün
+> sahibinin üç kararı: `stale_after` = **900 sn, ÖDÜNÇ ve ödünç olduğu kaynakta yazılı**
+> (kanon pozisyon-mark için sayı vermiyor; V18 §Stale record'un araştırma değeri analoji
+> olarak alındı) · `capability.py` REMOVAL CONDITION **#4 metni** imzalı OD-3(a)'ya
+> uyduruldu (kod değil SÖZLEŞME düzeltildi; arbitration'ı (b)'ye çevirmek §13.1'i tersine
+> çevirirdi) · flip sonrası değer `approved`. **ASIL BULGU: lift bir SÖZLEŞME HATASI
+> yarattı ve onu kapatan test bunu ÖNCEDEN yazmıştı** — `available: true` ile *"not
+> available in this build"* yan yana yayımlanıyordu; `test_the_capability_texts_do_not_
+> follow_the_flag` docstring'i *"`C9` bunu düzeltmeli"* diyordu, kırmızı verdi, düzeltildi
+> (`shared_allocation_capability_view` artık dünya başına metin seçer). **İKİNCİ BULGU:
+> golden yeniden üretimi ölçüldü, körlemesine yapılmadı** — oynayan tek digest
+> `contract.execution_key`, ve onu oynatan iki girdinin **ikisi de imzalı** (A15 bump +
+> 17'nin `execution_content` içindeki literali) → **hiçbir finansal sayı oynamadı**.
+> **40 kırmızının 40'ı tek tek ölçüldü:** iki-dünya fixture'ları **AYNALANDI** (`_lifted`
+> → `_contained`; iki dünya da hâlâ test ediliyor, hiçbir pin silinmedi), mutluluk yolları
+> (`..._draft_validate_revision`, `..._revision_carry`, FX, e2e) **lifted dünyaya** yazıldı
+> ve artık revizyonun gerçekten donduğunu kanıtlıyor — containment'ın hiç bırakmadığı şey.
+> **ÜÇ ayırt edici negatif kontrol** (taban 0, geri yükleme doğrulandı); NC-2 bağımsız bir
+> eksen buldu (sayaç `unmarked`'tan DAR olmalı — yalnız ledger testi görür).
+> **DÜRÜST SINIR: mark yolunun üretimde SIFIR çağıranı var** (`attribute()` hiçbir yerden
+> çağrılmıyor, `MarkPrice` yalnız testlerde kuruluyor) → OD-2 politikası **sevk edildi ve
+> manifest'te versiyonlu**, ama ulaşılabilir bir yola **bağlanmadı** (ürün sahibi kararı) ·
+> frontend kapıları KOŞULMADI (frontend'de sıfır satır) · **A-08 (#514) AÇIK, el değmedi,
+> blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.** Toplanan test **3868 (DEĞİŞMEDİ)**.
+> `PROJECT_HISTORY.md` §ADIM 132 · `docs/ADIM132_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > = **`future_dev` (EL DEĞMEDİ — bu slice LIFT DEĞİLDİR)** · `capability.py` **el değmedi** ·
@@ -397,7 +430,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** (`--check` exit 0) · golden dosyası **el değmedi** ·
-> `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) · **`backend/src` ve
+> `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (**el değmedi**) · **`backend/src` ve
 > `frontend/src`'te SIFIR SATIR**. **ADIM 127 (`C8` = üretim worker'ı üzerinde
 > ORACLE'lar).** Planın sözüyle bir oracle slice'ı; yeni
 > `test_shared_clock_production_oracles.py` (5 case) + bir A13 partition pini, toplanan test
@@ -431,8 +464,8 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
-> DEĞİŞTİ** → `backtest-engine-v18-a16-manifest-policy-provenance` · OpenAPI **değişmedi**
-> (ölçüldü, `--check` exit 0) · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) ·
+> DEĞİŞTİ** → (o gün) `backtest-engine-v18-a16-manifest-policy-provenance` · OpenAPI **değişmedi**
+> (ölçüldü, `--check` exit 0) · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (**el değmedi**) ·
 > `frontend/src` **sıfır satır**. **Son dalga — ADIM 126 (`C7` = A16 manifest split + A15
 > bump).** Manifest artık dört policy sürümünü taşıyor (`manifest.py::_portfolio_policy`,
 > **`execution_content` İÇİNDE**) ve admission çözülmüş sleeve tutarlarını + FX ref'lerini
@@ -466,7 +499,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK** — bu dalga şema
 > değiştirmedi) · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0) ·
-> golden **el değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) ·
+> golden **el değmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (**el değmedi**) ·
 > `frontend/src` **sıfır satır**. **Son dalga — ADIM 125 (`C6` TAMAMLANDI): `G11` (P2) +
 > `G12` (P8) admission blocker'ları sevk edildi**, ikisi de #849'da imzalı. Ön koşul **13/14**
 > kapandı; 15/16 ADIM 119'daydı → **`C6`'nın dört blocker'ı da yerinde.** **`C6`'NIN KAPANMASI
@@ -493,7 +526,7 @@ Before stopping a working session, produce **ALL** of the following:
 > **alembic head (o gün) `0044_drop_net_conflict_policy`** (**MIGRATION VAR** — yeni tablo/kolon yok:
 > `portfolio_allocation_plan.conflict_policy` üzerine CHECK kısıtı) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** (`--check` exit 0) · golden **el değmedi** ·
-> `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**). **Son dalga — ADIM 124 (`G14`
+> `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (**el değmedi**). **Son dalga — ADIM 124 (`G14`
 > Karar 1'in `B` yarısı SEVK EDİLDİ): `NET`, `CrossItemConflictPolicy`'den DÜŞTÜ.**
 > **ASIL BULGU: yeniden yazılacak CHECK YOKTU — hiç olmamıştı.** §Ölçüm 4 `B`'yi *"CHECK
 > yeniden yazımı"* diye çerçeveliyordu; ölçüldü: kolon düz `character varying`, `contype='c'`
@@ -531,7 +564,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** (**migration YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden digest'ler **el değmedi** ·
-> `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**). **Son dalga — ADIM 123 (`G14`
+> `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (**el değmedi**). **Son dalga — ADIM 123 (`G14`
 > Karar 2 = `B3` + Karar 4 = `B0` İMZALANDI; `B0` UYGULANDI): ÜRÜN KODU DEĞİŞTİ ama hiçbir
 > finansal sayı oynamadı.** **ASIL DERS: İMZALANAN MEKANİZMA, İMZALANAN SONUCU ÜRETMİYORDU** —
 > §Ölçüm 5 `B0`'ı iki mekanizmayla tanımlayıp *"küme o an donar"* diyordu; `ast` ile ölçüldü
@@ -557,7 +590,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
-> **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
+> **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (**el
 > değmedi**). **ADIM 122 (`G14` Karar 2'nin ÖLÇÜMÜ, DOCS-ONLY):
 > `backend/src`/`frontend/src`'te SIFIR satır; §Karar 2'nin imza kutusu BOŞ bırakıldı.**
 > **ASIL DERS: bir karar sorusu, cevabının ön koşulunu SESSİZCE VARSAYABİLİR** — Karar 2'nin
@@ -575,7 +608,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION`
-> **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el
+> **değişmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (**el
 > değmedi**). **Son dalga — ADIM 121 (`G10`'un ön koşul tablosu tazelendi, DOCS-ONLY):
 > `backend/src`/`frontend/src`'te SIFIR satır.** İki bayat öncül çürütüldü: **`G10` (Gate 2)
 > "hiç talep edilmedi" DEĞİL — talep edildi ve `B — ERTELE` olarak İMZALANDI** (2026-08-26;
@@ -593,7 +626,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration YOK) · `ENGINE_VERSION` **değişmedi** ·
-> OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 120
+> OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`. **Son dalga — ADIM 120
 > (`G15` İMZALANDI = Seçenek B, ve AYNI SLICE'TA UYGULANDI):** Ready Check leg 3'ün kazananı artık
 > **en yeni** satır, **toplam** sıra `created_at DESC, <pk> DESC`; leg 3 batch'lendi ve
 > `query_budgets.json` `per_item` **1 → 0** (`queries_large` 18 → 8, ölçüldü). **`_resolve_external`
@@ -615,7 +648,7 @@ Before stopping a working session, produce **ALL** of the following:
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) · `ENGINE_VERSION` **değişmedi** ·
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
 > `ENGINE_VERSION` **değişmedi** · **OpenAPI değişmedi (ÖLÇÜLDÜ)** ·
-> `SHARED_ALLOCATION_STATUS` = **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 119
+> `SHARED_ALLOCATION_STATUS` (o gün) = **`future_dev` (KALDIRILMADI)**. **Son dalga — ADIM 119
 > (`C6`'nın OD-1/OD-6 yarısı): ÜRÜN KODU DEĞİŞTİ (üç dosya) ama hiçbir finansal sayı
 > oynamadı — golden el değmedi, kabul tavanları el değmedi (54/6 · A1 B21 C6 D32).
 > Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.**
@@ -649,7 +682,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `PROJECT_HISTORY.md` §ADIM 119 · `docs/ADIM119_LANDED_KICKOFF.md`.
 >
 >
-> OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 117 (G11 + G12
+> OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`. **Son dalga — ADIM 117 (G11 + G12
 > İMZALANDI, DOCS-ONLY): G11 = (a) tam admission blok** (kod `ALLOCATION_SHARED_MODE_DEFERRED_FILL_UNSUPPORTED`,
 > `field_path` ikisi de/O-02; ön koşul `sayılamadı` — kural ürün sahibince BİLİNÇLİ geçersiz kılındı, imzalı
 > sapma) · **G12 = A + ret "ikisi de"**. `C6`'nın ÜÇ ön koşulu da tamam (C4 #777/#799/#805 + iki imza) →
@@ -1964,7 +1997,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` ·
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` ·
 > **OpenAPI DEĞİŞTİ**. **ADIM 66 (research timing provenance bundle KİMLİĞİNE
 > pinlendi, P-E3 / GH #558): ÜRÜN KODU DEĞİŞTİ, `bundle_hash` ŞEKİL DEĞİŞTİRDİ. Blocker
 > sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.** Ön koşul **imzasızdı ve slice
@@ -1995,7 +2028,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`.
 > **ADIM 65 (adli denetim kaydı + #541'in iki blocker gerekçesi, PR #700,
 > DARALTILDI): FİNANSAL MANTIK OKUNDU, DOKUNULMADI. Blocker sayısı DEĞİŞMEDİ (1 — yalnız
 > A-08), verdict BLOCKED. Closes #541.** `capabilities.py`'nin scaling-timeframe grubundaki
@@ -2023,7 +2056,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`.
 > **ADIM 64 (kabul borcu sınıf B, parti 04 — Backtest Result satır
 > değişmezliği, doc 16, PR #704): `RH-05` `RH-10` `RH-11` `RH-12` `RH-16` KAPANDI,
 > `partial` 111 → 106, `debt_class.B` 80 → 75. ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı
@@ -2044,7 +2077,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`.
 > **ADIM 63 (K-5'in SORUSU düzeltildi — checklist A-3, PR #719): KOD YOK.
 > Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED. K-5 KAPANMADI.**
 > Bu slice bir bulguyu değil **aracı** düzeltti: A-3 *"`h1→h2→h3` atlamasız"* diye
@@ -2065,7 +2098,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `adim-58` yazar. `PROJECT_HISTORY.md` §ADIM 63 · `docs/ADIM63_LANDED_KICKOFF.md` · RC §6.5.
 >
 > Öncesinde **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> `ENGINE_VERSION` **değişmedi** · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`.
 > **ADIM 62 (Ready Check'in son iki artık N+1'i batch'lendi, P-E2, PR #712):
 > DAVRANIŞ DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > ADIM 46 (#617) market-data bacağını kapatmıştı; **aynı şekil iki bacakta daha yaşıyordu
@@ -2085,7 +2118,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 > Öncesinde **HEAD `5e52465`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (migration yok) ·
 > **`ENGINE_VERSION` (o gün) = `backtest-engine-v18-percent-sizing-per-fill-commission` (BUMP)** ·
-> `SHARED_ALLOCATION_STATUS` = `future_dev`. **Son dalga — ADIM 61 (üç canlı finansal kusur
+> `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`. **Son dalga — ADIM 61 (üç canlı finansal kusur
 > KAPANDI, PR #720, 2026-08-14): ÜRÜN KODU DEĞİŞTİ, FİNANSAL SONUÇLAR OYNADI.** #550 sizing
 > **yüzde** oldu (`_percent_of_capital` tek dönüşüm; **`max_position_size_cap` YENİ public** —
 > cap'i okuyan HER yer ondan geçer) · #551 pozitif olmayan boyut (**negatif dahil**) hiçbir
@@ -2111,7 +2144,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 > **alembic head (o gün) `0043_i08_registry_strategy_fks`** · **`ENGINE_VERSION` DEĞİŞTİ** →
 > `backtest-engine-v18-percent-sizing-per-fill-commission` (o gün; **#720**, 2026-08-14: #550/#551/#552
-> KAPANDI) · `SHARED_ALLOCATION_STATUS` = `future_dev`. Test sayıları: **toplanan** için
+> KAPANDI) · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`. Test sayıları: **toplanan** için
 > `docs/generated/repository_facts.md`, **geçen** için CI. **Son dalga — P-B (kapanış
 > uzlaştırması, DOCS-ONLY): ürün davranışı DEĞİŞMEDİ. Blocker 1 (yalnız A-08), BLOCKED.**
 > Üç W0 denetimi güncel main'e karşı uzlaştırıldı; DR-2/DR-3/DR-4 (bayat sayılar) onarıldı,
@@ -2124,7 +2157,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > Öncesinde **HEAD `ac5cf50`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev`.
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev`.
 > **Son dalga — ADIM 60 (doküman kapısı artık HANGİ kickoff'un canlı olduğunu doğruluyor,
 > PR #716, 2026-08-14): ÜRÜN KODU DEĞİŞMEDİ. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > verdict BLOCKED.** `check_classification` sayıyı koruyordu, doğruluğu değil: **#697** ADIM 55'i,
@@ -2137,7 +2170,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/ADIM60_LANDED_KICKOFF.md`.
 >
 > Öncesinde **HEAD `e547391`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (containment KAPALI).
 > **Son dalga — ADIM 59 (P-A1 shared portfolio erişilebilirlik denetimi, PR #707, 2026-08-13):
 > ÜRÜN KODU DEĞİŞMEDİ (dört ağaçta 0 satır). Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08),
 > verdict BLOCKED.** Kanıtlandı: `run_portfolio` (`portfolio_engine.py:531`),
@@ -2193,7 +2226,7 @@ Before stopping a working session, produce **ALL** of the following:
 > (54 → 55 → 56 → 57) — bu haftanın **üçüncü** çakışma dizisi.
 >
 > Öncesinde **HEAD `31ed27d`** · **alembic head (o gün) `0043_i08_registry_strategy_fks`** (bu dalgada migration yok) ·
-> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` = `future_dev` (containment KAPALI).
+> `ENGINE_VERSION` değişmedi · `SHARED_ALLOCATION_STATUS` (o gün) = `future_dev` (containment KAPALI).
 > **Öncesinde ADIM 57 (K-3 ADJUDICATED, imzalı karar D-11, 2026-08-13): KOD YOK, tek
 > satır bile değişmedi. Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
 > K-3 (`contentinfo` landmark yok, 23/23) **kod yazmadan** kapandı: eksik olan ürün değil
@@ -2289,7 +2322,7 @@ Before stopping a working session, produce **ALL** of the following:
 > `tests/integration/test_external_object_run_provenance.py::_attach_trade_log` +
 > `::_completed_run`, diğer builder'lar **aynen** yeniden kullanıldı.
 > **ÜÇ AÇIK BULGU (insan/PO):** `TL-11.c3` **KAPATILAMAZ** — allocation-enabled run
-> bu build'de **admission'da fail-closed** (`SHARED_ALLOCATION_STATUS=future_dev`),
+> bu build'de **admission'da fail-closed** (o gün `SHARED_ALLOCATION_STATUS=future_dev`),
 > sınıfı **C** görünüyor ve **ADIM 48 (B-01)'in "kapatılabilir" önerisi YANLIŞTI**;
 > `TL-16` D görünüyor; `TL-01.c4` yol sapması. **Hiçbiri yeniden sınıflandırılmadı —
 > o tavanı YÜKSELTİRDİ.** **Parti seçmeden ÖNCE ÖLÇ:** kriterin adlandırdığı davranış

@@ -22,13 +22,14 @@ run's reproducibility identity.
 **3. A decided-but-unbuilt policy is disclosed, never assumed.** ADR 0002 §13 OD-2 (how an
 open position is marked at a tick with no fresh bar of its own) was RESOLVED on 2026-08-05 to
 option (a) — carry the last closed bar's close forward under a declared ``stale_after`` bound
-with a diagnostic counter (§13.1). None of that is built, and §13.1 assigns both the mark
-policy and this label's flip to ADIM 20, because flipping a policy label before the manifest
-that carries it exists would advertise a behaviour no artifact can show. So
-``MARK_STALENESS_POLICY`` still carries the literal ``"undefined_pending_od2"`` and the
-manifest says so out loud: what it advertises as absent is the IMPLEMENTATION, not the
-decision. ``arbitration.CONTENTION_SELECTION_STATUS`` is the same shape for OD-3, whose (a)
-behaviour ships while its label waits for the same slice.
+with a diagnostic counter (§13.1). §13.1 assigned both the mark policy and this label's flip
+to ADIM 20, and ADIM 20 landed them TOGETHER: ``MARK_STALENESS_POLICY`` now reads
+``"carry_forward_bounded_v1"`` and the behaviour behind it is
+``portfolio_ledger.MarkPrice.is_usable`` bounded by ``MARK_STALE_AFTER_MS``. The pairing was
+the point — flipping the label before the bound existed would have advertised a behaviour no
+artifact could show. ``arbitration.CONTENTION_SELECTION_STATUS`` was the same shape for OD-3
+and flipped in the same slice, though for the opposite reason: there the behaviour had shipped
+long before and only the label was waiting.
 
 The allocation amounts are NOT recomputed here. They are the numbers the server already
 derived and froze onto ``PortfolioAllocationPlanRevision.derived_amounts``
@@ -82,14 +83,17 @@ PORTFOLIO_MANIFEST_VERSION = "portfolio-manifest-v1"
 ENGINE_ALLOCATION_POLICY_VERSION = "portfolio-allocation-v1"
 
 #: ADR 0002 §13 OD-2 is DECIDED — (a), carry forward under a declared ``stale_after`` bound
-#: with a diagnostic counter (§13.1, 2026-08-05). What is still open is the IMPLEMENTATION:
-#: none of it is built, and §13.1 gives ADIM 20 both the mark policy and this label's flip.
-#: Until then the manifest advertises the absence rather than a default, and these three
-#: literals are held ON PURPOSE — a run that forward-fills a stale mark and a run that
-#: refuses to are not comparable, so claiming the decided policy before it runs would hide
-#: the gap inside an artifact just as surely as guessing one would have.
-MARK_STALENESS_POLICY = "undefined_pending_od2"
-MARK_STALENESS_STATUS = "open_decision"
+#: with a diagnostic counter (§13.1, 2026-08-05) — and as of ADIM 20 it is also BUILT
+#: (containment-lift precondition 17). §13.1 gave ADIM 20 both the mark policy and this
+#: label's flip, and they land together on purpose: the previous values advertised the
+#: ABSENCE rather than a default, so flipping the label before the bound existed would have
+#: hidden the gap inside an artifact just as surely as guessing a bound would have.
+#:
+#: The bound itself is ``portfolio_ledger.MARK_STALE_AFTER_MS`` and is part of THIS version —
+#: changing the number requires a new ``carry_forward_bounded_vN`` and an ``ENGINE_VERSION``
+#: bump, or two Results marked under different bounds would share one namespace (R-5).
+MARK_STALENESS_POLICY = "carry_forward_bounded_v1"
+MARK_STALENESS_STATUS = "built"
 MARK_STALENESS_TRACKING = "ADR 0002 §13 OD-2"
 
 #: Emitted when the frozen preview amount and the executed sleeve disagree at a

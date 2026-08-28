@@ -168,7 +168,7 @@ from entropia.shared.manifest import manifest_hash
 # as a PREDICATE exercised on all four (flag, version) corners rather than as an ``if``
 # that is vacuously green until the day it matters, so a lift that reuses this string is a
 # red build rather than a silent namespace collision.
-ENGINE_VERSION = "backtest-engine-v18-a16-manifest-policy-provenance"
+ENGINE_VERSION = "backtest-engine-v18-unified-clock-portfolio"
 
 # K1 (Master Ref Modul 6 §8: "komisyon dagilimi engine manifestinde acik olmalidir"),
 # satisfied by Karar 1's mandatory rider (GH #552, signed 2026-08-25). Until now the
@@ -216,14 +216,19 @@ ENGINE_ALLOCATION_POLICY_VERSION = "portfolio-allocation-v1"  # execution/proven
 CLOCK_POLICY_VERSION = "clock-policy-v1"  # execution/clock.py
 ARBITRATION_POLICY_VERSION = "arbitration-policy-v1"  # execution/arbitration.py
 
-# NOT a version — a DISCLOSURE. ADR 0002 §13 OD-2 (how an open position is marked at a tick
-# with no fresh bar of its own) was decided on 2026-08-05 but is NOT built, and precondition
-# 17 tracks the flip. The manifest states the undecided-in-code status out loud rather than
-# advertising a policy no artifact can show; what is absent is the IMPLEMENTATION, not the
-# decision. When 17 lands, this literal moves and — because the block below is part of
-# `execution_content` — the namespace shifts with it, which is the correct coupling: a run
-# marked under a real staleness bound is not comparable with one marked under none.
-MARK_STALENESS_POLICY = "undefined_pending_od2"
+# NOT a version of nothing any more — a real DISCLOSURE. ADR 0002 §13 OD-2 (how an open
+# position is marked at a tick with no fresh bar of its own) was decided (a) on 2026-08-05 and
+# BUILT at ADIM 20 (containment-lift precondition 17): carry the last closed bar's close
+# forward under a declared `stale_after` bound with a diagnostic counter. The implementation
+# and the bound live in `execution/portfolio_ledger.py` (`MarkPrice.is_usable`,
+# `MARK_STALE_AFTER_MS`); this module cannot import them — the signed importer allowlist names
+# two modules and `manifest.py` is not one of them (ADIM 118/126) — so the literal is
+# RE-WRITTEN here and `test_a16_manifest_policy_parity.py` closes the drift.
+#
+# The flip moved the `execution_key` namespace, which is the correct coupling and was spent
+# deliberately in the lift commit: a run marked under a real staleness bound is not comparable
+# with one marked under none. Changing `MARK_STALE_AFTER_MS` later REQUIRES a new version here.
+MARK_STALENESS_POLICY = "carry_forward_bounded_v1"
 
 
 #: The block as it appears in the manifest, built once so the two placements below cannot

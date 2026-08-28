@@ -29,6 +29,7 @@ from entropia.application.jobs import agent_tools
 from entropia.application.jobs.backtest_engine import run_backtest
 from entropia.application.queries import backtest_run as backtest_query
 from entropia.domain.agent_lab.enums import ALPHA_AGENT_ID, RuntimeMode, RuntimeStatus
+from entropia.domain.allocation import capability
 from entropia.domain.allocation.capability import (
     SHARED_ALLOCATION_MESSAGE,
     SHARED_ALLOCATION_REMEDIATION,
@@ -50,6 +51,23 @@ from tests.integration.test_backtest_persistence import (
     _ready_composition,
     _seed_principals,
 )
+
+
+@pytest.fixture(autouse=True)
+def _force_contained_world(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force ``future_dev`` for every test in this module — added at ADIM 20 (`C9`).
+
+    This module characterizes THE CONTAINMENT, and until the lift the containment was simply
+    what production shipped, so no fixture was needed. `C9` made ``active_v1`` the shipped
+    value. It did NOT delete the contained branch: ``future_dev`` is still a legal
+    ``SharedAllocationStatus``, and the blocker, the readiness envelope and the admission
+    guard asserted below are still exactly what a build that sets the constant back would do.
+    Forcing the world keeps those assertions meaningful instead of deleting them along with
+    the default. The LIFTED world's admission behaviour is covered by
+    ``tests/integration/test_shared_mode_admission.py``.
+    """
+    monkeypatch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
+
 
 pytestmark = pytest.mark.integration
 

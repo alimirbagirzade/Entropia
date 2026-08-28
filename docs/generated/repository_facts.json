@@ -694,8 +694,8 @@
     "visual_deviation_rows": 38
   },
   "engine": {
-    "engine_version": "backtest-engine-v18-a16-manifest-policy-provenance",
-    "shared_allocation_status": "future_dev"
+    "engine_version": "backtest-engine-v18-unified-clock-portfolio",
+    "shared_allocation_status": "active_v1"
   },
   "frontend": {
     "future_dev_subpage_count": 6,

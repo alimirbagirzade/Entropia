@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 131 — `G10` İMZALANDI (`A`) · sıradaki kalem **`C9` / ADIM 20**
 

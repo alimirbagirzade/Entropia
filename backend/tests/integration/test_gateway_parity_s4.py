@@ -50,6 +50,7 @@ from entropia.domain.agent_lab.enums import (
     RuntimeStatus,
 )
 from entropia.domain.agent_lab.tool_gateway import PolicyScope, ToolCallStatus, ToolName
+from entropia.domain.allocation import capability
 from entropia.domain.identity import Actor
 from entropia.domain.lifecycle.enums import ActorKind, PrincipalType, Role
 from entropia.domain.trade_log.compiler import compute_config_hash, validate_trade_log_config
@@ -67,7 +68,11 @@ from entropia.shared.errors import AccessDeniedError, AllocationHasBlockersError
 
 # ADIM 3: every ENABLED plan leads with the shared-capital containment blocker
 # (domain/allocation/capability.py) on BOTH the human and the Agent line.
-_CONTAINMENT_CODE = "SHARED_MODE_NOT_IN_BUILD"
+# EMPTY SINCE ADIM 20 (`C9`). This was ``{"SHARED_MODE_NOT_IN_BUILD"}``: while containment
+# was on, every ENABLED plan led with that blocker, so the cases below asserted it as the
+# expected blocker set and meant "and nothing else". The lift removed the blanket refusal, so
+# the same assertions now compare against an empty set and mean exactly what they always did.
+_CONTAINMENT_BLOCKERS: set[str] = set()
 
 pytestmark = pytest.mark.integration
 
@@ -314,7 +319,11 @@ async def test_allocation_read_tools_parity(session) -> None:
     assert via_sync["retained"] == direct_sync["retained"]
 
 
-async def test_allocation_full_chain_via_gateway(session) -> None:
+async def test_allocation_full_chain_via_gateway(session, monkeypatch) -> None:
+    # CONTAINED WORLD, forced since ADIM 20 (`C9`). This case characterizes the
+    # containment blanket, which the lift removed as the shipped default but did not
+    # delete: `future_dev` is still a legal status and still behaves exactly this way.
+    monkeypatch.setattr(capability, "SHARED_ALLOCATION_STATUS", "future_dev")
     await _seed(session)
     comp, items = await _composition_with_items(session, AGENT, count=3)
 
@@ -351,7 +360,7 @@ async def test_allocation_full_chain_via_gateway(session) -> None:
     # this build. The gateway is not a second policy surface; it reports the same
     # typed blocker (doc 18 §10: an Agent is never a privileged caller).
     assert validate["valid"] is False
-    assert _CONTAINMENT_CODE in {i["code"] for i in validate["issues"]}
+    assert "SHARED_MODE_NOT_IN_BUILD" in {i["code"] for i in validate["issues"]}
 
     # Human command line: the identical refusal.
     with pytest.raises(AllocationHasBlockersError) as exc_info:
@@ -359,7 +368,7 @@ async def test_allocation_full_chain_via_gateway(session) -> None:
             session, AGENT, composition_id=comp, expected_row_version=1
         )
     await session.rollback()
-    assert {d["code"] for d in exc_info.value.details} == {_CONTAINMENT_CODE}
+    assert {d["code"] for d in exc_info.value.details} == {"SHARED_MODE_NOT_IN_BUILD"}
     human_line_code = exc_info.value.code
 
     # Gateway line: the SAME typed error, not a softer gateway-specific outcome.
@@ -375,7 +384,7 @@ async def test_allocation_full_chain_via_gateway(session) -> None:
         )
     await session.rollback()
     assert gateway_exc.value.code == human_line_code
-    assert {d["code"] for d in gateway_exc.value.details} == {_CONTAINMENT_CODE}
+    assert {d["code"] for d in gateway_exc.value.details} == {"SHARED_MODE_NOT_IN_BUILD"}
     # Neither line left an immutable plan revision behind.
     assert await _count(session, PortfolioAllocationPlanRevision) == 0
 

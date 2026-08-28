@@ -805,6 +805,32 @@ def test_rc04_allocation_blocker_maps_and_not_ready() -> None:
     assert result.state == ReadinessState.NOT_READY
 
 
+def _shared_ready_strategy_item(item_id: str = "item_s1") -> ReadinessItemInput:
+    """A strategy item that shared mode will ADMIT (immediate fills, no scaling).
+
+    Needed since ADIM 20 (`C9`). While containment was on, the shared-mode execution checks
+    returned ``[]`` unconditionally (``validators.py``: ``if not allocation_enabled or not
+    shared_allocation_is_executable(): return []``), so an ``allocation_enabled=True`` case
+    could use the module's default payload no matter what it configured. The lift made those
+    checks reachable, and the default payload configures ``next_candle_open`` — a DEFERRED
+    fill, which `G11` (signed 2026-08-26, option (a)) refuses in shared mode.
+
+    That is correct behaviour, not a regression, and ADIM 125 measured this exact collision
+    when the blocker landed. The default is deliberately left alone — most cases in this
+    module are about single-item readiness, where deferred fills are fully supported — so the
+    handful of shared-capital cases opt in here instead.
+    """
+    payload = _strategy_payload()
+    payload["data"] = {
+        **payload["data"],
+        "execution": {
+            "entry_timing": "current_candle_close",
+            "exit_timing": "current_candle_close",
+        },
+    }
+    return _strategy_item(item_id, payload=payload)
+
+
 def test_rc03_allocation_unallocated_cash_warns() -> None:
     alloc = [
         AllocationIssue(
@@ -815,7 +841,7 @@ def test_rc03_allocation_unallocated_cash_warns() -> None:
         )
     ]
     result = evaluate_readiness(
-        [_strategy_item()], allocation_enabled=True, allocation_issues=alloc
+        [_shared_ready_strategy_item()], allocation_enabled=True, allocation_issues=alloc
     )
     assert Code.ALLOCATION_UNALLOCATED_CASH.value in _codes(result)
     assert result.state == ReadinessState.READY_WITH_WARNINGS

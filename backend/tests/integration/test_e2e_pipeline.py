@@ -536,16 +536,14 @@ async def _ready_pipeline(session) -> dict[str, Any]:
     await session.commit()
     report = await alloc_cmd.validate_allocation_draft(session, OWNER, composition_id=workspace_id)
     await session.commit()
-    # ADIM 3 containment: the shared plan SAVES (authoring is preserved) but is not
-    # valid — shared capital does not execute in this build, so no RUN can be
-    # admitted while it is on. The pipeline therefore does what the remediation
-    # tells a user to do: switch to independent capital, where the strategy's own
-    # Initial Capital funds the run (doc 13 §1.1 — a complete mode, not a degraded
-    # one). Freezing a plan revision is deliberately NOT attempted here: it is
-    # refused under containment, and that refusal is pinned in
-    # tests/integration/test_allocation_persistence.py.
-    assert report["valid"] is False
-    assert "SHARED_MODE_NOT_IN_BUILD" in {i["code"] for i in report["issues"]}
+    # LIFTED AT ADIM 20 (`C9`). Under ADIM 3's containment the shared plan SAVED but was
+    # never valid, and this pipeline went on to do what the remediation told a user to do:
+    # switch to independent capital. That switch is KEPT below — it is the doc 13 §1.1 path
+    # and this test's subject is the end-to-end run/history/metrics/trash flow, not the
+    # capital mode — but the reason for it is gone, so the assertion is now the opposite:
+    # an otherwise-clean shared plan is valid and carries no containment blocker.
+    assert report["valid"] is True
+    assert "SHARED_MODE_NOT_IN_BUILD" not in {i["code"] for i in report["issues"]}
 
     await alloc_cmd.upsert_allocation_draft(
         session,

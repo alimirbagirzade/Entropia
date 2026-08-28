@@ -65,7 +65,10 @@ carried silently under a familiar label.
 output — the projection's own and the loop's — and stops there. It is deliberately **not**
 the ADR §10.3 manifest block: ``clock_policy_version``, ``arbitration_policy_version`` and
 their neighbours belong to ADIM 20 and are built by ``build_portfolio_manifest`` in
-``execution/provenance.py``, which nothing calls. (Spelled as a path rather than a dotted
+``execution/provenance.py`` — which THIS module imports and therefore does call, as of the
+containment lift (ADIM 132) and the chain measured in ADIM 133. The clause that used to sit
+here, *"which nothing calls"*, was written under containment and went stale with it.
+(Spelled as a path rather than a dotted
 import on purpose — that module's containment guard is a text scan, and a docstring mention
 would read to it as a production importer.) Reading them here
 would also have made this module an importer of three separately contained modules — each

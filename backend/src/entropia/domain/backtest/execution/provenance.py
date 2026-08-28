@@ -1,7 +1,12 @@
 """Unified-clock portfolio provenance: the run manifest section + ledger artifact ref.
 
-ADIM 19. CONTAINED — nothing in production imports this module, exactly like
-``clock``/``intents``/``portfolio_ledger``/``arbitration``. It is the record a unified
+ADIM 19. REACHABLE FROM PRODUCTION as of ADIM 135: ``application/jobs/backtest_engine.py``
+imports ``execution/portfolio_projection.py``, which imports this module. The old wording
+(*"CONTAINED — nothing in production imports this module, exactly like
+``clock``/``intents``/``portfolio_ledger``/``arbitration``"*) was true when ADIM 19 wrote it;
+containment was lifted in ADIM 132 and the chain was measured in ADIM 133.
+
+It is the record a unified
 co-simulation must pin so a Result can be re-derived and audited without ever joining a
 live composition (doc 13 §13, Modül 11 §10, ADR 0002 §10).
 

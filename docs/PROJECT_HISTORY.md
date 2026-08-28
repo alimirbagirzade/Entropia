@@ -18810,3 +18810,45 @@ bayt bayt aynı** kaldı → bump edilecek bir namespace kayması **yok**. Bu, A
 `docs/generated/repository_facts.*` + `README.md` (üretilmiş) · `docs/STAGE2_HANDOFF.md` ·
 `docs/PROJECT_HISTORY.md` · `CLAUDE.md` · `docs/ADIM135_LANDED_KICKOFF.md` (yeni) ·
 `docs/ADIM134_LANDED_KICKOFF.md` (`current` → `historical`).
+
+### EK (aynı slice, ürün sahibi talebi) — DÖRT KARŞI-OLGUSAL DOCSTRING + ADR §13.1 DÜZELTİLDİ
+
+ADIM 135 ilk yazımında bunları **bilerek** bırakmıştı (*"düzeltmek adjudication'dır"*). Ürün
+sahibi 2026-08-28'de **ikisini de açıkça yetkilendirdi** → aynı slice'ta indi.
+
+**Zincir grep'le değil, importer takibiyle ölçüldü:**
+`application/jobs/backtest_engine.py:1273` → `project_portfolio_run` →
+`execution/provenance.py:62` → `execution/attribution.py`. Yani *"CONTAINED — nothing in
+production imports this module"* iddiaları **containment ADIM 132'de kalktığında sessizce
+bayatlamıştı**; hiçbir kapı bunu görmüyor çünkü hepsi **proza**.
+
+| Yer | Eski iddia | Bugün |
+|---|---|---|
+| `attribution.py:3` | *"nothing in production imports this module"* | **import ile ulaşılabilir**; `attribute()` yine de **sıfır çağıranlı** — artık **gerekçesiyle** yazılı |
+| `provenance.py:3` | aynı | **ulaşılabilir** (`portfolio_projection` import eder) |
+| `portfolio_projection.py:68` | *"which nothing calls"* | **bu modülün kendisi çağırıyor** |
+| `portfolio_engine.py:91` | *"No mark policy … not yet built"* | **built (132) + bound (135)**, diagnostics-only |
+| ADR-0002 §13.1 OD-2 | *"Not built. `run_portfolio` marks nothing"* | **Built + bound**; `E(t)` realized-only yarısı **değişmedi** |
+
+**Üç şey KORUNDU, ölçülerek:** (1) her düzeltme eski metni `Was: "…"` olarak **saklıyor** — bir
+kaydı yeniden yazmak onu git geçmişinden koparır (ADIM 90); (2) `portfolio_projection.py`'nin
+**yol** biçimli yazımı (`execution/provenance.py`) korundu — noktalı yazım containment metin
+taramasını **kendisi tetikler**; (3) `attribute()`'un sıfır çağıranlı kalması bir eksiklik değil
+**karar**: taşıyıcı `ledger.valuation()`, çünkü `PortfolioAttribution` OD-2(a)'nın sayacını
+taşımıyor (ADIM 133 Ölçüm 5) — bu artık docstring'de yazılı.
+
+**Kapılar:** `ruff` ✅ (bir `E501` çıktı ve düzeltildi) · `format` ✅ · `mypy` ✅ ·
+`pytest tests/unit` **exit 0** — containment guard'larının **metin taramaları dahil**.
+**Yeni test eklenmedi** (davranış değişmedi).
+
+### NUMARA TAŞINDI — ve yakalayan bir kapıydı, göz değil
+
+Bu kayıt **`ADIM 134` yazıldı**. PR sıra beklerken **#871** (`a716f8ad`) o adı **merge edilmiş
+olarak aldı** → kayıt **`ADIM 135`**'e taşındı; dal ve commit mesajları `stage-134` yazar.
+Kural değişmedi: **merge edilmiş ad kazanır, numaralar yeniden atanmaz.**
+
+**Asıl nokta:** çakışmayı ben fark etmedim — **`docs-history-guard` commit'i BLOKLADI** ve
+*"this commit removes record headings that exist on origin/main"* dedi (#590/#604 deseni). Bayat
+tabanlı bir docs PR'ı main'in ADIM 134 kaydını **sessizce düşürecekti**. Rebase edildi
+(**`Update branch` düğmesi KULLANILMADI**), sekiz çakışmanın hepsi **iki tarafı da koruyarak**
+çözüldü, üretilmiş artefaktlar **yeniden üretildi** (elle çözülmedi).

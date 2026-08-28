@@ -1,4 +1,4 @@
-"""OD-2(a)'s mark path, bound to the production loop — the diagnostics half (ADIM 134).
+"""OD-2(a)'s mark path, bound to the production loop — the diagnostics half (ADIM 135).
 
 ADIM 132 shipped the policy (``MarkPrice.is_usable`` / ``.is_stale_refused``, the
 ``MARK_STALE_AFTER_MS`` bound, ``PortfolioValuation.stale_refused_items``) and recorded it

@@ -1,6 +1,15 @@
 """Per-item attribution and contribution over ONE shared ledger (ADIM 19).
 
-CONTAINED — nothing in production imports this module.
+REACHABLE FROM PRODUCTION as of ADIM 135, by import though not yet by call.
+``application/jobs/backtest_engine.py`` -> ``execution/portfolio_projection.py`` ->
+``execution/provenance.py`` -> this module. The old wording (*"CONTAINED — nothing in
+production imports this module"*) was true when ADIM 19 wrote it and went stale silently:
+containment was lifted in ADIM 132 and the import chain was measured in ADIM 133.
+
+``attribute()`` itself still has NO caller. That is deliberate, not an oversight: OD-2(a)'s
+mark path is bound through ``PortfolioLedger.valuation`` instead, because
+``PortfolioAttribution`` does not carry ``stale_refused_items`` and binding here would ship
+OD-2(a) with its own diagnostic counter missing (ADIM 133 Ölçüm 5, ADIM 135).
 
 ``PortfolioLedger`` already books the REALISED half per item: every ``book_*`` call writes
 the delta it actually applied into ``ItemAttribution``, so

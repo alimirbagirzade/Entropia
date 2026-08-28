@@ -48,9 +48,16 @@ ADIM 133 bunu ölçtü ve üç kutu açtı. **ADIM 135 kutuları imzalattı ve `
 
 ## Açık kalanlar (bu slice kapatmadı, iddia da etmiyor)
 
-- **ADR-0002 §13.1'in OD-2 satırı** — *"`run_portfolio` marks nothing"* artık karşı-olgusal,
-  **bilerek düzeltilmedi** (sevk edilmiş ADR tablosunu yeniden yazmak adjudication'dır).
-- **ADIM 133 Ölçüm 1'in üç bayat docstring'i** + iki *"not yet built"* iddiası — ayrı slice.
+- ~~ADR-0002 §13.1'in OD-2 satırı~~ → **DÜZELTİLDİ** (ürün sahibi 2026-08-28'de adjudication'ı
+  açıkça yetkilendirdi). Satır artık *"Built (ADIM 132), bound (ADIM 135)"* diyor; eski metin
+  `Was: "…"` olarak **korundu**. `E(t)` realized-only iddiası **değişmedi, hâlâ doğru**.
+- ~~ADIM 133 Ölçüm 1'in bayat docstring'leri~~ → **DÜZELTİLDİ** (dördü: `attribution.py`,
+  `provenance.py`, `portfolio_projection.py`, `portfolio_engine.py`). Ampirik zincir ölçüldü:
+  `jobs/backtest_engine.py:1273` → `project_portfolio_run` → `provenance:62` → `attribution`.
+  **`attribute()`'un hâlâ SIFIR çağıranı var** ve bu docstring'de artık **gerekçesiyle** yazılı
+  (taşıyıcı `valuation()`, çünkü `PortfolioAttribution` `stale_refused_items` taşımaz).
+  `portfolio_projection.py`'nin **yol** biçimli yazımı korundu — noktalı yazım containment
+  taramasını kendisi tetikler.
 - **`(c1)` provenance** — seçilmedi; istenirse yeni bir imza ister.
 - **A-08 (#514)** — AÇIK, ayrı hat, **RC verdict `BLOCKED`**.
 - **Frontend kapıları koşulmadı**; **tam suite uçtan uca koşulmadı** → otorite **CI**.

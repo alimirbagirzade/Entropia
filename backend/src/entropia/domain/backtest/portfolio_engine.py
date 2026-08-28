@@ -86,9 +86,13 @@ HONEST BOUNDARY — what this module does NOT do
    ``scale_in`` therefore raises :class:`UnsupportedIntentKindError` rather than being applied
    through :meth:`PortfolioLedger.set_position`, which would REPLACE the held size with the
    layer size and quietly shrink the position.
-3. **No mark policy.** ``E(t)`` is realized-only, exactly as the ledger defines it. How an open
-   position is marked at a tick where its own item has no fresh bar is **OD-2 — decided (a) in
-   ADR §13.1 and not yet built**; §13.1 assigns that policy to ADIM 20, not to this loop.
+3. **Mark policy: REPORTED, never folded.** ``E(t)`` is realized-only, exactly as the ledger
+   defines it — a mark cannot move it. How an open position is marked at a tick where its own
+   item has no fresh bar is **OD-2, decided (a) in ADR §13.1, built in ADIM 132 and BOUND HERE
+   in ADIM 135**: ``_run_tick`` values the book once per tick at ``PV`` and the result reaches
+   ``diagnostics["mark_staleness"]`` only. The earlier wording, *"No mark policy … not yet
+   built"*, was accurate until ADIM 132 shipped the policy and ADIM 135 bound it.
+   Product-owner decision (b), 2026-08-28: diagnostics only — NOT provenance, NOT identity.
 """
 
 from __future__ import annotations

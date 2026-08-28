@@ -59,6 +59,57 @@ Alembic head: `0007_create_package_precheck` (unchanged — 2f is read-only, no 
 - 2f **`explicitly_shared` is readable by any authenticated actor** (mirrors `identity/policy.py::can_view`; no share-grant table yet). When a per-principal share list lands, tighten both `can_view` and `queries/library.py::_visibility_conditions` together.
 - 2f deferred refinements: **market/timeframe-scope facets** (need a defined facet vocabulary + indexed columns) and **user-driven sort** (V1 is fixed newest-first by `entity_id`; performance sorts need linked runs from Stage 5); the catalog **list** row surfaces the *pinned* family name while **detail** resolves the live name (fold live name into list rows when an indexed family projection exists).
 
+## Stage 133 — OD-2 mark production binding: the DECISION, not the wiring (PR pending)
+
+**DOCS-ONLY — zero lines in `backend/src`, `backend/tests`, `frontend/src`.** No migration, no
+`ENGINE_VERSION` move, no golden touch, OpenAPI unchanged, `capability.py` untouched,
+`MARK_STALE_AFTER_MS` untouched. New file:
+`docs/decisions/closure_od2_mark_production_binding_2026-08-28.md`, **every signature box EMPTY**
+(10 empty, 0 filled — measured).
+
+ADIM 132 shipped OD-2(a) and left an honest boundary: the mark path has zero production callers.
+Binding it changes shipped Result content, so it is a **product decision**. This slice measured
+the seam and opened a place to sign it.
+
+**Measured, not assumed.** The *"zero callers"* premise holds at FUNCTION level (`attribute` 0,
+`valuation` 1 — from `attribute` only, `MarkPrice` constructed only in tests) but is **stale at
+MODULE level**: `jobs/backtest_engine.py → portfolio_projection → provenance → attribution` reaches
+production, so three *"CONTAINED — nothing in production imports this module"* docstrings and two
+*"not yet built"* OD-2 claims are counterfactual today (recorded, deliberately **not** fixed).
+
+**The finding: the manifest advertises what no run does.** `mark_staleness_status = "built"` and
+`mark_staleness_policy` sit INSIDE `execution_content()` — on **every** run, single-Strategy
+included — under a `policy_versions()` docstring reading *"Every knob whose value changes what a
+replay produces."* Changing `MARK_STALE_AFTER_MS` today changes **no** replay. Same shape as the
+contract bug `C9` found (`available: true` beside *"not available in this build"*).
+
+**Four measurements that shape the options.** (1) The seam already has a name — `PV` — and all
+three `MarkPrice` inputs are already computed and discarded (`_price_for`, `staleness_ms`);
+`valuation()` is pure so it is legal inside the freeze window. (2) **Binding after the loop is
+structurally vacuous**: a real production-participant run measured `ledger.positions == {}` after
+P10 closes everything — so any terminal hook reports nothing. (3) **`attribute()` drops
+`stale_refused_items`**, i.e. OD-2(a)'s own required diagnostic counter — the carrier must be
+`ledger.valuation()`. (4) The bound bites: on `CANONICAL_TIMEFRAMES`, **5 of 9** (30m/1h/2h/4h/1D)
+can carry **zero** bars forward, so for them (a) is behaviourally the fail-closed zero bound the PO
+rejected. Bound **not changed**; opened as its own signature box.
+
+**Engineering constraint measured:** the signed importer allowlist admits `portfolio_engine.py`
+(`PV`) and `execution/portfolio_projection.py`; writing marks in the **worker** would widen a signed
+list — the exact move rejected at `C4` (five assertions, three files).
+
+**Cost matrix measured, not remembered:** no golden scenario exercises `iter_portfolio` /
+`project_portfolio_run` (0 hits; all 9 `portfolio.*` are `combine_item_runs`/rules), so (b)/(c1)
+move **0 digests**; only (c2) moves `contract.execution_key` and forces a bump. OpenAPI: all six
+relevant tokens **0 times**. Migration: none — `DiagnosticArtifact.content` and
+`ResultManifestSnapshot.manifest` are JSONB.
+
+**Honest boundary:** nothing was signed (three decisions OPEN); *"OD-2 flows in production"* is NOT
+claimed; ADR §13.1's OD-2 row untouched (its *"`run_portfolio` marks nothing"* half is still true);
+**A-08 (#514) untouched and OPEN, blocker count UNCHANGED (1), RC verdict BLOCKED**; suite not run
+(zero product lines) → authority is CI.
+
+Full record: `docs/PROJECT_HISTORY.md` §ADIM 133 · `docs/ADIM133_LANDED_KICKOFF.md`.
+
 ## Stage 132 — `C9` / ADIM 20: containment lift landed (PR pending)
 
 `SHARED_ALLOCATION_STATUS` **`future_dev` → `active_v1`**; `ENGINE_VERSION` →
@@ -9800,3 +9851,21 @@ mark policy: **politikayı yaz, sonra literali çevir**; iki yazım parite testi
 ön koşul 18 (`CONTENTION_SELECTION_STATUS` + `capability.py` #4 ↔ OD-3(a) çelişkisi,
 **`C9`'a adıyla devredildi**) → A22 (tam suite, tek çağrı, exit code **ayrı** okunur) →
 lift pinlerini **kasıtlı** güncelle. Paste-ready resume prompt aynı dosyanın sonunda.
+
+## Next: **OD-2 bağlama kararının İMZASI (insan) — kod değil**
+
+`docs/decisions/closure_od2_mark_production_binding_2026-08-28.md` **üç** kutu taşıyor ve
+üçü de **BOŞ**: Karar 1 (bağlansın mı / nereye — `(a)` statüko · `(b)` diagnostics ·
+`(c1)` provenance `execution_content` **dışında** · `(c2)` **içinde**), Karar 2
+(`MARK_STALE_AFTER_MS` = 900 sn, Ölçüm 6'nın 5/9 bulgusuna karşı), Karar 3 (diagnostics-only
+bir değişiklik `ENGINE_VERSION` bump'ı gerektirir mi — depoda **hiç yorumlanmamış** bir soru).
+**Ajan bu kutuları dolduramaz.**
+
+İmza gelirse uygulama kısıtları **ölçülmüş** hâlde hazır: bağlama `PV`'de olmak zorunda
+(döngüden sonrası P10 yüzünden **boş**), taşıyıcı `ledger.valuation()` olmak zorunda
+(`attribute()` `stale_refused_items`'ı düşürür), yazım yeri `portfolio_engine.py` ya da
+`execution/portfolio_projection.py` olmak zorunda (worker imzalı allowlist'i genişletir), ve
+`intents._price_for` **public'e çıkarılmalı** (yeniden yazmak drift üretir).
+
+**A-08 (#514) AYRI HATTIR ve AÇIK** — Karar 1 hangi şıkla imzalanırsa imzalansın RC verdict'i
+**BLOCKED** kalır. Paste-ready resume prompt: `docs/ADIM133_LANDED_KICKOFF.md` sonunda.

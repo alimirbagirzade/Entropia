@@ -18446,3 +18446,141 @@ present-tense olan tek codemap iddiası (`BACKEND_LAYERS.md`) düzeltildi.
 `docs/CODEMAPS/BACKEND_LAYERS.md` · `docs/PROJECT_HISTORY.md` · `docs/STAGE2_HANDOFF.md` ·
 `docs/ADIM132_LANDED_KICKOFF.md` (yeni) · `docs/ADIM131_LANDED_KICKOFF.md`
 (`current` → `historical`).
+
+---
+
+## ADIM 133 — OD-2 MARK YOLUNUN ÜRETİME BAĞLANMASI: ÖNCE KARAR BELGESİ, KOD YOK — VE ÖLÇÜM, "SIFIR ÇAĞIRAN" ÖNCÜLÜNÜN YARISINI ÇÜRÜTTÜ
+
+**Taban:** `origin/main` @ `c57ea644` (ADIM 132 / `C9`). Ölçüm sırasında **açık PR yoktu**
+(anlık görüntü, garanti değil — ADIM 100).
+**Diff:** DOCS-ONLY. `backend/src`, `backend/tests`, `frontend/src`'te **SIFIR SATIR**.
+Migration **yok** · `ENGINE_VERSION` **değişmedi** · golden **el değmedi** · OpenAPI
+**değişmedi** · `SHARED_ALLOCATION_STATUS` **el değmedi** (`active_v1`) · `capability.py`
+**el değmedi** · `MARK_STALE_AFTER_MS` **el değmedi**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Neden bu bir slice değil de bir karar belgesi
+
+ADIM 132 (`C9`) OD-2(a)'yı sevk etti ve kendi kaydına bir **dürüst sınır** yazdı: *"mark yolunun
+üretimde SIFIR çağıranı var"*. Bağlamak sevk edilen Result içeriğini değiştirir (yeni alanlar /
+yeni provenance), yani `ENGINE_VERSION` ve `execution_key` namespace'ini ilgilendirir. Depo
+kuralı: **imzasız ürün kararı indirilmez.** Bu slice o kararı ölçtü ve imzalanacak yeri açtı:
+`docs/decisions/closure_od2_mark_production_binding_2026-08-28.md`, **üç karar, on boş kutu,
+sıfır dolu kutu** (ölçüldü).
+
+### ASIL BULGU 1 — "sıfır çağıran" öncülü FONKSİYONDA doğru, MODÜLDE bayat
+
+Prompt'un öncülü yeniden ölçüldü. **Fonksiyon düzeyinde doğrulandı:** `attribute()` → `src`'te
+**0** çağıran; `PortfolioLedger.valuation` → **1**, o da yalnız `attribute()` içinden; `MarkPrice`
+→ üretimde **0** kez kuruluyor (yalnız iki unit test dosyası).
+
+**Ama modül düzeyinde zincir üretime ULAŞIYOR:**
+`application/jobs/backtest_engine.py` (worker) → `execution/portfolio_projection.py` →
+`execution/provenance.py` → `execution/attribution.py`.
+
+Bu yüzden **üç docstring karşı-olgusal**: `attribution.py`, `provenance.py` ve
+`portfolio_ledger.py`'nin *"CONTAINED — nothing in production imports this module"* cümleleri
+(sonuncusunun **beş** importer'ı var). Ayrıca iki *"not yet built"* OD-2 iddiası
+(`portfolio_engine.py` §HONEST BOUNDARY md. 3, `clock.py::ItemTickView`) ADIM 132'den beri bayat.
+**Ölçüldü, kaydedildi, BİLEREK DÜZELTİLMEDİ** — bu belge docs-only'dir ve ürün koduna dokunmaz;
+düzeltme ayrı ve ucuz bir slice'tır.
+
+### ASIL BULGU 2 — manifest, hiçbir koşuda olmayan bir şeyi ilan ediyor
+
+`provenance.py::PortfolioManifest.policy_versions()` `mark_staleness_status = "built"` yayımlıyor
+ve `policy_versions()` **`execution_content()`'in İÇİNDE** → `identity`'ye giriyor. Bağımsız
+olarak `manifest.py::_portfolio_policy()` `mark_staleness_policy`'yi **her** run'ın
+`execution_content`'ine koyuyor — modülün kendi yorumuyla: *"These are engine-wide, so an
+independent single-Strategy run carries them too."*
+
+Çelişki `policy_versions()`'ın **kendi docstring'inde**: *"Every knob whose value changes what a
+replay produces."* Bugün `MARK_STALE_AFTER_MS`'i değiştirmek **hiçbir replay'in hiçbir sayısını**
+değiştirmez; değiştirdiği tek şey `execution_key` **namespace'idir**. `"built"` **kodun** doğru
+tarifi, **koşunun** değil.
+
+**Bu, ADIM 132'nin kendi bulduğu kusurun AYNI ŞEKLİDİR** (`available: true` ↔ *"not available in
+this build"*). Karşı-argüman da kaydedildi ve zayıf değil: `manifest.py` fazladan-kaydırmayı
+**bilerek** ve fail-closed seçiyor (*"over-shifting costs a re-run, under-shifting returns a stale
+Result, and only one of those two is silent"*).
+
+### ASIL BULGU 3 — döngüden SONRA bağlamak YAPISAL OLARAK BOŞ
+
+Bu, seçenek tasarımını belirleyen ölçümdür ve **iddia değil, koşturuldu**. `_phase_10_finalize`
+hâlâ açık her pozisyonu `close_position` ile kapatır. Üretim katılımcısıyla
+(`_EngineParticipant`) gerçek bir koşu sürüldü — fixture'ın `_HELD_TO_THE_END` item'ı **bilerek**
+sona kadar açık kalır — ve terminal durum ölçüldü: **`ledger.positions == {}`, açık sayısı 0.**
+
+Yani `project_portfolio_run` çağrı yerinde ya da worker'da terminal bir `valuation()` **her zaman**
+sıfır açık pozisyon görür: `unmarked_items = ()`, `stale_refused_items = ()`. En ucuz bağlama
+noktası, OD-2'nin tam olarak **hiçbir şeyini** ölçmez. **Bağlama, bağlanacaksa, tick başına ve
+`PV`'de olmak zorundadır** — tercih değil, kısıt.
+
+### ASIL BULGU 4 — `attribute()`, OD-2(a)'nın KENDİ SAYACINI düşürüyor
+
+ADR §13.1 OD-2(a) *"a declared `stale_after` bound **and a diagnostic counter**"* ister. O sayaç
+`PortfolioValuation.stale_refused_items` ve onu `ledger.valuation()` üretiyor. Ama
+`PortfolioAttribution`'ın alan listesinde **yok** — yalnız `unmarked_items` var, ve
+`portfolio_ledger.py` ikisinin aynı olmadığını kendi yazıyor (stale-refused, unmarked'ın **alt
+kümesi**; *"Reading the count off `unmarked_items` would therefore over-report staleness"*).
+**Sonuç: taşıyıcı `ledger.valuation()` olmalı; `attribute()` üzerinden bağlamak OD-2(a)'yı sayacı
+eksik sevk eder.**
+
+### ASIL BULGU 5 — bound, kanonik merdivende 9'un 5'ini sıfırlıyor
+
+`MARK_STALE_AFTER_MS = 900_000` (15 dk), sınır **katı** (`>`; tam 900 000 kullanılabilir).
+`CANONICAL_TIMEFRAMES` üzerinde ölçüldü: 1m → 15 bar, 3m → 5, 5m → 3, 15m → 1, ve **30m · 1h · 2h ·
+4h · 1D → 0 bar**. Paylaşımlı saatte taşıma tam olarak **kaba** timeframe'li item için gerekir
+(1h'lik kardeşiyle aynı kompozisyondaki 1D item 24 tick'in 23'ünde taze bar taşımaz) → bound **en
+çok ihtiyaç duyulan yerde** ısırıyor. 30m ve üstü için (a), ürün sahibinin 2026-08-28'de
+**reddettiği** fail-closed sıfır bound ile davranışsal olarak **aynıdır**.
+
+**Bound DEĞİŞTİRİLMEDİ ve değiştirilmesi ÖNERİLMEDİ** — değiştirmek yeni bir
+`carry_forward_bounded_vN` **ve** ikinci bir `ENGINE_VERSION` bump'ı gerektirir; §Karar 2 olarak
+**ayrı** bir kutuya açıldı.
+
+### Mühendislik kısıtı ve maliyet matrisi — ikisi de ölçüldü
+
+İmzalı importer allowlist'i (`_AUTHORISED_PHASE_LOOP_IMPORTERS`, Seçenek A, 2026-08-18)
+`participant.py` + `portfolio_engine.py`'yi adlandırıyor. Bağlama `portfolio_engine.py::_run_tick`
+(`PV`) ya da `execution/portfolio_projection.py` (zaten `execution/` içinde, muaf) olursa allowlist
+**değişmez**; **worker'a yazmak imzalı listeyi genişletir** — `C4`'te birebir denenip **üç dosyada
+beş assertion** kırmızı verdiği için reddedilen hamle (GH #731).
+
+Seam'in kendisi zaten var ve adı **`PV`**; `MarkPrice`'ın üç alanının üçü de bugün hesaplanıp
+**atılıyor** (`intents._price_for` → `(price, authority)`, `ItemTickView.staleness_ms`), ve
+`valuation()` **saf** olduğu için donmuş pencerede çağrılması yasal. Tek pürüz: `_price_for`
+**private** ve `__all__`'da yok → public'e çıkarılmalı, yeniden yazmak ADIM 126'nın drift dersini
+tekrarlar.
+
+**Maliyet, hatırlanmadı — ölçüldü.** Golden dosyasında `project_portfolio_run` / `iter_portfolio` /
+`run_portfolio` **0 kez** geçiyor; dokuz `portfolio.*` senaryosunun hepsi `combine_item_runs` ya da
+allocation kuralı → **unified faz döngüsünün çıktısını bugün hiçbir golden digest kapsamıyor**, yani
+`(b)`/`(c1)` **0 digest** oynatır ve yalnız `(c2)` `contract.execution_key`'i oynatıp bump'ı zorunlu
+kılar. OpenAPI: `mark_staleness` · `stale_refused` · `unmarked_items` · `execution_key` ·
+`engine_version` · `portfolio_policy` → **altısı da 0 kez**. Migration: **yok** —
+`DiagnosticArtifact.content` ve `ResultManifestSnapshot.manifest` **JSONB**.
+
+### Kaydedilen bir ADJUDICATION DEĞİL: ADR (a)'yı zaten karşılamış olabilir
+
+Ön koşul 17'nin literali *"OD-2 mark policy **flip**"*, ve R-5 *"every OD **recorded in the
+manifest as a versioned policy**"* der — **ikisi de bağlamayı istemez.** ADIM 132 ikisini de harfi
+harfine karşıladı. Yani `(a)` (hiç bağlama) **atlanmış bir borç değil**, yazılı sözleşmenin
+karşılandığı noktadır; bu, belgede `(a)`'nın lehine **açıkça** yazıldı ki imzacı seçeneği zayıf
+görmesin.
+
+### Dürüst sınır
+
+**Hiçbir kutu doldurulmadı** (üç karar da AÇIK) · *"OD-2 üretimde akıyor"* **denmiyor** · ADR
+§13.1'in OD-2 satırı **el değmedi** (*"`run_portfolio` marks nothing"* yarısı **bugün hâlâ doğru**;
+sevk edilmiş bir ADR karar tablosunu yeniden yazmak adjudication'dır — ADIM 42/128) · Bulgu 1'in
+üç bayat docstring'i ve iki *"not yet built"* iddiası **düzeltilmedi** · **A-08 (#514) el değmedi
+ve AÇIK; blocker DEĞİŞMEDİ (1); RC verdict BLOCKED** · ürün/test kodunda sıfır satır olduğu için
+**suite KOŞULMADI** ve hiçbir geçen/coverage sayısı iddia edilmiyor, otorite **CI** · frontend
+kapıları **koşulmadı** · toplanan test sayısı **DEĞİŞMEDİ** · bu kayıttaki her sayı ya `grep`/dosya
+okumasıyla ya da `backend/.venv` içinde koşan **salt-okur** bir probe ile üretildi, probe'lar
+scratchpad'de kaldı ve **depoya girmedi**.
+
+**Dosyalar:** `docs/decisions/closure_od2_mark_production_binding_2026-08-28.md` (yeni) ·
+`docs/STAGE2_HANDOFF.md` · `docs/PROJECT_HISTORY.md` · `CLAUDE.md` ·
+`docs/ADIM133_LANDED_KICKOFF.md` (yeni) · `docs/ADIM132_LANDED_KICKOFF.md`
+(`current` → `historical`).

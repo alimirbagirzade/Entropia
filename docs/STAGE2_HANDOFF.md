@@ -9612,3 +9612,70 @@ adlar üzerinde total → her yeniden adlandırma ikisini birden kırmızı yapa
 `C9` için pazarlıksız devir DEĞİŞMEDİ: `ENGINE_VERSION`'ı lift commit'inde **TEKRAR** bump et
 (`C7`'nin bump'ı A15'i kapatmaz; `test_lifting_containment_requires_a_second_engine_version_bump`
 zorlar). Paste-ready resume prompt: `docs/ADIM127_LANDED_KICKOFF.md` sonu.
+
+## Stage ADIM 128 — `C8`'in açık bıraktığı dört invariant worker'a çıkarıldı + A4'ün çekişmeli yarısı landed (PR pending)
+
+**Taban** `origin/main` @ `853a61b7` (ADIM 127) · **alembic head `0044_drop_net_conflict_policy`
+(MIGRATION YOK)** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el
+değmedi** · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) · **`backend/src` +
+`frontend/src`'te SIFIR SATIR**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+
+**Ne indi:** yeni `backend/tests/integration/test_shared_clock_capital_oracles.py` (5 case);
+toplanan test **3861 → 3866**, dosya **365 → 366** (`repository_facts` tazelendi).
+İki çapa helper'ı opsiyonel parametreyle genişletildi (varsayılanlar bayt bayt aynı):
+`_attach_strategy`/`_composition` → `size_percent`, `_enable_shared_pool_plan` → `compound`.
+
+**Asıl bulgu:** `Ci(t)` yayımlanmış bir kolon **değil** — Result `Ci(0)`'ı yayımlar. Karar
+başına yayımlanan `granted_notional`, karar `remaining_sleeve` ile `capped` olduğunda
+**sleeve'in kendisidir**. Suite'in stok **%1** sizing'iyle istek sleeve'in iki büyüklük
+mertebesi altındadır, hiçbir katman bağlamaz ve dört invariant da sevk edilmiş artefakt
+üzerinde **okunamaz**. Fixture **%150**'ye çıkarıldı; tek değişiklik bu.
+
+**İkinci bulgu:** çekişme bir **FIXED-mode** olgusudur — compound'da sleeve'ler tam olarak
+`A(t)`'ye toplanır, solvency asla bağlamaz (ADR §9.1). Ölçüldü: aynı fixture compound'da iki
+`capped`, fixed'de bir `capped` + bir `rejected`.
+
+**Sayılar (tek fixture, `_e2e_bars` değişmeden):** `P0=50000`, rezerv %10 → `A0=45000`,
+paylar 60/40 → `Ci(0)=27000/18000`. Kapanan iki lot **−298.56 / −199.05** → `A(t)=44502.39`.
+COMPOUND → **26701.43 / 17800.96**; FIXED → pin 0 **27000.00** (kıpırdamadı), pin 1
+**`rejected` 0/0 `ledger_insolvent`** (kesme yapılsaydı 17502.39 verilebilirdi).
+
+**Üçüncü bulgu (bir NC'nin yeşil kalmasıyla):** reddi veren guard ledger'ın solvency dalı
+**değil**, `arbitration._capacity_for`'un **OD-3** dalıdır (aynı tick'te kardeşin bağladığını
+netleyen). Ledger'ın dalını pinleyen bir worker A10 testi, paylaşımlı saatin hiç girmediği
+bir yolu pinlerdi.
+
+**Dördüncü bulgu:** çekişme altında A4, ADR §14'te yazıldığı **koşulsuz** biçimiyle
+sağlanmıyor — ve sağlanmaması gerekiyor (`CONTENTION_SELECTION_POLICY ==
+"pin_order_admission"`). Manifest pinleri ters çevrilince: reddedilen item **değişti**,
+bağlanan sermaye **27000 → 18000**, havuzun kapanış equity'si **49447.19 → 49465.58** — ki
+sonuncusu `C8`'in çekişmesizde **DEĞİŞMEZ** ölçtüğü figürdür. **ADR DÜZELTİLMEDİ** (adjudication).
+
+**Negatif kontroller:** dördü ayırt edici (NC-1 → yalnız A6 · NC-3 → yalnız A10 · NC-4 →
+yalnız A4 + `C8`'in politika pini · NC-2 → A7 + üç çekişmeli, genişliği **ölçülmüş** bir
+kısıt), **NC-2-RED reddedildi** (kırmızı hedefin assertion'ında değil ön koşulda; ret bir
+tick öne kayıyor). Dördünde de dokunulmamış **19 C4+C8 testinin** tamamı yeşil (NC-4 hariç,
+orada tek kırmızı `C8`'in aynı kuralı politika tarafından pinleyen unit testi).
+
+**Dürüst sınır:** **A4 hâlâ `covered` DEĞİL** (sınır ölçüldü, kapatılmadı) · **A9 worker
+düzeyinde SOLVENCY reddiyle ölçüldü, `BLOCK_OPPOSITE` politikası worker'da sürülmedi** ·
+`capability.py` el değmedi (`C9`) · `ENGINE_VERSION`'ın ikinci bump borcu DEĞİŞMEDİ · ön
+koşul 17/18/22 KIRMIZI KALIR · frontend kapıları KOŞULMADI · coverage ve geçen sayının
+otoritesi **CI**.
+
+**Yerelde yeşil:** ruff · ruff format · mypy (405 dosya) · `openapi_export --check` ·
+`generate_repository_facts --check` · yeni modül 5 passed · dokunulmamış C4+C8 19 passed.
+**Tam suite TEK kırmızı verdi ve o kırmızı bu diff'e ait DEĞİL:** düşen test
+`test_the_repository_itself_passes_the_documentation_truth_gate`, yani **çalışma ağacının
+belgelerini** okuyan kapı — suite ~2.5 saat koşarken bu kapanış ritüeli tam da o belgeleri
+yazıyordu. Nihai ağaçta o dosya **38 passed / exit 0**. **DERS: uzun bir suite koşarken
+`docs/` düzenleme** (ADIM 100'ün kardeşi). İkinci ders: arka plan görevi *"exit 0"* dedi,
+pytest **1** döndürmüştü — yeşil olan wrapper'ın `echo`'suydu.
+
+`PROJECT_HISTORY.md` §ADIM 128 · `docs/ADIM128_LANDED_KICKOFF.md`.
+
+## Next: **Ön koşul 17 (OD-2 mark policy) + 18 (`CONTENTION_SELECTION_STATUS` flip) → sonra `C9`**
+
+`C9` için pazarlıksız devir DEĞİŞMEDİ: `ENGINE_VERSION`'ı lift commit'inde **TEKRAR** bump et
+(`C7`'nin bump'ı A15'i kapatmaz; `test_lifting_containment_requires_a_second_engine_version_bump`
+zorlar). Paste-ready resume prompt: `docs/ADIM128_LANDED_KICKOFF.md` sonu.

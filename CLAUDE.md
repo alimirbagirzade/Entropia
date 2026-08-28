@@ -271,9 +271,48 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> = `future_dev` (**el değmedi**) · **`backend/src` ve `frontend/src`'te SIFIR SATIR**.
+> **Son dalga — ADIM 128 (`C8`'in açık bıraktığı dört invariant worker'a çıktı + A4'ün
+> ÇEKİŞMELİ yarısı ölçüldü).** Yeni `test_shared_clock_capital_oracles.py` (5 case); iki çapa
+> helper'ı **opsiyonel** parametreyle genişledi (`size_percent`, `compound` — varsayılanlar
+> bayt bayt aynı). **ASIL BULGU: `Ci(t)` YAYIMLANMIŞ BİR KOLON DEĞİL — ancak BAĞLAYICI
+> olduğunda okunur.** Result `Ci(0)`'ı yayımlar; karar başına yayımlanan `granted_notional`
+> ise karar `remaining_sleeve` ile `capped` olduğunda **sleeve'in kendisidir**. Suite'in stok
+> **%1** sizing'inde istek sleeve'in **iki büyüklük mertebesi** altındadır, hiçbir katman
+> bağlamaz ve dört invariant da sevk edilmiş artefakt üzerinde **okunamazdı** — tek fixture
+> değişikliği `%150` budur. **İKİNCİ BULGU: çekişme bir FIXED-mode olgusudur** (compound'da
+> sleeve'ler tam `A(t)`'ye toplanır → solvency asla bağlamaz, ADR §9.1). Tek fixture, ölçülen
+> sayılar: `A0=45000`, paylar 60/40, kapanan iki lot **−298.56/−199.05** → `A(t)=44502.39`;
+> COMPOUND **26701.43/17800.96**, FIXED pin 0 **27000.00 (kıpırdamadı)** + pin 1 **`rejected`
+> 0/0 `ledger_insolvent`** (kesme yapılsaydı **17502.39**). A6'nın kardeş yarısı bir
+> **çürütme** olarak yazıldı (iki tek-lot karşı-olgusu **adlandırılıp yadsındı**); A9 ancak
+> fonlanan item kardeşin sermayesini **koyacak yeri olduğu** için yanlışlanabilir (~40500
+> istedi, `A(t)`'nin altında, yani havuz fonlayabilirdi — **fonlamadı**). **ÜÇÜNCÜ BULGU, bir
+> NC'nin YEŞİL kalmasıyla: reddi veren guard ledger'ın solvency dalı DEĞİL**,
+> `arbitration._capacity_for`'un **OD-3** dalı (kardeşin aynı tick'te bağladığını netleyen)
+> → ledger'ı pinleyen bir worker A10 testi hiç girilmeyen bir yolu pinlerdi. **DÖRDÜNCÜ
+> BULGU: çekişme altında A4, ADR §14'ün KOŞULSUZ yazımıyla SAĞLANMIYOR ve sağlanmaması
+> gerekiyor** — manifest pinleri ters çevrilince reddedilen item **değişti**, bağlanan
+> sermaye **27000 → 18000**, havuzun **kapanış equity'si 49447.19 → 49465.58** (ki bu tam
+> olarak `C8`'in çekişmesizde **DEĞİŞMEZ** ölçtüğü figürdür). **ADR DÜZELTİLMEDİ** — sevk
+> edilmiş bir invariant tablosunu yeniden yazmak adjudication'dır (ADIM 42). **DÖRT AYIRT
+> EDİCİ NC** (NC-1 → yalnız A6 · NC-3 → yalnız A10 · NC-4 → yalnız A4 + `C8`'in aynı kuralı
+> politika tarafından pinleyen unit testi · NC-2 → A7 + üç çekişmeli, **genişliği ölçülmüş
+> bir kısıt**: çekişme yalnız `sum(Ci_fixed) ∈ (A(t), A0]` iken vardır) ve **NC-2-RED
+> REDDEDİLDİ** (kırmızı hedefin assertion'ında değil bir **ön koşulda**). **DÜRÜST SINIR: A4
+> hâlâ `covered` DEĞİL** (sınır ölçüldü, kapatılmadı; kabul defteri el değmedi) · **A9 worker
+> düzeyinde SOLVENCY reddiyle ölçüldü, `BLOCK_OPPOSITE` worker'da SÜRÜLMEDİ** ·
+> `capability.py` el değmedi (`C9`) · `ENGINE_VERSION`'ın ikinci bump borcu DEĞİŞMEDİ · ön
+> koşul 17/18/22 KIRMIZI KALIR · frontend kapıları KOŞULMADI · coverage **CI'ın otoritesinde**.
+> Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED. `PROJECT_HISTORY.md` §ADIM 128 ·
+> `docs/ADIM128_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** (`--check` exit 0) · golden dosyası **el değmedi** ·
 > `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) · **`backend/src` ve
-> `frontend/src`'te SIFIR SATIR**. **Son dalga — ADIM 127 (`C8` = üretim worker'ı üzerinde
+> `frontend/src`'te SIFIR SATIR**. **ADIM 127 (`C8` = üretim worker'ı üzerinde
 > ORACLE'lar).** Planın sözüyle bir oracle slice'ı; yeni
 > `test_shared_clock_production_oracles.py` (5 case) + bir A13 partition pini, toplanan test
 > 3855 → 3861. **ASIL BULGU: bir "ölçülemez" kaydı, GEREKÇESİYLE birlikte bayatlar** —
@@ -2411,13 +2450,18 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 127'de güncellendi): A6/A7 + A9/A10 worker oracle'ları ve A4'ün
-> ÇEKİŞMELİ sınırı → sonra ön koşul 17/18 — KOD; `C9` EN SONDA.**
+> **GERÇEK Next (ADIM 128'de güncellendi): ön koşul 17 (OD-2 mark policy) + 18
+> (`CONTENTION_SELECTION_STATUS` flip); `C9` EN SONDA.** ÖNCE ÖLÇ: 18 bir **onay** bekliyor
+> gibi duruyor (`"recommended_pending_approval"`) — öyleyse varsayılan seçme, sor (ADIM 119).
 > ~~`C6`~~ ADIM 125'te, ~~`C7`~~ (A16 + A15 bump) ADIM 126'da, ~~`C8`~~ (üretim worker'ı
-> üzerinde oracle'lar) ADIM 127'de **indi**. **`C8` kapsamının AÇIKTA bıraktıkları,
-> iddia edilmeden:** A4 **`covered` DEĞİL** (çekişmesiz kompozisyonda ölçüldü) · A6/A7 ve
-> A9/A10 **worker düzeyine çıkarılmadı** (unit'te kanıtlı) · A13 pini bugün bağımsız
-> yanlışlanabilir değil (`C9`'un baseline'ı yeniden ürettiği andaki tripwire). **`C9`'un
+> üzerinde oracle'lar) ADIM 127'de, ~~A6/A7 + A9/A10 worker oracle'ları ve A4'ün çekişmeli
+> sınırı~~ **ADIM 128'de indi**. **ADIM 128'in AÇIKTA bıraktıkları, iddia edilmeden:**
+> A4 **hâlâ `covered` DEĞİL** — çekişmeli yarı **ölçüldü** ve ölçüm ADR §14'ün **koşulsuz**
+> A4 yazımının çekişme altında sağlanmadığını gösterdi (kural çalışıyor: `pin_order_admission`);
+> **ADR BİLEREK düzeltilmedi**, sevk edilmiş bir invariant tablosunu yeniden yazmak
+> adjudication'dır · **A9 worker'da SOLVENCY reddiyle ölçüldü, `BLOCK_OPPOSITE` politikası
+> worker'da SÜRÜLMEDİ** (unit'te kanıtlı) · A13 pini bugün bağımsız yanlışlanabilir değil
+> (`C9`'un baseline'ı yeniden ürettiği andaki tripwire). **`C9`'un
 > devraldığı pazarlıksız kalem: `ENGINE_VERSION`'ı lift commit'inde TEKRAR bump et**
 > — `C7`'nin bump'ı A16'nın *kayıt* değişikliği için harcandı ve A15'i KAPATMAZ
 > (`test_lifting_containment_requires_a_second_engine_version_bump` zorlar).

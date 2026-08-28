@@ -17761,3 +17761,202 @@ partition değiştiyse kırmızı). İddia edilmiyor, **ölçüldü ve sınırı
 - **Hiçbir issue açılmadı/kapatılmadı** (#514/#544/#559 el değmedi); **hiçbir imza kutusu
   doldurulmadı**.
 - Codemap **tazelenmedi ve gerekmedi** — yeni endpoint / tablo / sayfa / job yok.
+
+## ADIM 128 — `C8`'İN AÇIK BIRAKTIĞI DÖRT INVARIANT WORKER'A ÇIKARILDI, VE A4'ÜN ÇEKİŞMELİ YARISI ÖLÇÜLDÜ: `Ci(t)` YAYIMLANMIŞ BİR SAYI DEĞİL, ANCAK BAĞLAYICI OLDUĞUNDA GÖRÜNÜR
+
+**Taban:** `origin/main` @ `853a61b7` (ADIM 127 / `C8`, PR #864) · **Dal:**
+`claude/a4-contested-worker-oracles-4b4e73` · **alembic head
+`0044_drop_net_conflict_policy` (MIGRATION YOK)** · `ENGINE_VERSION` **DEĞİŞMEDİ** ·
+OpenAPI **değişmedi** · golden digest dosyası **el değmedi** · `SHARED_ALLOCATION_STATUS`
+= `future_dev` (**el değmedi**) · **`backend/src` ve `frontend/src`'te SIFIR SATIR**.
+Blocker DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+
+ADIM 127 kendi dürüst sınırında ne yapmadığını yazmıştı: *"A6/A7 ve A9/A10 bu slice'ta
+worker düzeyine ÇIKARILMADI … `covered` iddia edilmiyor"* ve *"A4 `covered`
+İŞARETLENMEDİ — kompozisyon ÇEKİŞMESİZ"*. Bu slice o iki cümlenin ikisini birden ele alır
+ve **yine hiçbirini kapatmaz**: dördü worker üzerinde kanıtlanır, A4'ün çekişmeli yarısı
+ölçülür ve **ölçüm A4'ün ADR'de yazıldığı biçimiyle çekişme altında DOĞRU OLMADIĞINI**
+gösterir.
+
+### Sevk edilen
+
+Yeni `backend/tests/integration/test_shared_clock_capital_oracles.py` (5 case). Toplanan
+test **3861 → 3866**, dosya **365 → 366** (`repository_facts` tazelendi — ADIM 60'ın
+dersi). İki çapa
+helper'ı **opsiyonel parametreyle** genişletildi — varsayılanları eski çağıranlar için
+bayt bayt aynı: `test_shared_clock_worker_branch.py::_attach_strategy` / `::_composition`
+artık `size_percent` alıyor, `test_shared_clock_production_oracles.py::_enable_shared_pool_plan`
+artık `compound` alıyor. **İkinci bir helper yazılmadı, bilerek** — A6/A7 ekseninin iki
+yakası yalnız bu parametrede ayrılmalı; elle yazılmış bir ikiz rezervde, paylarda ya da
+sermayede sürüklenmekte serbest olurdu ve eksen izole olmaktan çıkardı.
+
+### ASIL BULGU: `Ci(t)` YAYIMLANMIŞ BİR KOLON DEĞİL — ANCAK **BAĞLAYICI** OLDUĞUNDA OKUNUR
+
+Dört invariant da `Ci(t)` hakkındadır ve Result `Ci(t)`'yi **yayımlamaz**: yayımladığı
+`initial_sleeve`, yani `Ci(0)`. Karar başına yayımladığı şey
+`arbitration.granted_notional`'dır — ve bir karar `remaining_sleeve` ile `capped` olduğunda
+o sayı **sleeve'in kendisidir**, çünkü bağlayan şey sleeve'di.
+
+Bu yüzden buradaki tek fixture değişikliği şudur: `base_position_size` **%150**
+(`_OVERSIZED`). Suite'in stok **%1**'i ile istek sleeve'in **iki büyüklük mertebesi**
+altındadır, hiçbir katman bağlamaz ve `Ci(t)` **görünmez** — yani dört invariant da
+sevk edilmiş artefakt üzerinde bugüne kadar *okunamaz* durumdaydı. Görünmezliğin sebebi
+eksik bir kolon değil, **hiç bağlamayan bir istekti**.
+
+### İKİNCİ BULGU: ÇEKİŞME BİR **FIXED-MODE** OLGUSUDUR, VE BU TASARIMIN KENDİSİDİR
+
+`COMPOUND_PORTFOLIO_EQUITY` altında sleeve'ler `A(t)`'den yeniden hesaplanır, dolayısıyla
+**tam olarak `A(t)`'ye toplanır** → havuz her sleeve'i her zaman fonlayabilir ve solvency
+asla bağlamaz. `FIXED_INITIAL_PORTFOLIO_CAPITAL` altında sleeve'ler `Ci_fixed`'de durur
+ama havuzun gerçek tahsis edilebilir sermayesi `E(t)` ile birlikte düşer — ADR §9.1'in
+*"gerçek çekişmenin doğduğu tek yer"*i. Ölçüldü, varsayılmadı: aynı fixture compound'da
+**iki `capped`**, fixed'de **bir `capped` + bir `rejected`** üretir.
+
+### ÖLÇÜLEN SAYILAR (hepsi tek fixture'dan, `_e2e_bars` DEĞİŞTİRİLMEDEN)
+
+`P0 = 50000`, rezerv %10 → `R0 = 5000`, `A0 = 45000`, paylar **60/40** → `Ci(0) =
+27000 / 18000`. Her iki item de 2024-02-21'de girer, 2024-02-22'de stop olur; o ikinci
+barda faz sırası **iki P3 çıkışını iki P4 girişinden önce** işler, yani ikinci giriş
+**zaten para kaybetmiş** bir havuza karşı kararlaştırılır. Yeni bar icat edilmedi.
+
+- Kapanan iki lot: **−298.56** ve **−199.05** → `E(t) = 49502.39` → `A(t) = 44502.39`.
+- **COMPOUND:** `26701.43` ve `17800.96` — yani `A(t) × 60/100` ve `A(t) × 40/100`, sente
+  kadar. Sleeve'ler `Ci(0)`'ın **altına** düştü.
+- **FIXED:** pin 0 → **`27000.00`** (`Ci_fixed`, `E(t) < P0` olmasına rağmen **kıpırdamadı**);
+  pin 1 → **`rejected`**, `granted_units = 0`, `granted_notional = 0`,
+  `binding_constraint = ledger_solvency`, `reason = ledger_insolvent`.
+- Kesme yapılsaydı verilebilecek tutar: **`17502.39`** (pozitif, ve reddedilen item'ın
+  sleeve'i olan 18000'den küçük) → *"asla kısmi fill"* **adlandırılarak** reddedildi.
+
+**A6'nın kardeş yarısı bir ÇÜRÜTME olarak yazıldı.** *"Sleeve düştü"* iddiası, kendi
+gerçekleşen sonucundan compound eden bir item için de doğrudur — ki sevk edilen sıralı
+motorun yaptığı tam olarak budur ve A6 tam olarak onu dışlamak için vardır. Bu yüzden iki
+tek-lot karşı-olgusu **adlandırılıp yadsınır**: `(P0 − 298.56 − R0) × 0.60 = 26820.86` ve
+`(P0 − 199.05 − R0) × 0.60 = 26880.57` — **ikisi de gözlenen 26701.43 DEĞİL**. Yalnız
+toplam bu sayıyı verir. Vacuity muhafızı önce koşar: iki lot **birbirinden farklı**
+olmalıdır, yoksa iki karşı-olgu tek sayının iki adı olurdu.
+
+**A9 ancak fonlanan item'ın kardeşin sermayesini KOYACAK YERİ VARSA yanlışlanabilir.**
+%150 sizing sayesinde fonlanan item **~40500** ister (kendi sleeve'inin 1.5 katı) ve o
+istek havuzun o andaki `A(t) = 44502.39`'unun **altındadır** — yani havuz onu bütünüyle
+fonlayabilirdi. Fonlamadı: **tam kendi `27000.00`'ı**. Reddedilen kardeşin serbest kalan
+18000'i **hiç kullanılmadı**. Durduran şey solvency değil, **pay yapısıydı**.
+
+**A10'un *"kısmi fill yok"* iddiası rapor düzeyinde değil, MADDİ olarak da ölçüldü.**
+Kısmi bir fill bu fixture'da hiç kapanmayan bir pozisyon açardı ve trade ledger'a hiç
+düşmezdi. Düşen şey **ücret**tir: komisyon fill başına **düz** alınır (ADIM 114), ve
+reddedilen item koşuyu o tick'te fonlanan kardeşinin **tam bir komisyon** (0.04) gerisinde
+bitirir. Hiçbir şey doldurulmadı.
+
+### ÜÇÜNCÜ BULGU (BİR NEGATİF KONTROLÜN YEŞİL KALMASIYLA BULUNDU): REDDİ VEREN GUARD, LEDGER'IN SOLVENCY DALI **DEĞİL**
+
+NC-3'ün ilk yazımı `portfolio_ledger.py::resolve_capacity`'nin
+*"Never a partial fill and never a borrow"* dalını kesmeye ayarlanmıştı. **Kontrol yeşil
+geçti.** Sebep ölçüldü: o dal **tek** bir emrin donmuş havuza sığıp sığmadığını sorar ve
+bu fixture'da erken pin'in kendi sleeve'i ona rahatça sığar. Reddi veren
+`arbitration.py::_capacity_for`'un **OD-3** dalıdır — aynı tick'te bir **kardeşin** zaten
+bağladığı sermayeyi headroom'dan düşen, kendi deyimiyle *"the case the ledger alone cannot
+see"*. **Ledger'ın dalını pinleyen bir worker-düzeyi A10 testi, paylaşımlı saatin bu
+şekilde hiç girmediği bir yolu pinlerdi.** Kontrol doğru yere kurulunca ayırt edici oldu.
+
+### DÖRDÜNCÜ BULGU: ÇEKİŞME ALTINDA A4, ADR'DE YAZILDIĞI BİÇİMİYLE **SAĞLANMIYOR** — VE SAĞLANMAMASI GEREKİYOR
+
+ADR §14 A4 satırı koşulsuzdur: *"permuting `mainboard_items` yields an identical
+`EngineOutput` digest"*. `C8` bunu **çekişmesiz** bir kompozisyonda ölçtü ve parayı
+değişmez buldu; sınırını `ItemArbitrationProfile.priority` üzerinde bir **unit**
+assertion'ıyla pinledi. Bu slice çifti pahalı taraftan kapatır: aynı permütasyon, **ortak
+ödeme gücü yetmeyen** bir kompozisyonda, ve sonuç iki **sevk edilmiş Result'tan** okunur.
+
+| | kontrol | manifest pinleri ters |
+|---|---|---|
+| reddedilen item | %60'lık (pin 1) | **%40'lık (pin 1)** |
+| havuzun bağladığı sermaye | `27000.00` | **`18000.00`** |
+| havuzun kapanış equity'si | `49447.19` | **`49465.58`** |
+
+Üç sonuç **giderek güçlenir ve aynı bulgu değildirler**: farklı bir item reddedilir ·
+havuz farklı miktarda sermaye konuşlandırır · **havuzun kendi kapanış equity'si farklıdır**
+— ki sonuncusu tam olarak `C8`'in çekişmesiz kompozisyonda **DEĞİŞMEZ** ölçtüğü figürdür.
+`CONTENTION_SELECTION_POLICY == "pin_order_admission"` olduğu için bu **kuralın çalışması**,
+A4'ün bozulması değildir. **ADR §14'ün A4 satırının koşulsuz yazımı bir kapsam niteleyicisi
+ister; bu slice ADR'yi DÜZELTMEDİ** — sevk edilmiş bir invariant tablosunun yeniden
+yazılması adjudication'dır, bir test slice'ının kararı değil (ADIM 42 kuralı). Bulgu
+kaydedildi ve testin docstring'ine yazıldı.
+
+### Negatif kontroller — DÖRDÜ AYIRT EDİCİ, BİRİ REDDEDİLDİ
+
+Her kontrolde harness kaynağı belleğe yedekler → yamalar → **yamanın uygulandığını assert
+eder** → hedefi, **dokunulmamış 19 C4+C8 testini** ve yeni modülün tamamını koşar → geri
+yükler → ağaç `git status` ile doğrulanır.
+
+| # | Kusur | Hedef (satır) | Yeni modül | C4+C8 (19) |
+|---|---|---|---|---|
+| NC-1 | compound sleeve `E(t)` yerine `Ci(0)`'ı yeniden yayımlar | A6 `27000.00 == 26701.43` | **yalnız A6** | **yeşil** |
+| NC-2 | fixed mode sessizce auto-compound eder | A7 `26701.43 == 27000.00` | A7 + A9 + A10 + A4 | **yeşil** |
+| NC-3 | solvency açığı emri headroom'a **keser** | A10 `178.78 == 0` | **yalnız A10** | **yeşil** |
+| NC-4 | admission `item_id` sırasına geçer | A4 `id != id` | **yalnız A4** | 1 kırmızı (aşağıda) |
+| NC-2-RED | fixed sleeve `A0` yerine `P0`'dan kesilir | **ÖN KOŞUL** `1 == 2` | — | **REDDEDİLDİ** |
+
+**NC-2-RED reddedildi ve reddi bir yapısal gerçeği ölçtü.** Kırmızı vardı ama hedefin
+assertion'ında değil, `_pool_equity_at_the_second_entry`'nin `len(closed) == 2` ön
+koşulundaydı: `P0`'dan kesilen sleeve'ler `30000 + 20000 = 50000 > A0`, dolayısıyla ret
+**ilk** tick'e kayıyor, ikinci lot hiç kapanmıyor. **Yanlış sebeple kırmızı bir kontrol
+değildir** (ADIM 98/105'in şeklinin tekrarı). Ölçülen yapısal gerçek: bu fixture'da çekişme
+**yalnız `sum(Ci_fixed)` `(A(t), A0]` aralığındayken** vardır — altında her sleeve
+fonlanabilir, üstünde ret bir tick öne kayar. Bu yüzden **NC-2'nin genişliği tolere edilen
+bir kusur değil, ölçülmüş bir kısıttır**: tek bir kompozisyonda *"taban durdu"* ile
+*"çekişme böyle çözüldü"* **bağımsız olarak yanlışlanamaz**. Sınır testin docstring'ine
+yazıldı.
+
+**NC-4'ün C4+C8'deki tek kırmızısı beklenendir ve öğreticidir:** düşen test `C8`'in
+`test_the_pin_ordinal_tie_break_is_the_documented_boundary_of_item_order_invariance`'ıdır,
+yani **aynı kuralı politika tarafından pinleyen** unit assertion (`assert (0, 'b') <
+(0, 'a')`). İki test tek kuralı iki yakadan tutar — biri politikayı, diğeri **Result
+üzerindeki sonucunu**. Diğer 18 test yeşil kaldı.
+
+**NC-4 bir yardımcıyı da düzeltti.** İlk yazımda `_contended` reddedilen kararı **konumdan**
+(slot 1) alıyordu; NC-4 o zaman testin manşet iddiası yerine bir **ön koşulda** düşüyordu.
+Reddedilen karar artık **aranıyor** — böylece kırmızı `control_refused != permuted_refused`
+satırına, yani testin var olma sebebine düşüyor.
+
+### Dürüst sınır
+
+- **A4 hâlâ `covered` DEĞİL.** Bu slice onu kapatmaz; **sınırını** ölçer ve ölçüm A4'ün
+  koşulsuz okumasını **çürütür**. Kabul defterine dokunulmadı, hiçbir tavan oynatılmadı.
+- **A9 worker düzeyinde SOLVENCY reddiyle ölçüldü, politika BLOK'uyla değil.** ADR A9'un
+  *"how verified"* sütunu bir *conflict fixture* der; bu fixture'ın planı `conflict_policy`
+  vermez (yani `KEEP_SEPARATE`) ve iki item aynı barda **aynı yöne** girer, dolayısıyla
+  `BLOCK_OPPOSITE` yolu worker üzerinde **sürülmedi**. Unit suite onu sürüyor
+  (`test_an_opposite_direction_entry_is_blocked_and_leaves_the_pool_untouched`).
+- **`capability.py` el DEĞMEDİ** (`C9`) · **`ENGINE_VERSION`'ın ikinci bump borcu
+  DEĞİŞMEDİ** — `C7`'nin bump'ı A15'i kapatmaz ve
+  `test_lifting_containment_requires_a_second_engine_version_bump` bunu zorlamaya devam
+  ediyor · **ön koşul 17/18/22 KIRMIZI KALIR**.
+- **`shared_shapes.py`'ye tek satır eklenmedi** · hiçbir issue açılmadı/kapatılmadı
+  (#514/#544/#559 el değmedi) · hiçbir imza kutusu doldurulmadı.
+- **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- Codemap **tazelenmedi ve gerekmedi** — yeni endpoint / tablo / sayfa / job yok.
+- Yerelde **yeşil**: `ruff check` · `ruff format --check` · `mypy src` (405 dosya) ·
+  `openapi_export --check` (**ölçüldü**, exit 0) · `generate_repository_facts --check`
+  (documentation-truth gate, exit 0) · yeni modül **5 passed** · dokunulmamış
+  `test_shared_clock_worker_branch.py` + `test_shared_clock_production_oracles.py`
+  **19 passed**. **Tam suite tek çağrıda koştu ve TEK kırmızı verdi — sebebi ölçüldü ve o
+  kırmızı bu diff'e ait DEĞİL** (aşağıya bak). **Geçen sayının ve coverage'ın tek otoritesi
+  bir CI koşusudur** (`addopts` `--cov-fail-under=90`); ürün sahibi tam suite'in yerelde
+  yeniden koşturulmaması, otoritenin CI olması yönünde karar verdi.
+
+### SÜREÇ DERSİ: DOKÜMAN-DOĞRULUK KAPISI AĞACI BİR **TEST GİRDİSİ** YAPAR
+
+Tam suite'in tek kırmızısı
+`tests/contract/test_repository_facts_guard.py::test_the_repository_itself_passes_the_documentation_truth_gate`
+idi. O kapı ürün kodunu değil **çalışma ağacının belgelerini** okur — ve suite ~2.5 saat
+koşarken bu kapanış ritüeli `PROJECT_HISTORY.md`, `CLAUDE.md`, `STAGE2_HANDOFF.md` ve
+kickoff'u **yazıyordu**. Yani kapı **kendi girdisi değişirken** koştu. Nihai ağaçta aynı
+dosya yeniden koşuldu: **38 passed, exit 0.**
+
+**Ders: bu depoda uzun bir suite koşarken `docs/` düzenlenemez** — ADIM 100'ün *"her turdan
+sonra `git status`"* dersinin kardeşi: orada bir kontrol harness'i ağacı kirli bırakıyordu,
+burada kapanış ritüelinin kendisi. Sıra ya *"önce docs, sonra suite"* olmalı ya da suite
+docs'a dokunmayan bir anda koşmalı. **İKİNCİ DERS, aynı koşuda:** arka plan görevi
+*"exit code 0"* raporladı, oysa pytest **1** döndürmüştü — yeşil olan wrapper'ın `echo`'suydu
+(CLAUDE.md'nin *"`| tail` kullanma, exit code'u AYRI oku"* uyarısının birebir tekrarı; bu
+yüzden komut `FULL_SUITE_EXIT=$?` satırını dosyaya yazıyordu ve gerçek durum oradan okundu).

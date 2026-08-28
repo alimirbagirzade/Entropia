@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 127 — `C8` (üretim worker'ı üzerinde oracle'lar) İNDİ · sıradaki kalem
 

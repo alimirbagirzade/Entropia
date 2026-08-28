@@ -223,6 +223,7 @@ async def _enable_shared_pool_plan(
     *,
     reserve_percent: str = "0",
     shares: tuple[str, ...] | None = None,
+    compound: bool = True,
 ) -> list[str]:
     """A shared-pool plan with an explicit reserve and explicit, optionally UNEQUAL shares.
 
@@ -231,7 +232,14 @@ async def _enable_shared_pool_plan(
     by item identity, two 50% sleeves would swap into an indistinguishable arrangement and
     the permutation would reveal nothing. Unequal shares make that swap observable, which is
     what lets the A4 case below be falsifiable at all. Returns the item ids in mainboard
-    order so a caller can say which share went to whom."""
+    order so a caller can say which share went to whom.
+
+    ``compound`` selects the sizing base doc 13 §8.3 puts on the two sides of the A6/A7
+    axis: a pool that recomputes ``Ci(t)`` from portfolio ``E(t)``, or one that holds
+    ``Ci_fixed``. It is a parameter rather than a second helper because two runs on that
+    axis must differ in exactly this and nothing else — a hand-written twin would be free
+    to drift in the reserve, the shares or the capital, and the axis would stop being
+    isolated."""
     items = [
         item
         for item in await mb_repo.list_active_items(session, composition_id)
@@ -248,7 +256,9 @@ async def _enable_shared_pool_plan(
         expected_row_version=None,
         enabled=True,
         initial_capital={"amount": str(_P0), "currency": "USDT"},
-        compounding_mode="COMPOUND_PORTFOLIO_EQUITY",
+        compounding_mode=(
+            "COMPOUND_PORTFOLIO_EQUITY" if compound else "FIXED_INITIAL_PORTFOLIO_CAPITAL"
+        ),
         reserve_cash_percent=reserve_percent,
         entries=[
             {
@@ -258,7 +268,7 @@ async def _enable_shared_pool_plan(
             }
             for item, share in zip(items, shares, strict=True)
         ],
-        idempotency_key=f"c8-plan-{reserve_percent}-{'-'.join(shares)}",
+        idempotency_key=f"c8-plan-{compound}-{reserve_percent}-{'-'.join(shares)}",
     )
     await session.commit()
     return [str(item.item_id) for item in items]

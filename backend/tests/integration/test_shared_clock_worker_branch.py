@@ -186,6 +186,7 @@ async def _attach_strategy(
     *,
     pkg_rev_id: str,
     shared_safe: bool,
+    size_percent: str | None = None,
 ) -> str:
     """Seed one Strategy (its own market revision + processed asset) onto a workspace.
 
@@ -213,16 +214,24 @@ async def _attach_strategy(
     )
     await session.flush()
     build = _shared_safe_payload if shared_safe else _loop_refused_payload
+    payload = build(
+        market_root.entity_id,
+        market_rev.revision_id,
+        market_rev.content_hash,
+        indicator_revision_id=pkg_rev_id,
+    )
+    if size_percent is not None:
+        # ``base_position_size`` is a PERCENT of the resolved capital (GH #550), and on a
+        # shared plan that capital is the item's sleeve Ci(t). A value ABOVE 100 therefore
+        # makes the sleeve the binding limit, which is the only way an arbitration report
+        # publishes Ci(t) itself: a capped decision's ``granted_notional`` IS the sleeve.
+        # ``None`` for every existing caller, whose payload stays byte-identical.
+        payload["position_sizing"]["base_position_size"] = size_percent
     work_object = await mb_cmd.create_work_object(
         session,
         actor,
         object_kind="strategy",
-        payload=build(
-            market_root.entity_id,
-            market_rev.revision_id,
-            market_rev.content_hash,
-            indicator_revision_id=pkg_rev_id,
-        ),
+        payload=payload,
     )
     await mb_cmd.attach_mainboard_item(
         session,
@@ -235,13 +244,25 @@ async def _attach_strategy(
     return str(work_object["revision_id"])
 
 
-async def _composition(session: Any, actor: Actor, *, count: int, shared_safe: bool) -> str:
+async def _composition(
+    session: Any,
+    actor: Actor,
+    *,
+    count: int,
+    shared_safe: bool,
+    size_percent: str | None = None,
+) -> str:
     """A composition with ``count`` enabled Strategies (shared indicator, own market rev)."""
     workspace_id = await _empty_composition(session, actor)
     pkg_rev_id = await _seed_indicator_package(session)
     for _ in range(count):
         await _attach_strategy(
-            session, actor, workspace_id, pkg_rev_id=pkg_rev_id, shared_safe=shared_safe
+            session,
+            actor,
+            workspace_id,
+            pkg_rev_id=pkg_rev_id,
+            shared_safe=shared_safe,
+            size_percent=size_percent,
         )
     await session.commit()
     return str(workspace_id)

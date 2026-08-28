@@ -9869,3 +9869,49 @@ bir değişiklik `ENGINE_VERSION` bump'ı gerektirir mi — depoda **hiç yoruml
 
 **A-08 (#514) AYRI HATTIR ve AÇIK** — Karar 1 hangi şıkla imzalanırsa imzalansın RC verdict'i
 **BLOCKED** kalır. Paste-ready resume prompt: `docs/ADIM133_LANDED_KICKOFF.md` sonunda.
+
+## Stage ADIM 134 — GH #854 pin taşıma kusuru ilk kez koşuldu (iki yüzey) landed (PR pending)
+
+**Ürün kodunda SIFIR SATIR.** Migration yok · `ENGINE_VERSION` değişmedi · OpenAPI değişmedi ·
+golden el değmedi · `SHARED_ALLOCATION_STATUS` = `active_v1` (el değmedi). Toplanan test
+**3868 → 3870** (366 → 367 dosya). Blocker **DEĞİŞMEDİ** (1 — yalnız A-08), **BLOCKED**.
+
+Oturum OD-2 imza kontrolüyle açıldı; **on kutunun onu da BOŞ** ölçüldü → durduruldu, kod
+yazılmadı. **Yeniden talep yazılmadı ve gerekçesi ölçüldü:** belge **45 dakikalıktı**, oysa
+ADIM 130'un biçimi bir *erteleme gerekçesinin bayatlaması* üzerine kuruludur. Ürün sahibi
+sıradaki kalem olarak **#854**'ü seçti.
+
+**Sevk edilen:** `backend/tests/integration/test_external_import_pin_stability.py` (2 case) —
+Trade Log **ve** Trading Signal yüzeyleri, gerçek komutlarla, gerçek Postgres'te. Ölçülen dizi:
+READY kompozisyon → kullanıcı **yalnız görünen adı** düzenleyip Save New Revision der → pin
+N'den N+1'e **taşınır** → item K3 gereği repin edilmez → kompozisyon **`not_ready` +
+`EXTERNAL_IMPORT_UNRESOLVED`**. Import sağlamdır.
+
+**ASIL BULGU:** kusur bir kodlama hatası değil bir **kardinalite** — `_resolve_external` ters
+yönde çözer ve pin **tek değerli bir kolondur**, yani aynı batch'i paylaşan iki revision'dan
+**ancak biri** çözülebilir. Bu yüzden düzeltme bir **ürün kararıdır**.
+**BOŞLUĞUN ÖLÇÜSÜ:** set-once yamasında (NC-1) en ilgili iki dosyanın **26 testi de yeşil
+kaldı** → sevk edilen suite bu davranışı hiç ayırt edemiyordu.
+
+**Açılan karar:** `docs/decisions/closure_i854_external_import_pin_stability_2026-08-28.md` —
+**iki karar, sekiz boş kutu, sıfır dolu.** Kusur **düzeltilmedi**, #854 **kapatılmadı**.
+
+`PROJECT_HISTORY.md` §ADIM 134 · `docs/ADIM134_LANDED_KICKOFF.md`.
+
+## Next: **#854 düzeltmesinin İMZASI (insan) — kod değil**
+
+`docs/decisions/closure_i854_external_import_pin_stability_2026-08-28.md` **sekiz** kutu
+taşıyor ve sekizi de **BOŞ**: Karar 1 (hangi revision çözülsün — `(a)` statüko · `(b)`
+set-once · `(c)` ikinci pin'i reddet · `(d)` link tablosu · `(e)` payload'dan ileri çözüm),
+Karar 2 (`(d)`/`(e)` **imzalı** `G15`/Karar 4'ü konusuz bırakır — kabul mü).
+**Ajan bu kutuları dolduramaz.**
+
+İmza gelirse kısıtlar **ölçülmüş** hâlde hazır: yazıcılar `link_batch_to_revision` ve
+`link_normalized_to_revision`, her biri komut modülünde **iki** yerden çağrılır → **dördü
+birden** değişmeli. `(c)` O-02 zarfıyla yeni bir hata kodu ister. `(d)`/`(e)`
+`_resolve_external` **ve** `resolve_trade_log_batches` / `resolve_signal_revisions`'ı birlikte
+değiştirir; `G15` belgesi `historical` işaretlenir, **silinmez**. **Her şıkta bu slice'ın iki
+testi kırmızı olur** — kasıtlı güncellenir.
+
+**A-08 (#514) AYRI HATTIR ve AÇIK** — Karar 1 hangi şıkla imzalanırsa imzalansın RC verdict'i
+**BLOCKED** kalır. Paste-ready resume prompt: `docs/ADIM134_LANDED_KICKOFF.md` sonunda.

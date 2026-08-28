@@ -18584,3 +18584,110 @@ scratchpad'de kaldı ve **depoya girmedi**.
 `docs/STAGE2_HANDOFF.md` · `docs/PROJECT_HISTORY.md` · `CLAUDE.md` ·
 `docs/ADIM133_LANDED_KICKOFF.md` (yeni) · `docs/ADIM132_LANDED_KICKOFF.md`
 (`current` → `historical`).
+
+## ADIM 134 — GH #854: PIN TAŞIMA KUSURU İLK KEZ KOŞULDU — İKİ YÜZEY, GERÇEK KOMUTLAR, VE BOŞLUĞUN ÖLÇÜSÜ "MEVCUT SUITE YEŞİL KALIYOR"
+
+**Taban:** `origin/main` @ `8b3a24b0`. **Ürün kodunda SIFIR SATIR** — `backend/src` ve
+`frontend/src` el değmedi. alembic head `0044_drop_net_conflict_policy` (**migration YOK**) ·
+`ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** ·
+`SHARED_ALLOCATION_STATUS` = `active_v1` (**el değmedi**). Blocker sayısı **DEĞİŞMEDİ**
+(1 — yalnız A-08), verdict **BLOCKED**.
+
+**Bu slice NEDEN bu kalemi aldı.** Oturum OD-2 imza kontrolüyle açıldı:
+`closure_od2_mark_production_binding_2026-08-28.md`'nin **on kutusunun onu da BOŞ** ölçüldü
+(ADIM 133'ün kaydettiğiyle birebir) → durdurma koşulu ateşlendi, kod yazılmadı. **Yeniden
+talep YAZILMADI ve gerekçesi ölçüldü:** belge o gün `19:19:52`'de inmişti, yani **45
+dakikalıktı**; ADIM 130'un "yeniden talep" biçimi bir **erteleme gerekçesinin bayatlaması**
+üzerine kuruludur (`G10` `B — ERTELE` imzalıydı), burada ise **hiç cevap yok** ve geçmiş bir
+süre yok. 45 dakika önce sorulan soruyu yeniden sormak geçmemiş bir zamanın geçtiği izlenimini
+üretirdi. Ürün sahibi sıradaki kalem olarak **#854**'ü seçti.
+
+**ASIL BULGU: kusur bir kodlama hatası değil, bir KARDİNALİTE.**
+`_resolve_external` **ters yönde** çözer (`item.pinned_revision_id` → o revision'ı **taşıyan**
+satır) ve pin satırın üstünde **tek bir kolondur**. Sonuç: *aynı batch'i paylaşan iki
+revision'dan ancak BİRİ çözülebilir.* Bu yüzden *"kusuru düzelt"* tek başına bir talimat
+değildir — **hangi revision'ın çözüleceğini seçmek bir üründür**. Bu ölçüm, düzeltmenin neden
+sevk edilmediğini belirler.
+
+**İKİNCİ BULGU: tek kusur sınıfı, iki yüzey, dört çağrı yeri.**
+`link_batch_to_revision` (trade log) ve `link_normalized_to_revision` (trading signal) **ikisi
+de koşulsuz atamadır** ve her biri komut modülünde **iki** yerden çağrılır (create + revision).
+İki ayrı bug değil; bir düzeltme bir yüzeyi onarıp diğerini sessizce bırakabilirdi, o yüzden
+test **iki yüzeyi de** sürer.
+
+**ÜÇÜNCÜ BULGU — ve slice'ın asıl değeri: BOŞLUK ÖLÇÜLDÜ, İDDİA EDİLMEDİ.**
+`link_batch_to_revision` set-once yapılınca (NC-1) en ilgili iki dosyanın **26 testi de YEŞİL
+kaldı** → sevk edilen suite set-once ile bugünkü davranışı **ayırt edemiyordu**. Sebebi
+ölçüldü: mevcut ikinci-revision case'lerinin hepsi `_SECOND_CSV` ile **farklı** bir batch
+import eder; **aynı batch'in yeniden kullanıldığı durum ağaçta hiç koşmuyordu**. Karar açısından
+anlamı: **hangi seçenek seçilirse seçilsin mevcut suite bir güvenlik ağı sunmaz** — ağ artık
+bu testin kendisidir.
+
+**Sevk edilen.** Yeni `tests/integration/test_external_import_pin_stability.py` (**2 case**),
+gerçek Postgres + gerçek komutlar. Ölçülen dizi: kompozisyon **READY** (vacuity guard —
+`EXTERNAL_IMPORT_UNRESOLVED` yok) → kullanıcı **yalnız `identity.display_name`'i** değiştirip
+Save New Revision der (import'a dokunulmaz: aynı source asset, aynı batch) → pin N'den **N+1'e
+taşınır** (DB'den geri okundu) → import **sağlamdır** (`status` + `accepted_count` değişmedi) →
+item **K3 gereği repin edilmemiştir** → kompozisyon **`not_ready`** ve
+**`EXTERNAL_IMPORT_UNRESOLVED` BLOCKER** taşır. *Bir görünen ad düzenlemesi READY bir
+kompozisyonu BLOCKED etti.*
+
+**Signal case'i `_attach_trading_signal`'i BİLEREK kullanmaz** — o helper `create_work_object`
+sonrası pin'i **elle** `ts_repo.link_normalized_to_revision` ile yazar, yani sevk edilen komutu
+değil **harness'ı** kanıtlardı. Gerçek `create_trading_signal_and_attach` →
+`create_trading_signal_revision` çifti sürüldü; o çiftin **kendi docstring'i** K3'ü söylüyor
+(*"the Mainboard item is NEVER auto-repinned"*), stranded revision'ın önemi tam olarak budur.
+Seed'in `earliest_available_time`'ı **geçmiş bir instant** olmak zorundadır: gerçek komut work
+object'in `available_time`'ını o satırdan türetir, aksi halde doc 01 anti-lookahead kompozisyonu
+Ready'nin dışında tutar.
+
+**İKİ NEGATİF KONTROL, İKİSİ DE AYIRT EDİCİ.** NC-1 (`link_batch_to_revision` set-once) →
+**yalnız** trade log case'i, **yalnız** `assert batch.work_object_revision_id ==
+revised["revision_id"]` satırında kırmızı. NC-2 (`link_normalized_to_revision` set-once) →
+**yalnız** signal case'i, kendi karşılık gelen satırında kırmızı; **trade log case'i YEŞİL
+kaldı** → iki test birbirinden bağımsız, her biri kendi yüzeyini pinliyor. İki yamada da
+kaynak **bayt bayt geri alındı** — bellekteki anlık görüntüden kopyalanarak, VCS'ten geri alma
+komutuyla DEĞİL (ADIM 111'in dersi: o komut commit edilmemiş çalışmayı siler) — durum
+`git status` ile doğrulandı ve geri alma sonrası ikisi de **yeniden yeşil** (yani kırmızının
+sebebi yamaydı, çevre değil).
+
+**Bu bir KARAKTERİZASYON testidir ve bunu kendi docstring'inde SÖYLER.** Bugünkü **kusurlu**
+davranışı assert eder, onaylamaz; `xfail(strict)` **kullanılmadı** (depo `xfail` sayısını
+ADIM 66'da 1 → 0 indirdi ve *"bir bug'ı xfail'lemek onu görünmez yapar"* diyor). Docstring
+şunu **yazar**: *bir düzeltme bu testi KIRMIZI yapacaktır ve amaç budur* — NC-1/NC-2 bunun
+ölçümüdür.
+
+**Karar açıldı, VERİLMEDİ.**
+`docs/decisions/closure_i854_external_import_pin_stability_2026-08-28.md`: **iki karar, sekiz
+boş kutu, sıfır dolu.** Karar 1 beş seçenek — (a) statüko · (b) set-once · (c) ikinci pin'i
+reddet · (d) link tablosu · (e) payload'dan ileri çözüm. Karar 2: (d)/(e) **imzalı**
+`G15`/Karar 4'ü **konusuz bırakır** (link tablosu revision başına tek satır verir; ileri çözüm
+birincil anahtarla gider) — bu bir **adjudication**'dır, fix slice'ının kararı değil.
+**Ölçülmüş bedeller:** (b) kırılmayı yok etmez **yer değiştirir** (kolon N'de kalır → açık
+repin sonrası **N+1** çözülemez; *türetildi, deneyle ölçülmedi ve belgede öyle işaretli*) ·
+(c) import'a dokunmadan revizyon almayı **yasaklar** · satır kopyalama **tabloya alınmadı**
+çünkü batch satırı `records`/`skipped_rows`/`validation_summary`'yi **JSONB olarak kendisi
+taşır** · (e) yeni veri **istemez**, ileri referans (`import_binding.record_batch_revision_id`
+ve `..._normalized_event_revision_id`) **zaten zorunlu** config alanıdır.
+
+**DÜRÜST SINIR: KUSUR DÜZELTİLMEDİ.** #854 **kapatılmadı** ve durumu değiştirilmedi (insan
+kararı). `G15` belgesi ve imzası **el değmedi**. Frontend'de sıfır satır → frontend kapıları
+**koşulmadı**. Tam suite **koşulmadı**: yerelde 5 dosya / **36 test** yeşil (gerçek Postgres,
+izole DB, `--no-cov`, exit code çıktıdan **ayrı** okundu) — **geçen sayının ve coverage'ın
+otoritesi CI'dır.** Üretimde kaç revision'ın batch paylaştığı **sayılmadı ve ikame edilmedi**
+(`G15` §Ölçüm 3'ün *"sayılamadı"* sınırının aynısı); karar bu sayı olmadan verilebilir, çünkü
+ulaşılabilirlik **tek bir kullanıcı eylemiyle** gösterildi.
+
+**Yan iş (ADIM 60'ın dersi):** test eklendiği için `docs/generated/repository_facts.*` +
+README'nin gömülü bloğu **yeniden üretildi** — toplanan **3868 → 3870**, dosya **366 → 367**;
+`--check` **exit 0** (*documentation-truth gate OK*).
+
+**Ölçülmüş yan bulgu, YENİ DEĞİL ve DOKUNULMADI:** `gh issue list` sırasında **#582** açık
+görüldü ve gövdesi *"`SHARED_ALLOCATION_STATUS` stays `future_dev`"* / başlığı *"the containment
+cannot be lifted"* diyor; ölçülen değer **`active_v1`** (C9/ADIM 132 kaldırdı). **Bu yeni bir
+bulgu değildir** — `grep` ile doğrulandı: ADIM 59 döneminde zaten kaydedilmişti
+(*"gövdesi üç iddiada bayat, durumu OPEN ve doğru"*). Değişen **kapsam**: o gün yalnız gövde
+bayattı, bugün C9 indiği için **merkezî öncül de karşı-olgusal**. Yine de dokunulmadı — deponun
+kendi kaydı *"#582 bir insan izleme kaydıdır"* diyor.
+
+`docs/ADIM134_LANDED_KICKOFF.md`.

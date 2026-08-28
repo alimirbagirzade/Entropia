@@ -272,6 +272,23 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> = `active_v1` (**EL DEĞMEDİ**) · **`backend/src` ve `frontend/src`'te SIFIR SATIR**.
+> **Son dalga — ADIM 134 (GH #854 pin taşıma kusuru ilk kez koşuldu; DÜZELTİLMEDİ).**
+> Oturum OD-2 imza kontrolüyle açıldı → **on kutunun onu da BOŞ**, durduruldu. Yeni
+> `test_external_import_pin_stability.py` (2 case) Trade Log **ve** Signal yüzeylerinde
+> ölçüyor: kullanıcı **yalnız görünen adı** düzenleyip Save New Revision derse pin N'den
+> N+1'e **taşınır**, item K3 gereği repin edilmez, READY kompozisyon **`not_ready` +
+> `EXTERNAL_IMPORT_UNRESOLVED`** olur. **ASIL BULGU: bu bir kardinalite** — `_resolve_external`
+> ters yönde çözer, pin **tek değerli kolondur**, yani aynı batch'i paylaşan iki revision'dan
+> **ancak biri** çözülebilir → düzeltme bir **ürün kararıdır**. **BOŞLUĞUN ÖLÇÜSÜ:** set-once
+> yamasında (NC-1) mevcut **26 test yeşil kaldı**. Karar açıldı, **VERİLMEDİ**
+> (`closure_i854_external_import_pin_stability_2026-08-28.md`, **8 boş kutu**); #854
+> **kapatılmadı**. Toplanan test **3868 → 3870**. Blocker DEĞİŞMEDİ (1 — A-08), BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 134 · `docs/ADIM134_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > = `active_v1` (**EL DEĞMEDİ**) · `capability.py` **el değmedi** · `MARK_STALE_AFTER_MS`
 > **el değmedi** · **`backend/src`, `backend/tests` ve `frontend/src`'te SIFIR SATIR**.
 > **Son dalga — ADIM 133 (OD-2 mark yolunun üretime bağlanması: ÖNCE KARAR BELGESİ, KOD YOK).**
@@ -2606,8 +2623,18 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 133'te güncellendi): SIRADAKİ KALEM KOD DEĞİL, ÜÇ İMZA —
-> OD-2 mark yolu üretime BAĞLANSIN MI?**
+> **GERÇEK Next (ADIM 134'te güncellendi): SIRADAKİ KALEM KOD DEĞİL, İKİ AYRI İMZA HATTI.**
+>
+> **(1) #854 — dış import pin'i taşınıyor; hangi revision çözülsün?**
+> `docs/decisions/closure_i854_external_import_pin_stability_2026-08-28.md`: Karar 1 (`(a)`
+> statüko · `(b)` set-once · `(c)` ikinci pin'i reddet · `(d)` link tablosu · `(e)` ileri
+> çözüm), Karar 2 (`(d)`/`(e)` **imzalı** `G15`/Karar 4'ü konusuz bırakır — kabul mü).
+> **Sekiz kutu, sekizi de BOŞ.** Kusur ADIM 134'te **koşulur** hale getirildi
+> (`test_external_import_pin_stability.py`, iki yüzey) ama **DÜZELTİLMEDİ**; #854 açık.
+> Yazıcılar `link_batch_to_revision` + `link_normalized_to_revision`, **dört** çağrı yeri —
+> dördü birden değişmeli; her şıkta bu iki test **kırmızı olur** ve kasıtlı güncellenir.
+>
+> **(2) OD-2 mark yolu üretime BAĞLANSIN MI? — ÜÇ İMZA, hâlâ BOŞ**
 > `docs/decisions/closure_od2_mark_production_binding_2026-08-28.md`: Karar 1 (bağlansın mı /
 > nereye), Karar 2 (`MARK_STALE_AFTER_MS` = 900 sn, merdivende 9'un 5'ini sıfırlıyor), Karar 3
 > (diagnostics-only bir değişiklik bump gerektirir mi). **Üçü de BOŞ; ajan dolduramaz.**

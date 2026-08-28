@@ -272,7 +272,7 @@ olarak kalır. Manifest `mark_staleness_status: "built"` demeye devam eder.
 ön koşul 17'nin literali de *"OD-2 mark policy **flip**"*tir. ADIM 132 ikisini de **harfi harfine**
 karşıladı — yani (a), atlanmış bir borç değil, **yazılı sözleşmenin karşılandığı nokta**dır.
 
-☐ **(b) YALNIZ DIAGNOSTICS.** `PV`'de `ledger.valuation(t_ms, marks)` çağrılır; per-run özet
+☑ **(b) YALNIZ DIAGNOSTICS — SEÇİLDİ.** `PV`'de `ledger.valuation(t_ms, marks)` çağrılır; per-run özet
 (`unmarked_items`, **`stale_refused_items`**, marked/unmarked tick sayısı) projeksiyonun
 `diagnostics`'ine iner. Reproduction identity'ye **hiç** dokunulmaz.
 
@@ -285,10 +285,14 @@ kıpırdamaz.
 
 ☐ **Başka:** ______________________________________________
 
-**Seçim:** ____________   **İmza:** ____________   **Tarih:** ____________
+☑ **Seçim:** **(b) YALNIZ DIAGNOSTICS**   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-28
 
-**Serbest metinli gerekçe (opsiyonel):**
-> ______________________________________________
+**Serbest metinli gerekçe:** **alınmadı.** Saklanan metin, şıkkın **kendisine sunulan
+metnidir** (ADIM 129/131'in `C`/`A` kararlarıyla aynı biçim) — imzacının okuduğu şey buydu:
+*"PV'de `ledger.valuation(t_ms, marks)` çağrılır; per-run özet (`unmarked_items`,
+`stale_refused_items`, marked/unmarked tick sayısı) projeksiyonun `diagnostics`'ine iner.
+Reproduction identity'ye HİÇ dokunulmaz."* Ölçülmüş bedeli: **0 golden digest**, migration
+yok, OpenAPI yok, allowlist değişmez.
 
 ---
 
@@ -296,13 +300,18 @@ kıpırdamaz.
 
 > Karar 1'de (a) seçilirse bu soru **açık kalabilir** — bağlanmayan bir bound gözlemlenemez.
 
-☐ **A — DOKUNMA.** 900 sn kalır; 30m ve üstünde taşıma fiilen hiç olmaz ve bu **kabul edilir**
+☑ **A — DOKUNMA — SEÇİLDİ.** 900 sn kalır; 30m ve üstünde taşıma fiilen hiç olmaz ve bu **kabul edilir**
 (fail-closed; bir mark'ı uydurmaktansa reddetmek).
 ☐ **B — TIMEFRAME'E GÖRELİ BİR BOUND'A GEÇ** (ör. *"N bar"*). **Yeni `carry_forward_bounded_v2`
 + ikinci `ENGINE_VERSION` bump'ı gerektirir.**
 ☐ **C — ŞİMDİ ÇÖZME, ADIYLA DEVRET.** (ADIM 129'un `C` kararının biçimi.)
 
-**Seçim:** ____________   **İmza:** ____________   **Tarih:** ____________
+☑ **Seçim:** **A — DOKUNMA**   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-28
+
+> Karar 1 = (b) olduğu için bu soru artık **gözlemlenebilir**: bound bağlandı, yani 30m ve
+> üstünde `stale_refused_items` düzenli olarak dolacak. `A`, o reddi bir **kusur değil
+> sevk edilmiş politika** olarak imzalar. `B`'ye geçmek `carry_forward_bounded_v2` **ve**
+> ikinci bir `ENGINE_VERSION` bump'ı gerektirir — bu slice'ın kapsamı dışıdır.
 
 ---
 
@@ -314,14 +323,38 @@ kıpırdamaz.
 > için **hiç yorumlanmadı** — golden taban unified yolu kapsamadığı için soru bugüne kadar hiç
 > sorulmadı (Ölçüm 9).
 
-☐ **A — Bump GEREKMEZ** (identity değişmiyor; `diagnostics` bir rapordur).
+☑ **A — Bump GEREKMEZ — SEÇİLDİ** (identity değişmiyor; `diagnostics` bir rapordur).
 ☐ **B — Bump GEREKİR** (sevk edilen Result içeriği değişiyor).
 
-**Seçim:** ____________   **İmza:** ____________   **Tarih:** ____________
+☑ **Seçim:** **A — Bump GEREKMEZ**   ☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-28
+
+> **Uygulamada ÖLÇÜLDÜ, varsayılmadı:** (b) indikten sonra `engine_golden_digests.json`'ın
+> **50 digest'inin 50'si de bayt bayt aynı** kaldı (415 hedefli unit testi + tam unit suite,
+> exit 0). Bu, Ölçüm 9'un *"unified yol golden'da yok"* öngörüsünün birinci elden
+> doğrulamasıdır ve `A`'nın gerekçesini ampirik yapar: bump edilecek bir namespace kayması
+> **yok**. `ENGINE_VERSION` `backtest-engine-v18-unified-clock-portfolio`'da **kaldı**.
 
 ---
 
 ## Bu belgenin kapsamadıkları (dürüst sınır)
+
+> **BU BÖLÜM ADIM 133'ÜN (belgenin AÇILDIĞI slice) SINIRINI DONDURUR.** Üç imza
+> **2026-08-28'de ADIM 134 ile** alındı ve (b) **uygulandı**; aşağıdaki 1. ve 2. maddeler o
+> güne aittir ve bugün **kısmen karşı-olgusaldır**. Silinmiyorlar — bir kaydı yeniden yazmak
+> onu git geçmişinden koparır (ADIM 90) — ama **ne değiştiği** burada adıyla yazılıdır:
+>
+> - md. 1 → `Was:` *"Hiçbir ürün kodu değişmedi."* **ADIM 134'te değişti:** `intents.price_for`
+>   public oldu, `portfolio_engine` `PV`'de `_marks_at` + `ledger.valuation` çağırıyor,
+>   `PortfolioTick.valuation` eklendi, `portfolio_projection` `diagnostics["mark_staleness"]`
+>   yayımlıyor. **DEĞİŞMEYENLER hâlâ doğru:** `ENGINE_VERSION`, golden dosyası (50 digest,
+>   **bayt bayt aynı**), `capability.py`, `MARK_STALE_AFTER_MS` (Karar 2 = `A`),
+>   `SHARED_ALLOCATION_STATUS`, migration (yok), OpenAPI (değişmedi), importer allowlist'i.
+> - md. 2 → `Was:` *"Hiçbir imza kutusu doldurulmadı."* **Üçü de imzalandı** (b / A / A).
+> - md. 3 → **artık ters yönde doğru:** OD-2(a) **diagnostics olarak akıyor**; `E(t)`'ye
+>   hâlâ **dokunmuyor** ve dokunmaması testle pinli (`test_the_mark_never_moves_e_of_t`).
+> - md. 4, 5, 6, 8 → **DEĞİŞMEDİ, hâlâ açık.** ADR §13.1'in OD-2 satırı ve üç bayat
+>   docstring **el değmedi**; A-08 (#514) ayrı hat, **RC verdict `BLOCKED`**.
+> - md. 7 → **artık geçersiz:** ürün ve test kodu değişti, suite koşuldu (aşağıda).
 
 1. **Hiçbir ürün kodu değişmedi.** `backend/src`, `backend/tests` ve `frontend/src`'te
    **sıfır satır**. `ENGINE_VERSION`, golden dosyası, `capability.py`, `MARK_STALE_AFTER_MS`,

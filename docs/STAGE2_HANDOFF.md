@@ -9915,3 +9915,41 @@ testi kırmızı olur** — kasıtlı güncellenir.
 
 **A-08 (#514) AYRI HATTIR ve AÇIK** — Karar 1 hangi şıkla imzalanırsa imzalansın RC verdict'i
 **BLOCKED** kalır. Paste-ready resume prompt: `docs/ADIM134_LANDED_KICKOFF.md` sonunda.
+---
+
+## Stage 135 — OD-2(a) mark yolu bağlandı, karar `(b)` (PR sıra bekliyor)
+
+Üç kutu **imzalandı** (`alimirbagirzade`, 2026-08-28): **Karar 1 = `(b)` yalnız diagnostics ·
+Karar 2 = `A` dokunma · Karar 3 = `A` bump gerekmez.** `(b)` **aynı slice'ta uygulandı**.
+
+**Migration yok · `ENGINE_VERSION` DEĞİŞMEDİ · golden 50 digest bayt bayt AYNI · OpenAPI
+değişmedi · `MARK_STALE_AFTER_MS` el değmedi · importer allowlist'i el değmedi ·
+`frontend/src`'te sıfır satır.**
+
+Sevk edilen: `intents::price_for` public oldu · `portfolio_engine::_marks_at` (yeni) ·
+`_run_tick` `PV`'de donmuş pencerede `ledger.valuation(...)` çağırıyor ·
+`PortfolioTick.valuation` (zorunlu alan) · `portfolio_projection::_mark_staleness` →
+`diagnostics["mark_staleness"]` (dört anahtar). Yeni test dosyası **8 case**, üç negatif
+kontrol, üçü de ayırt edici, üçünde de önceden var olan suite **yeşil**.
+
+**Asıl bulgu:** ADIM 132 politikayı sevk etmişti ama sayacı **hiçbir koşu üretemiyordu** —
+manifest yine de her koşuda `mark_staleness_status: "built"` diyordu. `(b)` o asimetriyi
+manifest'e **dokunmadan** kapattı. **İkinci bulgu:** ilk `E(t)` testim **vacuous**'tu (fixture'ın
+tek pozisyonu unmarkable → `unrealized ∈ {0, None}`); NC-3 yeşil geçerek onu buldu, fixture
+fiyatı **oynayan** bir long'a çevrildi ve vacuity muhafızı eklendi.
+
+Toplanan test **3868 → 3876**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+`PROJECT_HISTORY.md` §ADIM 135 · `docs/ADIM135_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği üç açık kalemden biri**
+
+1. **ADR-0002 §13.1'in OD-2 satırı + üç bayat docstring** — *"`run_portfolio` marks nothing"*
+   artık **karşı-olgusal**, ama düzeltmek sevk edilmiş bir ADR tablosunu yeniden yazmaktır =
+   **adjudication** (ADIM 42/128). **İmza ister.**
+2. **`(c1)` provenance'a yazma** — ADIM 133 §Karar 1'de bir şıktı, **seçilmedi**. İstenirse
+   **yeni bir imza** ister; `execution_content` DIŞINDA kalırsa yine 0 digest oynatır.
+3. **A-08 (#514)** — **tek blocker**, ayrı hat, insan denetimi ister. RC verdict'i yalnız bu
+   kapatabilir.
+
+**Ajan bu üçünden hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
+`docs/ADIM135_LANDED_KICKOFF.md` sonunda.

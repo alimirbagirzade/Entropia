@@ -65,7 +65,10 @@ carried silently under a familiar label.
 output — the projection's own and the loop's — and stops there. It is deliberately **not**
 the ADR §10.3 manifest block: ``clock_policy_version``, ``arbitration_policy_version`` and
 their neighbours belong to ADIM 20 and are built by ``build_portfolio_manifest`` in
-``execution/provenance.py``, which nothing calls. (Spelled as a path rather than a dotted
+``execution/provenance.py`` — which THIS module imports and therefore does call, as of the
+containment lift (ADIM 132) and the chain measured in ADIM 133. The clause that used to sit
+here, *"which nothing calls"*, was written under containment and went stale with it.
+(Spelled as a path rather than a dotted
 import on purpose — that module's containment guard is a text scan, and a docstring mention
 would read to it as a production importer.) Reading them here
 would also have made this module an importer of three separately contained modules — each
@@ -541,6 +544,42 @@ def _partition(
     return pinned, [record for record in items if record.item_id not in run.ledger.attribution]
 
 
+def _mark_staleness(run: PortfolioRun) -> dict[str, Any]:
+    """OD-2(a)'s per-run diagnostic, folded from the per-tick valuations.
+
+    Reported only. No figure here reaches ``summary``, the equity curve or the execution
+    identity: ``E(t)`` is realized-only, so a mark cannot move a number (ADR §5, and the
+    ledger module's own docstring). This is the counter OD-2(a) asks for, made reachable.
+
+    The two item lists are unions across ticks and are kept as NAMES rather than counts,
+    matching ``PortfolioValuation``: a reviewer needs to see WHICH position aged out.
+    ``stale_refused_items`` is a SUBSET of ``unmarked_items`` — an item can be unmarked
+    without being stale (no price offered, ``unavailable`` authority, non-positive price),
+    so reading staleness off the wider list would over-report it.
+
+    ``ticks_fully_marked`` counts ticks where no open position lacked a usable mark. A tick
+    holding NO open position is vacuously fully marked and is counted as such; the pair of
+    counts is about marking completeness, not about how much was held."""
+    fully_marked = 0
+    with_unmarked = 0
+    unmarked: set[str] = set()
+    stale_refused: set[str] = set()
+    for tick in run.ticks:
+        valuation = tick.valuation
+        if valuation.unmarked_items:
+            with_unmarked += 1
+            unmarked.update(valuation.unmarked_items)
+        else:
+            fully_marked += 1
+        stale_refused.update(valuation.stale_refused_items)
+    return {
+        "ticks_fully_marked": fully_marked,
+        "ticks_with_unmarked_positions": with_unmarked,
+        "unmarked_items": sorted(unmarked),
+        "stale_refused_items": sorted(stale_refused),
+    }
+
+
 def project_portfolio_run(
     run: PortfolioRun,
     *,
@@ -594,6 +633,7 @@ def project_portfolio_run(
             "portfolio_projection_version": PORTFOLIO_PROJECTION_VERSION,
             "portfolio_loop_version": PORTFOLIO_LOOP_VERSION,
         },
+        "mark_staleness": _mark_staleness(run),
         "warnings": list(ABSENT_BY_CONSTRUCTION),
     }
     return EngineOutput(

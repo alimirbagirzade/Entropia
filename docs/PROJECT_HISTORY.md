@@ -18778,7 +18778,9 @@ bu davranışların hiçbirini mevcut hiçbir test göremiyordu.
 **405 dosya, 0 hata** · `pytest tests/unit` **exit 0** (yeni dosya **8 passed**) ·
 `pytest tests/integration -k "shared_clock or unified or portfolio or containment"`
 **51 passed, exit 0** · `generate_repository_facts.py --check` **exit 0** ·
-`memory_index --check` **exit 0**. Toplanan test **3868 → 3876**, test dosyası **366 → 367**.
+`memory_index --check` **exit 0**. Toplanan test **3870 → 3878**, test dosyası **367 → 368** (dalın kendi tabanı 3868/366
+idi; #871 araya iki test indirdiği için sayı merge edilmiş ağaçta YENİDEN ÜRETİLDİ —
+elle çıkarma yapılmadı, üretilmiş artefakt otoritedir).
 
 **Karar 3 = `A` AMPİRİK OLARAK DOĞRULANDI, varsayılmadı:** golden'ın **50 digest'inin 50'si de
 bayt bayt aynı** kaldı → bump edilecek bir namespace kayması **yok**. Bu, ADIM 133 Ölçüm 9'un

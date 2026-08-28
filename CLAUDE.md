@@ -303,7 +303,7 @@ Before stopping a working session, produce **ALL** of the following:
 > (*"`run_portfolio` marks nothing"* artık karşı-olgusal — düzeltmek **adjudication**'dır) ·
 > ADIM 133'ün üç bayat docstring'i **düzeltilmedi** · frontend kapıları **koşulmadı** · tam
 > suite uçtan uca **koşulmadı** → geçen sayı ve coverage **CI'ın otoritesinde**. Toplanan test
-> **3868 → 3876**. **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> **3870 → 3878**. **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
 > `PROJECT_HISTORY.md` §ADIM 135 · `docs/ADIM135_LANDED_KICKOFF.md`. **NUMARA TAŞINDI**
 > (134 → 135): PR sıra beklerken #871 o adı merge edilmiş olarak aldı; yakalayan
 > **`docs-history-guard`** oldu, gözlem değil.

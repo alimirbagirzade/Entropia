@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 128 — `C8`'in açık bıraktığı dört invariant worker'a çıktı + A4'ün çekişmeli yarısı ölçüldü · sıradaki kalem
 

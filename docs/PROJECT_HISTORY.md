@@ -17960,3 +17960,156 @@ docs'a dokunmayan bir anda koşmalı. **İKİNCİ DERS, aynı koşuda:** arka pl
 *"exit code 0"* raporladı, oysa pytest **1** döndürmüştü — yeşil olan wrapper'ın `echo`'suydu
 (CLAUDE.md'nin *"`| tail` kullanma, exit code'u AYRI oku"* uyarısının birebir tekrarı; bu
 yüzden komut `FULL_SUITE_EXIT=$?` satırını dosyaya yazıyordu ve gerçek durum oradan okundu).
+
+## ADIM 129 — ÖN KOŞUL 17 VE 18 ÖLÇÜLDÜ: İKİSİ AYNI ŞEY DEĞİL, VE 18'İN ADINDAKİ "ONAY" ÜÇ YIL ÖNCE ALINMIŞTI — ASIL BULGU BİR İDDİANIN ÜÇ YAZIMINDAN İKİSİNİN BAYAT KALMASI
+
+**Taban:** `origin/main` @ `3fffb9de` (ADIM 128, PR #865) · **Dal:**
+`claude/entropia-precondition-17-18-ec6744` · **alembic head
+`0044_drop_net_conflict_policy` (MIGRATION YOK)** · `ENGINE_VERSION` **DEĞİŞMEDİ** ·
+OpenAPI **değişmedi** · golden digest dosyası **el değmedi** · `SHARED_ALLOCATION_STATUS`
+= `future_dev` (**el değmedi**) · `capability.py` **EL DEĞMEDİ** (o `C9`) ·
+`frontend/src`'te **SIFIR SATIR**. **ÜRÜN KODU DEĞİŞTİ ama yalnız PROZA** — bir **ölü**
+sabitin metni ve onu çevreleyen yorumlar; hiçbir sayı, hiçbir digest, hiçbir davranış
+oynamadı. Blocker DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+
+### Görevin sorusu ölçüldü, ve cevabı "ikisi de değil" çıktı
+
+Görev *"bu ikisi KOD mu, İMZA mı? 18 bir ONAY bekliyor gibi duruyor — öyleyse DEFAULT
+SEÇME, sor"* diyordu. Ölçüm üç şeyi birden gösterdi:
+
+**1. 17 ve 18 AYNI ŞEKİLDE DEĞİL, ve `provenance.py`'nin bunu söyleyen cümlesi bu eksende
+YANLIŞ.** `provenance.py` modül docstring'i *"`arbitration.CONTENTION_SELECTION_STATUS` is
+the same shape for OD-3"* diyor. ADR §13.1'in kendi *"Effect on the delivery plan"*
+kolonu ikisini **ayırıyor**:
+
+- **OD-2 (ön koşul 17): _"Not built. … Building the mark policy is a prerequisite of
+  ADIM 20."_** Karar (a) olarak 2026-08-05'te verildi (carry-forward + bildirilmiş
+  `stale_after` sınırı + diagnostic sayaç) ama **uygulama yok ve yokluğu kasıtlı**:
+  `clock.py::ItemTickView.staleness_ms` boşluğu **ÖLÇER, sınır UYGULAMAZ**, ve
+  `portfolio_ledger.py` ile birlikte ikisi de sınırı *"ADIM 20'nin tanıtacağı"* diye
+  adlandırır. → **17 = KOD**, üstelik **finansal** kod.
+- **OD-3 (ön koşul 18): _"Already the shipped behaviour."_** Yazılacak hiçbir şey yok;
+  geciken **yalnız etiket**.
+
+**2. 18'in adındaki onay ZATEN ALINMIŞ — prompt'un hipotezi ÇÜRÜDÜ.** ADR §13.1
+(2026-08-05): *"Approval of this ADR resolves every open decision above to its stated
+recommendation"*; ADR §16: *"This ADR is **Accepted**"*. Sabitin **kendi docstring'i**
+bunu harfi harfine söylüyor: *"it describes the LABEL's state, not the decision's."* Yani
+ürün sahibine *"OD-3'ü onaylıyor musun"* diye sormak, ADR'nin üç yıl önce cevapladığı bir
+soruyu yeniden sormak olurdu. **ADIM 119'un dersinin AYNA GÖRÜNTÜSÜ:** orada boş bir imza
+kutusu gerçekti ve varsayılan seçmek yanlış olurdu; burada kutu **imzalı** ve asıl bayat
+olan **dizenin kendisi**.
+
+**3. ADR'nin flip'i geciktirme gerekçesi de ÇÜRÜDÜ.** §13.1: *"Both are declarative
+strings published through `build_portfolio_manifest`, **which nothing calls yet**."*
+Bugün ölçüldü: o fonksiyonun **üretim çağıranı VAR** —
+`portfolio_projection.py::project_portfolio_run` → worker `jobs/backtest_engine.py`.
+Dahası **A16 (ADIM 126) `mark_staleness_policy`'yi SEVK EDİLEN üst-düzey manifest'e
+koydu** (`manifest.py::_portfolio_policy`; kendi yorumu *"engine-wide, so an independent
+single-Strategy run carries them too"*) → 17'nin etiketi bugün **her sevk edilen Result'ta**
+duruyor. Gerekçe çürüdüğü hâlde flip **YAPILMADI**; sebepleri aşağıda.
+
+### ASIL BULGU — bir iddianın ÜÇ yazımı vardı, #852 yalnız BİRİNİ düzeltti
+
+`8a1d52d8`'de (2026-08-26 verdict'inin ölçtüğü taban) `arbitration.py` **"OD-3 is open."**
+diyordu. **#852** (`d0397035`) o docstring'i *"OD-3 is DECIDED"* olarak yeniden yazdı — ve
+**aynı iddianın diğer iki yazımına dokunmadı**:
+
+| # | Yazım | #852 | Bu slice |
+|---|---|---|---|
+| 1 | `CONTENTION_SELECTION_STATUS` docstring | ✅ düzeltildi | — |
+| 2 | `CONTENTION_SELECTION_NOTE` (`"OD-3 … is unresolved"`) | ❌ kaçtı | ✅ düzeltildi |
+| 3 | `test_the_od3_selection_rule_is_labelled_as_pending_approval` docstring (`"OD-3 is open"`) | ❌ kaçtı | ✅ düzeltildi |
+
+Sonuç: modül **kendi içinde çelişiyordu** — üç satır arayla biri *"DECIDED"*, öteki
+*"unresolved"* diyordu.
+
+**NEDEN HİÇBİR ŞEY YAKALAMADI, ÖLÇÜLDÜ: `CONTENTION_SELECTION_NOTE`'un OKUYUCUSU YOK.**
+`backend/src` ve `backend/tests`'te tek geçtiği yerler kendi tanımı ve `__all__` — hiçbir
+rapora, manifest'e ya da artefakta ulaşmıyor. Yani **hiçbir davranışsal test ona
+erişemez**; bir ölü sabitin metni sessizce bayatlar.
+
+**VE ZARAR HİPOTETİK DEĞİL, ÖLÇÜLDÜ.**
+`docs/audit/closure_c9_containment_lift_verdict_2026-08-26.md` §1 md. 4 ve §6 md. 7 bu
+modülden *"OD-3 is open"* alıntılayıp **OD-3'ü lift'i bloklayan AÇIK bir karar olarak
+kaydetti**. Verdict **kendi tabanında kaynağı DOĞRU okuyordu**; bayatlayan kaynaktı. Bu
+yüzden verdict **yanlış denmedi, TARİHLENDİ** — ve `doc-status: historical` olduğu için
+**dokunulmadı** (donmuş belge kuralı).
+
+**DERS (ADIM 118'in kardeşi, ölçüm tarafında): bir iddiayı düzeltmek, o iddianın DİĞER
+YAZIMLARINI düzeltmez — ve okuyucusu olmayan bir yazım en uzun bayat kalanıdır.** ADIM 108
+bunu checklist ↔ makine çıktısı ekseninde yaşamıştı; burası aynı şeklin **tek modül
+içindeki** hâli.
+
+### Ölçülen ikinci çelişki — KARARA BAĞLANMADI, ADIYLA DEVREDİLDİ
+
+Eski `CONTENTION_SELECTION_NOTE` *"the containment's own removal condition #4 already
+commits to"* diyordu. Ölçüldü: `capability.py` REMOVAL CONDITION #4 *"conflict/exposure
+arbitration is **symmetric** with deterministic id-based tie-breaking"* der, ve **ADR
+§13'ün kendi sözlüğünde** *"fully symmetric, order-free"* = **(b)**, yani §13.1'in
+**ALMADIĞI** seçenek. `pin_order_admission` kıtlıkta **düşük pin'i kayırır**. **Üç bağımsız
+ölçüm aynı fikirde:** C9 verdict §1 md. 4 · **ADIM 128'in A4 çekişme ölçümü** (manifest
+pinleri ters çevrilince reddedilen item değişti, bağlanan sermaye 27000 → 18000) · ADR
+§13'ün (b) tarifi. Yani **#4 yazıldığı hâliyle sevk edilen politikayla karşılanamaz**, ve
+eski not #4'ün **çekişmeli bir cümlesinin bir yarısını** seçiyordu.
+
+**ÜRÜN SAHİBİNE SORULDU (2026-08-28) → `C`: şimdi çözme, `C9`'a ADIYLA devret.** Bu bir
+adjudication **değil**, adjudication'ı **reddetmedir**: ne `capability.py` #4 ne ADR
+§13.1/§14 yeniden yazıldı (ADIM 42 kuralı). Yeni not bu yüzden **ne karara bağlandığını ve
+neyin tartıldığını** söyler, uzlaştırmayı **#4'ün sahibine bırakır** — ve bu tercih
+kaynağın kendisinde **tarihlidir**.
+
+### Negatif kontroller — üçü de ayırt edici
+
+| NC | Kusur | Sonuç |
+|---|---|---|
+| **NC-1** | Not `"is unresolved"`a geri konur | **yalnız** yeni test kırmızı, **runtime-string** assertion'ında; 45 mevcut test yeşil |
+| **NC-2** | `CONTENTION_SELECTION_STATUS` **docstring'i** `"OD-3 is open"`a geri konur | **yalnız** yeni test kırmızı, **kaynak-düzeyi** assertion'ında — **not'a bakan her assertion YEŞİL KALIR** |
+| **NC-3** | Etiket `"approved"`a çevrilir | **yalnız** `test_the_od3_selection_rule_is_labelled_as_pending_approval` kırmızı |
+
+**NC-2 en öğreticisi: iki yarı BAĞIMSIZ EKSENDİR.** Verdict'in okuduğu cümle bir
+**docstring**'ti, ihraç edilen sabit değil — yani yalnız `CONTENTION_SELECTION_NOTE`'u
+assert eden bir test tarihsel kusuru **göremezdi**.
+
+**NC-3 KENDİ TESTİMDE BİR GÖLGE BULDU.** İlk yazımda etiketi de assert ediyordum; NC-3
+**iki** testi birden kırmızıya çevirdi → o iki satır komşu testin zaten sahip olduğu
+ekseni **gölgeliyordu**. **Kaydedilmedi, KALDIRILDI** (ADIM 101 kuralı: önce kaldırmayı
+dene) ve NC-3 yeniden koşuldu: artık **yalnız** önceden var olan test kırmızı — yani bu
+slice'ın etiketi ellemediğinin kanıtı **bir negatif kontroldür**, iddia değil.
+
+**ÜÇÜNCÜ DERS, kendi aracımdan: bir tarama, ölçtüğü şeyin KANITINI yakalayabilir.** Yeni
+testin ilk yazımı **kendi açıklama yorumumda** kırmızı verdi, çünkü yorum retired cümleyi
+**alıntılıyordu**. Kırmızının hangi assertion'da olduğu okundu: iddia ihlal edilmemişti.
+Tarama **yorum satırlarını dışlayacak** biçimde daraltıldı ve **daraltma kuralın kendisi
+oldu**: *bir yorum bayat bir iddiayı TARİH olarak alıntılayabilir — alıntıyı silmek kanıtı
+siler (ADIM 90 emsali); bir docstring ya da string literali onu İDDİA EDEMEZ.*
+
+### Dürüst sınır
+
+- **ÖN KOŞUL 17 ve 18 KIRMIZI KALIR.** Hiçbiri kapatılmadı, hiçbiri `covered`
+  işaretlenmedi. 17 için tek satır kod yazılmadı; 18'in etiketi **ellenmedi**.
+- **17 neden bu slice'ta yapılmadı, ölçülerek:** literali politikayı yazmadan çevirmek
+  `manifest.py`'nin kendi yorumunun yasakladığı yalandır; **ve** literal A16'dan sonra
+  `execution_content` içinde olduğu için çevirmek **her `execution_key`'i kaydırır** —
+  yani `C9`'un lift bump'ıyla aynı namespace kaymasıdır ve **ADIM 126'nın dersi gereği
+  ikinci kez ayrı harcanamaz**.
+- **18 neden çevrilmedi, üç sebep:** (1) §13.1 açıkça *"ADIM 20 owns both flips"* diyor;
+  (2) **hiçbir belge flip sonrası DEĞERİ adlandırmıyor** (tüm ağaç tarandı) → varsayılan
+  seçmek yasak; (3) #4 çelişkisi çözülmeden *"onaylı"* bir etiket sevk etmek containment'ın
+  var olma sebebine aykırı. **Ürün sahibi de `C` dedi.**
+- `capability.py` **el değmedi**, ADR **el değmedi**, golden **el değmedi**,
+  `CONTENTION_SELECTION_POLICY` **el değmedi**.
+- **`C9`'un devraldığı borç DEĞİŞMEDİ ama ARTIK ADLANDIRILMIŞ:** `ENGINE_VERSION`'ın
+  ikinci bump'ı (ADIM 126'dan) + ön koşul 17'nin mark policy'si + 18'in flip'i + **#4 ↔
+  OD-3(a) çelişkisi**.
+- **frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- `repository_facts` tazelendi: toplanan test **3866 → 3867** (ADIM 60'ın dersi); tek
+  delta bu slice'ın tek yeni testidir, önceden var olan drift **yoktu**.
+
+### Dokunulan dosyalar
+
+`backend/src/entropia/domain/backtest/execution/arbitration.py` (proza) ·
+`backend/tests/unit/test_backtest_cross_item_arbitration.py` (bir docstring + bir yeni
+test) · `docs/audit/closure_w0_containment_lift_preconditions_2026-08-17.md` (satır 17/18
+notları; **donmuş `❌` kolonu EL DEĞMEDİ**, 22 kırmızı) · `README.md` +
+`docs/generated/repository_facts.{md,json}` (üretilmiş).

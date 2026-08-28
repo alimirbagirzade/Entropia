@@ -270,6 +270,43 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> = `active_v1` (**EL DEĞMEDİ**) · `capability.py` **el değmedi** · `MARK_STALE_AFTER_MS`
+> **el değmedi** · **`backend/src`, `backend/tests` ve `frontend/src`'te SIFIR SATIR**.
+> **Son dalga — ADIM 133 (OD-2 mark yolunun üretime bağlanması: ÖNCE KARAR BELGESİ, KOD YOK).**
+> ADIM 132'nin bıraktığı dürüst sınır ölçüldü ve imzalanacak yer açıldı —
+> `docs/decisions/closure_od2_mark_production_binding_2026-08-28.md`, **üç karar, on boş kutu,
+> SIFIR dolu kutu**. **Öncül yarı yarıya çürüdü:** *"sıfır çağıran"* FONKSİYONDA doğru
+> (`attribute()` 0 · `valuation` 1, o da yalnız `attribute()`'tan · `MarkPrice` üretimde 0 kez
+> kuruluyor) ama MODÜLDE **bayat** — `jobs/backtest_engine.py → portfolio_projection →
+> provenance → attribution` üretime **ulaşıyor**, yani üç *"CONTAINED — nothing in production
+> imports this module"* docstring'i ve iki *"not yet built"* OD-2 iddiası karşı-olgusal
+> (**ölçüldü, bilerek DÜZELTİLMEDİ**). **ASIL BULGU: manifest, hiçbir koşuda olmayan bir şeyi
+> ilan ediyor** — `mark_staleness_status = "built"` `execution_content()`'in İÇİNDE ve **her**
+> run'da (tek-Strategy dahil), oysa `policy_versions()`'ın kendi docstring'i *"Every knob whose
+> value changes what a replay produces"* diyor ve `MARK_STALE_AFTER_MS` bugün **hiçbir sayıyı**
+> oynatmıyor (yalnız namespace'i) → `C9`'un bulduğu kusurun **aynı şekli**. **İKİNCİ BULGU,
+> koşturularak: döngüden SONRA bağlamak YAPISAL OLARAK BOŞ** — üretim katılımcısıyla gerçek bir
+> koşuda P10 sonrası `ledger.positions == {}` ölçüldü → bağlama **`PV`'de olmak zorunda**, tercih
+> değil kısıt. **ÜÇÜNCÜ: `attribute()` OD-2(a)'nın KENDİ sayacını düşürüyor**
+> (`stale_refused_items` `PortfolioAttribution`'da **yok**) → taşıyıcı `ledger.valuation()`.
+> **DÖRDÜNCÜ: bound kanonik merdivende 9'un 5'ini sıfırlıyor** (30m/1h/2h/4h/1D → **0 bar**
+> taşıma) → 30m ve üstü için (a), ürün sahibinin **reddettiği** fail-closed sıfır bound ile
+> davranışsal olarak aynı; **bound DEĞİŞTİRİLMEDİ**, §Karar 2 olarak ayrı kutuya açıldı.
+> **Maliyet ölçüldü:** golden'da unified yol **yok** (0 hit; dokuz `portfolio.*` senaryosu
+> `combine_item_runs`/kural) → `(b)`/`(c1)` **0 digest**, yalnız `(c2)` `contract.execution_key`'i
+> oynatır ve bump'ı zorunlu kılar · OpenAPI'de altı token da **0 kez** · migration **yok** (JSONB).
+> **Mühendislik kısıtı:** imzalı allowlist `portfolio_engine.py`/`portfolio_projection.py`'ye izin
+> verir, **worker'a yazmak `C4`'te reddedilen hamledir**. **`(a)` ZAYIF DEĞİL ve belge bunu
+> yazıyor:** ön koşul 17'nin literali *"mark policy **flip**"*, R-5 *"recorded … as a versioned
+> policy"* — **ikisi de bağlamayı istemez**, ADIM 132 ikisini de karşıladı. **DÜRÜST SINIR: hiçbir
+> kutu doldurulmadı, "OD-2 üretimde akıyor" DENMİYOR**, ADR §13.1'in OD-2 satırı **el değmedi**
+> (*"`run_portfolio` marks nothing"* yarısı hâlâ doğru), suite **koşulmadı** (sıfır ürün satırı →
+> otorite CI), toplanan test **DEĞİŞMEDİ**. **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ
+> (1) → RC verdict BLOCKED.** `PROJECT_HISTORY.md` §ADIM 133 · `docs/ADIM133_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
 > DEĞİŞTİ** → `backtest-engine-v18-unified-clock-portfolio` (A15'in İKİNCİ bump'ı) ·
 > **`SHARED_ALLOCATION_STATUS` = `active_v1` — CONTAINMENT KALKTI** · golden **2 satır**
@@ -2569,7 +2606,17 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 131'de güncellendi): `C9` / ADIM 20 — THE LIFT. `G10` ONAYLI.**
+> **GERÇEK Next (ADIM 133'te güncellendi): SIRADAKİ KALEM KOD DEĞİL, ÜÇ İMZA —
+> OD-2 mark yolu üretime BAĞLANSIN MI?**
+> `docs/decisions/closure_od2_mark_production_binding_2026-08-28.md`: Karar 1 (bağlansın mı /
+> nereye), Karar 2 (`MARK_STALE_AFTER_MS` = 900 sn, merdivende 9'un 5'ini sıfırlıyor), Karar 3
+> (diagnostics-only bir değişiklik bump gerektirir mi). **Üçü de BOŞ; ajan dolduramaz.**
+> İmza gelirse uygulama kısıtları ÖLÇÜLMÜŞ hâlde: bağlama **`PV`'de** (döngüden sonrası P10
+> yüzünden boş), taşıyıcı **`ledger.valuation()`** (`attribute()` sayacı düşürür), yazım yeri
+> `portfolio_engine.py`/`portfolio_projection.py` (**worker'a yazma** — `C4`'te reddedildi),
+> `intents._price_for` public'e. **A-08 (#514) ayrı hattır ve tek blocker odur.**
+> *(Tarihsel — ADIM 131'in işaretçisi, `C9` İNDİ ve bu satır o gün doğruydu:)*
+> **`C9` / ADIM 20 — THE LIFT. `G10` ONAYLI.**
 > ADR §16 Gate 2 2026-08-28'de **`A` — ŞİMDİ ver** olarak imzalandı; `C9`'un önündeki
 > **karar** kapısı kalktı ve kapı (`test_lifting_containment_requires_gate2_approval`)
 > **sessiz** (ölçüldü). **`C9` YALNIZ koşar — başka hiçbir PR açık olamaz** (sıralı planın

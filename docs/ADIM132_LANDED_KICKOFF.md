@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 132 — `C9` / ADIM 20 İNDİ: CONTAINMENT KALKTI · sıradaki kalem **A-08 (insan)**
 

@@ -171,10 +171,32 @@ filled). §13.1 chose the recommendation. It is implemented and LABELLED rather 
 adopted: :data:`CONTENTION_SELECTION_POLICY` travels in every report, so a Result produced
 under it can always be told from one produced under a different resolution."""
 
+# THE THIRD SPELLING OF ONE CLAIM — corrected here because #852 corrected only the first.
+# `CONTENTION_SELECTION_STATUS`'s docstring above was rewritten from "OD-3 is open" to
+# "OD-3 is DECIDED" when §13.1's resolutions were named in source; this constant and the
+# unit test that reads it kept the pre-#852 sentence, so a reader who greps this module for
+# OD-3's status got the answer the ADR had already retired. That is not hypothetical: the
+# 2026-08-26 containment-lift verdict quoted "OD-3 is open" from this module and recorded
+# OD-3 as an open decision blocking the lift. It was reading the source correctly at its
+# own base and the source was what had gone stale.
+#
+# MEASURED AND DELIBERATELY NOT RESOLVED HERE. The old text said the tie-break is what
+# "the containment's own removal condition #4 already commits to". Condition #4
+# (`allocation/capability.py`) reads "conflict/exposure arbitration is SYMMETRIC with
+# deterministic id-based tie-breaking", and ADR §13's own vocabulary assigns "fully
+# symmetric, order-free" to option (b) — the alternative §13.1 did NOT take. So the two
+# halves of condition #4 pull apart under scarcity, where `pin_order_admission` favours the
+# low pin, and asserting that #4 "commits to" this rule picks one half of a contested
+# sentence. The note below therefore states what was decided and what was weighed, and
+# leaves the reconciliation to whoever owns condition #4 — it is not this module's to make.
+# Put to the PO on 2026-08-28, who chose to defer it to `C9` by name rather than rewrite
+# either side; precondition 18 therefore stays red and this label stays unflipped.
 CONTENTION_SELECTION_NOTE = (
-    "OD-3 (ADR 0002 §13) is unresolved. Admission order is the manifest-pinned "
-    "(pin_ordinal, item_id) tie-break the containment's own removal condition #4 already "
-    "commits to; the alternative under review is a fully symmetric reject-all."
+    "OD-3 (ADR 0002 §13) is DECIDED: §13.1 resolved it to (a) on 2026-08-05 and this module "
+    "implements it. What has not caught up is CONTENTION_SELECTION_STATUS, whose flip §13.1 "
+    "assigns to ADIM 20 (containment-lift precondition 18). Admission order is the "
+    "manifest-pinned (pin_ordinal, item_id) tie-break; the alternative §13 weighed and did "
+    "not take was a fully symmetric reject-all."
 )
 
 

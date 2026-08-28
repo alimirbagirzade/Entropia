@@ -1155,10 +1155,16 @@ def test_the_containment_flag_is_untouched() -> None:
 
 
 def test_the_od3_selection_rule_is_labelled_as_pending_approval() -> None:
-    """OD-3 is open (ADR §13). Canon decides the RESPONSE to a shortfall — reject, never
-    partial, never borrow — and that is implemented. It does not decide WHICH of several
-    affordable intents is refused, so the ADR's recommendation is implemented and travels in
-    every report as a named, versioned policy rather than being silently adopted."""
+    """OD-3 is DECIDED (ADR §13.1, 2026-08-05, option (a)); the LABEL lags on purpose.
+
+    Was "OD-3 is open (ADR §13)" — the pre-#852 sentence, kept here after #852 corrected
+    the same claim in the source docstring. The name of the test is deliberately unchanged:
+    what it pins is that the label still reads ``recommended_pending_approval``, and that is
+    still true and still correct. Only the reason changed. Canon decides the RESPONSE to a
+    shortfall — reject, never partial, never borrow — and that is implemented; it does not
+    decide WHICH of several affordable intents is refused, so §13.1's resolution travels in
+    every report as a named, versioned policy rather than being silently adopted. The flip
+    of the label itself is ADIM 20's (containment-lift precondition 18)."""
     assert CONTENTION_SELECTION_POLICY == "pin_order_admission"
     assert CONTENTION_SELECTION_STATUS == "recommended_pending_approval"
     ledger = _ledger()
@@ -1172,6 +1178,54 @@ def test_the_od3_selection_rule_is_labelled_as_pending_approval() -> None:
     )
     assert report.selection_status == "recommended_pending_approval"
     assert report.by_item("item_a").diagnostics["selection_policy"] == CONTENTION_SELECTION_POLICY
+
+
+def test_the_od3_disclosure_does_not_contradict_itself() -> None:
+    """One claim, three spellings — and for two of them the answer had gone stale.
+
+    ADR §13.1 (2026-08-05) resolved OD-3 to option (a) and the ADR is Accepted. #852 named
+    that in :data:`CONTENTION_SELECTION_STATUS`'s docstring and stopped there, leaving
+    :data:`CONTENTION_SELECTION_NOTE` and one test docstring still saying the decision was
+    unresolved. Nothing caught it because ``CONTENTION_SELECTION_NOTE`` has no reader — it
+    is exported and never consumed, so no behavioural test can reach it, and the constant
+    that says the decision is DECIDED sat three lines above the one that said it was not.
+
+    The cost was paid once already: ``closure_c9_containment_lift_verdict_2026-08-26.md``
+    quoted this module's pre-#852 wording and recorded OD-3 as open, a condition blocking
+    the containment lift. This test is what stops the module contradicting itself again.
+
+    It does NOT assert that the status label has flipped. It has not, and that lag is the
+    ADR's own instruction (§13.1 gives the flip to ADIM 20) — pinned by
+    ``test_the_od3_selection_rule_is_labelled_as_pending_approval`` right above."""
+    note = arbitration.CONTENTION_SELECTION_NOTE
+    assert "DECIDED" in note, "the note must not leave OD-3's resolution unnamed"
+    assert "§13.1" in note, "the note must cite the resolution it relies on"
+    for stale in ("is unresolved", "is open", "under review"):
+        assert stale not in note, f"the note still calls OD-3 undecided: {stale!r}"
+
+    # The source-level half. The exported string is one surface; the sentence the
+    # 2026-08-26 verdict actually quoted was a DOCSTRING, so the scan has to reach prose
+    # that is not this constant.
+    #
+    # COMMENT LINES ARE EXCLUDED, AND THE EXCLUSION IS THE RULE, NOT A LOOPHOLE. A comment
+    # may quote a retired claim in order to record that it was retired — that is how this
+    # repo keeps evidence, and deleting the quote would delete the proof. What may never
+    # come back is an ASSERTION of it: a docstring or a string literal that states OD-3 is
+    # undecided reaches a reader as the module's current answer. Written the naive way this
+    # assertion fired on the comment block above, which is the distinction being drawn.
+    lines = [
+        line
+        for line in Path(arbitration.__file__).read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    prose = "\n".join(lines)
+    for stale in ("OD-3 is open", "OD-3 (ADR 0002 §13) is unresolved"):
+        assert stale not in prose, f"a retired claim came back into the module: {stale!r}"
+
+    # The label itself is deliberately NOT asserted here. It is pinned one test above, and
+    # duplicating it would shadow that axis: NC-3 (flip the label) reddened both tests, so
+    # these two lines bought no coverage the neighbour did not already own. Removed rather
+    # than merely recorded — the docstring above already delegates the claim.
 
 
 def test_the_report_is_a_value_and_cannot_be_edited_after_the_fact() -> None:

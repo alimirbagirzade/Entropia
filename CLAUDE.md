@@ -272,8 +272,43 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> = `future_dev` (**el değmedi**) · `capability.py` **el değmedi** · `frontend/src` **sıfır
+> satır**. **Son dalga — ADIM 129 (ön koşul 17 + 18 ÖLÇÜLDÜ, İKİSİ DE KIRMIZI KALDI).**
+> Ürün kodu değişti ama **yalnız PROZA** — bir **ölü** sabitin metni; hiçbir sayı/digest
+> oynamadı. **ASIL BULGU: bir iddianın ÜÇ yazımı vardı, #852 yalnız BİRİNİ düzeltti** →
+> `arbitration.py` üç satır arayla hem *"OD-3 is DECIDED"* hem *"OD-3 … is unresolved"*
+> diyordu. Yakalayan yoktu çünkü **`CONTENTION_SELECTION_NOTE`'un OKUYUCUSU YOK** (kendi
+> tanımı + `__all__`) — hiçbir davranışsal test ona ulaşamaz. **Zarar ölçüldü:** 2026-08-26
+> containment-lift verdict'i bu modülden *"OD-3 is open"* alıntılayıp OD-3'ü lift'i bloklayan
+> AÇIK bir karar saydı; verdict **yanlış değil BAYAT** (kendi tabanında kaynağı doğru
+> okuyordu) → `doc-status: historical`, **dokunulmadı**. **17 ≠ 18, ve `provenance.py`'nin
+> *"the same shape"* cümlesi bu eksende YANLIŞ:** ADR §13.1 *"Effect"* kolonu OD-2'yi *"Not
+> built … a prerequisite of ADIM 20"*, OD-3'ü *"Already the shipped behaviour"* diye ayırır →
+> **17 = KOD (finansal), 18 = yalnız ETİKET. Prompt'un hipotezi ÇÜRÜDÜ: 18'in adındaki onay
+> 2026-08-05'te ALINDI** (ADR §13.1; §16 **Accepted**; sabitin docstring'i *"describes the
+> LABEL's state, not the decision's"*). **ADR'nin flip gerekçesi de ÇÜRÜDÜ** —
+> *"`build_portfolio_manifest`, which nothing calls yet"* artık yanlış (`project_portfolio_run`
+> → worker), ve A16 `mark_staleness_policy`'yi **sevk edilen** manifest'e koydu. **YİNE DE
+> ÇEVRİLMEDİ:** §13.1 *"ADIM 20 owns both flips"* diyor · **hiçbir belge flip sonrası DEĞERİ
+> adlandırmıyor** · `capability.py` #4 (*"symmetric"*) ile OD-3(a) `pin_order_admission`
+> (kıtlıkta **düşük pin'i kayırır**) **ÇELİŞİR** — üç bağımsız ölçüm aynı fikirde (C9 verdict
+> §1 md. 4 · **ADIM 128'in A4 çekişme ölçümü** · ADR §13'ün (b) tarifi). **ÜRÜN SAHİBİNE
+> SORULDU (2026-08-28) → `C`: şimdi çözme, `C9`'a ADIYLA devret** = adjudication değil,
+> adjudication'ı **reddetme**. **ÜÇ NC, üçü ayırt edici; NC-2 en öğreticisi** (docstring'i geri
+> koymak not'a bakan her assertion'ı **YEŞİL bırakır** → iki bağımsız eksen), **NC-3 kendi
+> testimde GÖLGE buldu → kaydedilmedi, KALDIRILDI** (ADIM 101). **Kendi taramam kendi
+> kanıtımı yakaladı** → tarama **yorum satırlarını dışlar**, ve bu bir kural: *yorum bayat bir
+> iddiayı TARİH olarak alıntılayabilir (ADIM 90), docstring onu İDDİA EDEMEZ.* **DÜRÜST SINIR:
+> 17 ve 18 KIRMIZI KALIR** (17 için sıfır satır kod; 18'in etiketi **ellenmedi** — NC-3 kanıtı),
+> `capability.py`/ADR/golden **el değmedi**, frontend kapıları KOŞULMADI, coverage **CI'ın
+> otoritesinde**. Toplanan test 3866 → **3867**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 129 · `docs/ADIM129_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > = `future_dev` (**el değmedi**) · **`backend/src` ve `frontend/src`'te SIFIR SATIR**.
-> **Son dalga — ADIM 128 (`C8`'in açık bıraktığı dört invariant worker'a çıktı + A4'ün
+> **ADIM 128 (`C8`'in açık bıraktığı dört invariant worker'a çıktı + A4'ün
 > ÇEKİŞMELİ yarısı ölçüldü).** Yeni `test_shared_clock_capital_oracles.py` (5 case); iki çapa
 > helper'ı **opsiyonel** parametreyle genişledi (`size_percent`, `compound` — varsayılanlar
 > bayt bayt aynı). **ASIL BULGU: `Ci(t)` YAYIMLANMIŞ BİR KOLON DEĞİL — ancak BAĞLAYICI
@@ -2450,9 +2485,13 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 128'de güncellendi): ön koşul 17 (OD-2 mark policy) + 18
-> (`CONTENTION_SELECTION_STATUS` flip); `C9` EN SONDA.** ÖNCE ÖLÇ: 18 bir **onay** bekliyor
-> gibi duruyor (`"recommended_pending_approval"`) — öyleyse varsayılan seçme, sor (ADIM 119).
+> **GERÇEK Next (ADIM 129'da güncellendi): ön koşul 17 ve 18 ÖLÇÜLDÜ, İKİSİ DE
+> KIRMIZI KALDI — ve ikisi de artık `C9`'a ait.** 17 = KOD ama literal
+> `execution_content` içinde, çevirmek **her `execution_key`'i kaydırır** → o namespace
+> kayması `C9`'un lift bump'ıdır (ADIM 126'nınki harcandı). 18 = yalnız etiket, **onayı
+> 2026-08-05'te alınmış**, ama flip sonrası **değeri hiçbir belge adlandırmıyor** ve
+> `capability.py` #4 ↔ OD-3(a) çelişkisi açık (ürün sahibi 2026-08-28: **`C` = devret**).
+> Sıra için `docs/audit/final_closure_delta_audit_2026-08-25.md` §10; `C9` EN SONDA.
 > ~~`C6`~~ ADIM 125'te, ~~`C7`~~ (A16 + A15 bump) ADIM 126'da, ~~`C8`~~ (üretim worker'ı
 > üzerinde oracle'lar) ADIM 127'de, ~~A6/A7 + A9/A10 worker oracle'ları ve A4'ün çekişmeli
 > sınırı~~ **ADIM 128'de indi**. **ADIM 128'in AÇIKTA bıraktıkları, iddia edilmeden:**

@@ -9737,3 +9737,43 @@ Kutu: `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md`
 kalemleri (ikinci `ENGINE_VERSION` bump → ön koşul 17 → 18 → A22 → **yalnız koş**):
 `docs/ADIM130_LANDED_KICKOFF.md` §*Sıradaki kalem*. Paste-ready resume prompt aynı dosyanın
 sonunda.
+
+## Stage ADIM 131 — `G10` (ADR §16 Gate 2) İMZALANDI: `A` — ŞİMDİ ver landed (PR pending)
+
+**Migration YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el
+değmedi** · `SHARED_ALLOCATION_STATUS` = **`future_dev` (EL DEĞMEDİ — bu slice LIFT
+DEĞİLDİR)** · `capability.py` **el değmedi** · `backend/src`, `backend/tests` ve
+`frontend/src`'te **SIFIR SATIR**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
+Toplanan test **3868 (DEĞİŞMEDİ)**.
+
+ADIM 130'un **boş** bıraktığı ikinci talep kutusunda **`A` — ŞİMDİ ver** işaretlendi
+(`alimirbagirzade`, 2026-08-28) → **`C9` / ADIM 20'nin önündeki KARAR kapısı kalktı.**
+Serbest metinli gerekçe **alınmadı ve uydurulmadı**; belgede saklanan alıntı **şıkkın
+kendisine sunulan metnidir** (ADIM 129'un `C` kararıyla aynı biçim).
+
+**ASIL ÖLÇÜM — ADIM 130'un NC-5'i üretimde doğrulandı:** kapı **tek bir literal
+değişmeden** sustu (9 passed / exit 0; `git diff --stat` **tek dosya** = karar belgesi, test
+dosyası **byte olarak el değmedi**). **Ve yeşil yeterli sayılmadı** — bayrak zaten aşağıda
+olduğu için kapı onay okunmadan da yeşil kalırdı, yani yeşil iki dünyanın **ortak**
+çıktısıdır → onayın gerçekten okunduğu ayrıca ölçüldü:
+`_gate2_is_approved(<gerçek belge>) -> True` ve
+`_lift_without_gate2("active_v1", <gerçek belge>) -> False` (ADIM 130'da `True` idi).
+
+**DÜRÜST SINIR: onay `C9`'u BAŞLATIR, BİTİRMEZ.** Hiçbir ön koşul yeşile çevrilmedi —
+**17/18/22 KIRMIZI KALIR** ve üçü de `C9`'un kendi teslimatıdır; §Karar tablosunun `A`
+satırının kendi yazdığı bedel (*"bir sonraki okuyucu 'onaylı' görüp kalan kırmızıları
+hafife alabilir"*) yerinde duruyor. **A-08 (#514) ayrı hattır ve AÇIK** — `C9` inse bile RC
+verdict'i sonuçlanamaz. `G8` md. 4'ün `#559` kapanış yorumu hâlâ yazılmadı (insan). Dört
+denetim belgesi `historical` ve **el değmedi**. Ürün/test kodunda sıfır satır → **suite bu
+slice'ta koşulmadı**, otorite **CI**.
+
+`PROJECT_HISTORY.md` §ADIM 131 · `docs/ADIM131_LANDED_KICKOFF.md`.
+
+## Next: **`C9` / ADIM 20 — the lift. YALNIZ koşar, başka hiçbir PR açık olamaz.**
+
+Pazarlıksız beş kalem (`docs/ADIM131_LANDED_KICKOFF.md` §*Sıradaki kalem*): ikinci
+`ENGINE_VERSION` bump'ı + golden/`repository_facts` **aynı commit'te** → ön koşul 17 (OD-2
+mark policy: **politikayı yaz, sonra literali çevir**; iki yazım parite testiyle bağlı) →
+ön koşul 18 (`CONTENTION_SELECTION_STATUS` + `capability.py` #4 ↔ OD-3(a) çelişkisi,
+**`C9`'a adıyla devredildi**) → A22 (tam suite, tek çağrı, exit code **ayrı** okunur) →
+lift pinlerini **kasıtlı** güncelle. Paste-ready resume prompt aynı dosyanın sonunda.

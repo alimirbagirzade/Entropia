@@ -272,8 +272,31 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> = **`future_dev` (EL DEĞMEDİ — bu slice LIFT DEĞİLDİR)** · `capability.py` **el değmedi** ·
+> **`backend/src`, `backend/tests` ve `frontend/src`'te SIFIR SATIR**. **Son dalga — ADIM 131
+> (`G10` / ADR §16 Gate 2 İMZALANDI: `A` — ŞİMDİ ver, `alimirbagirzade`, 2026-08-28).**
+> ADIM 130'un **boş** bıraktığı ikinci talep kutusu işaretlendi → **`C9` / ADIM 20'nin
+> önündeki KARAR kapısı kalktı.** Serbest metinli gerekçe **alınmadı ve UYDURULMADI** —
+> belgede saklanan alıntı **şıkkın kendisine sunulan metnidir** (ADIM 129'un `C` kararıyla
+> aynı biçim). **ASIL ÖLÇÜM: ADIM 130'un NC-5'i üretimde doğrulandı** — kapı **tek bir
+> literal değişmeden** sustu (9 passed / exit 0; `git diff --stat` **tek dosya** = karar
+> belgesi, test dosyası **byte olarak el değmedi**). **VE YEŞİL YETERLİ SAYILMADI:** bayrak
+> zaten aşağıda olduğu için kapı onay okunmadan da yeşil kalırdı — yeşil **iki dünyanın
+> ORTAK çıktısıdır** → onayın gerçekten okunduğu ayrıca ölçüldü
+> (`_gate2_is_approved(<gerçek belge>) -> True`, `_lift_without_gate2("active_v1", …) ->
+> False`; ADIM 130'da `True` idi). **DÜRÜST SINIR: onay `C9`'u BAŞLATIR, BİTİRMEZ** —
+> hiçbir ön koşul yeşile çevrilmedi, **17/18/22 KIRMIZI KALIR** ve üçü de `C9`'un kendi
+> teslimatıdır; §Karar tablosunun `A` satırının kendi bedeli (*"bir sonraki okuyucu 'onaylı'
+> görüp kalan kırmızıları hafife alabilir"*) yerinde duruyor. **A-08 (#514) AYRI HATTIR ve
+> AÇIK** — `C9` inse bile RC verdict'i sonuçlanamaz. Ürün/test kodunda sıfır satır → suite
+> **koşulmadı**, otorite **CI**; toplanan test **3868 (DEĞİŞMEDİ)**. Blocker DEĞİŞMEDİ
+> (1 — yalnız A-08), BLOCKED. `PROJECT_HISTORY.md` §ADIM 131 · `docs/ADIM131_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > = `future_dev` (**el değmedi**) · `capability.py` **el değmedi** · **`backend/src` ve
-> `frontend/src`'te SIFIR SATIR**. **Son dalga — ADIM 130 (`G10` YENİDEN TALEP EDİLDİ ve
+> `frontend/src`'te SIFIR SATIR**. **ADIM 130 (`G10` YENİDEN TALEP EDİLDİ ve
 > stop condition'ı ZORLANABİLİR kılındı).** §10'un dokuz maddelik sırası ölçüldü: **`C9`-dışı
 > ve insan-dışı tek açık kalem md. 7'ydi** (*"Request `G10`"*). `G10` 2026-08-26'da **`B` —
 > ERTELE** olarak imzalanmıştı (red değil); üç maddelik yeniden talep koşulunun **md. 2'si
@@ -2513,7 +2536,16 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 130'da güncellendi): SIRADAKİ KALEM KOD DEĞİL, `G10` İMZASI.**
+> **GERÇEK Next (ADIM 131'de güncellendi): `C9` / ADIM 20 — THE LIFT. `G10` ONAYLI.**
+> ADR §16 Gate 2 2026-08-28'de **`A` — ŞİMDİ ver** olarak imzalandı; `C9`'un önündeki
+> **karar** kapısı kalktı ve kapı (`test_lifting_containment_requires_gate2_approval`)
+> **sessiz** (ölçüldü). **`C9` YALNIZ koşar — başka hiçbir PR açık olamaz** (sıralı planın
+> W8'i). Pazarlıksız beş kalem `docs/ADIM131_LANDED_KICKOFF.md` §*Sıradaki kalem*'de:
+> ikinci `ENGINE_VERSION` bump'ı + golden/`repository_facts` **aynı commit'te** → ön koşul
+> 17 (**politikayı yaz, SONRA literali çevir**) → ön koşul 18 (`capability.py` #4 ↔ OD-3(a)
+> çelişkisi **`C9`'a adıyla devredildi**) → A22 → lift pinlerini **kasıtlı** güncelle.
+> **A-08 (#514) ayrı hattır ve AÇIK: `C9` inse bile RC verdict'i sonuçlanamaz.**
+> *(Tarihsel — ADIM 130'un işaretçisi: SIRADAKİ KALEM KOD DEĞİL, `G10` İMZASI.)*
 > §10'un dokuz maddesi ölçüldü; `C9`-dışı ve insan-dışı tek açık kalem **md. 7** ("Request
 > `G10`") idi ve talep **yazıldı** —
 > `docs/decisions/closure_g10_containment_lift_gate2_2026-08-26.md` §*Yeniden talep — Gate 2,

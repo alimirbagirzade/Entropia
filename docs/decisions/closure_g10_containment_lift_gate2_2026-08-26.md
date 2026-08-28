@@ -151,9 +151,10 @@ uygulanabilir bir işe verilir** ve §16'nın kapısı ilk kez amacına hizmet e
 
 ## Yeniden talep — Gate 2, **İKİNCİ** istek (2026-08-28, ADIM 130)
 
-> **Bu bölüm bir ÖLÇÜMDÜR, bir onay değil.** Aşağıdaki kutu **BOŞ bırakılmıştır** ve ajan
-> onu dolduramaz. Kaydettiği tek şey şudur: §Yeniden talep koşulunun **üç maddesi de**
-> tahliye edildi, yani `B — ERTELE`'nin dayandığı gerekçe artık ayakta değil.
+> **ADIM 130'da bu bölüm bir ÖLÇÜMDÜ ve kutusu BOŞTU.** Ölçüm şuydu: §Yeniden talep
+> koşulunun **üç maddesi de** tahliye edildi, yani `B — ERTELE`'nin dayandığı gerekçe artık
+> ayakta değil. **ADIM 131'de (2026-08-28) kutu İMZALANDI: `A` — Gate 2 ONAYLANDI.**
+> Aşağısı artık bir ölçüm **ve** bir karardır; ölçüm satırları el değmemiştir.
 
 ### Üç maddenin ölçümü (`80f6cc7d`, 2026-08-28)
 
@@ -174,15 +175,29 @@ Onay, uygulanacak bir şey olduğunda anlamlı."* Bugün kırmızı sayısı **3
 **üçü de `C9`'un kendi teslimatıdır** — yani onayın önünde artık `C9`-dışı hiçbir iş yok.
 Gerekçenin kendi koşulu karşılandı.
 
-### Karar kutusu — **BOŞ**
+### Karar kutusu — **İMZALI: `A` (2026-08-28)**
 
-☐ **A — ŞİMDİ ver** (Gate 2 onaylandı; `C9` / ADIM 20 PR'ı açılabilir)
+☑ **A — ŞİMDİ ver** (Gate 2 onaylandı; `C9` / ADIM 20 PR'ı açılabilir)
 ☐ **B — YİNE ERTELE** (gerekçe aşağıya yazılır; kapı açık kalır)
 ☐ **C — REDDET** (`C9` programı durdurulur; containment kalıcı olur)
 
-☐ **İmza:** ______________   ☐ **Tarih:** ____-__-__
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-28
 
-> **Gerekçe (imzacı doldurur):**
+> **Gerekçe.** Karar oturum içinde, ADIM 130'un ölçümü sunulduktan sonra verildi
+> (2026-08-28). **Seçilen şıkkın kendisine sunulan metni verbatim:** *"Gate 2 onaylanır;
+> `C9` / ADIM 20 PR'ı açılabilir hale gelir. Kapı
+> (`test_lifting_containment_requires_gate2_approval`) kendiliğinden susar — testte
+> değiştirilecek literal yok. Kalan kırmızılar 17/18/22 ve üçü de `C9`'un kendi teslimatı;
+> `C9` YALNIZ koşar, başka PR açık olamaz. A-08 (#514) yine de RC verdict'ini ayrıca
+> bloklar."*
+>
+> **Serbest metinli bir gerekçe ALINMADI ve UYDURULMADI** — imzacı üç şıktan birini seçti;
+> yukarıdaki alıntı **şıkkın metnidir**, imzacının cümlesi değildir. ADIM 129'un `C`
+> kararında da aynı biçim kullanıldı.
+>
+> **Bu onay `C9`'u BAŞLATIR, BİTİRMEZ.** §Karar tablosunun `A` satırının kendi bedeli
+> yerinde duruyor: *"bir sonraki okuyucu 'onaylı' görüp kalan kırmızıları hafife
+> alabilir."* Kalan üç kırmızı **17 / 18 / 22**'dir ve üçü de `C9`'un teslimatıdır.
 
 ### Bu talebin ZORLANIYOR olması (ADIM 130'un mühendislik yarısı)
 

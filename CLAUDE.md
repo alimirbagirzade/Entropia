@@ -270,6 +270,41 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** (`--check` exit 0) · golden dosyası **el değmedi** ·
+> `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) · **`backend/src` ve
+> `frontend/src`'te SIFIR SATIR**. **Son dalga — ADIM 127 (`C8` = üretim worker'ı üzerinde
+> ORACLE'lar).** Planın sözüyle bir oracle slice'ı; yeni
+> `test_shared_clock_production_oracles.py` (5 case) + bir A13 partition pini, toplanan test
+> 3855 → 3861. **ASIL BULGU: bir "ölçülemez" kaydı, GEREKÇESİYLE birlikte bayatlar** —
+> durdurma koşulu **A4 NOT EVALUABLE**'ın gerekçesi (W0: *"needs the real engine behind the
+> loop"*) `C3`/`C4` ile **kapanmıştı** → yeniden ölçüldü. **Mevcut `reversed` testi A4'ü
+> ÖLÇMÜYOR** (o `prepared_items`'ı permüte eder; ordinal'ler `manifest["mainboard_items"]`
+> **enumerate** edilerek üretilir — `_shared_clock_inputs`'un kendi docstring'i bunu söylüyor).
+> Manifest permüte edilince cevap **"aynı" değil "AYNI PARA, BAŞKA SIRA"**: `equity_curve` +
+> `filtered_events` **bayt bayt aynı**, per-item attribution **multiset aynı** (60% item'a 60%
+> sleeve — takas YOK), `trade_ledger` **multiset aynı / sıra farklı**, `signal_events` **tam
+> üç alan** (`pin_ordinal` · `seq` · satır ULID'i). Sebep **ölçüldü**: `TradeRow` item etiketi
+> **taşımaz** ve iki trade **aynı instant'ta** kapanır → sıralayabilecek tek şey pin sırası.
+> **A4 `covered` İŞARETLENMEDİ** — kompozisyon **ÇEKİŞMESİZ**; çekişmede `(pin_ordinal,
+> item_id)` **tasarım gereği** karar verir (`CONTENTION_SELECTION_POLICY ==
+> "pin_order_admission"`) ve bu sınır **testle** pinlendi (ADIM 48'in "işaretle ama kapsama"
+> şekli tekrarlanmadı). **İKİNCİ DERS: fixture'ın kendisi vacuity deliği olabilir** — 50/50
+> sleeve, sleeve'leri pin KONUMUNDAN dağıtan kusuru görünmez kılıyordu; 60/40'a geçmek testi
+> falsifiable yaptı ve deliği **negatif kontrol süreci** buldu. Reconciliation ve sleeve
+> parity **ilk kez Postgres'ten** okundu (`C3` onları kendi kurduğu harness'ta kanıtlamıştı).
+> **A13 ÖLÇÜLDÜ: 41 non-portfolio + 9 `portfolio.*`** (ADR §14'ün *"37"*'si **bayat**, M-2
+> uyarıyordu). **ÜÇ ayırt edici NC** (üçünde de dokunulmamış 14 C4 testi **yeşil**); **NC-1'in
+> DÖRT denemesi reddedildi**, üçü mevcut guard'lara çarpıp koşuyu tamamen düşürdü (ADIM
+> 105'in "doğru sebep, yanlış kapsam" şekli) — **yan kazanç: sleeve/share tutarlılığı zaten
+> sevk edilmiş guard'larla korunuyor**; **NC-5 KURULAMADI** ve sınırı yazıldı (golden testi
+> adlar üzerinde total). **DÜRÜST SINIR: A6/A7 ve A9/A10 worker düzeyine ÇIKARILMADI**
+> (unit'te kanıtlı, `covered` iddia edilmiyor) · ön koşul 22 KIRMIZI KALIR · `capability.py`
+> **el değmedi** (`C9`) · `C9`'un ikinci bump borcu **DEĞİŞMEDİ** · frontend kapıları
+> KOŞULMADI · coverage **CI'ın otoritesinde**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 127 · `docs/ADIM127_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
 > DEĞİŞTİ** → `backtest-engine-v18-a16-manifest-policy-provenance` · OpenAPI **değişmedi**
 > (ölçüldü, `--check` exit 0) · `SHARED_ALLOCATION_STATUS` = `future_dev` (**el değmedi**) ·
@@ -2376,8 +2411,13 @@ Before stopping a working session, produce **ALL** of the following:
 > kapısı **geçildi** (`docs/decisions/closure_participant_importer_allowlist_2026-08-18.md`,
 > `closure_c4_worker_importer_visibility_2026-08-19.md`). `jobs/backtest_engine.py:299` artık
 > `_prepare_strategy` içinde, seam'le ilgisiz.
-> **GERÇEK Next (ADIM 126'da güncellendi): ön koşul 17/18 — KOD; `C9` EN SONDA.**
-> ~~`C6`~~ ADIM 125'te, ~~`C7`~~ (A16 + A15 bump) ADIM 126'da **indi**. **`C9`'un
+> **GERÇEK Next (ADIM 127'de güncellendi): A6/A7 + A9/A10 worker oracle'ları ve A4'ün
+> ÇEKİŞMELİ sınırı → sonra ön koşul 17/18 — KOD; `C9` EN SONDA.**
+> ~~`C6`~~ ADIM 125'te, ~~`C7`~~ (A16 + A15 bump) ADIM 126'da, ~~`C8`~~ (üretim worker'ı
+> üzerinde oracle'lar) ADIM 127'de **indi**. **`C8` kapsamının AÇIKTA bıraktıkları,
+> iddia edilmeden:** A4 **`covered` DEĞİL** (çekişmesiz kompozisyonda ölçüldü) · A6/A7 ve
+> A9/A10 **worker düzeyine çıkarılmadı** (unit'te kanıtlı) · A13 pini bugün bağımsız
+> yanlışlanabilir değil (`C9`'un baseline'ı yeniden ürettiği andaki tripwire). **`C9`'un
 > devraldığı pazarlıksız kalem: `ENGINE_VERSION`'ı lift commit'inde TEKRAR bump et**
 > — `C7`'nin bump'ı A16'nın *kayıt* değişikliği için harcandı ve A15'i KAPATMAZ
 > (`test_lifting_containment_requires_a_second_engine_version_bump` zorlar).

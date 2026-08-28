@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 126 — `C7` (A16 manifest split + A15 bump) İNDİ · sıradaki kalem
 

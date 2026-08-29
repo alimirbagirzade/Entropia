@@ -607,4 +607,4 @@ def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None
     # `C7` moved it again for the A16 record change, `C9` moved it as the act of lifting,
     # and GH #532 moved it to register ``entry_exit_collision``. What the assertion pins is
     # that the namespace cannot shift without editing this line, not the particular string.
-    assert 'ENGINE_VERSION = "backtest-engine-v18-entry-exit-collision-registered"' in shipped
+    assert 'ENGINE_VERSION = "backtest-engine-v18-policy-provenance-completed"' in shipped

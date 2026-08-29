@@ -271,7 +271,40 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
-> DEĞİŞTİ** → `backtest-engine-v18-entry-exit-collision-registered` · **golden YENİDEN
+> DEĞİŞTİ** → `backtest-engine-v18-policy-provenance-completed` · **golden YENİDEN ÜRETİLDİ
+> (46/50 digest oynadı)** · OpenAPI **değişmedi** (`--check` exit 0) ·
+> `SHARED_ALLOCATION_STATUS` **el değmedi** · `frontend/src` **sıfır satır**. **Son dalga —
+> ADIM 137 (GH #534: diagnostics provenance bloğunun sekiz deliği kapatıldı).** Oturum üç
+> adayla açıldı, **ikisi ölçümde kapandı** (#854'ün dokuz kutusu **BOŞ** → girilmedi; A-08
+> `human-only`). **ASIL BULGU: issue'nun "expected answer"ı yine bir ölçüm değildi** — #534
+> md. 4 *"no bump"* diyordu, oysa golden digest'ler diagnostics'i **kapsıyor** (#532'nin
+> birebir aynı şekli; **ders artık iki örnekli**). Kapsam issue'nun başlığı değil
+> **YORUMU**: sahibinin kendi yorumu altı alan daha ölçmüş ve sekizini **birlikte** istemişti
+> → dokuz anahtar yayımlandı. **İKİNCİ BULGU: yalnız RESOLVED yayımlamak YENİ bir provenance
+> yalanı üretirdi** (operatörün seçmediği kanonik sırayı seçmiş gibi gösterirdi) → SAVED ve
+> RESOLVED **ikisi de** yayımlanıyor, blok bu ayrımı **zaten** taşıyordu
+> (`conflict_gate_on` ↔ `conflict_downgraded_from_net`). **ÜÇÜNCÜ (NC-3): muhafız
+> davranışsal OLAMAZDI** — sıralama bilerek ayrıştırıldığında **golden dahil** 135 testin
+> 134'ü yeşil kaldı (hiçbir senaryo logic stop ile fiyat stopunu yarıştırmıyor) → tek-türetim
+> muhafızı kaynak düzeyinde. **Delta iddia edilmedi, BAYT DÜZEYİNDE kanıtlandı:** oynayan 45
+> senaryonun **her birinde** fark **tam olarak** dokuz anahtar, silinen/değişen **0**,
+> trade/summary/equity **bayt bayt aynı**; bump sonrası **46 = 45 + `execution_key`**. Bump
+> yeni imza istemedi — eksen ADIM 136'da **imzalandı** (*"baytlar oynuyor mu"*) ve bu vaka
+> ölçülerek o tarafa düştü. **Kendi kodum bir FAIL-OPEN taşıdı ve vacuity muhafızı yakaladı:**
+> `stop_priority_order` yanlış sub-config'ten okunuyordu, `getattr(..., None)` onu sonsuza dek
+> `None` yayımlardı. **DÜRÜST SINIR: #534 KAPATILMADI** — md. 3 (*"same-candle kendi sayacını
+> hak ediyor mu"*) bir **adjudication**, kapsam dışı bırakıldı ve imzaya açıldı
+> (`closure_i534_same_candle_suppression_counter_2026-08-29.md`, **dört kutu, dördü de BOŞ**;
+> `(c) HİÇBİRİ` şıkkı ADIM 136 sayesinde **yeni**) · **composite Result'ın diagnostics'i bu
+> provenance'ı ALMIYOR** (dört `portfolio.*` digest'i bayt bayt aynı — ADIM 136'nın kompozit
+> bulgusunun aynı ailesi), **kapatılmadı** · `suppressed_entries` **el değmedi** · altı
+> tripwire **kasıtlı** güncellendi, `_C7_ENGINE_VERSION` **el değmedi** · frontend kapıları
+> KOŞULMADI. Toplanan test **3880 → 3885**. **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC
+> verdict BLOCKED.** `PROJECT_HISTORY.md` §ADIM 137 · `docs/ADIM137_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
+> DEĞİŞTİ** → (o gün) `backtest-engine-v18-entry-exit-collision-registered` · **golden YENİDEN
 > ÜRETİLDİ (46/50 digest oynadı)** · OpenAPI **değişmedi** (ölçüldü) ·
 > `SHARED_ALLOCATION_STATUS` **el değmedi** · `frontend/src` **sıfır satır**. **Son dalga —
 > ADIM 136 (GH #532: `entry_exit_collision` yayımlanan decision-trace taksonomisine

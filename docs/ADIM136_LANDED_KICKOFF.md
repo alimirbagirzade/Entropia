@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 136 — GH #532: `entry_exit_collision` taksonomiye kaydedildi + eksik anti-drift muhafızı
 

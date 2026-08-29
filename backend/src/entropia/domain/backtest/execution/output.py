@@ -369,6 +369,9 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "protection stops, deterministic breakout entry fixture (test-only — production "
         "requires a resolved indicator plan)."
     )
+    # #534: the saved stop precedence lives on protection_stop_logic (NOT on the conflict
+    # sub-config its siblings come from), and the block is optional.
+    _protection = ctx.config.protection_stop_logic
     diagnostics = {
         "engine_kind": "v1_bar_replay",
         "entry_model": entry_model,
@@ -382,6 +385,16 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "nary_reference_conditions": nary_reference_conditions,
         "vwap_blocks": vwap_blocks,
         "position_size_limits_active": ctx.config.position_sizing.position_size_limits is not None,
+        # #534 (D-3): the formula-based sizing variant. Its siblings ``leverage_mode`` and
+        # ``signal_strength_mode`` are both published; without this one a reader cannot tell
+        # WHICH formula was selected, because the L4 sizing warning names the method
+        # (``formula_based_sizing``), never the variant (``kelly_criterion`` / custom).
+        # ``None`` = no formula-based sizing configured.
+        "sizing_formula_type": (
+            ctx.config.position_sizing.formula_based.formula_type
+            if ctx.config.position_sizing.formula_based is not None
+            else None
+        ),
         # F-05: capability-matrix provenance. ``capabilities_modelled`` false means at least
         # one selected option is future_dev in this build, so the run was financially inert;
         # ``capability_not_in_build`` names each one as "<field_path>=<value>" so a Result can
@@ -401,6 +414,11 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "signal_strength_mode": ctx.strength_mode,
         "signal_strength_modelled": ctx.strength_ok,
         "strength_adjustments": led.strength_adjustments,
+        # #534 (D-3): the saved slippage model. Nothing else in this block names it, so a
+        # Result could only be read back to it through ``capability_not_in_build`` — and
+        # only while the option is future_dev, which makes the provenance disappear the day
+        # the option ships.
+        "slippage_mode": ctx.config.data.costs.slippage_mode,
         "entry_timing": ctx.config.data.execution.entry_timing,
         "exit_timing": ctx.config.data.execution.exit_timing,
         "execution_timing_modelled": ctx.timing_ok,
@@ -409,6 +427,13 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         # F-07b: order-type execution provenance + limit-order working-order counts.
         "order_type": ctx.order_cfg.type,
         "order_execution_modelled": ctx.order_ok,
+        # #534 (D-3): the limit sub-config. ``order_type`` alone cannot say WHICH limit rule
+        # governed, and ``partial_fills`` below counts an outcome whose deciding policy was
+        # otherwise unrecoverable from a Result. ``None`` = no limit block configured.
+        "limit_price_rule": (ctx.order_cfg.limit.price_rule if ctx.order_cfg.limit else None),
+        "limit_partial_fill_policy": (
+            ctx.order_cfg.limit.partial_fill_policy if ctx.order_cfg.limit else None
+        ),
         "limit_orders_placed": led.limit_orders_placed,
         "limit_orders_filled": led.limit_orders_filled,
         "limit_orders_cancelled": led.limit_orders_cancelled,
@@ -430,6 +455,14 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "scaling_method": ctx.scaling_cfg.method
         if ctx.scaling_enabled and ctx.scaling_cfg
         else None,
+        # #534 (D-3): S5c's timeframe structure. ``scaling_method`` names the ladder but not
+        # the timeframe each layer was decided on, which changes which bars produced layers.
+        "scaling_timeframe": (
+            ctx.scaling_cfg.timeframe if ctx.scaling_enabled and ctx.scaling_cfg else None
+        ),
+        "scaling_timeframe_mode": (
+            ctx.scaling_cfg.timeframe_mode if ctx.scaling_enabled and ctx.scaling_cfg else None
+        ),
         "scaling_modelled": ctx.scaling_ok,
         "scale_layers_added": led.scale_layers_added,
         "scale_layers_rejected": led.scale_layers_rejected,
@@ -447,6 +480,12 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "same_direction_stacking": ctx.stacking_policy,
         "opposite_direction_hedge": ctx.hedge_policy,
         "exit_on_opposite_signal": bool(ctx.conflict_cfg.exit_on_opposite_signal),
+        # #534 (F-3): the §5.9 same-candle policy. It was previously visible ONLY per event,
+        # inside ``entry_exit_collision.detail["policy"]`` — so a run in which no collision
+        # occurred carried no record of the policy that would have governed one. Its only
+        # aggregate signal, ``suppressed_entries``, is shared with two unrelated suppression
+        # paths, so a non-zero value there does not attribute to this rule.
+        "same_candle_entry_exit": ctx.conflict_cfg.same_candle_entry_exit,
         "stack_entries_added": led.stack_entries_added,
         "stack_entries_rejected": led.stack_entries_rejected,
         "positions_replaced": led.positions_replaced,
@@ -457,6 +496,18 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "logic_stop_blocks": len(ctx.stop_evals),
         "stop_trigger_requirement": ctx.stop_trigger_requirement,
         "stop_conflict_resolution": ctx.stop_conflict_resolution,
+        # #534 (F-3): the stop precedence, published as the SAVED input and the RESOLVED
+        # total order, the way this block already keeps a saved policy and its executed
+        # form apart (``conflict_gate_on`` / ``conflict_downgraded_from_net``). Publishing
+        # only the resolved sequence would report a canonical order the operator never
+        # chose as though they had; publishing only the saved one leaves ``null`` — by far
+        # the common case — saying nothing about what actually governed.
+        "stop_priority_order": (
+            list(_protection.stop_priority_order)
+            if _protection is not None and _protection.stop_priority_order
+            else None
+        ),
+        "stop_priority_order_resolved": list(ctx.stop_priority_resolved),
         "logic_stop_triggers": led.logic_stop_triggers,
         # #549: how many stop exits filled at the bar OPEN because the bar gapped past the
         # level. Reported beside the stop policy because it explains a result the policy

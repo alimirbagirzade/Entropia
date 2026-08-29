@@ -19012,3 +19012,142 @@ yok, ayrım ölçülebilir:** OD-2'nin diagnostics eklemesi `portfolio_projectio
 baytları oynatıyor. **Kural, bir sonraki okuyucu için: eksen "diagnostics mi değil mi" DEĞİL,
 "artefaktın baytları oynuyor mu".** İkisi de ürün sahibinin imzasıdır; ikisi de kendi
 ölçümünün üstünde durur.
+
+## ADIM 137 — GH #534: BİR PROVENANCE BLOĞUNUN SEKİZ DELİĞİ, VE "BUMP GEREKMEZ" DİYEN İKİNCİ ISSUE ÖLÇÜLDÜĞÜNDE YİNE YANILDI
+
+**Taban:** `origin/main` @ `de3d8816` (ADIM 136). **Diff:** dört ürün dosyası
+(`execution/output.py` dokuz anahtar, `execution/fills.py` tek türetim çıkarıldı,
+`execution/state.py` bir ctx alanı, `engine.py` prolog'da tek çözüm + wiring) +
+`manifest.py` bump + yeni bir test dosyası (5 case) + altı `ENGINE_VERSION` tripwire'ının
+kasıtlı güncellenmesi + bir karar belgesi + üretilmiş artefaktlar. Migration **yok** ·
+**`ENGINE_VERSION` DEĞİŞTİ** → `backtest-engine-v18-policy-provenance-completed` · golden
+**yeniden üretildi (46/50 digest oynadı)** · OpenAPI **değişmedi** (ölçüldü, `--check`
+exit 0) · `SHARED_ALLOCATION_STATUS` **el değmedi** · `frontend/src`'te **sıfır satır**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Oturum üç seçenekle açıldı, ikisi ÖLÇÜMDE kapandı
+
+Görev *"#874 indi mi, sonra sıradaki kalemi seç"*ti. #874 **MERGED** (`2026-08-29T11:35:59Z`),
+açık PR **yok**, son kayıt ADIM 136 → numara **137**. Üç aday ölçüldü:
+
+1. **#854 imza hattı** — karar belgesinde **dokuz kutunun dokuzu da BOŞ**, dosya
+   `a716f8ad`'den beri **el değmemiş** → *"kutu boşsa DUR"*. Girilmedi.
+2. **A-08 (#514)** — `human-only`, ajan ne açar ne kapatır. Girilmedi.
+3. **Kod kalemi** → **#534** seçildi.
+
+### ASIL BULGU: issue'nun "beklenen cevap"ı bir ölçüm değildi — İKİNCİ KEZ
+
+#534 md. 4 aynen şöyle diyor: *"adding diagnostics keys does not change trade/summary bytes;
+expected answer is **no bump**"* — ama hemen ardından *"digests may cover the diagnostics
+block — check before assuming"* diye uyarıyor. **Ölçüldü:** golden testin kendi docstring'i
+*"digests each run's FULL EngineOutput: summary, trades, equity points, decision events,
+**diagnostics** and position intervals"* diyor → diagnostics **hash'e giriyor**.
+
+Bu, ADIM 136'nın **birebir aynı şekli**: #532 de *"bump gerekmez"* diye çerçevelemişti ve
+ölçüm onu da çürütmüştü. **Ders artık iki örnekli: bir issue'nun "expected answer"ı bir
+tahmindir, ölçüm değildir — ve bu depoda ikisi de aynı yönde yanıldı.**
+
+### Delta İDDİA EDİLMEDİ, BAYT DÜZEYİNDE KANITLANDI
+
+50 senaryonun tam kanonik payload'ı **önce** (dört ürün dosyası HEAD sürümüne geri alınarak)
+ve **sonra** donduruldu; geri yükleme **byte-exact** doğrulandı ve AFTER payload'ları **iki
+kez** üretilip aynı çıktığı gösterildi (motor deterministik, koşu gürültüsü yok).
+
+- **45 digest oynadı**, ve oynayan **her** senaryoda fark **tam olarak** eklenen dokuz
+  anahtar: eklenen `= {9 anahtar}`, silinen **0**, değişen mevcut diagnostics anahtarı **0**,
+  ve `summary` / `trades` / `equity_points` / `filtered_events` / `signal_events` /
+  `position_intervals` **bayt bayt aynı**. **Hiçbir finansal sayı oynamadı.**
+- **5 digest oynamadı ve sebebi ölçüldü:** `contract.execution_key` (diagnostics'i **hiç
+  yok**) + **dört `portfolio.*` composite senaryosu** — composite Result'ın diagnostics'i
+  `combine_item_runs` tarafından ayrı kuruluyor, `_build_diagnostics`'ten **geçmiyor**.
+- Bump **sonrası** delta **46 = 45 + `execution_key`**, ve bump'ın kendisi **hiçbir**
+  finansal bölümü oynatmadı (no-bump ↔ bumped karşılaştırması: farklı bölüm **YOK**).
+
+Bu, ADIM 136'nın aritmetiğinin **aynısı**. Bump kararı yeni bir imza istemedi: eksen ADIM
+136'da **imzalandı** (*"artefaktın baytları oynuyor mu"*) ve bu vaka ölçülerek o eksenin
+**bump** tarafına düştü. ADIM 135'in `A` = *bump gerekmez* imzası çelişmiyor — orada 50
+digest'in 50'si **aynı** kalmıştı.
+
+### İKİNCİ BULGU: kapsam issue'nun BAŞLIĞI değil, YORUMU
+
+#534'ün gövdesi **iki** alan sayıyor. Sahibinin kendi yorumu (ADIM 11 capability-matrix
+adjudication'ı, PR #538 §0 D-3) **altı tane daha** ölçmüş ve *"tek bir provenance-block
+değişikliği; bölmek bloğu yarı tutarlı bırakır"* diye **sekizini birlikte** istemiş. Sekizi
+de bu slice'ta yayımlandı. En kötü vakası sahibinin kendi işaretlediğiydi:
+`limit.partial_fill_policy` — satır **`active_v1`**, yani sonucu üreten politika bir
+Result'tan **hiç** geri okunamıyordu, yalnız `partial_fills` sayısı yayımlanıyordu.
+
+### ÜÇÜNCÜ BULGU: "resolved yayımla" tek başına YENİ bir provenance yalanı üretirdi
+
+md. 2 *"raw nullable değil RESOLVED sırayı yayımla"* diyor. Ama `stop_priority_order`
+**null** vakası yaygın vakadır, ve yalnız resolved'ı yayımlamak operatörün **hiç seçmediği**
+kanonik sırayı seçmiş gibi gösterirdi — #532'nin kusurunun **aynı sınıfı**. Bu yüzden
+**ikisi de** yayımlanıyor (`stop_priority_order` = SAVED, nullable ·
+`stop_priority_order_resolved` = TOTAL sıra), ve bu bir icat değil: blok **zaten** bu ayrımı
+taşıyor (`conflict_gate_on` = EXECUTED ↔ `conflict_downgraded_from_net` = SAVED'ın izi;
+ctx kurulumundaki yorum aynen *"the SAVED policy vs the EXECUTED one stays visible"* diyor).
+İki alanın **gerçekten** iki farklı olgu olduğu ölçüldü: saved `["absolute","percentage"]` →
+resolved `["absolute","percentage","trailing"]`.
+
+### DÖRDÜNCÜ BULGU (NC-3): muhafız DAVRANIŞSAL OLAMAZDI — ADIM 136'nın dersinin ikizi
+
+Yayımlanan sıra ancak **fills'in gerçekten sıraladığı** sıra olduğu sürece doğrudur, o yüzden
+türetim **teke** indirildi (`fills.py::stop_priority_sequence`; `_stop_priority_index` artık
+ondan türer). Muhafızın davranışsal olamayacağı **ölçüldü**: NC-3 sıralamayı bilerek
+ayrıştırdı (logic anahtarları kanonik fiyat stoplarının **arkasına** alındı) ve **golden dahil
+135 testin 134'ü YEŞİL kaldı** — 50 golden senaryosunun **hiçbiri** logic stop ile fiyat
+stopunu `priority_order` altında yarıştırmıyor. Yani drift, doğru trade'lerin yanında yanlış
+bir sıra yayımlayarak **görünmez** kalırdı; onu yakalayan tek şey kaynak/yapı düzeyindeki
+tek-türetim muhafızıdır.
+
+### DÖRT NEGATİF KONTROL, DÖRDÜ DE AYIRT EDİCİ
+
+Taban: altı dosyalık alt küme, **135 test, exit 0**. Her turdan sonra geri yükleme **ayrıca
+doğrulandı** (`restored_clean=1`), çünkü `finally` SIGTERM'de koşmaz (ADIM 100).
+
+| NC | Kusur | Kırmızı | Ayırt ediciliği |
+|---|---|---|---|
+| NC-1 | `same_candle_entry_exit` anahtarını sil | 2 yeni case + golden | Alt kümenin **129 mevcut testi YEŞİL** = boşluğun ölçümü |
+| NC-2 | resolved anahtarına SAVED değeri koy | yalnız iki resolved case + golden | `..._configured_value` **yeşil kaldı** (o SAVED'ı sürüyor) → iki eksen gerçekten ayrık |
+| NC-3 | sıralamayı bağımsız yeniden yaz | **yalnız 1** test | **golden YEŞİL** — yukarıdaki dördüncü bulgu |
+| NC-4 | `limit_price_rule`'u yanlış oku | 1 case + golden | Alan-bazlı assertion'ın canlı olduğu |
+
+### KENDİ TESTİM İKİ KUSUR TAŞIYORDU, İKİSİNİ DE KOŞU YAKALADI
+
+Birincisi **üründe**: `stop_priority_order` ilk yazımda `ctx.conflict_cfg`'den okunuyordu,
+oysa alan `protection_stop_logic`'te — ve `getattr(..., None)` fallback'i onu **sessizce
+sonsuza dek `None`** yayımlardı. İkincisi **testte**: `formula_type` tek başına fixture'ın
+`formula_based` bloğunu kurmuyor (`method="formula_based_sizing"` de gerekiyor), yani
+`sizing_formula_type` assertion'ı `None == 'kelly_criterion'` ile düştü. **Ders: bir
+provenance alanını yanlış sub-config'ten okumak fail-open'dır** — tip doğru, değer hep
+`None`, ve hiçbir şey kırmızı vermez. Testin **vacuity muhafızı** (dokuz anahtarın hiçbiri
+kendi varsayılanına eşit olamaz) bu sınıfı yapısal olarak kapatıyor.
+
+### md. 3 SEVK EDİLMEDİ — ADJUDICATION, ve AÇILDI
+
+Issue'nun md. 3'ü (*"same-candle bastırmaları paylaşılan `suppressed_entries` yerine kendi
+sayacını hak ediyor mu — açıkça karar ver"*) bir **ürün kararıdır**: bir okuması (**TAŞI**)
+sevk edilmiş bir sayacın **değerini** değiştirir. Kapsam dışı bırakıldı ve
+`docs/decisions/closure_i534_same_candle_suppression_counter_2026-08-29.md` açıldı —
+**dört kutu, dördü de BOŞ**. Ölçülenler: sayacın **üç** yolu birden saydığı (§5.9 same-candle
++ iki yön-yanlılığı reddi) ve **md. 3'ün öncülünün bugün BAYAT olduğu** — *"tek aggregate
+sinyal"* iddiası #534 açıldığında doğruydu, ama ADIM 136 `entry_exit_collision`'ı taksonomiye
+kaydetti ve olay `detail["resolution"]` içinde `ambiguous_entry_suppressed` ayrımını **zaten**
+taşıyor → üç yolu karıştırmayan **ikinci** bir aggregate yol var. Bu, karar belgesine
+**üçüncü seçenek (c) HİÇBİRİ** olarak yazıldı.
+
+### DÜRÜST SINIR
+
+- **#534 KAPATILMADI** — md. 1/2/4 sevk edildi, **md. 3 imza bekliyor** (insan kararı).
+- **Composite Result'ın diagnostics'i bu provenance'ı ALMIYOR** — ölçüldü (dört `portfolio.*`
+  digest'i bayt bayt aynı kaldı), **kapatılmadı**. `combine_item_runs` kendi bloğunu kuruyor;
+  bu, ADIM 136'nın kaydettiği *"kompozit yol ayrı bir yüzeydir"* bulgusunun aynı ailesi.
+- **`suppressed_entries` el değmedi** (md. 3).
+- Altı `ENGINE_VERSION` tripwire'ı **kasıtlı** güncellendi; yük taşıyan `_C7_ENGINE_VERSION`
+  **el değmedi** (ölçüldü).
+- **frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- Karar belgesindeki *"journal budanır mı"* sorusu **aranmadı ve iddia EDİLMEDİ** —
+  `output.py`'de cap yok, ama üretim yolunun tamamı taranmadı.
+
+Toplanan test **3880 → 3885**. **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC
+verdict BLOCKED.**

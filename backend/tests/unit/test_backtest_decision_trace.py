@@ -378,12 +378,18 @@ def test_every_emitted_event_type_is_published_in_the_taxonomy() -> None:
 def _literal_event_types_in_source() -> dict[str, list[str]]:
     """Every event-type STRING LITERAL that reaches an emit surface, by source location.
 
-    Honest boundary: an event type passed as a VARIABLE is invisible here — measured, the
-    three such sites forward an already-emitted type rather than naming a new one
-    (``booking.emit_event``'s own parameter, ``portfolio_projection``'s ``intent.kind``
-    and ``portfolio``'s pass-through of an item's own event). A ternary IS seen: the
-    close/partial-close pair is written that way, so the whole argument subtree is walked
-    instead of only a bare constant."""
+    Honest boundary: an event type passed as a VARIABLE is invisible here. The three such
+    sites were measured rather than assumed, and only two of them are mere forwarders —
+    ``booking.emit_event``'s own parameter, and ``portfolio``'s pass-through of an item's
+    already-published event. The third is NOT: ``portfolio_projection`` writes
+    ``intent.kind``, a disjoint six-value vocabulary (``IntentKind`` — entry / scale_in /
+    exit / partial_exit / no_op / blocked) of which ZERO are members of the taxonomies
+    below. That is not the same defect, because the composite portfolio result publishes
+    no ``decision_trace_event_types`` at all (measured: its diagnostics carry
+    ``decision_trace_count`` and no taxonomy list), so no artifact there advertises a list
+    its own trace contradicts. It does mean this axis says nothing about the unified-clock
+    path's event vocabulary. A ternary IS seen: the close/partial-close pair is written
+    that way, so the whole argument subtree is walked instead of only a bare constant."""
     package = pathlib.Path(run_engine.__code__.co_filename).parent
     # (callee, index of the event_type positional)
     emit_calls = {"_emit": 0, "emit_event": 1}

@@ -18980,6 +18980,27 @@ koruyacak şekilde düzeltildi — sevk edilen dizenin artık bir ADR önerisi t
 
 Toplanan test **3878 → 3880**.
 
+### KENDİ DÜRÜST SINIRIMI YAZARKEN ÇÜRÜTTÜM — VE ALTINDAN AYRI BİR KALEM ÇIKTI
+
+Eksen 2'nin kör noktasını *"üç değişken site de zaten yayılmış bir tipi ileri taşıyor"* diye
+yazmıştım. **İkisi öyle, üçüncüsü DEĞİL:** `portfolio_projection.py::_signal_events`
+`SignalEventRow(event_type=intent.kind)` yazar ve `IntentKind` **ayrık** bir sözcük
+dağarcığıdır — `entry` · `scale_in` · `exit` · `partial_exit` · `no_op` · `blocked`, ve
+**altısının SIFIRI** decision-trace taksonomisinde var (ölçüldü).
+
+**Aynı kusur DEĞİL, ve sebebi ölçüldü:** kompozit portföy Result'ı
+`decision_trace_event_types`'ı **hiç yayımlamıyor** (`diagnostics` `decision_trace_count`
+taşır, taksonomi listesi taşımaz) → orada hiçbir artefakt kendi izinin yalanladığı bir liste
+**reklam etmiyor**. #532 tam olarak o reklamın yalan olmasıydı.
+
+**Ama kalem gerçek ve C9'dan beri CANLI bir yolda:** unified-clock kompozit Result'ı bir
+decision trace yayımlıyor ve okuyucusuna o izin sözcük dağarcığını **hiçbir yerde
+bildirmiyor**. Tek-item Result'ının sahip olduğu şey (yayımlanmış taksonomi) kompozitte
+**yok**. Bunu doldurmak *"kompozit kendi tipi listesini mi yayımlamalı, yoksa iki artefakt
+bilerek mi ayrı"* sorusudur — bir **ürün kararı**, bir fix slice'ının değil. **Kaydedildi,
+dokunulmadı**, ve eksen 2'nin docstring'i artık bunu doğru anlatıyor (ilk yazım
+karşı-olgusaldı; ADIM 129'un kuralı: yorum tarihi alıntılayabilir, docstring **iddia edemez**).
+
 ### İKİ İMZA, TERS YÖNDE GÖRÜNÜYOR — AYRIM YAZILI
 
 ADIM 135'in **Karar 3**'ü (2026-08-28) *"diagnostics-only bir değişiklik bump gerektirir mi"*

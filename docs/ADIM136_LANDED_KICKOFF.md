@@ -56,6 +56,14 @@ Artık kayıtlı, ve bir daha aynı şeklin olmaması **iki eksenle** zorlanıyo
 - **Eksen 1, yayımlanan 22 tipin 14'ünü sürüyor**; 8'i hiçbir temsili senaryoda koşmuyor
   (`exit_scheduled`, `filtered_no_entry`, `partial_fill`, `position_partial_close`,
   `scale_layer_added`, `scale_layer_rejected`, `stack_entry_added`, `stack_entry_rejected`).
+- **YENİ KALEM (ölçüldü, kapatılmadı):** unified-clock **kompozit** Result'ı bir decision
+  trace yayımlıyor ama sözcük dağarcığını hiç bildirmiyor — olayları `IntentKind`
+  (`entry`/`scale_in`/`exit`/`partial_exit`/`no_op`/`blocked`, **altısının sıfırı**
+  decision-trace taksonomisinde) ve `diagnostics`'inde `decision_trace_event_types` **yok**
+  (yalnız `decision_trace_count`). #532'nin kusuru DEĞİL (orada yalan bir reklam vardı,
+  burada reklam hiç yok) ama tek-item Result'ının sahip olduğu şey kompozitte eksik.
+  Doldurmak bir **ürün kararıdır** — kompozit kendi listesini mi yayımlamalı, yoksa iki
+  artefakt bilerek mi ayrı.
 - **BULGU, düzeltilmedi:** `test_oracle_portfolio_containment_gate.py`'nin ikinci-bump
   muhafızındaki *"Today the flag is down"* yorumu C9'dan beri karşı-olgusal.
 - **A13 partition testinin** *"bir bump yalnız `portfolio.*`'ı oynatabilir"* cümlesi **C9

@@ -46,6 +46,7 @@ from entropia.infrastructure.postgres.models import (
     Job,
     MarketValidationIssue,
     Principal,
+    ResearchNativeAsset,
     ResearchValidationIssue,
 )
 from entropia.infrastructure.postgres.repositories import market_data as md_repo
@@ -206,11 +207,24 @@ async def _run_research_ingest(
 
         return parse_research(_RESEARCH_CSV.encode())
 
-    async def _write(_s: AsyncSession, _e: str, _rid: str, parsed: ParsedResearch) -> str:
+    async def _write(
+        s: AsyncSession, e: str, rid: str, parsed: ParsedResearch
+    ) -> ResearchNativeAsset:
         from entropia.application.jobs.research_data import _to_parquet_bytes as to_parquet
 
         written.extend(_read_parquet_column(to_parquet(parsed), "event_time"))
-        return "sha256:deadbeef"
+        # Only the S3 write is faked; the asset ROW is written for real so the job's own
+        # reverse pointer (``native_asset_id``, GH #703) is exercised, not stubbed.
+        return rd_repo.add_native_asset(
+            s,
+            entity_id=e,
+            object_key=f"s3://processed/{e}.parquet",
+            content_digest="sha256:deadbeef",
+            size_bytes=128,
+            revision_id=rid,
+            row_count=len(parsed.rows),
+            schema_descriptor={"columns": parsed.columns},
+        )
 
     result = await run_research_analysis(
         session, job.job_id, load_and_parse=_load, write_native=_write

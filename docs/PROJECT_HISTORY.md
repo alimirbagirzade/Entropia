@@ -19151,3 +19151,118 @@ taşıyor → üç yolu karıştırmayan **ikinci** bir aggregate yol var. Bu, k
 
 Toplanan test **3880 → 3885**. **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC
 verdict BLOCKED.**
+
+## ADIM 138 — GH #703: BİR ALANI OKUYAN ÜÇ SATIR VARDI, YAZAN SIFIR; VE DÜZELTMENİN YERİ, KUSURUN GÖRÜLDÜĞÜ YER DEĞİL FAKE'İN ULAŞAMADIĞI YERDİ
+
+**Taban:** `origin/main` @ `91b45fe8` (ADIM 137). **Diff:** bir ürün dosyası
+(`jobs/research_data.py` — seam dönüş tipi + reverse pointer), dört mevcut test dosyasının
+`write_native` fake'i, bir yeni test dosyası (3 case) + üretilmiş artefaktlar. Migration
+**YOK** (kolon `0004_research_data.py:64`'te zaten var) · `ENGINE_VERSION` **DEĞİŞMEDİ** ·
+golden **el değmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` **el değmedi** ·
+`queries/funding.py` (okuma yolu) **EL DEĞMEDİ** · `frontend/src`'te **sıfır satır**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Oturum üç imza kalemiyle açıldı, üçü de ölçümde kapandı
+
+Devir promptu üç kalem sayıyordu ve üçü de durdu, **ölçülerek**: `#534` md. 3'ün karar
+belgesinde **dört kutu, dördü de boş** (`[ ]`; belge `☑` değil `[ ]` kullanıyor — promptun
+`grep -c '☑'` komutu **her iki dosyada da 0 döner** ve bu *"imza yok"* ile *"işaret farklı"*yı
+ayırt etmez, o yüzden ikisi de kutu kutu okundu) · `#854`'te **dokuz kutu, dokuzu da boş** ·
+`A-08` (#514) `human-only` ve repo içinden kapatılamaz. Geriye promptun kendi adlandırdığı
+tek uygulanabilir kalem kaldı: **#703**.
+
+### Öncül ÖLÇÜLDÜ, çürümedi (bu depoda alışılmışın tersi)
+
+`native_asset_id` `backend/src` ağacında **üç kez** geçiyor: bir mapped-column bildirimi
+(`models/research_data.py:84`) ve **iki okuma** (`queries/funding.py:88` fail-closed guard,
+`:93` deref). **Yazıcı sıfır.** Yani sevk edilen bir okuyucu, üretimin hiç doldurmadığı bir
+alanı dereference ediyordu ve her app-created revision o guard'da fail-closed düşüyordu.
+
+Kusurun **görünmez kalma sebebi** issue'da yazılıydı ve doğrulandı: funding'i süren üç
+testin üçü de revision satırını elle kuruyor ve pointer'ı **kendisi** set ediyor
+(`native_asset_id="rnat_k03"` vb.) → yeşil suite kusurla **tutarlıydı**.
+
+### ASIL BULGU: düzeltmenin YERİ, iki seçenekten yalnız birinde ölçülebilir
+
+Issue iki seam öneriyordu: **(a)** pointer'ı `_write_native`'in içinde yaz, **(b)** asset'i
+döndür ve `run_analysis`/`_advance_revision`'da ata. Ölçüldüğünde bunlar eşdeğer değil:
+`_write_native` bir **enjeksiyon seam'idir** ve `write_native=` ile **her test onu
+değiştirir** (beş çağrı yeri). `(a)` seçilseydi pointer'ı üretimde hiçbir test koşusu
+yazmazdı — onu **fake'ler** yazardı, yani kusurun kendisi (*"fixture pointer'ı elle set
+ediyor"*) yeni bir kılıkta geri gelirdi. `(b)` sevk edildi: dönüş tipi
+`Awaitable[str]` → `Awaitable[ResearchNativeAsset]`, digest artık satırdan okunuyor
+(`native_asset.content_digest` — **değer değişmedi**, o yüzden `manifest_hash` da
+oynamadı), pointer `_advance_revision` içinde **üretim kodunda** yazılıyor.
+
+**Reddedilen üçüncü yol, ölçümle:** okuyucuyu değiştirip asset'i `revision_id` ile aramak.
+`research_native_asset.revision_id` **UNIQUE DEĞİL** ve `run_analysis`'in kendi docstring'i
+redelivery'de *"a SECOND run for the same revision"* diyor → hangi satırın kazanacağı
+**tanımsız** olurdu. Bu `G15`'in birebir şeklidir, yani bir **ürün kararı**; ters pointer o
+belirsizliği hiç doğurmuyor (son yazan kazanır, yazan yer **tek**).
+
+### FAKE'LERİN KENDİSİ SEAM'İN SÖZLEŞMESİNİ İHLAL EDİYORDU
+
+Modülün kendi yorumu seam'i tarif ediyor: *"the S3/Polars steps are swappable so
+``run_analysis`` is exercisable end-to-end against a real DB without MinIO."* Ama sevk
+edilen dört fake **DB'yi de** atlıyordu — hiçbiri `add_native_asset` çağırmıyor, düz bir
+digest string döndürüyorlardı, yani suite'te **tek bir `research_native_asset` satırı bile
+üretilmiyordu**. Dördü de yalnız S3'ü atlayacak biçimde düzeltildi (satır gerçekten
+yazılıyor); `test_ingest_timezone_normalization.py`'nin parquet yan etkisi korundu. Ortak
+bir fake fabrikası **yazılmadı** — dört fake'in üçü farklı yan etki taşıyor, tek bir factory
+onları bükerdi.
+
+### İKİNCİ BULGU: #703'ün BAŞLIĞI iki kapıdan besleniyordu, gövdesi yalnız birini adlandırıyor
+
+Issue'nun başlığı *"Funding-enabled runs cannot use any Research revision created through
+the app"* diyor. Bu iddia `native_asset_id` kapatıldıktan sonra da **DOĞRU KALIYOR** ve
+sebebi ölçüldü: `instrument_mapping_ref` de üretimde **hiç yazılmıyor** (dört okuma, sıfır
+yazıcı — `native_asset_id`'nin birebir ikizi), oysa `linked_market_dataset_revision_id`
+**her** app-created revision'da yazılıyor çünkü `create_research_dataset` `market_entity_id`'yi
+**zorunlu** kılıyor. `instrument_mapping_is_valid` ise `has_link == has_ref` döndürüyor →
+her app-created revision **incoherent** → `build_funding_schedule` `has_instrument_mapping=False`
+üzerinde fail-closed. Bu **backlog R1**'dir (kanonik instrument-resolution wiring,
+`domain/research_data/time_policy.py`'nin kendi *"honest boundary"* notunda adlandırılmış) ve
+**kapsam dışı bırakıldı**. Yeniden keşfedilmesin diye **testle pinlendi**, adjudicate
+**edilmedi**.
+
+Bunun sonucu bir dürüst sınırdır: **#703 KAPATILMADI.** Gövdesinin adlandırdığı yarı
+kapandı, başlığının iddiası ikinci kapı yüzünden ayakta.
+
+### TESTLER: ÜÇ CASE, HİÇBİRİ POINTER'A DOKUNMUYOR
+
+`test_research_native_asset_pointer.py` gerçek pipeline'ı sürüyor —
+`create_research_dataset` → `set_time_policy` → `request_research_dataset_analysis` →
+`run_analysis` → (Admin) `approve_research_dataset_revision` — ve **hiçbir case
+`native_asset_id` atamıyor**; iddia edilen şey bir değer değil bir **provenance**'tır.
+
+* **c1** pointer'ın yazıldığını **üç ayrı eksende** ölçer: bir vacuity guard (asset satırı
+  gerçekten var — yoksa *"pointer set"* dereference edilemez bir değer hakkında bir cümle
+  olurdu), presence, ve **kimlik** (pointer bu koşunun yazdığı asset'i adlandırıyor).
+* **c2** resolver'ın artık native-asset kapısında durmadığını, ama **mapping** kapısında
+  durduğunu pinler. Yalnız `pytest.raises(FundingSourceInvalid)` yazmak **düzeltmeden önce
+  ve sonra aynı şekilde geçerdi** — ayırt eden yarı mesajdır.
+* **c3** issue'nun adlandırdığı ucu sürer: gerçek bir funding schedule kurulur. Elle
+  doldurulan tek şey backlog-R1 yarısı (`instrument_mapping_ref`); rows'a ulaşılan pointer
+  **üretimin yazdığıdır**.
+
+### ÜÇ NEGATİF KONTROL, ÜÇÜ DE FARKLI ASSERTION SATIRINDA
+
+* **NC-1** (pointer ataması silinir): üç yeni case kırmızı — c1 **satır 174** (presence) —
+  ve **önceden var olan 44 test YEŞİL KALIR**. Boşluğun *iddiası* değil **ölçümü**.
+* **NC-2** (pointer non-None ama YANLIŞ değer): c1 **satır 178** (kimlik). Presence
+  assertion'ı geçiyor → iki eksen ayrık, biri diğerini **gölgelemiyor**.
+* **NC-3** (fake DB satırını atlar, detached nesne döndürür): c1 **satır 172** (vacuity
+  guard). Guard'ın kendi ekseni olduğunun kanıtı — ve *"fake yine DB'yi atlarsa"* halinin
+  testi kör bırakmadığının ölçümü.
+
+### DÜRÜST SINIR
+
+* **#703 KAPATILMADI** (yukarıdaki ikinci bulgu) ve **kapatmak insan kararıdır**.
+* **`instrument_mapping_ref` boşluğu DÜZELTİLMEDİ** — ölçüldü, testle pinlendi, backlog R1
+  olarak bırakıldı; bir yazıcı eklemek *"mapping ref'i nereden gelir"* sorusudur = ürün kararı.
+* **Kabul defterine DOKUNULMADI.** `RD-09.c4` (*"an existing run stays bound to v1.0"*) hâlâ
+  `partial`: kriter funding-enabled bir **RUN** ister, bu slice bir **schedule**'a kadar
+  gitti. Tavanlar oynamadı, hiçbir kriter `covered` işaretlenmedi.
+* **Karar belgesi yazılmadı** — bu bir adjudication değil; seçenekler ölçüldü ve `(b)`'nin
+  tek yanlışlanabilir seam olduğu gösterildi, reddedilen üçüncü yol kayda geçti.
+* Frontend kapıları **koşulmadı** (`frontend/src`'te sıfır satır).

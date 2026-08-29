@@ -270,6 +270,37 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK** — kolon zaten vardı) ·
+> `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** ·
+> `SHARED_ALLOCATION_STATUS` **el değmedi** · `queries/funding.py` (okuma yolu) **EL DEĞMEDİ** ·
+> `frontend/src` **sıfır satır**. **Son dalga — ADIM 138 (GH #703: `native_asset_id` üretimde
+> İLK KEZ yazılıyor).** Oturum üç imza kalemiyle açıldı, **üçü de ölçümde kapandı** (#534 dört
+> kutu · #854 dokuz kutu, hepsi BOŞ; A-08 `human-only`) → tek uygulanabilir kalem #703. Öncül
+> **çürümedi**: alan `backend/src`'te bir bildirim + **iki okuma** + **SIFIR yazıcı** taşıyordu,
+> yani sevk edilmiş bir fail-closed guard üretimin hiç doldurmadığı bir alanı dereference
+> ediyordu. **ASIL BULGU — düzeltmenin YERİ:** issue'nun iki seam önerisi eşdeğer DEĞİL;
+> `_write_native` bir **enjeksiyon seam'idir** ve beş test onu değiştirir → pointer orada
+> yazılsaydı onu üretim değil **fake'ler** yazardı (kusurun görünmez kalma sebebinin yeni
+> kılığı). Sevk edilen seam `_advance_revision`; protokol dönüşü `Awaitable[str]` →
+> `Awaitable[ResearchNativeAsset]`, digest **satırdan** okunuyor (değer değişmedi →
+> `manifest_hash` oynamadı). **Reddedilen üçüncü yol ÖLÇÜLDÜ:** okuyucuyu `revision_id` ile
+> aramaya çevirmek — kolon UNIQUE değil, redelivery ikinci satır yazar → kazanan **tanımsız** =
+> `G15`'in birebir şekli = ürün kararı. **İKİNCİ BULGU: #703'ün BAŞLIĞI iki kapıdan
+> besleniyordu** — `instrument_mapping_ref` de üretimde **hiç yazılmıyor** (dört okuma, sıfır
+> yazıcı) ve `linked_market_dataset_revision_id` her app-created revizyonda yazıldığı için
+> `has_link == has_ref` **False** → `build_funding_schedule` hâlâ fail-closed. **Backlog R1,
+> kapsam dışı, TESTLE PİNLENDİ, adjudicate EDİLMEDİ.** Sevk edilen dört fake seam'in kendi
+> sözleşmesini (*"swap S3/Polars, keep the real DB"*) ihlal ediyordu — hiçbiri
+> `add_native_asset` çağırmıyordu, suite tek bir `research_native_asset` satırı bile
+> üretmiyordu; dördü de düzeltildi. **ÜÇ NC, üçü FARKLI assertion satırında** (vacuity /
+> presence / kimlik) ve NC-1'de **önceden var olan 44 test YEŞİL KALDI** = boşluğun ölçümü.
+> **DÜRÜST SINIR: #703 KAPATILMADI** (başlığındaki iddia ikinci kapı yüzünden ayakta) ·
+> `RD-09.c4` hâlâ `partial`, **kabul defterine dokunulmadı**, hiçbir tavan oynamadı · karar
+> belgesi **yazılmadı** (adjudication değil) · frontend kapıları **koşulmadı**.
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 138 · `docs/ADIM138_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
 > DEĞİŞTİ** → `backtest-engine-v18-policy-provenance-completed` · **golden YENİDEN ÜRETİLDİ
 > (46/50 digest oynadı)** · OpenAPI **değişmedi** (`--check` exit 0) ·

@@ -10011,23 +10011,68 @@ aynı ailesi. **`suppressed_entries` el değmedi.**
 **Devredilenler:** #534 **kapatılmadı** (md. 3 imza bekliyor) · #532 · #703 · #854 ·
 A-08 (#514). Tam kayıt `PROJECT_HISTORY.md` §ADIM 137 · `docs/ADIM137_LANDED_KICKOFF.md`.
 
+## Stage ADIM 138 — GH #703: `native_asset_id` üretimde ilk kez yazılıyor (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `91b45fe8`. **Migration YOK** (kolon `0004_research_data.py:64`'te
+zaten vardı) · `ENGINE_VERSION` **değişmedi** · golden **el değmedi** · OpenAPI **değişmedi** ·
+`SHARED_ALLOCATION_STATUS` el değmedi · `queries/funding.py` (okuma yolu) **EL DEĞMEDİ** ·
+`frontend/src` sıfır satır. Blocker **DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+
+Oturum üç imza kalemiyle açıldı, üçü de **ölçümde** kapandı (#534 dört kutu / #854 dokuz
+kutu, hepsi BOŞ; A-08 `human-only`) → promptun adlandırdığı tek uygulanabilir kalem #703.
+Öncül **çürümedi**: `native_asset_id` `backend/src`'te bir bildirim + **iki okuma** +
+**sıfır yazıcı** taşıyordu, yani sevk edilmiş bir fail-closed guard üretimin hiç doldurmadığı
+bir alanı dereference ediyordu.
+
+**ASIL BULGU — düzeltmenin YERİ:** issue iki seam öneriyordu ve bunlar eşdeğer **değil**.
+`_write_native` bir **enjeksiyon seam'idir** (`write_native=` ile beş test onu değiştirir);
+pointer orada yazılsaydı onu üretim değil **fake'ler** yazardı = kusurun görünmez kalma
+sebebinin yeni kılığı. Sevk edilen seam `run_analysis`/`_advance_revision`; protokol dönüşü
+`Awaitable[str]` → `Awaitable[ResearchNativeAsset]`, digest satırdan okunuyor (**değer
+değişmedi**, `manifest_hash` oynamadı). **Reddedilen üçüncü yol ölçüldü:** okuyucuyu
+`revision_id` ile aramaya çevirmek — kolon UNIQUE değil ve redelivery ikinci satır yazabilir
+→ kazanan **tanımsız** = `G15`'in birebir şekli = ürün kararı.
+
+**İKİNCİ BULGU — #703'ün başlığı iki kapıdan besleniyordu:** `instrument_mapping_ref` de
+üretimde **hiç yazılmıyor** (dört okuma, sıfır yazıcı), oysa `linked_market_dataset_revision_id`
+her app-created revizyonda yazılıyor → `has_link == has_ref` **False** →
+`build_funding_schedule` fail-closed. **Backlog R1**, kapsam dışı, **testle pinlendi**,
+adjudicate **edilmedi**. Sonuç: **#703 KAPATILMADI.**
+
+Sevk edilen dört fake seam'in kendi sözleşmesini ihlal ediyordu (*"swap S3/Polars, keep the
+real DB"*) — hiçbiri `add_native_asset` çağırmıyordu, yani suite tek bir
+`research_native_asset` satırı bile üretmiyordu. Dördü de yalnız S3'ü atlayacak şekilde
+düzeltildi.
+
+**ÜÇ NC, üçü de FARKLI assertion satırında** (172 vacuity / 174 presence / 178 kimlik) ve
+NC-1'de **önceden var olan 44 test YEŞİL KALDI** = boşluğun *iddiası* değil **ölçümü**.
+
+**Ölçülüp KAPATILMAYAN:** `instrument_mapping_ref` (yukarıda) · `RD-09.c4` hâlâ `partial`
+(kriter funding-enabled bir **RUN** ister, bu slice bir **schedule**'a kadar gitti; kabul
+defterine **dokunulmadı**, hiçbir tavan oynamadı).
+
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 138 · `docs/ADIM138_LANDED_KICKOFF.md`.
+
 ## Next: **ürün sahibinin seçeceği açık kalemlerden biri — ÜÇÜ İMZA, İKİSİ KOD**
 
-1. **#534 md. 3 — same-candle sayacı** (İMZA). Belge açık ve ölçülmüş:
-   `docs/decisions/closure_i534_same_candle_suppression_counter_2026-08-29.md`, **dört kutu,
-   dördü de BOŞ**. `(c) HİÇBİRİ` şıkkı ADIM 136 sayesinde **yeni**: olay artık taksonomide.
-   İmzalanana kadar **#534 açık kalır**.
-2. **#854 — dış import pin'i taşınıyor** (İMZA). **Dokuz kutu, dokuzu da BOŞ**; kusur ADIM
-   134'te koşulur hale getirildi, düzeltilmedi.
-3. **ADR-0002 §13.1'in OD-2 satırı + üç bayat docstring** (İMZA/adjudication, ADIM 136'dan
-   devir).
-4. **Composite Result'ın provenance'ı** (KOD, ama önce issue + imza) — iki ayrı ölçülmüş
-   eksik: decision-trace sözcük dağarcığı (ADIM 136) **ve** politika provenance bloğu
-   (ADIM 137). İkisi de `combine_item_runs`'ın kendi bloğunda.
-5. **#703 — funding-enabled run'lar** (KOD, daha büyük; `native_asset_id` üretimde hiç
-   yazılmıyor).
-6. **A-08 (#514)** — **tek blocker**, ayrı hat, insan denetimi ister. RC verdict'i yalnız bu
+> **Başlıktaki sayı ADIM 137 dönemine aittir ve bilerek değiştirilmedi** — `docs-history-guard` bir başlığın yeniden adlandırılmasını silme sayar (ADIM 61) ve başlığı düzeltmek için kapıyı aşmaya değmez. **ADIM 138 sonrası güncel dağılım: DÖRDÜ imza (1, 2, 3, 5), İKİSİ kod (4, 6), biri blocker (7).**
+
+1. **#534 md. 3 — same-candle sayacı** (İMZA). `closure_i534_..._2026-08-29.md`, **dört kutu,
+   dördü de BOŞ** (ADIM 138'de yeniden ölçüldü). **Kutu işareti `[ ]`, `☑` DEĞİL** — tek bir
+   `grep -c '☑'` bu dosyada her zaman 0 döner ve "imza yok" ile "işaret farklı"yı ayırt etmez.
+2. **#854 — dış import pin'i taşınıyor** (İMZA). **Dokuz kutu (`☐`), dokuzu da BOŞ.**
+3. **`instrument_mapping_ref`** (İMZA, sonra KOD) — **#703'ün ikizi, ADIM 138'de ölçüldü**:
+   dört okuma, sıfır yazıcı; her app-created revizyon incoherent → funding hâlâ fail-closed.
+   Bir yazıcı eklemek *"mapping ref'i nereden gelir"* sorusudur = **ürün kararı** (backlog R1).
+   Sınır `test_research_native_asset_pointer.py::test_the_native_asset_gate_is_passed_by_a_
+   pipeline_built_revision` içinde **pinli**.
+4. **Composite Result'ın provenance'ı** (KOD, ama önce issue + imza) — ADIM 136 + ADIM 137'den
+   devir, ikisi de `combine_item_runs`'ın kendi bloğunda.
+5. **ADR-0002 §13.1'in OD-2 satırı + üç bayat docstring** (İMZA/adjudication, ADIM 136'dan devir).
+6. **RD-09.c4** (KOD) — funding-enabled bir **RUN** ister; kapatılabilir hale gelmesi md. 3'e
+   bağlı, bugün kapatmak mapping'i fixture'da elle set etmek olurdu = #703'ün kör noktası.
+7. **A-08 (#514)** — **tek blocker**, ayrı hat, insan denetimi ister. RC verdict'i yalnız bu
    kapatabilir.
 
 **Ajan bunlardan hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
-`docs/ADIM137_LANDED_KICKOFF.md` sonunda.
+`docs/ADIM138_LANDED_KICKOFF.md` sonunda.

@@ -274,8 +274,19 @@ async def test_order_book_dataset_keeps_its_native_columns(session) -> None:
     async def _fake_load(_session, _entity_id):
         return parsed
 
-    async def _fake_write(_session, _entity_id, _revision_id, _parsed):
-        return "digest-order-book"
+    async def _fake_write(session_, entity_id_, revision_id_, parsed_):
+        # Only the S3 write is faked; the asset ROW is written for real so the job's own
+        # reverse pointer (``native_asset_id``, GH #703) is exercised, not stubbed.
+        return rd_repo.add_native_asset(
+            session_,
+            entity_id=entity_id_,
+            object_key=f"s3://processed/{entity_id_}.parquet",
+            content_digest="digest-order-book",
+            size_bytes=128,
+            revision_id=revision_id_,
+            row_count=len(parsed_.rows),
+            schema_descriptor={"columns": parsed_.columns},
+        )
 
     requested = await rd_cmd.request_research_dataset_analysis(
         session, OWNER, entity_id=root.entity_id

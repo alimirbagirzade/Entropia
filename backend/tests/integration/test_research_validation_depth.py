@@ -21,6 +21,7 @@ from entropia.domain.research_data.enums import AvailableTimePolicy, ResearchRev
 from entropia.infrastructure.postgres.models import (
     Job,
     Principal,
+    ResearchNativeAsset,
     ResearchValidationIssue,
     ResearchValidationRun,
 )
@@ -72,8 +73,19 @@ async def _run(
     async def _load(_s: AsyncSession, _e: str) -> ParsedResearch:
         return parsed
 
-    async def _write(_s: AsyncSession, _e: str, _rid: str, _p: ParsedResearch) -> str:
-        return "sha256:deadbeef"
+    async def _write(s: AsyncSession, e: str, rid: str, p: ParsedResearch) -> ResearchNativeAsset:
+        # Only the S3 write is faked; the asset ROW is written for real so the job's own
+        # reverse pointer (``native_asset_id``, GH #703) is exercised, not stubbed.
+        return rd_repo.add_native_asset(
+            s,
+            entity_id=e,
+            object_key=f"s3://processed/{e}.parquet",
+            content_digest="sha256:deadbeef",
+            size_bytes=128,
+            revision_id=rid,
+            row_count=len(p.rows),
+            schema_descriptor={"columns": p.columns},
+        )
 
     result = await run_analysis(session, job.job_id, load_and_parse=_load, write_native=_write)
     await session.flush()

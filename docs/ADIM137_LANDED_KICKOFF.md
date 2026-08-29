@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 137 landed — GH #534: diagnostics provenance bloğunun sekiz deliği kapatıldı
 
 **Taban:** `origin/main` @ `de3d8816` (ADIM 136) · **PR:** sıra bekliyor ·

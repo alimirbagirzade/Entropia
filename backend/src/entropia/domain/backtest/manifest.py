@@ -182,7 +182,7 @@ from entropia.shared.manifest import manifest_hash
 # non-``portfolio.*`` digests; A13's partition test pins group sizes, not values, so it
 # stays green — a reader comparing this regeneration against A13's "only portfolio.* may
 # move" sentence should read that sentence as scoped to the lift it was written for.
-ENGINE_VERSION = "backtest-engine-v18-entry-exit-collision-registered"
+ENGINE_VERSION = "backtest-engine-v18-policy-provenance-completed"
 
 # K1 (Master Ref Modul 6 §8: "komisyon dagilimi engine manifestinde acik olmalidir"),
 # satisfied by Karar 1's mandatory rider (GH #552, signed 2026-08-25). Until now the

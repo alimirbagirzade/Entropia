@@ -489,19 +489,32 @@ def _first_trigger_index(
     return None
 
 
-def _stop_priority_index(custom_order: list[str] | None, logic_keys: list[str]) -> dict[str, int]:
-    """Map every stop key to a precedence index (lower = higher priority).
+def stop_priority_sequence(
+    custom_order: list[str] | None, logic_keys: list[str]
+) -> tuple[str, ...]:
+    """Resolve the TOTAL stop precedence order actually governing a run (§9.2).
 
     The canonical default (``custom_order is None``) is logic blocks in display order,
-    then percentage, trailing, absolute (Master Ref §9.2). An explicit
-    ``stop_priority_order`` leads; any key it omits is appended in canonical order so the
-    result is always total and deterministic.
+    then percentage, trailing, absolute. An explicit ``stop_priority_order`` leads; any
+    key it omits is appended in canonical order so the result is always total and
+    deterministic.
+
+    #534: this is the single derivation of that order. The diagnostics provenance block
+    publishes the sequence and ``_stop_priority_index`` ranks by it — a second, parallel
+    reimplementation on the reporting side would be free to drift from the one the fills
+    actually resolved against, which is the whole defect the field is being published to
+    close.
     """
     ordered: list[str] = list(custom_order) if custom_order else []
     for key in [*logic_keys, *_CANONICAL_PRICE_STOP_ORDER]:
         if key not in ordered:
             ordered.append(key)
-    return {key: idx for idx, key in enumerate(ordered)}
+    return tuple(ordered)
+
+
+def _stop_priority_index(custom_order: list[str] | None, logic_keys: list[str]) -> dict[str, int]:
+    """Map every stop key to a precedence index (lower = higher priority)."""
+    return {key: idx for idx, key in enumerate(stop_priority_sequence(custom_order, logic_keys))}
 
 
 @dataclass(frozen=True, slots=True)

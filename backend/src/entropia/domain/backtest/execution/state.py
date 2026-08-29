@@ -433,6 +433,12 @@ class _RunConfig:
     stop_trigger_requirement: str = ""
     stop_conflict_resolution: str = ""
     stop_exit_conflict: str = ""
+    # #534: the RESOLVED total stop precedence (§9.2) this run ranked against, built once
+    # in the prologue by ``fills.stop_priority_sequence``. Empty only for a run with no
+    # protection stop logic at all. The SAVED (nullable) input stays readable from the
+    # config; both are published, because a saved ``null`` and a saved order that happens
+    # to equal the canonical one are the same resolved sequence and different decisions.
+    stop_priority_resolved: tuple[str, ...] = ()
     trailing_lock_in_active: bool = False
     scaling_enabled: bool = False
     scale_max_total: Decimal | None = None

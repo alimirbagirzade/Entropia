@@ -9978,3 +9978,56 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 136 · `docs/ADIM136_LANDED_KICKOFF.md`.
 
 **Ajan bu üçünden hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
 `docs/ADIM135_LANDED_KICKOFF.md` sonunda.
+
+## Stage ADIM 137 — GH #534: provenance bloğunun sekiz deliği kapatıldı (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `de3d8816`. **Migration yok** · **`ENGINE_VERSION` DEĞİŞTİ** →
+`backtest-engine-v18-policy-provenance-completed` · **golden yeniden üretildi (46/50 digest)**
+· OpenAPI değişmedi (ölçüldü, `--check` exit 0) · `SHARED_ALLOCATION_STATUS` el değmedi ·
+`frontend/src` sıfır satır. Toplanan test **3880 → 3885**. Blocker **DEĞİŞMEDİ (1 — A-08)**,
+verdict **BLOCKED**.
+
+Oturum üç adayla açıldı; ikisi **ölçümde** kapandı (#854'ün dokuz kutusu **BOŞ** → girilmedi;
+A-08 `human-only`). #534 alındı. Diagnostics provenance bloğu, issue'nun **iki** alanını ve
+sahibinin yorumunun **altı** alanını birden yayımlıyor artık (dokuz anahtar — çünkü
+`stop_priority_order` SAVED ve RESOLVED olarak **iki** olgudur; yalnız resolved'ı yayımlamak
+operatörün seçmediği kanonik sırayı seçmiş gibi gösterirdi = #532'nin kusur sınıfı).
+Sıra türetimi **teke** indirildi (`fills.py::stop_priority_sequence`).
+
+**#534 md. 4'ün *"expected answer is no bump"*u yine yanlış çıktı** — golden digest'ler
+diagnostics'i **kapsıyor**. Delta **bayt düzeyinde** kanıtlandı: 45 senaryonun her birinde
+fark **tam olarak** dokuz anahtar, silinen/değişen **0**, ve trade/summary/equity **bayt bayt
+aynı**; bump sonrası **46 = 45 + `execution_key`**. Bu, ADIM 136'da **imzalanmış** eksenin
+(*"artefaktın baytları oynuyor mu"*) ölçülmüş uygulamasıdır, yeni bir imza istemedi.
+
+**NC-3 öğretici:** sıralama bilerek ayrıştırıldığında **golden dahil** 135 testin 134'ü yeşil
+kaldı (hiçbir senaryo logic stop ile fiyat stopunu yarıştırmıyor) → muhafız **kaynak-düzeyi**
+olmak zorundaydı, ADIM 136'nın dersinin ikizi.
+
+**Ölçülüp KAPATILMAYAN:** composite Result'ın diagnostics'i bu provenance'ı **almıyor**
+(dört `portfolio.*` digest'i bayt bayt aynı kaldı) — ADIM 136'nın kompozit-yüzey bulgusunun
+aynı ailesi. **`suppressed_entries` el değmedi.**
+
+**Devredilenler:** #534 **kapatılmadı** (md. 3 imza bekliyor) · #532 · #703 · #854 ·
+A-08 (#514). Tam kayıt `PROJECT_HISTORY.md` §ADIM 137 · `docs/ADIM137_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği açık kalemlerden biri — ÜÇÜ İMZA, İKİSİ KOD**
+
+1. **#534 md. 3 — same-candle sayacı** (İMZA). Belge açık ve ölçülmüş:
+   `docs/decisions/closure_i534_same_candle_suppression_counter_2026-08-29.md`, **dört kutu,
+   dördü de BOŞ**. `(c) HİÇBİRİ` şıkkı ADIM 136 sayesinde **yeni**: olay artık taksonomide.
+   İmzalanana kadar **#534 açık kalır**.
+2. **#854 — dış import pin'i taşınıyor** (İMZA). **Dokuz kutu, dokuzu da BOŞ**; kusur ADIM
+   134'te koşulur hale getirildi, düzeltilmedi.
+3. **ADR-0002 §13.1'in OD-2 satırı + üç bayat docstring** (İMZA/adjudication, ADIM 136'dan
+   devir).
+4. **Composite Result'ın provenance'ı** (KOD, ama önce issue + imza) — iki ayrı ölçülmüş
+   eksik: decision-trace sözcük dağarcığı (ADIM 136) **ve** politika provenance bloğu
+   (ADIM 137). İkisi de `combine_item_runs`'ın kendi bloğunda.
+5. **#703 — funding-enabled run'lar** (KOD, daha büyük; `native_asset_id` üretimde hiç
+   yazılmıyor).
+6. **A-08 (#514)** — **tek blocker**, ayrı hat, insan denetimi ister. RC verdict'i yalnız bu
+   kapatabilir.
+
+**Ajan bunlardan hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
+`docs/ADIM137_LANDED_KICKOFF.md` sonunda.

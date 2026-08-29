@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 135 — OD-2(a) MARK YOLU BAĞLANDI (`(b)` diagnostics): imza indi, kod indi
 

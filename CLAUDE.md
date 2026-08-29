@@ -270,8 +270,39 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
+> DEĞİŞTİ** → `backtest-engine-v18-entry-exit-collision-registered` · **golden YENİDEN
+> ÜRETİLDİ (46/50 digest oynadı)** · OpenAPI **değişmedi** (ölçüldü) ·
+> `SHARED_ALLOCATION_STATUS` **el değmedi** · `frontend/src` **sıfır satır**. **Son dalga —
+> ADIM 136 (GH #532: `entry_exit_collision` yayımlanan decision-trace taksonomisine
+> kaydedildi + eksik anti-drift muhafızı).** Oturum **#854 imza kontrolüyle açıldı → dokuz
+> kutunun dokuzu da BOŞ, durduruldu** (kod yok, #854 **açık**, `G15`/Karar 4 konusuz
+> bırakılmadı); en dar kapsamlı ölçülmüş aday alındı. **ASIL BULGU: issue'nun "beklenen
+> cevap"ı bir ölçüm değildi** — #532 *"bump gerekmez"* diye çerçeveliyordu, ölçüldü:
+> **50 golden'ın 45'i taksonomiyi taşıyor**. Karar ürün sahibine ölçümle soruldu, **`A` =
+> bump et** imzalandı (2026-08-29); gerekçe bir sayının oynaması DEĞİL — `execution_key`
+> artefaktın **baytlarını** anahtarlar. **Delta iddia edilmedi, BAYT DÜZEYİNDE kanıtlandı:**
+> oynayan 45 payload'ın **her birinde** fark **tam olarak** eklenen üye, `contract.execution_key`
+> bump öncesi **bayt bayt aynı**, bump sonrası digest deltası **46 = 45 + execution_key**,
+> beklenmedik **sıfır**. **İKİNCİ BULGU: muhafız davranışsal OLAMAZDI** — 50 golden
+> senaryosunun hiçbiri `entry_exit_collision` yaymıyor (22 tipin yalnız 13'ü), yani
+> golden'a dayanan bir muhafız tam bu kusur için **boşuna yeşil** olurdu → **eksen 2
+> kaynak-düzeyi**, PR #513 indiği gün kırmızı verecekti. **ÜÇ NC, üçü ayırt edici:** NC-1'de
+> mevcut sekiz test (self-consistency dahil) **YEŞİL kaldı** = boşluğun ölçümü · NC-2'de
+> **yalnız eksen 2** kırmızı · NC-3 ternary assertion'ının gölgelenmediğini gösterdi. Altı
+> `ENGINE_VERSION` tripwire'ı **kasıtlı** güncellendi, yük taşıyan
+> `!= _C7_ENGINE_VERSION` **el değmedi**. **DÜRÜST SINIR: #532 KAPATILMADI** (insan kararı) ·
+> #534/#703/#854 **el değmedi** · eksen 2 **değişken-değerli** tipleri göremez (üç site,
+> üçü ileri taşıyıcı) · eksen 1 22 tipin **14'ünü** sürüyor · A13 partition testinin
+> *"yalnız `portfolio.*` oynar"* cümlesi **C9 lift'i için** yazılmıştı, bu bump 41
+> non-portfolio digest'i de oynattı ve test boyutları pinlediği için yeşil kaldı
+> (**değiştirilmedi**) · frontend kapıları KOŞULMADI. Toplanan test **3878 → 3880**.
+> **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 136 · `docs/ADIM136_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
-> **DEĞİŞMEDİ** (`backtest-engine-v18-unified-clock-portfolio` — Karar 3 = `A`) · OpenAPI
+> **DEĞİŞMEDİ** (o gün `backtest-engine-v18-unified-clock-portfolio` — Karar 3 = `A`) · OpenAPI
 > **değişmedi** · golden **EL DEĞMEDİ ve OYNAMADI** (50 digest bayt bayt aynı) ·
 > `SHARED_ALLOCATION_STATUS` **el değmedi** · `capability.py` **el değmedi** ·
 > `MARK_STALE_AFTER_MS` **el değmedi** (Karar 2 = `A`) · importer allowlist'i **el değmedi** ·
@@ -364,7 +395,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
-> DEĞİŞTİ** → `backtest-engine-v18-unified-clock-portfolio` (A15'in İKİNCİ bump'ı) ·
+> DEĞİŞTİ** → (o gün) `backtest-engine-v18-unified-clock-portfolio` (A15'in İKİNCİ bump'ı) ·
 > **`SHARED_ALLOCATION_STATUS` = `active_v1` — CONTAINMENT KALKTI** · golden **2 satır**
 > oynadı (50 digest'in **49'u bayt bayt aynı**) · OpenAPI değişmedi. **Son dalga — ADIM 132
 > (`C9` / ADIM 20: THE LIFT).** `G10` (ADR §16 Gate 2) #868'de imzalıydı; ön koşul **17
@@ -2668,15 +2699,22 @@ Before stopping a working session, produce **ALL** of the following:
 > `docs/decisions/closure_i854_external_import_pin_stability_2026-08-28.md`: Karar 1 (`(a)`
 > statüko · `(b)` set-once · `(c)` ikinci pin'i reddet · `(d)` link tablosu · `(e)` ileri
 > çözüm), Karar 2 (`(d)`/`(e)` **imzalı** `G15`/Karar 4'ü konusuz bırakır — kabul mü).
-> **Sekiz kutu, sekizi de BOŞ.** Kusur ADIM 134'te **koşulur** hale getirildi
+> **DOKUZ kutu, dokuzu da BOŞ** (ADIM 136'da ölçüldü — eski *"sekiz"* sayımı Karar 1'in
+> `☐ **Başka:** ___` serbest metin satırını atlıyordu). Kusur ADIM 134'te **koşulur** hale getirildi
 > (`test_external_import_pin_stability.py`, iki yüzey) ama **DÜZELTİLMEDİ**; #854 açık.
 > Yazıcılar `link_batch_to_revision` + `link_normalized_to_revision`, **dört** çağrı yeri —
 > dördü birden değişmeli; her şıkta bu iki test **kırmızı olur** ve kasıtlı güncellenir.
 >
-> **(2) OD-2 mark yolu üretime BAĞLANSIN MI? — ÜÇ İMZA, hâlâ BOŞ**
+> **(2) OD-2 — KAPANDI, bu kalem artık AÇIK DEĞİL (ADIM 136'da ölçüldü).** Üç karar da
+> **2026-08-28'de imzalandı** (`alimirbagirzade`; belgede altı dolu kutu) ve `(b)` **ADIM
+> 135'te sevk edildi**. Aşağısı ADIM 134'ün işaretçisidir, **tarihsel**:
 > `docs/decisions/closure_od2_mark_production_binding_2026-08-28.md`: Karar 1 (bağlansın mı /
 > nereye), Karar 2 (`MARK_STALE_AFTER_MS` = 900 sn, merdivende 9'un 5'ini sıfırlıyor), Karar 3
-> (diagnostics-only bir değişiklik bump gerektirir mi). **Üçü de BOŞ; ajan dolduramaz.**
+> (diagnostics-only bir değişiklik bump gerektirir mi). **Üçü de İMZALANDI: `(b)` · `A`
+> dokunma · `A` bump gerekmez.** Karar 3'ün gerekçesi *"identity değişmiyor; `diagnostics`
+> bir rapordur"* ve o vakada **hiçbir golden oynamamıştı**; ADIM 136 aynı soruyu **45 golden
+> digest'i oynadığı** bir vakada sordu ve ürün sahibi orada **bump et**'i imzaladı — iki imza
+> çelişmiyor, ayrım **artefaktın baytları oynuyor mu** eksenindedir.
 > İmza gelirse uygulama kısıtları ÖLÇÜLMÜŞ hâlde: bağlama **`PV`'de** (döngüden sonrası P10
 > yüzünden boş), taşıyıcı **`ledger.valuation()`** (`attribute()` sayacı düşürür), yazım yeri
 > `portfolio_engine.py`/`portfolio_projection.py` (**worker'a yazma** — `C4`'te reddedildi),

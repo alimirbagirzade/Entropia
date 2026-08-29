@@ -977,12 +977,13 @@ def test_no_intent_field_ships_in_the_manifest_yet_and_the_engine_version_stands
     manifest_src = (
         Path(__file__).resolve().parents[2] / "src/entropia/domain/backtest/manifest.py"
     ).read_text(encoding="utf-8")
-    # MOVED AT ADIM 20 (`C9`), AS THE ACT OF LIFTING. Every earlier bump came from OUTSIDE
-    # the contained work (#550/#551/#552, then `C7`'s A16 record change) and this line was
-    # the tripwire saying containment could not be lifted without editing it. It was edited,
-    # deliberately, in the lift commit — and the assertion below it did NOT loosen: the
-    # sequential manifest still must not name the portfolio BEHAVIOUR.
-    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
+    # Moved at ADIM 20 (`C9`) AS THE ACT OF LIFTING, and moved again by GH #532 — an
+    # OUTSIDE bump (the decision-trace taxonomy gained ``entry_exit_collision``), which is
+    # the same class as #550/#551/#552 and `C7`'s A16 record change. The literal tracks the
+    # CURRENT shipped version; what it pins is that the namespace cannot shift without a
+    # human editing this line. The assertion below it has never loosened: the sequential
+    # manifest still must not name the portfolio BEHAVIOUR.
+    assert ENGINE_VERSION == "backtest-engine-v18-entry-exit-collision-registered"
     assert "arbitration_policy_version" in manifest_src, "A16 requires it (shipped at `C7`)"
     for absent in ("intent_contract_version", "item-intent-v1"):
         assert absent not in manifest_src

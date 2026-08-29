@@ -391,9 +391,17 @@ def test_the_containment_flag_and_engine_version_are_both_lifted() -> None:
     what makes this line's new value non-negotiable rather than cosmetic."""
     assert SHARED_ALLOCATION_STATUS == "active_v1"
     assert shared_allocation_is_executable() is True
-    # ADR §10.3's proposed name, taken verbatim rather than invented — the version string is
-    # a namespace, and inventing one here would have made the namespace this slice's opinion.
-    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
+    # The LIFT-era value was ``backtest-engine-v18-unified-clock-portfolio`` — ADR §10.3's
+    # proposed name, taken verbatim rather than invented, because a version string is a
+    # namespace and inventing one would have made it that slice's opinion. GH #532 bumped
+    # again afterwards (the decision trace gained ``entry_exit_collision``), so the current
+    # value is a POST-lift outside bump and carries no ADR proposal behind it. The module
+    # docstring says this test exists to fail "the day someone lifts the flag, BUMPS THE
+    # ENGINE VERSION or closes the last gap" — it did, a human re-read §14, and the pin was
+    # moved deliberately rather than loosened.
+    assert ENGINE_VERSION == "backtest-engine-v18-entry-exit-collision-registered"
+    # A15's real invariant, untouched by any later bump: whatever the string becomes, the
+    # lifted world may never reuse `C7`'s contained-era namespace.
     assert ENGINE_VERSION != _C7_ENGINE_VERSION
     assert "unified-clock multi-item co-simulation" in SHARED_ALLOCATION_DEPENDENCY
 

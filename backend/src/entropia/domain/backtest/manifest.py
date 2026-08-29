@@ -168,7 +168,21 @@ from entropia.shared.manifest import manifest_hash
 # as a PREDICATE exercised on all four (flag, version) corners rather than as an ``if``
 # that is vacuously green until the day it matters, so a lift that reuses this string is a
 # red build rather than a silent namespace collision.
-ENGINE_VERSION = "backtest-engine-v18-unified-clock-portfolio"
+#
+# GH #532 bumps it again, and the reason is NOT that a number moved — none did. The
+# decision-trace taxonomy gained ``entry_exit_collision``, an event PR #513 had emitted
+# since the day it landed while the published list denied it existed. Measured: the
+# taxonomy is absent from ``execution_content``, so the ``contract.execution_key`` payload
+# is byte-identical without a bump, and each of the 45 golden payloads that moved differs
+# by exactly the added member and nothing else. The bump is required anyway, for the
+# reason the golden module states: ``execution_key`` keys the ARTIFACT's bytes, and
+# without a shift two runs sharing a key would publish different diagnostics blocks — the
+# stored pre-#532 Result would stop being byte-reproducible under its own key. This bump
+# is NOT the `C9` lift bump (that one landed with the flag flip) and, unlike it, it moves
+# non-``portfolio.*`` digests; A13's partition test pins group sizes, not values, so it
+# stays green — a reader comparing this regeneration against A13's "only portfolio.* may
+# move" sentence should read that sentence as scoped to the lift it was written for.
+ENGINE_VERSION = "backtest-engine-v18-entry-exit-collision-registered"
 
 # K1 (Master Ref Modul 6 §8: "komisyon dagilimi engine manifestinde acik olmalidir"),
 # satisfied by Karar 1's mandatory rider (GH #552, signed 2026-08-25). Until now the

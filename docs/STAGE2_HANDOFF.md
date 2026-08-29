@@ -9941,6 +9941,31 @@ fiyatı **oynayan** bir long'a çevrildi ve vacuity muhafızı eklendi.
 Toplanan test **3868 → 3876**. Blocker DEĞİŞMEDİ (1 — yalnız A-08), **BLOCKED**.
 `PROJECT_HISTORY.md` §ADIM 135 · `docs/ADIM135_LANDED_KICKOFF.md`.
 
+## Stage ADIM 136 — GH #532: `entry_exit_collision` taksonomiye kaydedildi (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `3d94c4c0`. **Migration yok** · **`ENGINE_VERSION` DEĞİŞTİ** →
+`backtest-engine-v18-entry-exit-collision-registered` · **golden yeniden üretildi (46/50
+digest)** · OpenAPI değişmedi (ölçüldü) · `frontend/src` sıfır satır. Toplanan test
+**3878 → 3880**; tam suite yerelde **koştu**, coverage **%94.04** (kapı ≥90) ve
+documentation-truth gate yeşil. Blocker **DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+
+Oturum **#854 imza kontrolüyle açıldı → dokuz kutunun dokuzu da BOŞ, durduruldu** (kod yok,
+#854 açık). En dar kapsamlı ölçülmüş aday alındı. Yayımlanan decision-trace taksonomisi PR
+#513'ten beri kendi motorunu yalanlıyordu; üye eklendi ve eksik anti-drift muhafızı **iki
+eksenli** kuruldu — davranışsal eksen tek başına yetmezdi, çünkü **50 golden senaryosunun
+hiçbiri `entry_exit_collision` yaymıyor**. `ENGINE_VERSION` bump'ı ürün sahibince imzalandı
+(2026-08-29) ve golden deltası **bayt düzeyinde** kanıtlandı (46 = 45 taksonomi +
+`contract.execution_key`, beklenmedik sıfır).
+
+**Ölçülüp KAPATILMAYAN yeni kalem:** unified-clock **kompozit** Result'ı bir decision trace
+yayımlıyor ama sözcük dağarcığını hiç bildirmiyor (`IntentKind`'ın altı değerinin sıfırı
+taksonomide; `diagnostics`'te `decision_trace_event_types` **yok**). #532'nin kusuru değil —
+orada yalan bir reklam vardı, burada reklam hiç yok — ama tek-item Result'ının sahip olduğu
+şey kompozitte eksik. **Ürün kararı.**
+
+**Devredilenler:** #532 **kapatılmadı** (insan kararı) · #534 · #703 · #854 · A-08 (#514).
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 136 · `docs/ADIM136_LANDED_KICKOFF.md`.
+
 ## Next: **ürün sahibinin seçeceği üç açık kalemden biri**
 
 1. **ADR-0002 §13.1'in OD-2 satırı + üç bayat docstring** — *"`run_portfolio` marks nothing"*

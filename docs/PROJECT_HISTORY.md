@@ -18854,3 +18854,161 @@ Kural değişmedi: **merge edilmiş ad kazanır, numaralar yeniden atanmaz.**
 tabanlı bir docs PR'ı main'in ADIM 134 kaydını **sessizce düşürecekti**. Rebase edildi
 (**`Update branch` düğmesi KULLANILMADI**), sekiz çakışmanın hepsi **iki tarafı da koruyarak**
 çözüldü, üretilmiş artefaktlar **yeniden üretildi** (elle çözülmedi).
+
+## ADIM 136 — GH #532: BİR TAKSONOMİ İKİ YIL BOYUNCA KENDİ MOTORUNU YALANLADI, VE ONU YAKALAYACAK MUHAFIZ DAVRANIŞSAL DEĞİL KAYNAK-DÜZEYİ OLMAK ZORUNDAYDI
+
+**Taban:** `origin/main` @ `3d94c4c0` (ADIM 135). **Diff:** iki ürün dosyası
+(`execution/output.py` bir üye + yorum, `manifest.py` bump + gerekçe) + bir test dosyasına
+iki yeni case + altı `ENGINE_VERSION` tripwire'ının kasıtlı güncellenmesi + üretilmiş
+artefaktlar. Migration **yok** · **`ENGINE_VERSION` DEĞİŞTİ** →
+`backtest-engine-v18-entry-exit-collision-registered` · golden **yeniden üretildi (46/50
+digest oynadı)** · OpenAPI **değişmedi** (ölçüldü, `--check` exit 0) ·
+`SHARED_ALLOCATION_STATUS` **el değmedi** · `frontend/src`'te **sıfır satır**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Oturum #854 ile açıldı ve ORADA DURDU
+
+Görev OD-2 değil **#854**'tü: ADIM 134 pin taşıma kusurunu koşulur hale getirmiş ve
+düzeltmeyi karara açmıştı. İlk iş imzayı ölçmek oldu —
+`closure_i854_external_import_pin_stability_2026-08-28.md`: **dokuz kutu, dokuzu da BOŞ**,
+dosya `a716f8ad`'den beri **el değmemiş**. Durdurma koşulu uygulandı: kod yazılmadı,
+varsayılan seçilmedi, **#854 kapatılmadı**, `G15`/Karar 4 konusuz bırakılmadı.
+
+**Yan düzeltme:** hem prompt hem `CLAUDE.md` §Next *"sekiz kutu"* diyordu; gerçek **dokuz**
+— sayım Karar 1'in `☐ **Başka:** ___` serbest metin satırını atlamış. Küçük ama bu depoda bir
+sayı bir ön koşuldur, düzeltildi.
+
+### Neden #532 seçildi
+
+Üç ölçülmüş aday vardı (#703 · #532 · #534). #532 en dar kapsamlısı ve **içinde ürün kararı
+yok**; #534'ün 3. maddesi *"açıkça karar ver"* diyor (adjudication riski), #703 daha büyük.
+
+### ASIL BULGU: KUSUR GERÇEKTİ, AMA ISSUE'NUN "BEKLENEN CEVAP"I DEĞİLDİ
+
+Kusur `57c9d0e` tabanlı bir issue'dan geliyordu, yani **bayat varsayıldı ve yeniden ölçüldü**:
+`ast` ile taksonomi ↔ emit siteleri karşılaştırıldı → **tek kaçak, `entry_exit_collision`**
+(başka drift yok), sonra **runtime'da** yeniden üretildi (flat-position entry+exit çarpışması:
+olay `signal_events`'te var, yayımlanan taksonomide **yok**).
+
+Issue *"golden digest'ler diagnostics'i kapsıyor OLABİLİR — varsaymadan kontrol et"* diyordu
+ve beklenen cevabı *"bump gerekmez"* diye çerçeveliyordu. **Kontrol edildi: 50 golden'ın 45'i
+taksonomiyi taşıyor.** Yani tek üye eklemek 45 digest'i oynatıyor — issue'nun tahmininin
+tersi bir dünya. **Ders: bir issue'nun "beklenen cevap" tahmini bir ölçüm değildir.**
+
+Karar ürün sahibine **ölçümle birlikte** soruldu ve **`A` — bump et** olarak imzalandı
+(2026-08-29). Bump'ın gerekçesi *"bir sayı oynadı"* DEĞİL — hiçbiri oynamadı:
+`execution_key` artefaktın **baytlarını** anahtarlar, ve bump olmadan aynı anahtara sahip iki
+koşu farklı diagnostics blokları yayımlardı; saklanan #532-öncesi bir Result kendi anahtarı
+altında bayt-yeniden-üretilebilir olmaktan çıkardı.
+
+### Golden deltası İDDİA EDİLMEDİ, BAYT DÜZEYİNDE KANITLANDI
+
+Digest'ler yeniden üretilmeden **önce** 50 senaryonun tam kanonik payload'ı donduruldu; sonra:
+
+- payload **45 oynadı / 5 aynı**, ve oynayan **45'in her birinde** delta **tam olarak**
+  eklenen üye — başka hiçbir bayt değil (**hiçbir finansal sayı oynamadı**),
+- `contract.execution_key` payload'ı bump'tan **önce** bayt bayt **AYNI** (taksonomi
+  `execution_content`'te yok — ölçüldü),
+- bump'tan **sonra** digest deltası **46 = 45 + `contract.execution_key`**, beklenmedik
+  oynayan **sıfır**, oynaması beklenip oynamayan **sıfır**. Değişmeyen 4'ü ne diagnostics ne
+  execution_key taşıyan `combine_*` senaryoları.
+
+### MUHAFIZ İKİ EKSENLİ, ÇÜNKÜ TEK EKSEN BU KUSURU GÖREMEZ
+
+Mevcut `test_diagnostics_expose_trace_schema_and_unmodelled_classes` sabiti **kendi
+yankısıyla** karşılaştırıyor — self-consistency, drift'e yapı gereği kör.
+
+- **Eksen 1 (davranışsal):** temsili koşu setinde yayılan her `event_type` yayımlanmış
+  olmalı. **AMA ÖLÇÜLDÜ: 50 golden senaryosunun hiçbiri `entry_exit_collision` yaymıyor**
+  (golden 22 tipin yalnız 13'ünü sürüyor) → yalnız golden'a dayanan bir muhafız tam bu kusur
+  için **boşuna yeşil** olurdu. Çarpışma senaryosu bu yüzden **açıkça** sürülüyor.
+- **Eksen 2 (kaynak-düzeyi):** bir emit yüzeyine ulaşan her event-type **literali**
+  yayımlanmış olmalı — fixture gerekmeden. **PR #513 indiği gün kırmızı verecek olan eksen
+  budur.**
+
+Eksen 2'yi yazarken iki kör nokta ölçülerek kapatıldı: `stop_resolution`
+`SignalEventRow(event_type=…)` ile yayılıyor (düz pozisyonel tarama kaçırır) ve
+`position_close`/`position_partial_close` bir **ternary** ile (düz `Constant` taraması
+kaçırır) → tarayıcı argümanın **tüm alt ağacını** yürüyor. İkinci bir taksonomi de var
+(`FILTERED_EVENT_TYPES`, filtre vetoları kendi journal'ına gider); hedef küme ikisinin
+**birleşimi**.
+
+### ÜÇ NEGATİF KONTROL, ÜÇÜ DE AYIRT EDİCİ
+
+- **NC-1** (üyeyi geri al = kusuru yeniden kur) → **iki eksen de kırmızı**, ve asıl ölçüm
+  şu: **aynı koşuda mevcut sekiz test, self-consistency testi dahil, YEŞİL kaldı.** Boşluğun
+  *iddiası* değil **ölçümü**. Ayrıca eksen 1'in kırmızısı yalnız çarpışma senaryosundan
+  gelebilir (golden onu hiç yaymıyor) → o senaryonun **taşıyıcı** olduğunun kanıtı.
+- **NC-2** (hiçbir fixture'ın ulaşmadığı bir dala kayıtsız yeni literal) → **yalnız eksen 2
+  kırmızı, eksen 1 yeşil.** #532'yi yaşatan kusur sınıfı tam olarak budur.
+- **NC-3** (tarayıcının alt-ağaç yürüyüşünü kırp) → **ternary assertion'ında** kırmızı, sayı
+  tabanı (`>= 20`) **geçti** → o assertion gölgelenmiyor, bağımsız taşıyıcı (ADIM 101/135).
+
+### Altı `ENGINE_VERSION` tripwire'ı KASITLI güncellendi, hiçbiri gevşetilmedi
+
+Altı test eski dizeyi literal pinliyordu ve bump'ı **bilerek** kırmızıya çevirdiler — tasarım
+böyle. Beşinin yorumu zaten *"literal yalnız contained iş DIŞINDAN bir bump olduğunda oynar"*
+diyordu; altıncısı (containment gate) modül docstring'inde *"engine version bump'landığı gün
+FAIL etmek için yazıldı"* diyor ve **tam öyle ateşledi**. Değeri taşındı, yük taşıyan
+`ENGINE_VERSION != _C7_ENGINE_VERSION` **el değmedi**, ve karşı-olgusal hale gelen iki yorum
+(*"MOVED AT ADIM 20, AS THE ACT OF LIFTING"* · *"ADR §10.3'ün önerdiği ad, birebir"*) tarihi
+koruyacak şekilde düzeltildi — sevk edilen dizenin artık bir ADR önerisi taşımadığı **yazıldı**.
+
+### DÜRÜST SINIRLAR
+
+- **#854 EL DEĞMEDİ:** imza yok, kod yok, issue **açık**, `G15`/Karar 4 **konusuz
+  bırakılmadı**.
+- **A-08 (#514) el değmedi** → blocker **1**, verdict **BLOCKED**. Bu slice hiçbir kapıyı
+  kapatmaz.
+- **Eksen 2'nin kör noktası yazılı:** event type'ı **değişken** olarak geçen üç site
+  görünmez — ölçüldü, üçü de **zaten yayılmış** bir tipi ileri taşıyor, yeni ad üretmiyor.
+- **Eksen 1 yayımlanan 22 tipin 14'ünü sürüyor**; kalan 8'i (`exit_scheduled`,
+  `filtered_no_entry`, `partial_fill`, `position_partial_close`, `scale_layer_added`,
+  `scale_layer_rejected`, `stack_entry_added`, `stack_entry_rejected`) **hiçbir temsili
+  senaryoda koşmuyor** → o tiplerdeki bir davranışsal drift bu eksene görünmez (eksen 2
+  görür).
+- **A13 partition testi (`…partitions_into_the_scenarios_c9_may_move`) YEŞİL kalır ama
+  cümlesi bu bump'ı kapsamaz:** *"bir bump yalnız `portfolio.*`'ı oynatabilir"* ifadesi
+  **C9 lift'i için** yazılmıştı; bu bump 41 non-portfolio digest'i de oynatıyor ve test
+  grup **boyutlarını** pinlediği için geçiyor. Kayda geçirildi, **test değiştirilmedi**.
+- **BULGU, düzeltilmedi:** `test_oracle_portfolio_containment_gate.py`'nin ikinci bump
+  muhafızındaki *"Today the flag is down"* yorumu **C9'dan beri karşı-olgusal** (bayrak
+  `active_v1`). ADIM 129'un kuralına göre bir **iddia**dır, tarih alıntısı değil — ama bu
+  slice'ın kapsamı değil, **kaydedildi ve dokunulmadı**.
+- **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır); codemap tazelemesi
+  **gerekmedi** (yeni endpoint/tablo/sayfa/job yok, taksonomi codemap'lerde geçmiyor).
+
+Toplanan test **3878 → 3880**.
+
+### KENDİ DÜRÜST SINIRIMI YAZARKEN ÇÜRÜTTÜM — VE ALTINDAN AYRI BİR KALEM ÇIKTI
+
+Eksen 2'nin kör noktasını *"üç değişken site de zaten yayılmış bir tipi ileri taşıyor"* diye
+yazmıştım. **İkisi öyle, üçüncüsü DEĞİL:** `portfolio_projection.py::_signal_events`
+`SignalEventRow(event_type=intent.kind)` yazar ve `IntentKind` **ayrık** bir sözcük
+dağarcığıdır — `entry` · `scale_in` · `exit` · `partial_exit` · `no_op` · `blocked`, ve
+**altısının SIFIRI** decision-trace taksonomisinde var (ölçüldü).
+
+**Aynı kusur DEĞİL, ve sebebi ölçüldü:** kompozit portföy Result'ı
+`decision_trace_event_types`'ı **hiç yayımlamıyor** (`diagnostics` `decision_trace_count`
+taşır, taksonomi listesi taşımaz) → orada hiçbir artefakt kendi izinin yalanladığı bir liste
+**reklam etmiyor**. #532 tam olarak o reklamın yalan olmasıydı.
+
+**Ama kalem gerçek ve C9'dan beri CANLI bir yolda:** unified-clock kompozit Result'ı bir
+decision trace yayımlıyor ve okuyucusuna o izin sözcük dağarcığını **hiçbir yerde
+bildirmiyor**. Tek-item Result'ının sahip olduğu şey (yayımlanmış taksonomi) kompozitte
+**yok**. Bunu doldurmak *"kompozit kendi tipi listesini mi yayımlamalı, yoksa iki artefakt
+bilerek mi ayrı"* sorusudur — bir **ürün kararı**, bir fix slice'ının değil. **Kaydedildi,
+dokunulmadı**, ve eksen 2'nin docstring'i artık bunu doğru anlatıyor (ilk yazım
+karşı-olgusaldı; ADIM 129'un kuralı: yorum tarihi alıntılayabilir, docstring **iddia edemez**).
+
+### İKİ İMZA, TERS YÖNDE GÖRÜNÜYOR — AYRIM YAZILI
+
+ADIM 135'in **Karar 3**'ü (2026-08-28) *"diagnostics-only bir değişiklik bump gerektirir mi"*
+sorusuna **`A` — bump GEREKMEZ** diye imzalandı, gerekçesi *"identity değişmiyor; `diagnostics`
+bir rapordur"*. Bu slice aynı soruyu sordu ve **bump et** imzalandı (2026-08-29). **Çelişki
+yok, ayrım ölçülebilir:** OD-2'nin diagnostics eklemesi `portfolio_projection` tarafındaydı ve
+**hiçbir golden digest'i oynamadı** (50/50 aynı) — artefaktın baytları kıpırdamadı, o yüzden
+`execution_key` hâlâ sadık bir anahtardı. Buradaki üye **45 senaryonun payload'ında** ve
+baytları oynatıyor. **Kural, bir sonraki okuyucu için: eksen "diagnostics mi değil mi" DEĞİL,
+"artefaktın baytları oynuyor mu".** İkisi de ürün sahibinin imzasıdır; ikisi de kendi
+ölçümünün üstünde durur.

@@ -1333,10 +1333,11 @@ def test_no_ledger_field_ships_in_the_manifest_yet_and_the_engine_version_stands
     ).read_text(encoding="utf-8")
 
     # The literal moves only when something OUTSIDE the contained work bumps the version;
-    # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, and
-    # the tripwire is unchanged by that: it still fails the moment the ADIM 20 wiring
-    # shifts the namespace, because it would have to move this line to do so.
-    assert ENGINE_VERSION == "backtest-engine-v18-unified-clock-portfolio"
+    # #550/#551/#552 (percent sizing, the zero-size guard, per-fill commission) did, `C9`
+    # did as the act of lifting, and GH #532 did again to register ``entry_exit_collision``
+    # in the decision trace. The tripwire is unchanged by any of them: it still fails the
+    # moment a namespace shift happens, because it would have to move this line to do so.
+    assert ENGINE_VERSION == "backtest-engine-v18-entry-exit-collision-registered"
     assert "engine_allocation_policy_version" in manifest_src, "A16 requires it (shipped at `C7`)"
     for absent in ("portfolio_ledger_policy_version", LEDGER_POLICY_VERSION):
         assert absent not in manifest_src

@@ -1135,7 +1135,7 @@ def test_no_arbitration_field_ships_in_the_manifest_yet_and_the_engine_version_s
     # CURRENT shipped version; what it pins is that the namespace cannot shift without a
     # human editing this line. The assertion below it has never loosened: the sequential
     # manifest still must not name the portfolio BEHAVIOUR.
-    assert ENGINE_VERSION == "backtest-engine-v18-entry-exit-collision-registered"
+    assert ENGINE_VERSION == "backtest-engine-v18-conflict-provenance-completed"
     # Shipped at `C7` (A16). Parity with this module's own constant is proved in
     # ``tests/unit/test_a16_manifest_policy_parity.py``, which may import both sides.
     for present in ("arbitration_policy_version", "arbitration-policy-v1"):

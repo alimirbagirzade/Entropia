@@ -271,7 +271,41 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
-> DEĞİŞTİ** → `backtest-engine-v18-entry-exit-collision-registered` · **golden YENİDEN
+> DEĞİŞTİ** → `backtest-engine-v18-conflict-provenance-completed` · **golden YENİDEN ÜRETİLDİ
+> (46/50 digest oynadı)** · OpenAPI **değişmedi (ölçüldü)** · `SHARED_ALLOCATION_STATUS` **el
+> değmedi** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 137 (GH #534: provenance
+> bloğunun yayımlamadığı iki conflict kuralı).** Oturum **iki imza kontrolüyle açıldı, ikisi
+> de bloklu**: #854'ün **dokuz kutusu BOŞ** (durduruldu — varsayılan seçilmedi, issue
+> kapatılmadı), A-08 `human-only`. **ASIL BULGU: iki alan aynı sebeple eksik DEĞİLDİ** —
+> `same_candle_entry_exit` yalnız bir olayın `detail`'inde görünüyordu, yani **çakışma
+> olmayan koşu politikayı hiçbir yerde kaydetmiyordu** ve *"olay yok"* iki farklı dünyada
+> birebir aynı okunuyordu (ADIM 136'nın kardeşi: orada liste olayı **yadsıyordu**, burada
+> olayın yokluğu politikayı **siliyor**); stop öncelik sırası ise config `null` iken —
+> **yaygın durum** — görünmezdi, ve ham girdiyi yayımlamak `None` basardı → yayımlanan şey
+> **çözülmüş TOPLAM sıra**, `fills._stop_priority_index`'ten **tek kez** türetilir (ikinci
+> transkripsiyon YOK; `logic_enabled` koşu başına kurulur, ölçüldü). **DELTA İDDİA EDİLMEDİ,
+> ÜYE ÜYE KANITLANDI:** bump öncesi **45 oynadı, 5 bayt bayt aynı** (o 5'in 5'i conflict
+> bloğu taşımıyor), **beklenmedik delta SIFIR**, hiçbir finansal sayı oynamadı; bump sonrası
+> **46 = 45 + `execution_key`**, golden diff'i bağımsız doğruladı (47 = 46 + `engine_version`).
+> **Bump bir karar DEĞİL, ADIM 136'nın imzalı kuralının uygulanması** (*eksen "diagnostics
+> mi" değil, "baytlar oynuyor mu"*); ADIM 135'in ters yönlü imzası **çelişmiyor** — orada
+> 50/50 digest aynıydı. **ÜÇ NC, üçü ayırt edici, üçünde de önceden var olan
+> `test_backtest_engine.py` YEŞİL** = boşluğun ölçümü; **NC-3 (2 düşen) ile NC-2 (3 düşen)
+> farkı anti-drift assertion'ının GÖLGELENMEDİĞİNİ kanıtladı** (NC-3'ün sabit dizesi
+> tesadüfen kanonik sırayla aynı). **Kendi varsayımlarım ölçümle iki kez çürüdü** (varsayılan
+> `use_intrabar_data_if_available`, olaylar `signal_events`) — düzeltilen assertion'lar değil
+> **varsayımlardı**. **DÜRÜST SINIR: #534 KAPATILMADI** — md. 3 (ayrı sayaç) **adjudication**
+> olduğu için açıldı ama **VERİLMEDİ** (`closure_i534_…_2026-08-29.md`, **dört kutu, dördü
+> BOŞ**); yan ölçüm kararın eksenini değiştirdi: karar izi kesilmiyor → iki bastırma sınıfı
+> da **bugün izden ayrıştırılabilir**, kayıp *toplam*, bilgi değil · #854/#703 **el değmedi** ·
+> `stop_priority_resolved` **koşu düzeyinde** tek sıradır · frontend kapıları **KOŞULMADI**.
+> Toplanan test **3880 → 3886**, coverage **%94.02** (tam suite yerelde koştu).
+> **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 137 · `docs/ADIM137_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
+> DEĞİŞTİ** → (o gün) `backtest-engine-v18-entry-exit-collision-registered` · **golden YENİDEN
 > ÜRETİLDİ (46/50 digest oynadı)** · OpenAPI **değişmedi** (ölçüldü) ·
 > `SHARED_ALLOCATION_STATUS` **el değmedi** · `frontend/src` **sıfır satır**. **Son dalga —
 > ADIM 136 (GH #532: `entry_exit_collision` yayımlanan decision-trace taksonomisine

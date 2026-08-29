@@ -19012,3 +19012,138 @@ yok, ayrım ölçülebilir:** OD-2'nin diagnostics eklemesi `portfolio_projectio
 baytları oynatıyor. **Kural, bir sonraki okuyucu için: eksen "diagnostics mi değil mi" DEĞİL,
 "artefaktın baytları oynuyor mu".** İkisi de ürün sahibinin imzasıdır; ikisi de kendi
 ölçümünün üstünde durur.
+
+---
+
+## ADIM 137 — GH #534: BİR PROVENANCE BLOĞU İKİ KURALI YAYIMLAMIYORDU, VE İKİSİNİN GİZLENDİĞİ ŞEKİL AYRIYDI
+
+**Taban:** `de3d8816` (ADIM 136, PR #874). **Migration YOK.** **`ENGINE_VERSION` DEĞİŞTİ** →
+`backtest-engine-v18-conflict-provenance-completed`. **Golden YENİDEN ÜRETİLDİ (46/50 digest
+oynadı).** OpenAPI **değişmedi (ölçüldü)**. `SHARED_ALLOCATION_STATUS` **el değmedi**.
+`frontend/src`'te **sıfır satır**. **A-08 (#514) AÇIK, el değmedi → blocker DEĞİŞMEDİ (1),
+RC verdict BLOCKED.**
+
+### OTURUM İKİ İMZA KONTROLÜYLE AÇILDI, İKİSİ DE BLOKLU ÇIKTI
+
+Sıradaki kalem koddan önce imzaydı. Ölçüldü:
+
+- **#854** — `closure_i854_external_import_pin_stability_2026-08-28.md`'de **dokuz kutunun
+  dokuzu da BOŞ** (ADIM 136'nın düzelttiği sayım doğrulandı: Karar 1'in `☐ **Başka:**`
+  serbest metin satırı dahil). Durdurma koşulu uygulandı: **varsayılan seçilmedi, #854
+  kapatılmadı, `G15`/Karar 4 konusuz bırakılmadı, dört çağrı yerine dokunulmadı.**
+- **A-08 (#514)** — `OPEN` + `human-only` etiketi. Ajan ne açar ne kapatır.
+
+İkisi de bloklu olduğu için ürün sahibinin ölçülmüş kod adaylarından **#534** alındı.
+
+### ASIL BULGU: İKİ EKSİK ALAN, İKİ FARKLI GİZLENME ŞEKLİ — VE BİRİ DİĞERİNDEN DAHA SİNSİ
+
+Provenance bloğu (`execution/output.py`) her conflict alanını yayımlıyordu, **ikisi hariç**.
+Dondurulmuş 50 golden payload'ından ölçüldü (ayrı bir koşu değil, aynı veri):
+
+| alan | 50 senaryonun kaçında |
+|---|---|
+| `stop_exit_conflict` (kardeş) | **45** |
+| `stop_trigger_requirement` (kardeş) | **45** |
+| `stop_conflict_resolution` (kardeş) | **45** |
+| `overlapping_signal_policy` (kardeş) | **45** |
+| **`same_candle_entry_exit`** | **0** |
+| **`stop_priority*`** | **0** |
+
+**Ama ikisi aynı sebeple eksik değildi ve düzeltmeleri de aynı değil:**
+
+1. `same_candle_entry_exit` **yalnız bir olayın içinde** görülebiliyordu
+   (`entry_exit_collision` → `detail["policy"]`). Yani **çakışma olmayan bir koşu, kendisini
+   yöneten politikayı hiçbir yerde kaydetmiyordu** — ve *"olay yok"* cümlesi, politikanın
+   hiçbir şeyi bastırmadığı dünyada da hiç danışılmadığı dünyada da **birebir aynı okunur**.
+   Bu, ADIM 136'nın *"iki yıl boyunca kendi motorunu yalanlayan taksonomi"*sinin kardeşi:
+   orada yayımlanan liste olayı **yadsıyordu**, burada olayın yokluğu politikayı **siliyor**.
+2. Stop öncelik sırası **config `null` bırakıldığında** görünmezdi — ve `null` **yaygın
+   durumdur**. Ham girdiyi yayımlamak `None` basardı, yani okuyucuya *hiçbir şey*
+   söylemezdi. Bu yüzden yayımlanan şey **`_stop_priority_index`'in kurduğu ÇÖZÜLMÜŞ TOPLAM
+   sıra**: kanonik §9.2 fallback'i tam olarak **onu yönettiği anda** görünür oluyor.
+
+**İkinci transkripsiyon YAZILMADI (ADIM 125 kuralı):** sıra motorun her barda danıştığı
+**aynı fonksiyondan** alınır. `logic_enabled` `engine.py:1206`'da **koşu başına bir kez**
+kurulduğu için (ölçüldü: `:969` ile `:1206` arasında fonksiyon sınırı yok) tek bir sıra tüm
+koşuyu yönetir ve yayımlanması güvenlidir.
+
+### DELTA İDDİA EDİLMEDİ, ÜYE ÜYE KANITLANDI
+
+Digest bir payload'ın *oynadığını* söyler, **NE'nin** oynadığını söyleyemez. O yüzden 50
+senaryonun **kanonik projeksiyonları** donduruldu ve yürünerek karşılaştırıldı:
+
+- **bump ÖNCESİ:** **45 oynadı, 5 bayt bayt aynı**, ve **beklenmedik delta SIFIR** — her fark
+  tam olarak eklenen iki üyeden birinin *eklenmesi*. Değişmeyen **5'in 5'i** de conflict
+  bloğu **taşımayan** senaryolar. **Hiçbir finansal sayı oynamadı.**
+- **bump SONRASI:** **46 = 45 + `contract.execution_key`**, beklenmedik **sıfır**. Golden
+  dosyasının git diff'i bunu bağımsız doğruladı: **47 satır = 46 digest + `engine_version`**.
+
+### BUMP BİR KARAR DEĞİL, İMZALI BİR KURALIN UYGULANMASIYDI
+
+ADIM 136 bu sınıfın ayrımını **yazılı** bırakmıştı: *eksen "diagnostics mi değil mi" DEĞİL,
+"artefaktın baytları oynuyor mu"*. ADIM 135'in Karar 3'ü (**bump gerekmez**) OD-2 için
+doğruydu çünkü orada **50/50 digest aynı kalmıştı**; burada 45 payload oynuyor →
+**bump**. İki imza çelişmiyor, ikisi de kendi ölçümünün üstünde duruyor. Gerekçe
+`manifest.py`'de kaynağa yazıldı; #532 paragrafı **silinmedi**.
+
+Altı `ENGINE_VERSION` tripwire'ı **kasıtlı** güncellendi (eski literal kalan: **0**).
+
+### ÜÇ NEGATİF KONTROL, ÜÇÜ DE AYIRT EDİCİ — VE NC-3 BİR GÖLGE OLMADIĞINI KANITLADI
+
+Üçünde de **önceden var olan `test_backtest_engine.py` YEŞİL kaldı** = boşluğun *iddiası*
+değil **ölçümü**.
+
+| NC | mutasyon | düşen | önceden var olan suite |
+|---|---|---|---|
+| NC-1 | `same_candle_entry_exit`'i yeniden yayımlama | 3 | **YEŞİL** |
+| NC-2 | çözülmüş sıra yerine **ham nullable girdi** | 3 (`null_config…` dahil) | **YEŞİL** |
+| NC-3 | sırayı `output.py` tarafında **yeniden yaz** (drift) | **2** | **YEŞİL** |
+
+**NC-3'ün 2'si, NC-2'nin 3'ü — ve fark öğretici:** NC-3'ün sabit dizesi tesadüfen kanonik
+sırayla aynı (`("percentage", "trailing", "absolute")`), o yüzden
+`test_null_config_publishes_the_canonical_order_not_none` **YEŞİL kalıyor**. O kusuru **yalnız
+anti-drift testi** görüyor → assertion gölgelenmiş değil, kendi eksenini taşıyor.
+
+### KENDİ VARSAYIMLARIM ÖLÇÜMLE İKİ KEZ ÇÜRÜDÜ
+
+İlk testler kırmızı verdi ve **ikisi de benim varsayımımdı**: `same_candle_entry_exit`'in
+varsayılanını `"suppress_entry"` sandım — şema varsayılanı **`"use_intrabar_data_if_available"`**
+(`config.py:1092`); ve `EngineOutput.decision_events` diye bir alan yok — olaylar
+**`signal_events`** içinde. **Düzeltilen assertion'lar değil, varsayımlardı**; kaynak baştan
+doğruydu.
+
+### MD. 3 KARAR VERİLMEDİ — ADJUDICATION, VE NEDEN OLDUĞU ÖLÇÜLDÜ
+
+#534 md. 3 same-candle bastırmaları için ayrı bir sayaç *"açıkça karar ver"* diyor.
+Ölçüldü: **üç yol tek sayaca yazıyor** (`engine.py:2065` same-candle · `:2730` plan modu
+direction-restriction · `:2750` breakout-proxy aynısı — **issue'nun `:2427`/`:2447`
+numaraları BAYAT**, mekanizma ADIM 71'in `_LedgerEffect` describe/book ayrımına taşındı;
+**iddia bayatlamadı**). Seçeneklerden biri **sevk edilmiş bir sayının anlamını değiştirir** →
+ADIM 42 emsaliyle **adjudication**. Karar **açıldı, VERİLMEDİ**:
+`docs/decisions/closure_i534_same_candle_suppression_counter_2026-08-29.md`, **dört kutu,
+dördü de BOŞ**.
+
+**Yan ölçüm, kararın eksenini değiştirdi:** karar izinde **kesme yok** ve
+`entry_exit_collision` ADIM 136'da yayımlanan taksonomiye kaydedildi → **iki bastırma sınıfı
+da bugün izden ayrıştırılabiliyor**. Yani md. 3 bir **doğruluk** boşluğu değil; kaybolan şey
+*toplam*, bilgi değil.
+
+### DÜRÜST SINIR
+
+- **#534 KAPATILMADI** — md. 1/2/4 indi, **md. 3 imzasız**.
+- **#854 EL DEĞMEDİ:** dokuz kutu boş, kod yok, issue açık.
+- **A-08 (#514) el değmedi**, blocker **DEĞİŞMEDİ (1)**, verdict **BLOCKED**.
+- `stop_priority_resolved` **koşu düzeyinde** tek sıradır; `logic_enabled` koşu başına
+  kurulduğu için bu doğrudur, ama bar başına değişen bir gelecekteki tasarımda **yeniden
+  ölçülmelidir**.
+- §Ölçüm 2'nin *"iz kesilmiyor"* bulgusu `output.py`/`state.py` üzerinde arandı; **persist
+  katmanındaki** olası bir limit bu slice'ta **ölçülmedi**.
+- **frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- **Tam backend suite YERELDE koştu** (Postgres ayakta): tek düşen
+  `test_repository_facts_guard` idi — **üretilmiş olguların bayatlığı**, ADIM 60'ın dersi;
+  tazelendikten sonra yeşil. Coverage **%94.02** (kapı ≥90). Toplanan test **3880 → 3886**
+  (369 dosya). **Sarmalayıcının exit'i `tail'in oldu** — gerçek değer log'a ayrı yazıldı,
+  deponun kendi uyarısının birinci elden tekrarı.
+- A13 partition testi grup **boyutlarını** pinler, değerleri değil → bu bump 41
+  non-portfolio digest'i de oynattı ve test **yeşil kaldı** (ADIM 136'nın kaydettiği aynı
+  şekil; **değiştirilmedi**).

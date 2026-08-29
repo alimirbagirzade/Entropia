@@ -453,10 +453,23 @@ def build_diagnostics(ctx: _RunConfig, led: _Ledger, warnings: list[str]) -> dic
         "opposite_signal_closes": led.opposite_signal_closes,
         "conflict_signals_ignored": led.conflict_signals_ignored,
         "stop_exit_conflict": ctx.stop_exit_conflict,
+        # #534: the flat-position Entry+Exit collision policy. Kept beside its Stop+Exit
+        # sibling because they are two DIFFERENT rules a reader routinely conflates. It is
+        # published unconditionally and on purpose: its only other trace is a per-event
+        # ``entry_exit_collision`` detail, so a run where no collision fired carried no
+        # record of the governing policy at all -- and "no event" reads identically
+        # whether the policy suppressed nothing or was never consulted.
+        "same_candle_entry_exit": ctx.same_candle_entry_exit,
         "stop_exit_collisions": led.stop_exit_collisions,
         "logic_stop_blocks": len(ctx.stop_evals),
         "stop_trigger_requirement": ctx.stop_trigger_requirement,
         "stop_conflict_resolution": ctx.stop_conflict_resolution,
+        # #534: the RESOLVED total stop precedence order, not the nullable config input.
+        # A ``null`` ``stop_priority_order`` is the common case, and reporting the raw
+        # input would publish ``None`` for it -- telling the reader nothing about which
+        # rule actually won. This list is what ``_stop_priority_index`` built, so the
+        # canonical Master Ref 9.2 fallback is visible exactly when it governed.
+        "stop_priority_resolved": list(ctx.stop_priority_resolved),
         "logic_stop_triggers": led.logic_stop_triggers,
         # #549: how many stop exits filled at the bar OPEN because the bar gapped past the
         # level. Reported beside the stop policy because it explains a result the policy

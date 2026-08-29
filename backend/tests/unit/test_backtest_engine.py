@@ -133,6 +133,7 @@ def _config(
     max_size: str | None = None,
     stop_exit_conflict: str | None = None,
     same_candle_entry_exit: str | None = None,
+    stop_priority_order: list[str] | None = None,
     entry_timing: str = "current_candle_close",
     exit_timing: str = "current_candle_close",
 ) -> StrategyConfig:
@@ -184,6 +185,10 @@ def _config(
     protection: dict[str, Any] = (
         {"percentage_stop": {"enabled": True, "loss_percentage": loss_pct}} if with_stop else {}
     )
+    # #534: optional so every existing caller stays byte-identical -- the resolved stop
+    # precedence order is only interesting to the tests that set it explicitly.
+    if stop_priority_order is not None:
+        protection["stop_priority_order"] = stop_priority_order
     return StrategyConfig.model_validate(
         {
             "strategy_root_id": "strat_root_1",

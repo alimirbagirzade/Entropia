@@ -433,6 +433,14 @@ class _RunConfig:
     stop_trigger_requirement: str = ""
     stop_conflict_resolution: str = ""
     stop_exit_conflict: str = ""
+    # #534: the two conflict policies the sibling fields above already carry provenance
+    # for. ``same_candle_entry_exit`` was observable ONLY inside an ``entry_exit_collision``
+    # event's ``detail["policy"]``, so a run where no collision occurred recorded the
+    # governing policy NOWHERE. ``stop_priority_resolved`` holds the RESOLVED total order
+    # ``fills._stop_priority_index`` actually built -- not the nullable config input --
+    # so a ``None`` config still publishes the canonical Master Ref 9.2 order that governed.
+    same_candle_entry_exit: str = ""
+    stop_priority_resolved: tuple[str, ...] = ()
     trailing_lock_in_active: bool = False
     scaling_enabled: bool = False
     scale_max_total: Decimal | None = None

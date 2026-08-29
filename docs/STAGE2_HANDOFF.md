@@ -9978,3 +9978,53 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 136 · `docs/ADIM136_LANDED_KICKOFF.md`.
 
 **Ajan bu üçünden hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
 `docs/ADIM135_LANDED_KICKOFF.md` sonunda.
+
+## Stage 137 — GH #534: provenance bloğunun yayımlamadığı iki conflict kuralı landed
+
+**Migration YOK.** **`ENGINE_VERSION` DEĞİŞTİ** →
+`backtest-engine-v18-conflict-provenance-completed`. **Golden yeniden üretildi: 46/50 digest
+oynadı** (47 satır = 46 digest + `engine_version`). OpenAPI **değişmedi (ölçüldü: iki yeni
+anahtar da 0 kez; kardeşi `stop_exit_conflict` de 0 → diagnostics bloğu şemada hiç
+yayımlanmıyor)**. `SHARED_ALLOCATION_STATUS` el değmedi. `frontend/src`'te sıfır satır.
+
+**Oturum iki imza kontrolüyle açıldı, ikisi de bloklu:** #854'ün dokuz kutusu BOŞ
+(durduruldu), A-08 `human-only`. Ürün sahibinin ölçülmüş adaylarından #534 alındı.
+
+**Sevk edilen (md. 1/2/4):** `_RunConfig.same_candle_entry_exit` +
+`_RunConfig.stop_priority_resolved`; provenance bloğu ikisini de yayımlıyor. Sıra
+`fills._stop_priority_index`'ten **tek kez** türetilir (ikinci transkripsiyon YOK) ve
+**çözülmüş toplam** sıradır — ham nullable girdi `null` yaygın durumda `None` basardı.
+
+**Delta iddia edilmedi, üye üye kanıtlandı:** bump öncesi 45 payload oynadı, 5 bayt bayt
+aynı (o 5'in 5'i conflict bloğu taşımıyor), **beklenmedik delta SIFIR** — her fark tam
+olarak eklenen üyenin eklenmesi, hiçbir finansal sayı oynamadı. Bump sonrası **46 = 45 +
+`contract.execution_key`**. Bump bir karar değil, ADIM 136'nın **imzalı kuralının**
+uygulanması (*eksen "diagnostics mi" değil, "baytlar oynuyor mu"*). Altı tripwire kasıtlı
+güncellendi, eski literal kalan **0**.
+
+**Üç negatif kontrol, üçü ayırt edici**, üçünde de önceden var olan `test_backtest_engine.py`
+**YEŞİL** = boşluğun ölçümü. NC-3 (2 düşen) ile NC-2 (3 düşen) farkı öğretici: NC-3'ün sabit
+dizesi tesadüfen kanonik sırayla aynı, o yüzden `null_config` testi yeşil kalıyor → anti-drift
+assertion'ı **gölgelenmiş değil**.
+
+**md. 3 KARARA BAĞLANMADI (adjudication):**
+`docs/decisions/closure_i534_same_candle_suppression_counter_2026-08-29.md`, **dört kutu,
+dördü BOŞ**. Üç yol tek `suppressed_entries`'e yazıyor (issue'nun satır numaraları bayat,
+iddiası değil). Yan ölçüm: karar izi kesilmiyor → iki sınıf da **bugün izden ayrıştırılabilir**,
+yani kayıp *toplam*, bilgi değil.
+
+**Devredilenler:** #534 **kapatılmadı** (md. 3 imzasız) · #854 · #703 · A-08 (#514).
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 137 · `docs/ADIM137_LANDED_KICKOFF.md`.
+
+## Next: **yine İMZA — iki açık karar kutusu**
+
+1. **#534 md. 3** — same-candle bastırmaları kendi sayacını hak ediyor mu? **Dört kutu, dördü
+   boş.** (b)/(c) golden'ı oynatır ve **bump** ister; (c) ayrıca sevk edilmiş bir sayının
+   anlamını değiştirir.
+2. **#854** — pin taşıma kusuru, **dokuz kutu, dokuzu boş**. Düzeltme dört çağrı yerini
+   birden değiştirir.
+3. **A-08 (#514)** — **tek blocker**, ayrı hat, insan denetimi ister.
+
+**Kod kalemi istenirse ölçülmüş aday: #703** (`native_asset_id` üretimde hiç yazılmıyor).
+**Ajan imza kutularını kendi başına dolduramaz.** Paste-ready resume prompt:
+`docs/ADIM137_LANDED_KICKOFF.md` sonunda.

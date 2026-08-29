@@ -983,7 +983,7 @@ def test_no_intent_field_ships_in_the_manifest_yet_and_the_engine_version_stands
     # CURRENT shipped version; what it pins is that the namespace cannot shift without a
     # human editing this line. The assertion below it has never loosened: the sequential
     # manifest still must not name the portfolio BEHAVIOUR.
-    assert ENGINE_VERSION == "backtest-engine-v18-entry-exit-collision-registered"
+    assert ENGINE_VERSION == "backtest-engine-v18-conflict-provenance-completed"
     assert "arbitration_policy_version" in manifest_src, "A16 requires it (shipped at `C7`)"
     for absent in ("intent_contract_version", "item-intent-v1"):
         assert absent not in manifest_src

@@ -99,6 +99,7 @@ from entropia.domain.backtest.execution.fills import (
     _limit_price,
     _pct_stop_level,
     _resolve_stop,
+    _stop_priority_index,
     _StopOutcome,
     _Tick,
     _TickCursor,
@@ -1204,6 +1205,14 @@ def _build_stepper(
     stop_evals: list[BlockEvaluator] = build_evaluators(stop_specs)
     stop_pairs = list(zip(stop_specs, stop_evals, strict=True))
     logic_enabled = [f"logic:{spec.block_id}" for spec in stop_specs]
+    # #534: the RESOLVED total precedence order, taken from the SAME function
+    # ``_resolve_stop`` consults on every bar -- a second transcription here would drift
+    # away from the order that actually governs. ``logic_enabled`` is built once per RUN
+    # (not per bar), so this single order governs the whole run and is safe to publish.
+    _stop_priority = _stop_priority_index(
+        _protection.stop_priority_order if _protection is not None else None, logic_enabled
+    )
+    stop_priority_resolved = tuple(sorted(_stop_priority, key=_stop_priority.__getitem__))
 
     # S5c Logic-Based SCALING evaluators — INDEPENDENT of the entry plan for the same reason
     # the stop evaluators are: a strategy may scale on a different indicator than it enters
@@ -1307,6 +1316,8 @@ def _build_stepper(
         stop_trigger_requirement=stop_trigger_requirement,
         stop_conflict_resolution=stop_conflict_resolution,
         stop_exit_conflict=stop_exit_conflict,
+        same_candle_entry_exit=same_candle_entry_exit,
+        stop_priority_resolved=stop_priority_resolved,
         trailing_lock_in_active=trailing_lock_in_active,
         scaling_enabled=scaling_enabled,
         scale_max_total=scale_max_total,

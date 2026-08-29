@@ -182,7 +182,23 @@ from entropia.shared.manifest import manifest_hash
 # non-``portfolio.*`` digests; A13's partition test pins group sizes, not values, so it
 # stays green — a reader comparing this regeneration against A13's "only portfolio.* may
 # move" sentence should read that sentence as scoped to the lift it was written for.
-ENGINE_VERSION = "backtest-engine-v18-entry-exit-collision-registered"
+#
+# GH #534 bumps it again, for the same reason and by the same measurement -- the axis is
+# NOT "is this only diagnostics" but "do the artifact's bytes move". The provenance block
+# published every conflict policy except two: ``same_candle_entry_exit`` (observable only
+# inside an ``entry_exit_collision`` event, so a run with no collision recorded the policy
+# nowhere) and the stop precedence order (invisible whenever the config left it null).
+# Both are now published. Measured BEFORE the bump, member by member rather than by
+# digest: 45 of the 50 golden payloads move, each by EXACTLY the two added members and
+# nothing else; the 5 that do not move are exactly the 5 that carry no conflict block; the
+# ``contract.execution_key`` payload is byte-identical without the bump, so the post-bump
+# delta is 46 = 45 + ``execution_key``. No financial number moved -- every difference is
+# an added key. That is precisely why the bump is still required: ``execution_key`` keys
+# the ARTIFACT's bytes, so without a shift a stored pre-#534 Result and a new one would
+# share a key while publishing different diagnostics blocks. This is the same class the
+# ADIM 135 signature ruled the OTHER way, and the two do not conflict: OD-2's diagnostics
+# addition moved zero golden digests, so its key stayed faithful without a bump.
+ENGINE_VERSION = "backtest-engine-v18-conflict-provenance-completed"
 
 # K1 (Master Ref Modul 6 §8: "komisyon dagilimi engine manifestinde acik olmalidir"),
 # satisfied by Karar 1's mandatory rider (GH #552, signed 2026-08-25). Until now the

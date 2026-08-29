@@ -399,7 +399,7 @@ def test_the_containment_flag_and_engine_version_are_both_lifted() -> None:
     # docstring says this test exists to fail "the day someone lifts the flag, BUMPS THE
     # ENGINE VERSION or closes the last gap" — it did, a human re-read §14, and the pin was
     # moved deliberately rather than loosened.
-    assert ENGINE_VERSION == "backtest-engine-v18-entry-exit-collision-registered"
+    assert ENGINE_VERSION == "backtest-engine-v18-conflict-provenance-completed"
     # A15's real invariant, untouched by any later bump: whatever the string becomes, the
     # lifted world may never reuse `C7`'s contained-era namespace.
     assert ENGINE_VERSION != _C7_ENGINE_VERSION

@@ -66,6 +66,10 @@ DECISION_TRACE_EVENT_TYPES = (
     "position_close",  # a position closed (trade linkage + exit reason + realized pnl)
     "stop_resolution",  # multi-rule / logic stop resolution (F-08 combination engine)
     "stop_exit_collision",  # same-bar stop+exit tie-break decision (§5.9)
+    # §5.9 flat-position entry+exit tie-break: while FLAT, an entry and an explicit
+    # exit are close-confirmed by the same bar and OHLCV carries no ordering between
+    # them; the traced decision names the governing policy and its resolution (PR #513).
+    "entry_exit_collision",
     "funding_charge",  # a funding rate applied to the open position (F-11, doc 12 §8.4)
     # F-07i (C): a limit order filled PARTIALLY — the fraction computed from the intrabar
     # print path's trade sizes vs the intended size; the detail carries the governing

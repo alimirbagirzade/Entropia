@@ -10,6 +10,8 @@ same inputs (a stand-in for the same manifest -> deterministic trace acceptance)
 
 from __future__ import annotations
 
+import ast
+import pathlib
 from collections.abc import Iterator
 from decimal import Decimal
 from typing import Any
@@ -23,6 +25,7 @@ from entropia.domain.backtest.engine import (
     run_engine,
 )
 from entropia.domain.backtest.execution.portfolio import combine_item_runs
+from entropia.domain.backtest.execution.state import FILTERED_EVENT_TYPES
 from entropia.domain.backtest.indicators import (
     IndicatorPlan,
     IndicatorSpec,
@@ -30,6 +33,14 @@ from entropia.domain.backtest.indicators import (
 )
 from entropia.domain.strategy.config import StrategyConfig
 from tests.unit.engine_signal_plan import sma_entry_plan
+from tests.unit.oracles.harness import bar as oracle_bar
+from tests.unit.oracles.harness import (
+    entry_and_exit_plan,
+    flat_run,
+    oracle_config,
+    run_oracle,
+)
+from tests.unit.test_backtest_engine_golden import _scenarios as golden_scenarios
 
 
 def _config(
@@ -290,3 +301,129 @@ def test_combined_events_bind_the_executing_object_revision() -> None:
         assert event.detail["item_id"] == "mbi_1"
         assert event.detail["root_id"] == "wo_a"
         assert event.detail["revision_id"] == "rev_a"
+
+
+# --------------------------------------------------------------------------------------
+# F-1 (GH #532) — the ANTI-DRIFT guard the suite was missing.
+#
+# ``test_diagnostics_expose_trace_schema_and_unmodelled_classes`` compares the published
+# constant to its own echo in the diagnostics block. That is self-consistency: the constant
+# and the engine's real behaviour can drift apart without a single assertion noticing, and
+# they DID — ``entry_exit_collision`` was emitted by PR #513 and never registered, so every
+# Result advertised a taxonomy that its own trace contradicted.
+#
+# The gap is closed on TWO axes because neither one alone can see it:
+#
+#   * behavioural — what a representative replay actually emits must be published. This
+#     axis proves the runtime contract, but it is blind to any event type no fixture
+#     reaches, and MEASURED: the 50-scenario golden matrix never produces an
+#     ``entry_exit_collision``, so a behavioural-only guard would have stayed green
+#     through the whole life of this defect. The collision scenario is therefore driven
+#     explicitly here rather than left to whatever the matrix happens to cover.
+#   * source-level — every event-type LITERAL that reaches an emit surface must be
+#     published, whether or not a test ever drives that branch. This is the axis that
+#     would have failed on the day PR #513 landed.
+# --------------------------------------------------------------------------------------
+
+_TAXONOMY = frozenset(DECISION_TRACE_EVENT_TYPES) | FILTERED_EVENT_TYPES
+
+
+def _representative_outputs() -> list[EngineOutput]:
+    """The golden matrix plus the one decision the matrix does not exercise.
+
+    The golden scenarios are reused rather than duplicated: they are the maintained
+    representative set, so a scenario added there widens this guard for free."""
+    outputs = [
+        result for _name, build in golden_scenarios() if isinstance(result := build(), EngineOutput)
+    ]
+    # §5.9 flat-position entry+exit tie-break — absent from the golden matrix (measured).
+    outputs.append(
+        run_oracle(
+            oracle_config(direction="long"),
+            [
+                *flat_run(),
+                oracle_bar(21, "100", "102", "100", "102"),
+                oracle_bar(22, "102", "102", "99", "99"),
+                oracle_bar(23, "98", "98", "98", "98"),
+            ],
+            plan=entry_and_exit_plan(),
+        )
+    )
+    return outputs
+
+
+def test_every_emitted_event_type_is_published_in_the_taxonomy() -> None:
+    """Axis 1 (behavioural): a replay may not emit a decision the artifact never names."""
+    outputs = _representative_outputs()
+    signal_types = {event.event_type for out in outputs for event in out.signal_events}
+    filtered_types = {event.event_type for out in outputs for event in out.filtered_events}
+
+    unpublished = sorted((signal_types | filtered_types) - _TAXONOMY)
+    assert not unpublished, (
+        f"the engine emits {unpublished} but the published taxonomy does not name them. "
+        "Register the event in DECISION_TRACE_EVENT_TYPES (or FILTERED_EVENT_TYPES for a "
+        "filter veto) — do NOT narrow this assertion."
+    )
+    # A veto is routed to its own journal and never conflated with a signal (I-02).
+    assert filtered_types <= FILTERED_EVENT_TYPES
+    assert signal_types <= frozenset(DECISION_TRACE_EVENT_TYPES)
+
+    # Vacuity guards: an empty or collision-free observation would satisfy every subset
+    # assertion above for free. 14 distinct types were measured at the time of writing
+    # (13 from the golden matrix + the collision driven here); the floor may only rise.
+    assert "entry_exit_collision" in signal_types
+    assert len(signal_types) >= 14, sorted(signal_types)
+
+
+def _literal_event_types_in_source() -> dict[str, list[str]]:
+    """Every event-type STRING LITERAL that reaches an emit surface, by source location.
+
+    Honest boundary: an event type passed as a VARIABLE is invisible here — measured, the
+    three such sites forward an already-emitted type rather than naming a new one
+    (``booking.emit_event``'s own parameter, ``portfolio_projection``'s ``intent.kind``
+    and ``portfolio``'s pass-through of an item's own event). A ternary IS seen: the
+    close/partial-close pair is written that way, so the whole argument subtree is walked
+    instead of only a bare constant."""
+    package = pathlib.Path(run_engine.__code__.co_filename).parent
+    # (callee, index of the event_type positional)
+    emit_calls = {"_emit": 0, "emit_event": 1}
+    found: dict[str, list[str]] = {}
+
+    for path in sorted(package.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None) or ""
+            subtrees: list[ast.AST] = []
+            if name in emit_calls:
+                index = emit_calls[name]
+                if len(node.args) > index:
+                    subtrees.append(node.args[index])
+            if name == "SignalEventRow":
+                subtrees += [kw.value for kw in node.keywords if kw.arg == "event_type"]
+            for subtree in subtrees:
+                for child in ast.walk(subtree):
+                    if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                        found.setdefault(child.value, []).append(f"{path.name}:{child.lineno}")
+    return found
+
+
+def test_every_event_type_literal_in_the_engine_source_is_published() -> None:
+    """Axis 2 (source-level): registering a new event type is not optional.
+
+    This is the guard that fails the moment an event is emitted without being named,
+    with no fixture required — the failure mode that let GH #532 live undetected."""
+    found = _literal_event_types_in_source()
+
+    unpublished = sorted(set(found) - _TAXONOMY)
+    assert not unpublished, (
+        "these event-type literals are emitted by the engine source but are absent from "
+        f"the published taxonomy: {[(name, found[name]) for name in unpublished]}"
+    )
+    # Vacuity guard: a scanner that silently stops matching would pass the subset check
+    # with an empty set. 20 literals were measured at the time of writing.
+    assert len(found) >= 20, sorted(found)
+    assert "entry_exit_collision" in found
+    # The ternary-written pair proves the walk descends into the argument subtree.
+    assert {"position_close", "position_partial_close"} <= set(found)

@@ -604,7 +604,7 @@ def test_no_portfolio_manifest_field_ships_in_the_shipped_manifest_yet() -> None
     ):
         assert field in shipped, f"{field!r} left the shipped manifest; A16 requires it"
     # The literal tracks whatever the CURRENT shipped version is; #550/#551/#552 moved it,
-    # and `C7` moved it again for the A16 record change. What the assertion pins is that
-    # lifting containment cannot happen without editing this line, not the particular
-    # string.
-    assert 'ENGINE_VERSION = "backtest-engine-v18-unified-clock-portfolio"' in shipped
+    # `C7` moved it again for the A16 record change, `C9` moved it as the act of lifting,
+    # and GH #532 moved it to register ``entry_exit_collision``. What the assertion pins is
+    # that the namespace cannot shift without editing this line, not the particular string.
+    assert 'ENGINE_VERSION = "backtest-engine-v18-entry-exit-collision-registered"' in shipped

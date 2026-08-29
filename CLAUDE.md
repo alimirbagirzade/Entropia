@@ -302,7 +302,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
-> **DEĞİŞMEDİ** (`backtest-engine-v18-unified-clock-portfolio` — Karar 3 = `A`) · OpenAPI
+> **DEĞİŞMEDİ** (o gün `backtest-engine-v18-unified-clock-portfolio` — Karar 3 = `A`) · OpenAPI
 > **değişmedi** · golden **EL DEĞMEDİ ve OYNAMADI** (50 digest bayt bayt aynı) ·
 > `SHARED_ALLOCATION_STATUS` **el değmedi** · `capability.py` **el değmedi** ·
 > `MARK_STALE_AFTER_MS` **el değmedi** (Karar 2 = `A`) · importer allowlist'i **el değmedi** ·
@@ -395,7 +395,7 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
-> DEĞİŞTİ** → `backtest-engine-v18-unified-clock-portfolio` (A15'in İKİNCİ bump'ı) ·
+> DEĞİŞTİ** → (o gün) `backtest-engine-v18-unified-clock-portfolio` (A15'in İKİNCİ bump'ı) ·
 > **`SHARED_ALLOCATION_STATUS` = `active_v1` — CONTAINMENT KALKTI** · golden **2 satır**
 > oynadı (50 digest'in **49'u bayt bayt aynı**) · OpenAPI değişmedi. **Son dalga — ADIM 132
 > (`C9` / ADIM 20: THE LIFT).** `G10` (ADR §16 Gate 2) #868'de imzalıydı; ön koşul **17

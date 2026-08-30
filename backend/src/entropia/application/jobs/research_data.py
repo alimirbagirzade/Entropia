@@ -5,7 +5,8 @@ local to the functions that need them):
 
 * ``run_analysis`` — the durable ``data``-queue job: load raw asset -> parse the
   native schema (Polars) -> validate time policy + usage scope + field meaning ->
-  write a native asset + a validation run/issues -> advance the revision state.
+  write a native asset + a validation run/issues -> advance the revision state
+  and pin it to the asset it just wrote (``native_asset_id``, GH #703).
 * ``compile_agent_data_bundle`` — immutable Agent research bundle pinning exact
   research + market revision ids + content hashes, enforcing usage scope.
 * ``compile_backtest_evidence_bundle`` — immutable Backtest evidence bundle; only
@@ -45,6 +46,7 @@ from entropia.domain.research_data.usage_scope import ensure_allows_evidence_bun
 from entropia.infrastructure.postgres.models import (
     EntityRegistry,
     ResearchDatasetRevision,
+    ResearchNativeAsset,
 )
 from entropia.infrastructure.postgres.repositories import audit as audit_repo
 from entropia.infrastructure.postgres.repositories import research_data as rd_repo
@@ -99,7 +101,11 @@ class ParsedResearch:
 # ``run_analysis`` is exercisable end-to-end against a real DB without MinIO.
 # Production callers pass neither and get the real helpers below.
 _LoadAndParse = Callable[[AsyncSession, str], Awaitable[ParsedResearch]]
-_WriteNative = Callable[[AsyncSession, str, str, ParsedResearch], Awaitable[str]]
+# Returns the ROW, not just its digest: ``run_analysis`` must write the revision's
+# reverse pointer (``native_asset_id``) and only the asset knows its own id. Handing
+# back a bare digest is what left that pointer unwritten in production (GH #703) while
+# every fake in the suite set it by hand.
+_WriteNative = Callable[[AsyncSession, str, str, ParsedResearch], Awaitable[ResearchNativeAsset]]
 
 
 def revision_source_zone(revision: ResearchDatasetRevision) -> ZoneInfo | None:
@@ -303,7 +309,8 @@ async def run_analysis(
     parsed = normalize_event_timestamps(loaded, source_zone=revision_source_zone(revision))
     outcome = evaluate_research(parsed, revision)
 
-    native_digest = await write(session, entity_id, revision_id, parsed)
+    native_asset = await write(session, entity_id, revision_id, parsed)
+    native_digest = native_asset.content_digest
 
     run = rd_repo.add_validation_run(
         session,
@@ -335,7 +342,7 @@ async def run_analysis(
             evidence=issue.get("evidence"),
         )
 
-    _advance_revision(revision, outcome, parsed, native_digest)
+    _advance_revision(revision, outcome, parsed, native_asset)
 
     audit_repo.add_audit_event(
         session,
@@ -374,10 +381,18 @@ def _advance_revision(
     revision: ResearchDatasetRevision,
     outcome: AnalysisOutcome,
     parsed: ParsedResearch,
-    native_digest: str,
+    native_asset: ResearchNativeAsset,
 ) -> None:
+    native_digest = native_asset.content_digest
     revision.validation_status = outcome.status
     revision.native_schema_descriptor = {"columns": parsed.columns}
+    # GH #703: the reverse pointer the funding resolver dereferences
+    # (``queries/funding.py`` -> ``get_native_asset``). Written HERE, in the job, rather
+    # than inside ``_write_native``: the S3 half is an injection seam every test replaces,
+    # so a pointer written there would be written by fakes and never by production. The
+    # asset row is not flushed yet; ``native_asset_id`` is a plain column, not an FK, and
+    # the job's own flush lands both.
+    revision.native_asset_id = native_asset.asset_id
     if revision.revision_state == ResearchRevisionState.ANALYZING:
         revision.revision_state = next_research_revision_state(
             ResearchRevisionState.ANALYZING, outcome.next_state
@@ -423,13 +438,16 @@ async def _write_native(
     entity_id: str,
     revision_id: str,
     parsed: ParsedResearch,
-) -> str:
-    """Write parsed native rows to a Parquet asset. Returns the digest."""
+) -> ResearchNativeAsset:
+    """Write parsed native rows to a Parquet asset. Returns the asset row.
+
+    The digest is read off the returned row (``content_digest``); the caller also needs
+    the asset's id for the revision's reverse pointer (GH #703)."""
     from entropia.infrastructure.s3.datasets import put_processed_parquet
 
     parquet_bytes = _to_parquet_bytes(parsed)
     object_key, digest = put_processed_parquet(entity_id, parquet_bytes)
-    rd_repo.add_native_asset(
+    return rd_repo.add_native_asset(
         session,
         entity_id=entity_id,
         object_key=object_key,
@@ -439,7 +457,6 @@ async def _write_native(
         row_count=len(parsed.rows),
         schema_descriptor={"columns": parsed.columns},
     )
-    return digest
 
 
 # --------------------------------------------------------------------------- #

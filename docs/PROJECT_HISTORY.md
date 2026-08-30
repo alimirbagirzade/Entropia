@@ -19959,3 +19959,90 @@ tekrar *mesafe* ölçmeye dönmesini engelliyor.
 - `integration/test_logic_based_stop.py` **EL DEĞMEDİ**.
 - **Frontend kapıları KOŞULMADI** (frontend'de sıfır satır).
 - **A-08 (#514) AÇIK** — tek blocker, `human-only`, çıkış kriterleri 0/4.
+
+## ADIM 145 — GH #677: İKİ KESİNTİ SAYFA KUSURU DEĞİL KABUK KUSURUYDU, VE TAVANI YERELDEN SIKIŞTIRMAK BİR PROVENANCE İHLALİ OLURDU
+
+**PR #884** · taban `bfce3e32` (ADIM 144) · **`backend/` içinde SIFIR SATIR** · migration
+**YOK** · `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** ·
+`SHARED_ALLOCATION_STATUS` **el değmedi** · **blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED**.
+
+Sevk edilen iki dosya: `frontend/index.html` (`<meta name="description">`, metin README'nin
+kendi ürün tarifinden kırpıldı) ve `frontend/public/robots.txt` (`Disallow: /`).
+
+### Aday seçimi: devir prompt'unun listesi bayattı
+
+Kickoff'un resume prompt'u altı aday sayıyordu. Açık issue listesi tarandığında onun
+**saymadığı iki kalem** çıktı: **#582** ve **#547** — ikisi de `product-decision` etiketi
+taşımıyor, yani "imzasız ilerlenebilir" görünüyorlardı. ADIM 139'un dersinin tekrarı:
+*devir notunun kod adayı da bayatlar.* İkisi de ölçüldü:
+
+* **#582 bayat.** Başlığı *"the containment cannot be lifted"* diyor; ölçüm:
+  `SHARED_ALLOCATION_STATUS = "active_v1"` ve `CONTENTION_SELECTION_STATUS = "approved"` —
+  containment **ADIM 132'de kalkmış**. Öncül karşı-olgusal; **kapatmak insan kararı**, bu
+  slice kapatmadı.
+* **#547 imza bekliyor.** Gövdesi harfi harfine *"Blocked on a product decision … Do not
+  start before it is answered"* diyor ve issue'nun **0 yorumu** var.
+
+Geriye **#677** kaldı ve onun engeli de bir öncüldü: ADIM 141 *"Lighthouse Compose stack'i
+bu ortamda koşulamaz"* diye ölçmüştü — ama o ölçüm **remote container'a** aitti. Bu
+makinede `docker daemon: UP`, Compose v5.1.2 → **engel yok**.
+
+### ASIL BULGU: rota sayısı 23/23 olduğu için sayfa kusuru olamazdı
+
+İki audit de kabukta / origin'de yaşıyor. Ölçüm, çıkarım değil:
+
+```
+GET /robots.txt  ->  status=200  content_type=text/html
+<!doctype html> …
+```
+
+Dosya yoktu; nginx'in SPA kuralı (`try_files $uri $uri/ /index.html`) uygulama kabuğunu
+döndürüyordu ve Lighthouse bunu **geçersiz robots dosyası** olarak okuyordu. `try_files`
+gerçek dosyayı fallback'e tercih ettiği için çözüm `public/robots.txt` → `dist/robots.txt`.
+**Build çıktısında kanıtlandı:** `dist/robots.txt` (579 B) var, `dist/index.html` tag'i taşıyor.
+
+`Disallow: /` bir tedbir değil **doğru politika**: her rota login arkasında, public içerik
+yok. Audit **geçersiz** dosyada düşer, **kısıtlayıcıda** değil.
+
+### İKİNCİ BULGU: tavanı yerelden sıkıştırmak bir PROVENANCE İHLALİ olurdu
+
+`lighthouse-baseline.json`'ın kendi `provenance` bloğu ölçümü **2-vCPU GitHub runner**'a
+pinler; `sensitivity_boundary` skorun **yalnız kendi runner sınıfı içinde**
+karşılaştırılabilir olduğunu yazar. Apple Silicon'da ölçülen `tightened.json`'ı commit
+etmek, bir sonraki CI koşusunda **çırpınan bir kapı** kurardı — issue'nun
+`panel-management` için uyardığı `do_not_tighten` tuzağının **genel hâli**. Bu yüzden
+tavanlar bu commit'te **sıkıştırılmadı**; PR'ın **kendi CI artefaktından** alınır.
+
+### ÜÇÜNCÜ BULGU (ölçüm dersi): host'tan `curl` tarayıcının kanıtı değildir
+
+Yerel teşhiste `curl http://localhost:8000` **200** dönerken tarayıcı ulaşamıyordu; `curl`
+sessizce IPv6'ya kaçıyordu (`-4` → `000`, `-6` → `200`). Ama kök **o değildi**: teşhisi
+**ekran görüntüsü** koydu — `NETWORK_UNAVAILABLE: Request timed out after 15s`. API
+**soğukken** `/meta` istemcinin 15 sn'lik fail-closed zaman aşımını aşıyor (seed + 12
+container aynı anda kalkarken); ısındıktan sonra aynı çağrı **0.36 sn** (2.32 → 0.67 → 0.36
+ölçüldü). SPA'nın gösterdiği *"Cannot reach the server"* ekranı **doğru davranıştı**.
+
+### DÖRDÜNCÜ: `--no-file-parallelism` yeniden doğrulandı
+
+Düz `npm run test` **8 hata / 3 dosya** verdi (`libraryValidationRun`,
+`researchDataLifecycle`, `strategy`; koşu 559 sn). Aynı üç dosya seri kipte **42 passed /
+0 failed**. Yük kaynaklı timeout, regresyon değil — **varsayılmadı, ölçüldü**.
+
+### Kendi hatam, kaydedilecek: yeşil exit code kanıt değildir
+
+İlk Lighthouse wrapper'ım `echo "EXIT=$?"` yüzünden **`exit 0`** raporladı, oysa koşu
+düşmüştü. Çıktı okunmasaydı *"taban alındı"* denecekti. Deponun kendi dersi, birinci elden.
+
+### DÜRÜST SINIR
+
+* **#677 KAPATILMADI** — dört kesintinin **ikisi** düzeltildi.
+* **`errors-in-console` (23/23) TEŞHİS EDİLMEDİ.** Issue *"read the actual console output"*
+  diyor; yerel stack oturumlu bir sayfaya sürülemedi. **İpucu kaydedildi, sonuç değil:**
+  ulaşılabilen oturumsuz sayfalarda konsol hataları `/api/v1/events` (SSE) ve
+  `/api/v1/manual/stream` üzerinde **401**'di. Audit'in puanladığı oturumlu vaka bu değildir.
+* **CLS / `panel-management` el değmedi**; performans tavanı **98'de kalmalı**.
+* **Tavanlar sıkıştırılmadı** (ikinci commit, CI artefaktından).
+* Route / react-query key / OCC token / `Idempotency-Key` / SSE taksonomisi / `lib/*.ts`
+  **el değmedi**; **görsel değişiklik yok** (v18 presentation-only sınırı korundu).
+* Backend kapıları **koşulmadı** — `backend/` içinde sıfır satır; otorite **CI**.
+* **A-08 (#514) AÇIK** — tek blocker, `human-only`, çıkış kriterleri 0/4.

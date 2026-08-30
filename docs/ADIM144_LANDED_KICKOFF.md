@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 144 landed — GH #536 md. 2'nin kalanı: `most_conservative` tie-break'i + `first_trigger_wins` yapısal dışlaması
 
 ## Nerede olduğumuz

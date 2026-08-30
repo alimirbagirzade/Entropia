@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 141 landed — GH #536 Gap A + Gap B (sevk edilen conflict literalleri ilk kez sürüldü)
 
 ## Nerede olduğumuz

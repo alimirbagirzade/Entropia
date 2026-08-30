@@ -272,6 +272,40 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
+> SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 142 (GH #536 md. 2: politika
+> echo'su İKİ düzlemde ilk kez pinlendi; `record_all_execute_highest` bir İKİZ çıktı).**
+> ADIM 141 md. 2'yi *"test işidir, imzasız yapılabilir"* diye borç bırakmıştı; alındı. Diğer
+> kalemler ölçüldü, girilmedi: #703 (11 kutu BOŞ) · #854 (9 kutu BOŞ) · **#534 bir AYRIŞMA**
+> (issue `CLOSED` ama tek yorumu 2026-08-04, kapanış 2026-08-30 → **kapanış yorumu YOK**, 4
+> kutu BOŞ; **ADIM 90: otorite imza kutusudur** → açık) · #677 (Lighthouse ortamı yok) ·
+> #514 `human-only`. **ÖNCÜL KISMEN ÇÜRÜDÜ — md. 2'nin üç yarısından İKİSİ zaten kapalıydı:**
+> `most_conservative` **açıkça set ediliyordu**, `logic:<block_id>` **ADIM 137'de** kapanmıştı,
+> `all_active` diagnostics'ten assert ediliyordu. **Ayakta kalan tek şey ECHO'ydu** ve o **iki
+> düzlemde** yayımlanıyor: `diagnostics["stop_conflict_resolution"]` **0** assertion ·
+> `stop_resolution` → `detail["resolution"]` **0** · `detail["requirement"]` **0**; ayrıca
+> `record_all_execute_highest` **motor düzlemine hiç ulaşmamıştı**. **ASIL BULGU: o literal
+> `priority_order`'ın BAYT BAYT İKİZİ** — `backend/src`'teki tamamı **dört hit** (biri
+> `fills.py`'de **paylaşılan dal**, üçü şema prozası) ve şemanın *"records every co-triggered
+> rule in the ledger"* vaadi `_StopOutcome.triggered` her dalda aynı kurulduğu için **dört
+> literalin dördü** tarafından karşılanır → **hiçbirini ayırt etmez**. **İKİNCİ BULGU,
+> ölçüldü:** adı *"records every triggered rule"* olan mevcut test NC-3'te literal dalından
+> düşürüldüğünde **YEŞİL KALDI**. **ÜÇÜNCÜ (TUZAK): ADIM 141'in `_fingerprint`'i bu soruyu
+> CEVAPLAYAMAZ** — `diagnostics`'i tümüyle dışlar ama `signal_events`'i **hash'ler** ve echo
+> oraya da damgalanır → olduğu gibi kullanmak tripwire'ı **doğuştan tatmin edilemez** yapardı
+> (ölçüldü: dört ayrı fingerprint); `_stop_fingerprint` echo'yu **iki düzlemden de** sıyırır.
+> **DÖRT NC, dördü ayırt edici, DÖRDÜNDE DE mevcut 41 test YEŞİL** (NC-1 `:326` diagnostics ·
+> NC-2 **`:328`** event = iki bağımsız eksen · NC-3 **yalnız 2** · NC-4 **yalnız 1**).
+> **DÜRÜST SINIR: #536 KAPATILMADI** — `logic:<block_id>`'nin **MOTOR düzlemi kapsanmadı**
+> (motor seviyesinde logic-stop fixture'ı **YOK**), **md. 4 kapsam dışı**, **`record_all`
+> bulgusu KAYDEDİLDİ + tripwire ile PİNLENDİ, DÜZELTİLMEDİ** (ürün kararı; **dördüncü bir
+> imzasız karar belgesi AÇILMADI** — ADIM 141 emsali), şema prozası **düzeltilmedi**
+> (adjudication), frontend kapıları **koşulmadı**. Toplanan test **3895 → 3898**.
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 142 · `docs/ADIM142_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
 > SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 141 (GH #536 Gap A + Gap B:
 > sevk edilen conflict literalleri İLK KEZ sürüldü).** On iki açık issue ölçüldü; beşi
 > `product-decision`, üçü imza kutusu bekliyor, #514 `human-only` → imzasız ilerleyebilen

@@ -19545,3 +19545,128 @@ koda karşı yapılır.**
   diagnostics'i değiştirmek golden digest'leri oynatır ve `ENGINE_VERSION` bump'ı ister
   (ADIM 136'nın imzalı ekseni), yani bir **kapsam kararıdır**.
 - **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+
+## ADIM 142 — GH #536 MD. 2: BİR POLİTİKANIN HANGİSİ OLDUĞUNU SÖYLEYEN ECHO İKİ DÜZLEMDE YAYIMLANIYORDU VE HİÇBİRİ OKUNMUYORDU; VE BİR LİTERAL, KENDİ TESTİNİN GÖREMEDİĞİ BİR İKİZDİ
+
+**Taban:** `origin/main` @ `17bb495f` (ADIM 141). **Diff:** ADIM 141'in açtığı
+`tests/unit/test_conflict_policy_coverage.py` modülüne **üç yeni test fonksiyonu**
+(biri 4 parametreli → toplam **6 case**; modül 5 → 11 test) + üretilmiş artefaktların
+tazelenmesi + kapanış belgeleri. **`backend/src`'te SIFIR SATIR** · migration **YOK** ·
+`ENGINE_VERSION` **DEĞİŞMEDİ** · golden **el değmedi** · OpenAPI **değişmedi** ·
+`frontend/src` **sıfır satır**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Kalem seçimi: imzasız ilerleyebilen tek kalem ölçümle bulundu
+
+Açık kalemler tek tek ölçüldü: **#703** (11 kutu, **11'i BOŞ**) · **#854** (9 kutu,
+**9'u BOŞ**) · **#534** · **#514** (`human-only`) · **#677** · **#536**.
+**#534 bir AYRIŞMADIR ve ADIM 90'ın kuralıyla çözüldü:** issue `CLOSED/COMPLETED`
+görünüyor, ama tek yorumu **2026-08-04** tarihli (ADIM 11 audit bulgusu), kapanış ise
+`2026-08-30T06:59:14Z` → **kapanış yorumu YOK**, karar belgesi `current` ve dört kutusu
+**BOŞ**. Üç düzlem ayrıştığında **otorite imza kutusudur** → md. 3 açık sayıldı, girilmedi.
+**#677 yine alınmadı** (Lighthouse Compose stack'i bu ortamda koşulamaz → kanıtsız kalırdı).
+Geriye **#536'nın md. 2'si** kaldı — ADIM 141'in kaydının kendisi onu *"yazılmadı (test
+işidir, imzasız yapılabilir)"* diye borç bırakmıştı.
+
+### ÖNCÜL KISMEN ÇÜRÜDÜ: üç yarının İKİSİ zaten kapanmıştı
+
+Issue md. 2 üç şey ister; üçü de ayrı ayrı ölçüldü:
+
+| İddia | Ölçüm |
+|---|---|
+| *"`most_conservative` hiçbir testte AÇIKÇA set edilmiyor"* | **ÇÜRÜDÜ** — `test_oracle_protection_stops.py:135` ve `:308` açıkça set ediyor |
+| *"`stop_priority_order` `logic:<block_id>` girdilerini hiçbir test kapsamıyor"* | **ÇÜRÜDÜ** — ADIM 137 (`test_backtest_policy_provenance.py:185/:187`) `stop_priority_sequence` düzleminde kapsıyor |
+| *"`stop_resolution` event'i `priority_order` / `all_active` altında hiç assert edilmiyor"* | `all_active` **ÇÜRÜDÜ** (`test_backtest_logic_stop.py:372/:381` diagnostics'ten assert ediyor); **ECHO yarısı AYAKTA** |
+
+**Ayakta kalan tek şey ECHO'ydu — ve o iki düzlemde yayımlanıyordu:**
+
+| Yayımlanan echo | Kaynak | Assert eden test (ölçüm, `17bb495f`) |
+|---|---|---|
+| `diagnostics["stop_conflict_resolution"]` | `execution/output.py` | **0** |
+| `stop_resolution` → `detail["resolution"]` | `engine.py` | **0** |
+| `stop_resolution` → `detail["requirement"]` | `engine.py` | **0** |
+
+Ayrıca **`record_all_execute_highest` motor düzlemine hiç ulaşmamıştı** — tek case'i
+`_resolve_stop`'u doğrudan sürüyor.
+
+### ASIL BULGU: `record_all_execute_highest`, `priority_order`'ın BAYT BAYT İKİZİ
+
+İddia edilmedi, **ölçüldü**. `backend/src`'te literalin **tamamı dört hit**: biri
+`execution/fills.py`'de **paylaşılan dal** (`if resolution in ("priority_order",
+"record_all_execute_highest")`), üçü şema literali ve prozası. Şema farkı
+*"record_all also records every co-triggered rule in the ledger"* diye tarif eder — oysa
+`_StopOutcome.triggered` **her dalda aynı biçimde** kurulur, yani o vaat **dört literalin
+dördü tarafından da** karşılanır ve **hiçbirini ayırt etmez**.
+
+Dört literal motorda koşuldu (echo iki düzlemden de sıyrılarak fingerprint alındı):
+
+```
+first_trigger_wins          fc36cf5f…   exit 101.50  (first_trigger_approximated=True)
+most_conservative           ee853c3b…   exit 101.50
+priority_order              af9804b8…   exit 100.98
+record_all_execute_highest  af9804b8…   exit 100.98   <- AYNI
+```
+
+### İKİNCİ BULGU: mevcut testin bunu GÖREMEDİĞİ ölçüldü, iddia edilmedi
+
+`test_backtest_logic_stop.py::test_record_all_execute_highest_records_every_triggered_rule`
+adıyla *"her tetikleneni kaydeder"* der. **NC-3'te** literal paylaşılan daldan düşürüldü
+(`most_conservative`'e sarktı) → **o test YEŞİL KALDI**, çünkü iki assertion'ı
+(`executed_key == "percentage"`, `set(triggered) == {...}`) o fixture'da her iki dal için de
+doğrudur. Yani mevcut case paylaşılan dalın çalıştığını kanıtlar, `record_all`'ın **fazladan**
+bir şey kaydettiğini değil.
+
+### ÜÇÜNCÜ BULGU (TUZAK): ADIM 141'in `_fingerprint`'i BU SORUYU CEVAPLAYAMAZ
+
+`_fingerprint` `diagnostics`'i **tümüyle** dışlar — Gap A için yeterliydi, çünkü
+`overlapping_signal_policy` yalnız orada echo edilir. Ama `stop_conflict_resolution`
+**her `stop_resolution` event'ine de** `detail["resolution"]` olarak damgalanır ve
+`_fingerprint` `signal_events`'i **hash'ler**. Olduğu gibi kullanılsaydı dört literal
+**dört farklı** fingerprint verirdi (ölçüldü: `74b77515` / `25674b86` / `3c45c531` /
+`42f2e9dc`) → tripwire **doğuştan tatmin edilemez** olurdu. Bu yüzden `_stop_fingerprint`
+echo'yu **iki düzlemden de** sıyırır ve gerekçesi docstring'ine yazıldı.
+
+### Sevk edilen üç eksen
+
+1. `test_the_stop_conflict_resolution_that_governed_is_published_per_literal` (×4) —
+   davranış **ve** disclosure **birlikte** pinlenir: yalnız echo'yu assert etmek motor ayarı
+   yok sayarken geçer, yalnız sonucu assert etmek Result hiç uygulanmamış bir politikayı
+   adlandırırken geçer. `record_all_execute_highest` **ilk kez** motor düzlemine ulaşır.
+2. `test_the_four_stop_conflict_resolutions_are_covered_by_a_case_between_them` —
+   anti-drift; ADIM 141'in `same_candle` guard'ının birebir şekli.
+3. `test_record_all_execute_highest_is_a_deliberate_twin_of_priority_order` — Gap A şeklinde
+   **TRIPWIRE**: ikizlik bozulursa kırmızı verir ve şemadaki vaadin doğru mu hâlâ kurgu mu
+   olduğunu bir **disclosure kararına** zorlar.
+
+### Dört negatif kontrol, dördü ayırt edici; DÖRDÜNDE DE mevcut 41 test YEŞİL
+
+| NC | Mutasyon | Kırmızı olan |
+|---|---|---|
+| NC-1 | `output.py` diagnostics echo'su sabite | 4 yeni test, **`:326` diagnostics assertion'ında** |
+| NC-2 | `engine.py` event echo'su sabite | 4 yeni test, **`:328` event assertion'ında** (FARKLI satır → iki düzlem bağımsız eksen) |
+| NC-3 | `record_all` paylaşılan daldan düşürüldü | **yalnız 2** (kendi parametresi + tripwire); diğer 3 parametre **yeşil** |
+| NC-4 | şemaya beşinci literal | **yalnız 1** (completeness guard) |
+
+Dördünde de `test_backtest_logic_stop.py` + `test_oracle_protection_stops.py` +
+`test_backtest_policy_provenance.py` (**41 test**) **YEŞİL KALDI** — boşluğun *iddiası*
+değil **ölçümü**. Her turdan sonra `git checkout -- src` + `__pycache__` düşürüldü ve
+`git status --porcelain src` **boş** doğrulandı (ADIM 141'in bayat-bytecode dersi).
+
+### DÜRÜST SINIR
+
+- **#536 KAPATILMADI.** Bu slice **md. 2'nin ayakta kalan yarısını** sevk eder.
+- **`logic:<block_id>`'nin MOTOR düzlemi KAPSANMADI** — motor seviyesinde bir logic-stop
+  fixture'ı **yok** (`test_backtest_logic_stop`'un motor case'leri `logic_stop_blocks == 0`
+  ile koşar) ve onu kurmak kendi başına bir fixture slice'ıdır, bu modülün eksik bıraktığı
+  bir assertion değil. Sınır modül docstring'ine **yazıldı**.
+- **Md. 4 (Gap C guard) kapsam dışı** — ADIM 141'in gerekçesi değişmedi (tasarım kararı).
+- **`record_all_execute_highest` bulgusu KAYDEDİLDİ ve PİNLENDİ, DÜZELTİLMEDİ.** Düzeltmek
+  bir **ürün kararıdır**: ya literale gerçek bir etki verilir ya kaldırılır (ikincisi
+  saklanan config'leri kıran bir değişikliktir). **Dördüncü bir imzasız karar belgesi
+  AÇILMADI** — ADIM 141'in emsali (bulguyu kaydet, tripwire ile pinle, imza defterini
+  şişirme).
+- **Şema prozası DÜZELTİLMEDİ** — *"records every co-triggered rule in the ledger"* bugün
+  karşı-olgusal değil ama **ayırt edici de değil**; metni yeniden yazmak bir adjudication'dır
+  (ADIM 42/128 kuralı).
+- **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**

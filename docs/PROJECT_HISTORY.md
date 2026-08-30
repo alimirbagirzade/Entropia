@@ -20033,6 +20033,30 @@ Düz `npm run test` **8 hata / 3 dosya** verdi (`libraryValidationRun`,
 İlk Lighthouse wrapper'ım `echo "EXIT=$?"` yüzünden **`exit 0`** raporladı, oysa koşu
 düşmüştü. Çıktı okunmasaydı *"taban alındı"* denecekti. Deponun kendi dersi, birinci elden.
 
+### BEŞİNCİ BULGU: İLK DÜZELTMEM BİR ÖZ GOLDÜ, VE ONU CI'IN KENDİ RATCHET'İ YAKALADI
+
+`robots.txt`'in ilk sürümü **`Disallow: /`** taşıyordu — private bir uygulama için
+**doğru okunan** politika. CI ölçtü (run `33333765655`, 23/23 rota, PR #884):
+
+| | seo | kesintiler |
+|---|---|---|
+| önce | **82** | `meta-description` (w=1) + `robots-txt` (w=1) |
+| `Disallow: /` | **63** | `is-crawlable` (**w=4.04**) |
+
+Ağırlığı 1 olan **iki** audit kapanırken ağırlığı **4.04** olan **bir** audit açıldı →
+rota başına net **−19 puan**, kategori kendi donmuş tabanının **altına** düştü ve
+Lighthouse job'ı **kırmızı verdi**. **Bu, kapının çalışmasıdır — gürültü değil.**
+
+Ders iki katmanlı: (1) audit **geçersiz** dosyada düşer, **kısıtlayıcıda** değil — boş
+`Disallow:` RFC'nin *"hepsine izin ver"* yazımıdır ve `is-crawlable`'ı açmadan
+`robots-txt`'i kapatır; (2) **bir kesintiyi kapatmak, daha ağır bir başkasını açabilir**;
+"düzeltme" ancak **net etkisi ölçülünce** düzeltmedir. robots.txt bir **talimattır**,
+erişim denetimi değil — denetim login'dir, dolayısıyla hiçbir şey açılmaz.
+
+Aynı artefakt `meta-description` ve `robots-txt`'in **ikisinin de kesinti listesinden
+düştüğünü** doğruladı; dokunulmayan iki kesinti **değişmedi** (`errors-in-console` 23/23,
+CLS 1/23).
+
 ### DÜRÜST SINIR
 
 * **#677 KAPATILMADI** — dört kesintinin **ikisi** düzeltildi.

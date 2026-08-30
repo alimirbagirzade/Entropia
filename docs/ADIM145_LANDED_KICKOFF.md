@@ -56,6 +56,14 @@ aynı anda kalkarken), ısındıktan sonra aynı çağrı **0.36 sn**.
 Düz `npm run test` **8 hata / 3 dosya** verdi. Aynı üç dosya seri kipte **42 passed / 0
 failed**. Hatalar yük kaynaklı timeout'tu, regresyon değil — **varsayılmadı, ölçüldü**.
 
+## BEŞİNCİ BULGU: ilk düzeltmem bir ÖZ GOLdü ve ratchet yakaladı
+
+`robots.txt` önce `Disallow: /` ile indi. CI ölçtü (run `33333765655`): seo **82 → 63**,
+çünkü ağırlığı 1 olan iki audit kapanırken ağırlığı **4.04** olan `is-crawlable` açıldı →
+net **−19**, taban altı, job **kırmızı**. Boş `Disallow:` ile düzeltildi.
+**Ders: bir kesintiyi kapatmak daha ağır bir başkasını açabilir; "düzeltme" ancak NET
+etkisi ölçülünce düzeltmedir.** Audit **geçersiz** dosyada düşer, kısıtlayıcıda değil.
+
 ## DÜRÜST SINIR — kapatılmayanlar
 
 - **`errors-in-console` (23/23) TEŞHİS EDİLMEDİ.** Issue *"read the actual console output"*

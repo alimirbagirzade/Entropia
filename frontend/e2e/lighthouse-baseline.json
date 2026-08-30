@@ -43,7 +43,8 @@
     "measured_pre_merge": "Measured on the P11-8 branch, not on main: the whole point of the run was to record the tree WITH the gate in it. The next main run must reproduce these numbers exactly \u2014 if it does not, this file is wrong, not the run.",
     "stability": "The measuring run saw 0 points of spread everywhere. The very next run did NOT: panel-management's performance passes came in 98-100 while its median stayed 98. So 'zero spread' is a property of one run, not of this gate, and it is recorded that way on purpose. What actually holds the floor is the MEDIAN, and it held: both runs reported 98 for that route. If a future run starts flapping, the answer is more repeats or a warm-up change - never a lower floor.",
     "sensitivity_boundary": "performance sits at 100 on 22 of 23 routes. That is a real measurement, not a rounding artefact, and it is also this gate's weakest axis: against a localhost stack on the desktop preset the score is saturated, so only a substantial regression will move it. A floor of 100 means 'may not get worse at all' \u2014 the strictest ratchet available \u2014 but it is not evidence that the app is fast on a real user's machine. The per-route FCP/LCP/TBT/CLS/SI in lighthouse-report/lighthouse-results.json do differentiate the routes and are reported, never gated.",
-    "do_not_tighten": "panel-management/performance must stay at 98. It is the one route with measured repeat variance (98-100 across 3 passes), so a run whose median reads 100 will make the tightened map suggest raising it. Taking that suggestion arms a gate that fails the next time the same route medians at 98 - a flapping gate nobody asked for. Every other floor may be tightened normally when a real improvement lands."
+    "do_not_tighten": "panel-management/performance must stay at 98. It is the one route with measured repeat variance (98-100 across 3 passes), so a run whose median reads 100 will make the tightened map suggest raising it. Taking that suggestion arms a gate that fails the next time the same route medians at 98 - a flapping gate nobody asked for. Every other floor may be tightened normally when a real improvement lands.",
+    "tightened_2026_08_30": "GH #677 / ADIM 145 (PR #884). The `seo` floor was raised 82 -> 100 on all 23 routes after `meta-description` and `robots-txt` were fixed in the SPA shell. Measured by the SAME gate that enforces it: E2E workflow run 33334644272, job 'Lighthouse', LH_REPEATS=3, seeded Compose stack \u2014 NOT from a developer machine. An earlier local run was deliberately NOT used: this file's own `sensitivity_boundary` records that the score is comparable only inside its own runner class, so a floor copied off Apple Silicon would arm a gate that fails on the next CI pass. `performance` and `best-practices` floors are UNCHANGED, and panel-management/performance stays at 98 per `do_not_tighten` (that run medianed 98, so the tightened map did not even suggest raising it). Two deductions remain open and are declared in #677: errors-in-console (23/23) and cumulative-layout-shift (panel-management)."
   },
   "policy": {
     "categories": "performance, best-practices, seo",
@@ -55,117 +56,117 @@
     "mainboard": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "strategy-details": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "outsource-signal": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "trading-signal": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "trade-log": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "create-package": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "pre-check": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "package-library": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "embedded-packages": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "rationale-families": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "market-data": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "research-data": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "portfolio": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "ready-check": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "run-results": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "results-history": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "arrange-metrics": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "analysis-lab": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "panel-management": {
       "performance": 98,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "panel-logs": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "trash": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "user-manual": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     },
     "future-dev": {
       "performance": 100,
       "best-practices": 96,
-      "seo": 82
+      "seo": 100
     }
   }
 }

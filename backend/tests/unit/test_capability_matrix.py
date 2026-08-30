@@ -187,16 +187,30 @@ _SCHEMA_FIELDS: dict[str, tuple[type, str]] = {
     "data.costs.slippage_mode": (config_module.CostsModel, "slippage_mode"),
     "data.execution.entry_timing": (config_module.ExecutionModel, "entry_timing"),
     "data.execution.exit_timing": (config_module.ExecutionModel, "exit_timing"),
+    "data.order_config.limit.price_rule": (
+        config_module.LimitOrderDetails,
+        "price_rule",
+    ),
+    "data.order_config.limit.partial_fill_policy": (
+        config_module.LimitOrderDetails,
+        "partial_fill_policy",
+    ),
     "position_sizing.leverage_mode": (config_module.PositionSizing, "leverage_mode"),
     "position_sizing.signal_strength_adjustment": (
         config_module.PositionSizing,
         "signal_strength_adjustment",
+    ),
+    "position_sizing.formula_based.formula_type": (
+        config_module.FormulaBasedSizing,
+        "formula_type",
     ),
     "position_exit_logic.partial_aftermath": (
         config_module.PositionExitLogic,
         "partial_aftermath",
     ),
     "scaling_logic.timeframe": (config_module.ScalingLogic, "timeframe"),
+    "scaling_logic.timeframe_mode": (config_module.ScalingLogic, "timeframe_mode"),
+    "scaling_logic.method": (config_module.ScalingLogic, "method"),
     "restrictions_filters.filters.filter_type": (
         config_module.RestrictionFilter,
         "filter_type",
@@ -218,6 +232,26 @@ def _literal_values(model: type, field_name: str) -> set[str]:
         if get_origin(arm) is Literal:
             return {str(v) for v in get_args(arm)}
     raise AssertionError(f"{model.__name__}.{field_name} is not a Literal field")
+
+
+def test_the_registry_covers_every_matrix_field_path() -> None:
+    """The exhaustiveness guard is only as wide as ``_SCHEMA_FIELDS`` — so pin the width.
+
+    ``test_matrix_enumerates_every_schema_literal`` is parametrized over the registry, not
+    over the matrix. A matrix field path that nobody registers is therefore never asserted
+    about, and CI stays green while a new literal reaches the editor unclassified — the
+    exact failure the matrix was built to close. That is not hypothetical: the registry sat
+    at 9 of 14 paths (GH #540), and no test could notice.
+
+    This is the second axis. Axis 1 (above) asks "are this field's literals classified?";
+    this one asks "is every gated field being asked at all?" — a drifting registry fails
+    here even when every registered field still agrees.
+    """
+    assert set(_SCHEMA_FIELDS) == {o.field_path for o in CAPABILITY_MATRIX}, (
+        "the exhaustiveness registry and the capability matrix disagree. Every matrix "
+        "field_path must be registered in _SCHEMA_FIELDS (so its literals are checked), "
+        "and _SCHEMA_FIELDS must not name a path the matrix does not classify."
+    )
 
 
 @pytest.mark.parametrize("field_path", sorted(_SCHEMA_FIELDS))

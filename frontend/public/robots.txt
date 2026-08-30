@@ -1,0 +1,11 @@
+# Entropia V18 is an authenticated internal platform: every route sits behind a
+# login and there is no public content to index. Disallow-all is therefore the
+# accurate policy, not a precaution.
+#
+# Lighthouse's `robots-txt` audit fails on an INVALID file, not a restrictive
+# one. Before this file existed, /robots.txt fell through nginx's SPA rule
+# (`try_files $uri $uri/ /index.html`) and answered 200 text/html with a
+# `<!doctype html>` body — measured on the seeded stack, and the reason the
+# audit was deducted on 23 of 23 routes (GH #677).
+User-agent: *
+Disallow: /

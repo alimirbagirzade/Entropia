@@ -133,6 +133,7 @@ def _config(
     max_size: str | None = None,
     stop_exit_conflict: str | None = None,
     same_candle_entry_exit: str | None = None,
+    overlapping_signal_policy: str | None = None,
     entry_timing: str = "current_candle_close",
     exit_timing: str = "current_candle_close",
 ) -> StrategyConfig:
@@ -241,6 +242,11 @@ def _config(
                 **(
                     {"same_candle_entry_exit": same_candle_entry_exit}
                     if same_candle_entry_exit is not None
+                    else {}
+                ),
+                **(
+                    {"overlapping_signal_policy": overlapping_signal_policy}
+                    if overlapping_signal_policy is not None
                     else {}
                 ),
             },

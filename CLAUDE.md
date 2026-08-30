@@ -271,6 +271,41 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
+> SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 141 (GH #536 Gap A + Gap B:
+> sevk edilen conflict literalleri İLK KEZ sürüldü).** On iki açık issue ölçüldü; beşi
+> `product-decision`, üçü imza kutusu bekliyor, #514 `human-only` → imzasız ilerleyebilen
+> **iki** kalem kaldı ve **#677 bilerek alınmadı** (kabul kriteri düzeltme + tavan
+> sıkılaştırmasını **birlikte** ister, Lighthouse Compose stack'i bu ortamda koşulamaz →
+> kanıtsız kalırdı). **ÖNCÜL KISMEN ÇÜRÜDÜ ve çürüyen yarı ADIM 139'un işiydi:** issue
+> *"six fields outside the guard"* diyor, `_SCHEMA_FIELDS` bugün **14 alan** (#878 onu 9→14
+> yaptı) ve `conflict_position_handling.opposite_direction_hedge` **içeride** →
+> `ConflictPositionHandling`'in **beş** Literal alanından **biri guard'da, dördü dışarıda**;
+> **Gap C kapsam dışı** (kalanları eklemek her literal için matris satırı ister, her satır
+> bir **sınıflandırma kararı**). **GAP B:** `same_candle_entry_exit` beş literal sevk eder,
+> suite'te alan için üç hit vardı ve **üçü de `exit_first`** → `stop_first` / `ignore_trade` /
+> `conservative_rule` hiç sürülmemişti. **Yalnız bastırmayı assert etmek ZAYIF YARIDIR**
+> (iki literal sessizce tek koda çökse trade sayısı yine 0) → her case **kendi
+> `entry_exit_collision.detail["policy"]`'sini** de pinler; GH #532'nin (ADIM 136)
+> taksonomiye kaydettiği alanı **literal başına yanlışlanabilir** kılan şey budur. **GAP A:**
+> `overlapping_signal_policy`'nin dört literali **bayt bayt aynı** koşu üretir, motorun
+> **dalı yoktur**, ve vacuity savı **yalnız bir kaynak yorumunda** yaşıyordu — diagnostics
+> echo'su ise *"uygulandı"* diye okunuyordu. Yeni case onu **kasıtlı, savunulmuş** bir no-op'a
+> çevirir ve bir **TRIPWIRE**'dır: toplama modeli değişip politika ısırırsa kırmızı verir ve
+> disclosure kararını **zorlar**. **ÜÇ NC, üçü ayırt edici:** NC-1 (policy echo sabitlenir) →
+> yeni iki case + **mevcut** default case · NC-2 (diagnostics echo dondurulur) → **yalnız**
+> Gap A · NC-3 (`conservative_rule` admit etmeye başlar) → **yalnız** yeni case,
+> `test_backtest_engine.py`'nin tamamı **YEŞİL KALIR** = boşluğun ölçümü. **TUZAK, birinci
+> elden: NC turlarından sonra `RESTORE VERIFY` kırmızı verdi ama `git status` TEMİZDİ** —
+> sebep bayat `__pycache__`'ti (ADIM 100'ün kardeşi: **ağacı geri yazmak yetmez, TÜRETİLMİŞ
+> artefaktları da geri al**). **DÜRÜST SINIR: #536 KAPATILMADI** — issue dört madde ister,
+> sevk edilen **md. 1 + md. 3**; **md. 2 yazılmadı** (test işidir, imzasız yapılabilir),
+> **md. 4 kapsam dışı**; Gap A'nın **disclosure yarısı sevk edilmedi** (golden'ı oynatır +
+> bump ister = kapsam kararı). **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict
+> BLOCKED.** `PROJECT_HISTORY.md` §ADIM 141 · `docs/ADIM141_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > **el değmedi** · **`backend/src`'te SIFIR SATIR** · `frontend/src` **sıfır satır**.
 > **Son dalga — ADIM 140 (GH #703'ün İKİNCİ kapısı Ready Check düzleminde ölçüldü; karar

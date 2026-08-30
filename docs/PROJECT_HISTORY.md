@@ -19467,3 +19467,81 @@ bedeline yazıldı.
   **her** app-created kökte doğduğunu gösterir, bir örnekleme değil.
 - **Frontend'e dokunulmadı**, frontend kapıları **koşulmadı**.
 - **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+
+## ADIM 141 — GH #536 GAP A + GAP B: BİR POLİTİKANIN "HİÇBİR ŞEY YAPMADIĞI" DA BİR SÖZLEŞMEDİR, VE ONU PİNLEMEYEN SUITE KENDİ BOŞLUĞUNU GÖREMEZ
+
+**Taban:** `origin/main` @ `31593c79` (ADIM 140). **Diff:** bir yeni unit test dosyası
+(5 case) + `test_backtest_engine.py::_config`'e **opsiyonel** bir parametre
+(`overlapping_signal_policy=None`; varsayılan çağrılar bayt bayt aynı) + kapanış belgeleri.
+**`backend/src`'te SIFIR SATIR** · migration **YOK** · `ENGINE_VERSION` **DEĞİŞMEDİ** ·
+golden **el değmedi** · OpenAPI **değişmedi** · `frontend/src` **sıfır satır**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Kalem seçimi: on iki açık issue ölçüldü, imzasız ilerleyebilen İKİ tane çıktı
+
+Açık issue'ların beşi `product-decision` etiketli, üçü (#703 · #854 · #534) imza kutusu
+bekliyor, #514 `human-only`, #582 `C9` hattı. Geriye **#677** (Lighthouse, dört donmuş
+eksik) ve **#536** (conflict-matrix test boşlukları) kaldı. **#677 bilerek alınmadı:** kabul
+kriteri *"her düzeltme tavanı sıkılaştırılmış hâlde iner"* diyor ve bu ortamda Lighthouse
+Compose stack'i koşulamıyor → düzeltme **kanıtsız** kalırdı. **#536 seçildi.**
+
+### Öncül KISMEN ÇÜRÜDÜ, ve çürüyen yarı ADIM 139'un işiydi
+
+Issue *"six fields outside the capability exhaustiveness guard"* diyor. Ölçüldü:
+`_SCHEMA_FIELDS` bugün **14 alan** taşıyor (ADIM 139 onu 9'dan 14'e çıkardı) ve içine
+**`conflict_position_handling.opposite_direction_hedge`** girmiş. `ConflictPositionHandling`
+**beş** Literal alan bildirir; bugün **biri guard'da, dördü dışarıda**. Gap C bu yüzden
+**kapsam dışı bırakıldı** — kalan dördü eklemek her literal için matris satırı ister ve o
+satırların her biri bir **sınıflandırma kararıdır**, bir test slice'ının kararı değil.
+
+### Gap B — beş literal sevk ediliyor, ikisi sürülüyordu
+
+`same_candle_entry_exit` beş değer taşır; suite'te alan için **üç hit** vardı ve **üçü de
+`exit_first`**. `stop_first` / `ignore_trade` / `conservative_rule` hiç sürülmemişti. Üçü de
+bugün girişi bastırıyor — ve **yalnız bastırmayı** assert etmek zayıf yarıdır: iki literal
+sessizce tek koda çökse trade sayısı yine 0 kalırdı. Bu yüzden her case **kendi
+`entry_exit_collision.detail["policy"]`'sini** de pinler. GH #532 (ADIM 136) o event tipini
+yayımlanan taksonomiye kaydetmişti; bu case'ler onun `policy` alanını **literal başına
+yanlışlanabilir** kılan şeydir.
+
+### Gap A — dört değer bayt bayt aynı, ve bu KASITLI
+
+`overlapping_signal_policy`'nin dört literali özdeş koşu üretir; motorun üzerinde **dalı
+yok** (bir kez okunur, diagnostics'e verbatim kopyalanır). Motorun kendi savı bunun
+**vacuous** olduğudur — değerlendirme penceresi başına en fazla bir toplanmış sinyal vardır,
+yani politika ısıramaz. **O sav yalnız bir kaynak yorumunda yaşıyordu**, diagnostics echo'su
+ise *"bu politika uygulandı"* diye okunuyordu ve **hiçbir test** iki yarıdan birini
+pinlemiyordu. Yeni case belgelenmemiş bir no-op'u **kasıtlı, savunulmuş** bir no-op'a
+çevirir ve bir **tripwire**'dır: toplama modeli bir gün örtüşen sinyalleri erişilebilir
+kılarsa test kırmızı verir ve kararı (capability satırı + diagnostics ifadesi) **zorlar**.
+
+### ÜÇ NEGATİF KONTROL, ÜÇÜ AYIRT EDİCİ
+
+| NC | Yama | Kırmızıya dönen | Ölçtüğü |
+|---|---|---|---|
+| NC-1 | collision `detail["policy"]` sabitlenir | yeni iki case + **mevcut** default case | disclosure ekseni canlı; literal çökmesi görülür |
+| NC-2 | diagnostics echo'su dondurulur | **yalnız** Gap A case'i | echo ekseni bağımsız |
+| NC-3 | `conservative_rule` giriş **admit etmeye başlar** | **yalnız** yeni case | **boşluğun ölçümü** — `test_backtest_engine.py`'nin tamamı YEŞİL KALIR |
+
+### TUZAK, birinci elden: BAYAT BYTECODE SAHTE KIRMIZI ÜRETİR
+
+NC turlarından sonra `RESTORE VERIFY` kırmızı verdi, ama `git status` **temizdi** ve
+`git diff backend/src` **boştu**. Sebep `__pycache__`'ti: NC yamaları `.pyc` üretmiş, geri
+yazma sonrası bayat bytecode koşmaya devam etmişti. `find … -name __pycache__ -delete` sonrası
+beş case yeşil, üç ardışık randomize koşu da yeşil. **Ders (ADIM 100'ün kardeşi): ağacı geri
+yazmak yeterli değil — TÜRETİLMİŞ artefaktları da geri al, yoksa bir sonraki ölçüm bayat
+koda karşı yapılır.**
+
+### DÜRÜST SINIR
+
+- **#536 KAPATILMADI.** Issue dört madde ister; bu slice **md. 1 ve md. 3'ü** sevk eder.
+  **Md. 2** (`stop_conflict_resolution` explicit + `stop_priority_order` `logic:<block_id>`)
+  **yazılmadı**. **Md. 4** (guard genişletme) **kapsam dışı**, gerekçesi yukarıda ölçüldü.
+  **Md. 4'ün kendi alternatifi** (*"yeni bir literal matris-enumerated ya da allow-listed
+  olmalı"* guard'ı) da **yazılmadı** — o da bir tasarım kararıdır.
+- **Üretim davranışı DEĞİŞMEDİ ve bu iddia değil ölçüm:** `backend/src`'te sıfır satır.
+- `_config`'e eklenen parametre **opsiyoneldir**; varsayılan çağrılar aynı config'i üretir.
+- **Gap A'nın disclosure yarısı (capability satırı / diagnostics ifadesi) SEVK EDİLMEDİ** —
+  diagnostics'i değiştirmek golden digest'leri oynatır ve `ENGINE_VERSION` bump'ı ister
+  (ADIM 136'nın imzalı ekseni), yani bir **kapsam kararıdır**.
+- **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**

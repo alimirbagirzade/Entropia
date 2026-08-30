@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 143 landed — GH #536 md. 2 tamamlandı (`logic:<block_id>` motor düzleminde precedence yarışması + okunmayan sayaç)
 
 ## Nerede olduğumuz

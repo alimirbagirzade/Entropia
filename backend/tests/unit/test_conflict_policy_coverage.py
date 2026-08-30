@@ -53,11 +53,18 @@ engine-plane run that builds a stop plan replays flat bars, so its block never f
 ``logic_stop_triggers`` -- published on every Result and aggregated across a portfolio --
 had zero assertions anywhere, because its only writer sits on that unreached path.
 
-HONEST BOUNDARY: the contest is driven under ``priority_order``, which is the resolution
-``stop_priority_order`` actually governs. A logic block competing under
-``most_conservative`` (where the order is only a tie-break) or under ``first_trigger_wins``
-is not covered. Gap C (md. 4) remains out of scope, and ``record_all_execute_highest``
-remains pinned as a twin rather than fixed -- both are decisions, not assertions.
+**Gap B (the resolution that decides whether the order is read at all).** ADIM 143 drove
+the contest only under ``priority_order``. That left the sharper half open: ``most_conservative``
+consults ``stop_priority_order`` ONLY to break a distance tie, and ``first_trigger_wins``
+never lets a logic block win a tick-resolved bar at all. Both are pinned below and at the
+``_resolve_stop`` plane (``test_backtest_logic_stop``), where the measurement was taken:
+deleting the conservative tie-break term, or admitting logic stops into the tick candidates,
+each leaves the whole unit suite green (2597 passed, ``origin/main`` @ ``c9676816``).
+
+HONEST BOUNDARY: Gap C (md. 4) remains out of scope, and ``record_all_execute_highest``
+remains pinned as a twin rather than fixed -- both are decisions, not assertions. The
+engine-plane contest below carries no tick path, so ``first_trigger_wins`` is exercised
+there only on its OHLCV fallback; its tick-resolved arm is covered at the unit plane.
 """
 
 from __future__ import annotations
@@ -531,3 +538,73 @@ def test_the_stop_resolution_event_names_all_active_as_the_requirement_that_gove
     assert event.detail["requirement"] == "all_active"
     assert out.diagnostics["stop_trigger_requirement"] == "all_active"
     assert out.summary["total_stops"] == 1
+
+
+#: resolution -> (executed rule, exit price, ``first_trigger_approximated``).
+#: Measured on ``origin/main`` @ ``c9676816`` with ONE fixed ``stop_priority_order``
+#: (``_ORDER_UNDER_TEST``) held constant across all three, so the resolution literal is
+#: the only variable. ``record_all_execute_highest`` is deliberately absent: it shares
+#: ``priority_order``'s branch and is pinned as a twin above.
+_ORDER_UNDER_TEST = [_LOGIC_KEY, "percentage"]
+_RESOLUTION_CONTESTS: dict[str, tuple[str, str, bool]] = {
+    # Reads the order: the logic block leads, so it executes at the drop bar's close.
+    "priority_order": (_LOGIC_KEY, "95.00", False),
+    # Ignores the order (no tie): |102 - 100.98| = 1.02 beats |102 - 95.00| = 7.00.
+    "most_conservative": ("percentage", "100.98", False),
+    # No tick path over OHLCV -> degrades to the conservative model and FLAGS it (§9.3).
+    "first_trigger_wins": ("percentage", "100.98", True),
+}
+
+
+@pytest.mark.parametrize("resolution", sorted(_RESOLUTION_CONTESTS))
+def test_the_stop_priority_order_governs_only_under_the_resolution_that_reads_it(
+    resolution: str,
+) -> None:
+    """One order, one set of bars, three resolutions -- and two different exit prices.
+
+    ``_STOP_RESOLUTIONS`` above already drives all four literals at this plane, but with
+    two PRICE stops and no explicit ``stop_priority_order``; it therefore cannot say
+    whether a saved order is authoritative. This case holds the order fixed and varies
+    only the resolution, which is the claim that was missing: ``stop_priority_order`` is
+    read by ``priority_order`` (and its twin) and is otherwise at most a tie-break.
+
+    The stake is real money on identical bars -- 95.00 under one literal, 100.98 under the
+    other two -- and the echo cannot explain it, which is the point of the last assertion:
+    the SAVED order is byte-identical in all three runs, so a reader who trusted the
+    disclosure alone would conclude the logic block always leads.
+    """
+    expected_rule, expected_exit, expected_approximated = _RESOLUTION_CONTESTS[resolution]
+    out = _run(
+        _patched(
+            _config(),
+            {
+                "protection_stop_logic": {
+                    "stop_conflict_resolution": resolution,
+                    "stop_priority_order": _ORDER_UNDER_TEST,
+                }
+            },
+        ),
+        _long_breakout_then_stop(),
+        indicator_plan=_logic_stop_plan(),
+    )
+
+    events = [e for e in out.signal_events if e.event_type == "stop_resolution"]
+    assert len(events) == 1, "one bar resolves the stop, so exactly one trace is recorded"
+    detail = events[0].detail
+
+    # Contest guard: both rules must fire on the same bar, else the resolution has nothing
+    # to resolve and all three literals would agree for a reason unrelated to precedence.
+    assert sorted(detail["triggered"]) == ["logic:stop_1", "percentage"], (
+        f"no contest: only {sorted(detail['triggered'])} fired"
+    )
+
+    assert out.summary["total_trades"] == 1
+    assert out.summary["total_stops"] == 1
+    assert detail["executed"] == expected_rule
+    assert detail["resolution"] == resolution
+    assert detail["first_trigger_approximated"] is expected_approximated
+    assert str(out.trades[0].exit_price) == expected_exit
+
+    # The disclosure is CONSTANT while the outcome moves: the saved order is echoed
+    # verbatim under every resolution, including the two that never consult it.
+    assert out.diagnostics["stop_priority_order"] == _ORDER_UNDER_TEST

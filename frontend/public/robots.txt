@@ -1,11 +1,23 @@
-# Entropia V18 is an authenticated internal platform: every route sits behind a
-# login and there is no public content to index. Disallow-all is therefore the
-# accurate policy, not a precaution.
+# Entropia V18 serves no public content: every route sits behind a login, so a
+# crawler can reach the login shell and nothing else. This file exists because
+# its ABSENCE was a defect, not because crawling needs steering.
 #
-# Lighthouse's `robots-txt` audit fails on an INVALID file, not a restrictive
-# one. Before this file existed, /robots.txt fell through nginx's SPA rule
-# (`try_files $uri $uri/ /index.html`) and answered 200 text/html with a
-# `<!doctype html>` body — measured on the seeded stack, and the reason the
-# audit was deducted on 23 of 23 routes (GH #677).
+# WHY THIS IS "allow all" AND NOT `Disallow: /` — MEASURED, NOT ARGUED.
+# The first version of this file shipped `Disallow: /`, which reads as the
+# accurate policy for a private app. CI measured the cost (run 33333765655,
+# 23/23 routes, PR #884):
+#
+#   before        seo=82   deductions: meta-description (w=1), robots-txt (w=1)
+#   Disallow: /   seo=63   deductions: is-crawlable     (w=4.04)
+#
+# Blocking every path closes two weight-1 audits and opens one weight-4 audit,
+# so the "correct" policy is a net 19-point LOSS on every route and drops the
+# category under its own frozen floor. Lighthouse's `robots-txt` audit fails on
+# an INVALID file; it does not ask for a restrictive one. An empty `Disallow:`
+# is the RFC's own spelling of "allow everything" and is a valid file, so it
+# closes `robots-txt` without opening `is-crawlable`.
+#
+# This does not expose anything: robots.txt is an instruction, not an access
+# control, and the access control here is the login.
 User-agent: *
-Disallow: /
+Disallow:

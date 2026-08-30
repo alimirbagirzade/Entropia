@@ -14,12 +14,15 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+import pytest
+
 from entropia.domain.backtest.engine import (
     run_engine,
 )
 from entropia.domain.backtest.execution.fills import (
     _resolve_stop,
     _StopOutcome,
+    _Tick,
 )
 from entropia.domain.backtest.execution.state import (
     _Bar,
@@ -108,25 +111,39 @@ def _pos(
     )
 
 
-def _bar(low: str, close: str = "98") -> _Bar:
+def _bar(low: str, close: str = "98", high: str = "100") -> _Bar:
     return _Bar(
         timestamp="2024-01-22T00:00:00Z",
         open=Decimal("100"),
-        high=Decimal("100"),
+        high=Decimal(high),
         low=Decimal(low),
         close=Decimal(close),
         volume=Decimal("10"),
     )
 
 
-def _resolve(protection: dict[str, Any], pos: _Position, bar: _Bar, *, triggered=(), enabled=()):
+def _resolve(
+    protection: dict[str, Any],
+    pos: _Position,
+    bar: _Bar,
+    *,
+    triggered=(),
+    enabled=(),
+    ticks: tuple[_Tick, ...] = (),
+):
     return _resolve_stop(
         _cfg(protection),
         pos,
         bar,
         logic_enabled=list(enabled),
         logic_triggered=list(triggered),
+        ticks=ticks,
     )
+
+
+def _ticks(*prices: str) -> tuple[_Tick, ...]:
+    """A chronological intrabar print path, one print per price."""
+    return tuple(_Tick(epoch_ms=1000 * i, price=Decimal(p)) for i, p in enumerate(prices))
 
 
 # --------------------------------------------------------------------------- #
@@ -270,6 +287,138 @@ def test_all_active_with_price_and_logic_requires_both() -> None:
     )
     assert out is not None
     assert set(out.triggered) == {"percentage", "logic:s1"}
+
+
+# --------------------------------------------------------------------------- #
+# Logic block vs price stop under most_conservative / first_trigger_wins       #
+# (GH #536 md. 2 — the ADIM 143 honest boundary, at the plane that decides)    #
+# --------------------------------------------------------------------------- #
+
+#: The two levels that make the ``most_conservative`` contest a genuine DISTANCE TIE.
+#: The percentage stop rests 1.00 BELOW the entry and the logic block confirms 1.00
+#: ABOVE it, so the comparator's first term (``abs(entry - level)``) is equal and its
+#: second term — the priority index — is the only thing left to decide. Both are read
+#: by the fixtures below, so editing one without the other trips the tie guard.
+_TIE_PCT_LEVEL = Decimal("99")
+_TIE_LOGIC_CLOSE = Decimal("101")
+
+#: label -> (saved ``stop_priority_order``, executed key, exit price).
+#: Measured on ``origin/main`` @ ``c9676816``.
+_CONSERVATIVE_TIES: dict[str, tuple[list[str] | None, str, str]] = {
+    # The canonical §9.2 default — logic blocks lead, then percentage/trailing/absolute.
+    "null — canonical order, logic leads": (None, "logic:s1", "101"),
+    "explicit, logic still leads": (["logic:s1", "percentage"], "logic:s1", "101"),
+    # The one that matters: the order is consulted, so promoting the price stop wins.
+    "explicit, percentage promoted over the logic block": (
+        ["percentage", "logic:s1"],
+        "percentage",
+        "99",
+    ),
+}
+
+
+@pytest.mark.parametrize("label", sorted(_CONSERVATIVE_TIES))
+def test_most_conservative_breaks_a_distance_tie_with_the_stop_priority_order(
+    label: str,
+) -> None:
+    """The ``most_conservative`` comparator has a SECOND term, and nothing exercised it.
+
+    ``_resolve_stop`` ranks by ``(abs(entry - level), priority_index)``. Every existing
+    case separates the two levels, so only the first term is ever read. Measured on
+    ``origin/main`` @ ``c9676816``: deleting the ``priority_index`` term outright leaves
+    the whole unit suite green (2597 passed). What that term buys is DETERMINISM — with
+    it gone the winner of a tie falls to dict insertion order, which no contract names.
+
+    This module's own docstring claims "+/- cases for every combination"; a logic block
+    competing under ``most_conservative`` with an explicit order was not one of them.
+
+    The tie is not cosmetic: 99 books a LOSS and 101 books a GAIN on the very same bar,
+    so the term this pins decides the sign of the trade.
+    """
+    order, expected_key, expected_price = _CONSERVATIVE_TIES[label]
+    protection: dict[str, Any] = {
+        "percentage_stop": {"enabled": True, "loss_percentage": "1.0"},
+        "stop_conflict_resolution": "most_conservative",
+    }
+    if order is not None:
+        protection["stop_priority_order"] = order
+
+    out = _resolve(
+        _protection(**protection),
+        _pos(pct=str(_TIE_PCT_LEVEL)),
+        _bar(low="98", close=str(_TIE_LOGIC_CLOSE), high="101.5"),
+        enabled=["logic:s1"],
+        triggered=["logic:s1"],
+    )
+
+    assert out is not None
+    # Contest guard: both rules must fire, else precedence decides nothing and every
+    # ordering would agree by default.
+    assert set(out.triggered) == {"percentage", "logic:s1"}
+    # Tie guard: if a future edit separates the levels, the first comparator term starts
+    # deciding again and this case would silently go back to measuring distance.
+    assert abs(_ENTRY - _TIE_PCT_LEVEL) == abs(_ENTRY - _TIE_LOGIC_CLOSE), (
+        "the fixture no longer ties, so the priority tie-break is not being exercised"
+    )
+
+    assert out.executed_key == expected_key
+    assert out.price == Decimal(expected_price)
+
+
+def test_first_trigger_wins_cannot_elect_a_logic_block_from_a_tick_path() -> None:
+    """A logic stop is STRUCTURALLY excluded from tick resolution — even ranked first.
+
+    ``_resolve_stop`` filters the tick candidates to ``price_levels`` before walking the
+    prints, because a logic block confirms only at the bar close and so cannot precede an
+    intrabar touch. That exclusion is load-bearing and was unguarded: measured on
+    ``origin/main`` @ ``c9676816``, admitting logic stops into ``price_triggered`` leaves
+    the whole unit suite green (2597 passed).
+
+    The two arms differ in EXACTLY one input — the presence of a tick path — so the
+    no-tick arm is this case's own negative control: it shows the percentage win above is
+    produced by the exclusion, not by the ranking or the bar. Without ticks the same
+    config elects the logic block at 101 and flags the approximation (§9.3); with them it
+    exits at 99 instead. Two prices, one differing input.
+    """
+    protection = _protection(
+        percentage_stop={"enabled": True, "loss_percentage": "1.0"},
+        stop_conflict_resolution="first_trigger_wins",
+        # The logic block is ranked FIRST — if the order could reach the tick path at all,
+        # this is the configuration under which it would win.
+        stop_priority_order=["logic:s1", "percentage"],
+    )
+    bar = _bar(low="98", close=str(_TIE_LOGIC_CLOSE), high="101.5")
+
+    with_ticks = _resolve(
+        protection,
+        _pos(pct=str(_TIE_PCT_LEVEL)),
+        bar,
+        enabled=["logic:s1"],
+        triggered=["logic:s1"],
+        ticks=_ticks("100", "99.5", "98.5", "101"),
+    )
+    assert with_ticks is not None
+    assert set(with_ticks.triggered) == {"percentage", "logic:s1"}
+    assert with_ticks.executed_key == "percentage"
+    assert with_ticks.price == _TIE_PCT_LEVEL
+    # The TRUE print order resolved it, so nothing was approximated.
+    assert with_ticks.tick_resolved is True
+    assert with_ticks.approximated_first is False
+
+    # Control arm: identical config and bar, no tick path.
+    without_ticks = _resolve(
+        protection,
+        _pos(pct=str(_TIE_PCT_LEVEL)),
+        bar,
+        enabled=["logic:s1"],
+        triggered=["logic:s1"],
+    )
+    assert without_ticks is not None
+    assert without_ticks.executed_key == "logic:s1"
+    assert without_ticks.price == _TIE_LOGIC_CLOSE
+    assert without_ticks.tick_resolved is False
+    # Over OHLCV the order is unknowable, and §9.3 requires that be DISCLOSED, not faked.
+    assert without_ticks.approximated_first is True
 
 
 def test_short_position_price_stop_triggers_on_the_high() -> None:

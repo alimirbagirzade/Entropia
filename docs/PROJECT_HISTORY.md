@@ -19820,3 +19820,142 @@ kuralı).
   idiomlarını taşır; üçüncü bir harness icat edilmedi.
 - **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
 - **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+
+## ADIM 144 — GH #536 MD. 2'NİN KALANI: BİR KARŞILAŞTIRICININ İKİNCİ TERİMİ HİÇ OKUNMAMIŞTI, VE BİR YAPISAL DIŞLAMANIN HİÇ MUHAFIZI YOKTU — İKİSİ DE PARANIN İŞARETİNİ DEĞİŞTİRİYOR
+
+**Taban** `origin/main` @ `c9676816` (ADIM 143 **indi**, PR #882). **`backend/src`'te SIFIR
+SATIR** · `frontend/src` **sıfır satır** · migration **YOK** · `ENGINE_VERSION`
+**DEĞİŞMEDİ** · golden **el değmedi** · OpenAPI **değişmedi**. Üç yeni test fonksiyonu
+(yedi parametrik case). **Blocker DEĞİŞMEDİ (1 — yalnız A-08) → RC verdict BLOCKED.**
+
+ADIM 143 kendi modül docstring'ine bir **HONEST BOUNDARY** yazmıştı: *"the contest is
+driven under `priority_order` … a logic block competing under `most_conservative` (where
+the order is only a tie-break) or under `first_trigger_wins` is not covered."* Bu slice o
+borcu kapatır.
+
+### Oturum açılışı: imzasız ilerleyebilen tek kalem ölçümle bulundu
+
+Üç karar belgesinin kutuları **tek tek** sayıldı (belgeler **farklı işaret** kullanır, tek
+grep ikisini birden ölçmez): #703 **11 ☐**, #854 **9 ☐**, #534 **4 `[ ]`** — **hiçbiri
+dolu değil**. #677 Lighthouse/Compose ortamı ister (bu ortamda yok), #514 `human-only`.
+Geriye imzasız ilerleyebilen tek kalem olarak **#536'nın kalan KOD işi** kaldı.
+
+### Öncül ölçüldü, ve YİNE KISMEN ÇÜRÜDÜ — ama çürüyen yarı bu kez daha ince
+
+Devir notu *"`most_conservative` altında bir logic bloğunun yarışması kapsanmadı"* diyordu.
+**Harfi harfine yanlış:** `test_backtest_logic_stop.py::test_logic_stop_can_be_more_conservative_than_a_touched_price_stop`
+bir logic bloğunu bir fiyat stopuna karşı **zaten** yarıştırıyor ve conservative modelin
+onu seçtiğini assert ediyor.
+
+**Ayrım taşıyıcı ve kaynakta okundu** (`execution/fills.py`, `_resolve_stop`):
+
+```python
+else:  # most_conservative: tightest adverse move, canonical priority as tie-break
+    winner = min(
+        triggered,
+        key=lambda k: (abs(entry - triggered[k]), priority.get(k, len(priority))),
+    )
+```
+
+Karşılaştırıcı bir **demettir**. Mevcut her case iki seviyeyi **ayırır**, yani yalnız
+**birinci** terim okunur. İkinci terim — `stop_priority_order`'ın yapılandırdığı tam da o
+indeks — **ancak mesafeler EŞİTken** ulaşılabilir. Boşluk *"logic bloğu yarışmıyor"* değil,
+**"beraberlik hiç kurulmamış"**tı.
+
+### Boşluk iddia edilmedi, ÖLÇÜLDÜ (NC-0 — iki bağımsız eksen)
+
+Yazmadan önce, üretim koduna kusur enjekte edilip **tam unit suite** koşuldu:
+
+| Enjeksiyon | Sonuç |
+|---|---|
+| `most_conservative`'in **tie-break terimi SİLİNDİ** | **2597 passed, exit 0** |
+| `first_trigger_wins`'in **logic-stop dışlaması KALDIRILDI** (`price_triggered = dict(triggered)`) | **2597 passed, exit 0** |
+
+İkisi de **tamamen yeşil**. Yani iki ayrı, yük taşıyan davranışın **hiçbir muhafızı
+yoktu**. Silinen tie-break'in satın aldığı şey **DETERMİNİZM**'dir: o terim gidince bir
+beraberliğin kazananı `dict` ekleme sırasına düşer, ki hiçbir sözleşme onu adlandırmaz.
+
+**Yan bulgu:** `test_backtest_logic_stop.py`'nin kendi modül docstring'i *"+/- (fires /
+does not fire) cases for **every combination**"* diyor. Ölçüldü: **yanlış** — iki
+kombinasyon eksikti ve bu slice onları ekliyor.
+
+### TUZAK, birinci elden: `-q` İKİ KEZ verilince pytest ÖZETİ SUSAR
+
+İlk NC-0 koşusu `exit=0` verdi ve **hiçbir sayı basmadı**. Sebep: `addopts` zaten `-q`
+taşıyor, komut satırındaki ikinci `-q` çıktıyı özet satırını bastıracak kadar kısıyor →
+elde yalnız **exit code** kalıyor. Deponun *"yeşil exit code kanıt değildir"* kuralının
+yeni bir kılığı: **bu kez kanıtı gizleyen şey ortam değil, kendi bayrağımdı.** Kendi `-q`'m
+düşürüldü, ölçüm `2597 passed` olarak **okundu**.
+
+### Sevk edilen — iki düzlem, çünkü iki mekanizma iki yerde yaşıyor
+
+**Unit düzlemi** (`test_backtest_logic_stop.py`, mekanizmanın kendisi):
+
+- `test_most_conservative_breaks_a_distance_tie_with_the_stop_priority_order` (×3) —
+  entry **100**, yüzde stopu **99** (mesafe 1.00), logic bloğu bar close **101**'de
+  (mesafe 1.00) → **GERÇEK BERABERLİK**, ve karar tamamen sıraya kalır.
+  **Beraberlik kozmetik değil: 99 bir ZARAR, 101 bir KAZANÇ yazar** — aynı barda,
+  aynı config'te. Pinlenen terim **trade'in işaretini** belirliyor.
+- `test_first_trigger_wins_cannot_elect_a_logic_block_from_a_tick_path` — logic bloğu
+  `stop_priority_order`'da **BİRİNCİ** sıraya konur ve **yine kazanamaz**
+  (`percentage` @ 99, `tick_resolved=True`). İkinci kol **testin kendi negatif
+  kontrolüdür**: tek fark tick yolunun yokluğu → aynı config `logic:s1` @ **101** seçer ve
+  `approximated_first=True` ile **açıklar** (§9.3). **İki fiyat, tek değişen girdi.**
+
+**Motor düzlemi** (`test_conflict_policy_coverage.py`):
+
+- `test_the_stop_priority_order_governs_only_under_the_resolution_that_reads_it` (×3) —
+  **TEK sabit `stop_priority_order`** (`["logic:stop_1", "percentage"]`), **tek bar
+  kümesi**, üç resolution:
+
+| resolution | executed | exit | `first_trigger_approximated` |
+|---|---|---|---|
+| `priority_order` | `logic:stop_1` | **95.00** | `False` |
+| `most_conservative` | `percentage` | **100.98** | `False` |
+| `first_trigger_wins` | `percentage` | **100.98** | `True` |
+
+  **Kaydedilen sıra üçünde de BAYT BAYT AYNI yayımlanır** — yani disclosure'a tek başına
+  güvenen bir okuyucu *"logic bloğu hep önde"* sonucuna varırdı. Testin son assertion'ı
+  tam da bunu pinler: **echo sabitken sonuç oynuyor.**
+
+`_STOP_RESOLUTIONS` (ADIM 142) dört literali bu düzlemde zaten sürüyor — ama **iki fiyat
+stopuyla ve HİÇ açık sıra vermeden**, dolayısıyla *"kaydedilen sıra otoriter mi"* sorusunu
+**soramaz**. Bu case'in kazandığı eksen budur.
+
+### NC turu: BEŞ kontrol, BİRİ REDDEDİLDİ
+
+| # | Enjeksiyon | Sonuç |
+|---|---|---|
+| NC-1 | tie-break silindi | **3 kırmızı, üçü de benim**; **2597 mevcut test YEŞİL** |
+| NC-2 | logic stop tick çözümüne alındı | **tam 1 kırmızı** (yalnız hedef) |
+| NC-3 | `most_conservative` sırayı BİRİNCİL okur | **REDDEDİLDİ** — 6 kırmızının **4'ü MEVCUT** test |
+| NC-3′ | **yalnız açık sıra** varken sıra birincil olur | **tam 2 kırmızı, ikisi de benim** |
+| NC-5 | fixture beraberliği bozulur (`101` → `101.5`) | **tie guard ateşlendi** (`Decimal('1') == Decimal('1.5')`) |
+
+**NC-3 REDDİ bu slice'ın süreç dersidir** (ADIM 105'in *"doğru sebep, yanlış kapsam"*
+şeklinin üçüncü örneği): karşılaştırıcıyı bütünüyle sıra-birincil yapmak `oracles/test_oracle_protection_stops.py`'nin
+**iki** testini ve `_STOP_RESOLUTIONS`'ın **iki** parametresini düşürdü — yani *"mesafe
+birincildir"* özelliği **zaten korunuyordu** ve o kontrol **benim** boşluğumu ölçmüyordu.
+Yerine, **yalnız açık bir sıra verildiğinde** sırayı birincil yapan NC-3′ kuruldu: mevcut
+suite'in tamamı yeşil kalır, **yalnız iki yeni case** düşer. *"Açık sıra mesafeyi geçersiz
+kılmaz"* iddiasının ölçüsü budur.
+
+**NC-1'in kısmî kapsamı da kaydedildi, gizlenmedi:** üç tie parametresinden **ikisi**
+kırmızı verir; *"explicit, percentage promoted"* parametresi **yeşil kalır**, çünkü
+tie-break yokken `dict` ekleme sırası (fiyat stopları logic'ten önce eklenir) tesadüfen
+aynı kazananı üretir. Ayırt edici olanlar **kanonik-sıra** parametreleridir.
+
+**NC-5 bir vacuity muhafızını doğrular:** eklenen tie guard (`abs(entry - pct) ==
+abs(entry - logic_close)`) ölü değil — fixture kayarsa **ateşleniyor** ve testin sessizce
+tekrar *mesafe* ölçmeye dönmesini engelliyor.
+
+### DÜRÜST SINIR
+
+- **#536 KAPATILMADI.** md. 2 artık tamam; **md. 4 (Gap C) kapsam dışı** (tasarım kararı).
+- **`record_all_execute_highest` hâlâ ikiz olarak PİNLİ, DÜZELTİLMEDİ** (ürün kararı).
+- Motor düzlemindeki contest'in **tick yolu yok** → `first_trigger_wins` orada yalnız
+  **OHLCV geri düşüşüyle** sürülür; tick-çözümlü kolu **unit düzleminde** kapsanır.
+- Şema prozası **düzeltilmedi** (adjudication).
+- `integration/test_logic_based_stop.py` **EL DEĞMEDİ**.
+- **Frontend kapıları KOŞULMADI** (frontend'de sıfır satır).
+- **A-08 (#514) AÇIK** — tek blocker, `human-only`, çıkış kriterleri 0/4.

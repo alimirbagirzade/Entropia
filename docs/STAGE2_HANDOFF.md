@@ -10388,3 +10388,68 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 143 · `docs/ADIM143_LANDED_KICKOFF.md`.
    `most_conservative` / `first_trigger_wins` altında yarışması (ADIM 143'ün dürüst sınırı).
 5. **#677 — Lighthouse'un dört donmuş eksiği** (KOD) — Compose + Lighthouse ortamı ister.
 6. **A-08 (#514)** — **TEK BLOCKER**, `human-only`. Çıkış kriterleri **0/4** → kapatılamaz.
+
+## Stage ADIM 144 — GH #536 md. 2'nin kalanı: `most_conservative` tie-break'i + `first_trigger_wins` yapısal dışlaması (PR sıra bekliyor)
+
+Taban `origin/main` @ `c9676816`. **`backend/src`'te SIFIR SATIR** · migration **YOK** ·
+`ENGINE_VERSION` **değişmedi** · golden **el değmedi** · OpenAPI **değişmedi** ·
+`frontend/src` **sıfır satır**. Üç yeni test fonksiyonu (yedi parametrik case).
+
+ADIM 143'ün **HONEST BOUNDARY**'si tahliye edildi. **Öncül YİNE KISMEN ÇÜRÜDÜ:**
+*"`most_conservative` altında logic bloğu yarışmıyor"* **harfi harfine yanlıştı** —
+`test_logic_stop_can_be_more_conservative_than_a_touched_price_stop` zaten yarıştırıyor.
+Gerçek boşluk daha inceydi ve **kaynakta okundu**: `most_conservative`'in karşılaştırıcısı
+bir **DEMET** (`(abs(entry - level), priority_index)`) ve mevcut her case iki seviyeyi
+**ayırdığı** için yalnız **birinci** terim okunuyordu. **YARIŞMAK ≠ BERABERE KALMAK.**
+
+**BOŞLUK İDDİA EDİLMEDİ, ÖLÇÜLDÜ — iki bağımsız eksen, ikisi de tamamen yeşil:**
+tie-break terimi **silindi** → **2597 passed, exit 0**; `first_trigger_wins`'in logic-stop
+**dışlaması kaldırıldı** → **2597 passed, exit 0**.
+
+**Sevk edilen — iki düzlem:** unit (`test_backtest_logic_stop.py`) beraberliği kurar
+(entry 100, yüzde 99, logic close 101 → **mesafe 1.00 = 1.00**) ve **99 bir ZARAR / 101 bir
+KAZANÇ** yazar, yani pinlenen terim **trade'in işaretini** belirler; ayrıca logic bloğu
+sırada **BİRİNCİ** olsa bile tick yolundan **seçilemez** (`tick_resolved=True`), ikinci kol
+**testin kendi negatif kontrolü**dür. Motor düzlemi (`test_conflict_policy_coverage.py`)
+**tek sabit sırayla** üç resolution'ı yarıştırır → `priority_order` **95.00**,
+`most_conservative` **100.98**, `first_trigger_wins` **100.98 + `approximated=True`** —
+ve **kaydedilen sıra üçünde de bayt bayt aynı yayımlanır**, yani disclosure tek başına
+yanıltır.
+
+**NC'ler:** NC-1 (tie-break silindi) → **3 kırmızı, üçü de yeni, 2597 mevcut test YEŞİL**
+(üç tie param'ından **ikisi** ayırt edici — üçüncüsünde `dict` ekleme sırası tesadüfen aynı
+kazananı verir, **kaydedildi**). NC-2 → **tam 1 kırmızı**. **NC-3 REDDEDİLDİ** (ADIM
+105'in şekli, üçüncü örnek): karşılaştırıcıyı bütünüyle sıra-birincil yapmak **dört MEVCUT
+testi** düşürdü ⇒ *"mesafe birincildir"* zaten korunuyordu → **NC-3′** (yalnız **açık sıra**
+varken vur) → **tam 2 kırmızı, ikisi de yeni**. **NC-5** vacuity muhafızını yanlışlar: tie
+guard fixture kayınca **ateşleniyor**.
+
+**İKİ TUZAK, birinci elden.** (1) `addopts` zaten `-q` taşırken komut satırına **ikinci bir
+`-q`** koymak pytest **özet satırını susturur** → elde yalnız exit code kalır (*"yeşil exit
+code kanıt değildir"* kuralının yeni kılığı; bu kez kanıtı gizleyen **kendi bayrağımdı**).
+(2) Bu handoff'u güncellerken `str.index()` **tekrar eden** bir `## Next:` işaretçisinin
+**İLK** eşleşmesini buldu ve ADIM 141/142/143 kayıtlarını **sildi** — #590/#604'ün birebir
+sınıfı. Geri alındı, `rindex` + **başlık koruma kontrolü** ile yeniden yapıldı: *tekrar eden
+bir işaretçiye göre kesme yapma, kesme SONRASI başlık kümesini karşılaştır.*
+
+**DÜRÜST SINIR:** #536 **KAPATILMADI** (md. 2 tamam; **md. 4 kapsam dışı**) ·
+`record_all_execute_highest` hâlâ **ikiz olarak pinli, düzeltilmedi** · motor düzleminde
+**tick yolu yok** → `first_trigger_wins` orada yalnız OHLCV geri düşüşüyle sürülür ·
+şema prozası **düzeltilmedi** · `integration/test_logic_based_stop.py` ve
+`oracles/test_oracle_protection_stops.py` **el değmedi** · frontend kapıları **koşulmadı** ·
+**A-08 (#514) AÇIK**.
+
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 144 · `docs/ADIM144_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği açık kalemlerden biri — ÜÇÜ İMZA, İKİSİ KOD, BİRİ BLOCKER**
+
+1. **#703 / `instrument_mapping_ref` — yazıcı kim?** (İMZA)
+   `closure_i703_..._2026-08-30.md`, **üç karar / on bir kutu (`☐`), hepsi BOŞ**.
+2. **#854 — dış import pin'i** (İMZA). **Dokuz kutu (`☐`), dokuzu BOŞ.**
+3. **#534 — AYRIŞMA** (İMZA): issue **CLOSED** ama **kapanış yorumu YOK** ve karar belgesi
+   **dört kutu (`[ ]`) BOŞ** → ADIM 90 gereği md. 3 **açık**.
+4. **#536'nın kalanı — İKİSİ DE KARAR, imzasız yapılamaz:** **md. 4** (Gap C guard) bir
+   **tasarım kararı**; **`record_all` ikizliği** bir **ÜRÜN KARARI**.
+   **#536'nın imzasız KOD işi TÜKENDİ** (md. 1/2/3 kapandı).
+5. **#677 — Lighthouse'un dört donmuş eksiği** (KOD) — Compose + Lighthouse ortamı ister.
+6. **A-08 (#514)** — **TEK BLOCKER**, `human-only`. Çıkış kriterleri **0/4** → kapatılamaz.

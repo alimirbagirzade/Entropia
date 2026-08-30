@@ -272,6 +272,45 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
+> SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 144 (GH #536 md. 2'nin
+> KALANI: `most_conservative` tie-break'i + `first_trigger_wins` yapısal dışlaması).**
+> ADIM 143 bunu HONEST BOUNDARY olarak bırakmıştı; alındı. Diğer kalemler ölçüldü,
+> girilmedi: #703 (**11 kutu BOŞ**) · #854 (**9 kutu BOŞ**) · #534 (issue `CLOSED`,
+> **kapanış yorumu YOK**, 4 kutu BOŞ → ADIM 90 → açık) · #677 (Lighthouse ortamı yok) ·
+> #514 `human-only`. **ÖNCÜL YİNE KISMEN ÇÜRÜDÜ:** *"`most_conservative` altında logic
+> bloğu yarışmıyor"* **harfi harfine yanlıştı** —
+> `test_logic_stop_can_be_more_conservative_than_a_touched_price_stop` **zaten**
+> yarıştırıyor. **Taşıyıcı ayrım: YARIŞMAK ≠ BERABERE KALMAK** — `most_conservative`'in
+> karşılaştırıcısı bir **DEMET** (`(abs(entry - level), priority_index)`) ve mevcut her
+> case iki seviyeyi **ayırdığı** için yalnız **birinci** terim okunuyordu. **ASIL BULGU,
+> İKİ EKSENDE ÖLÇÜLDÜ (iddia edilmedi):** tie-break terimini **silmek** → **2597 passed,
+> exit 0**; `first_trigger_wins`'in logic-stop **dışlamasını kaldırmak** → **2597 passed,
+> exit 0**. İki yük taşıyan davranışın **hiçbir muhafızı yoktu**. **PARA OYNUYOR:** unit
+> düzleminde beraberlik **99 (ZARAR) ↔ 101 (KAZANÇ)** ayırır — pinlenen terim trade'in
+> **işaretini** belirler; motor düzleminde **tek sabit sırayla** üç resolution **95.00 /
+> 100.98 / 100.98** verir ve **kaydedilen sıra üçünde de bayt bayt aynı yayımlanır** →
+> disclosure tek başına yanıltır. **BEŞ NC ve BİRİ REDDEDİLDİ:** NC-3 kırmızıydı ama
+> **dört MEVCUT testi** düşürdü ⇒ *"mesafe birincildir"* **zaten** korunuyordu (ADIM
+> 105'in şekli, üçüncü örnek) → **yalnız açık sıra** varken vuran **NC-3′** ile
+> değiştirildi: **tam 2 kırmızı, ikisi de yeni**. NC-1 → **3 kırmızı, 2597 mevcut test
+> YEŞİL** (üç tie param'ından **ikisi** ayırt edici, üçüncüsü `dict` sırası yüzünden
+> tesadüfen yeşil — **kaydedildi**); NC-2 → **tam 1**; **NC-5** tie guard'ın ölü olmadığını
+> yanlışlar. **İKİ TUZAK:** `addopts` zaten `-q` taşırken **ikinci bir `-q`** pytest
+> **özetini susturur** (elde yalnız exit code kalır); ve handoff'u güncellerken
+> `str.index()` **tekrar eden** bir `## Next:` işaretçisinin **İLK** eşleşmesini bulup ADIM
+> 141/142/143 kayıtlarını **sildi** (#590/#604 sınıfı) → geri alındı, `rindex` + **multiset
+> başlık koruma kontrolü** ile yeniden yapıldı (**246 kayıt korundu**). **DÜRÜST SINIR:
+> #536 KAPATILMADI** — md. 2 tamam, ama **md. 4 kapsam dışı**, **`record_all` hâlâ ikiz
+> olarak pinli, DÜZELTİLMEDİ**, motor düzleminde **tick yolu yok** (o kol yalnız unit'te),
+> şema prozası **düzeltilmedi**, `integration/test_logic_based_stop.py` ve
+> `oracles/test_oracle_protection_stops.py` **EL DEĞMEDİ**, frontend kapıları
+> **koşulmadı**. **#536'nın imzasız KOD işi TÜKENDİ.** Toplanan test **3901 → 3904**.
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 144 · `docs/ADIM144_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
 > SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 143 (GH #536 md. 2 TAMAMLANDI:
 > `logic:<block_id>` motor düzleminde bir custom `stop_priority_order` yarışmasına sokuldu).**
 > ADIM 142 bunu kendi docstring'ine **HONEST BOUNDARY** olarak yazmıştı; alındı. Diğer kalemler

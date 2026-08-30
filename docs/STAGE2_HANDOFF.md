@@ -10139,3 +10139,62 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 139 · `docs/ADIM139_LANDED_KICKOFF.md`.
 
 **Ajan bunlardan hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
 `docs/ADIM139_LANDED_KICKOFF.md` sonunda.
+## Stage ADIM 140 — GH #703'ün İKİNCİ kapısı Ready Check düzleminde ölçüldü; karar açıldı (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `7f2d8317`. **`backend/src`'te SIFIR SATIR** · migration **YOK** ·
+`ENGINE_VERSION` **değişmedi** · golden **el değmedi** · OpenAPI **değişmedi** ·
+`SHARED_ALLOCATION_STATUS` el değmedi · `frontend/src` sıfır satır. Blocker **DEĞİŞMEDİ
+(1 — A-08)**, verdict **BLOCKED**.
+
+Oturum **beş** kalemle açıldı, **dördü ölçümde kapandı** (#534 dört kutu / #854 dokuz kutu,
+hepsi BOŞ — iki belge **farklı kutu işareti** kullanır ve tek grep ikisini ölçmez; `RD-09.c4`
+md. 3'e bağlı; A-08 `human-only`). Kalan tek kalem **`instrument_mapping_ref`** ve devir notu
+onu doğru sınıflandırmıştı: **bir yazıcı eklemek bir ürün kararıdır.**
+
+**ASIL BULGU — kapı İKİ düzlemde vuruyor, ADIM 138 yalnız birini pinlemişti.** Aynı predicate
+(`time_policy::instrument_mapping_is_valid`) hem worker'da (`queries/funding.py` →
+fail-closed), hem `readiness/validators.py::_research_market_compatibility_issues` içinde
+**`INSTRUMENT_MAPPING_INVALID` / `Sev.BLOCKER`** olarak **admission'da** okunur. İkinci düzlem
+üretim yolunda **hiç koşulmamıştı**; koşuldu ve ölçüldü:
+`['INSTRUMENT_MAPPING_INVALID', 'RESEARCH_COVERAGE_LIMITED']`, `state: not_ready`.
+
+**İKİNCİ BULGU (slice'ın adı):** `test_readiness_research_data.py::_seed_research_revision`
+`linked_market_dataset_revision_id`'yi **hiç set etmez** → `False == False` → predicate
+*coherent* der → BLOCKER doğmaz. Üretim o şekli **üretemez** (`market_entity_id` zorunlu).
+ADIM 138'in dersinin **ayna görüntüsü, daha sinsi kılıkta**: orada fake *fazladan* bir şey
+yapıyordu, burada harness *eksik* bir şey yapıyor ve eksiklik iddiayı **tersine çeviriyor**.
+Ders: **bir fixture'ın YAPMADIĞI şey de bir iddiadır.**
+
+**ÜÇÜNCÜ BULGU:** R1 bir alt sistemin **yokluğu değil**, sevk edilmiş bir desenin
+**aynalanmaması** — `instrument_registry`/`instrument_alias` + `resolve_scope_id` vardır ve
+**Market Data tarafı onu zaten kullanır** (`instrument_scope` → kanonik id → fail-closed 422).
+Ve **(b)'nin ön koşulu ölçülünce zayıfladı**: `MarketDatasetRevision.instrument_id` de
+nullable ve yazıcısı koşullu → link'ten kopyalamak kusuru bir katman öteye taşıyabilir.
+
+**ÜÇ NC, üçü ayırt edici:** NC-1 (predicate sökülür) → mevcut altı Ready Check testi **YEŞİL
+KALIR** = boşluğun ölçümü · NC-2 (yalnız Ready Check kapısı) → **yalnız** yeni iki test =
+düzlemler bağımsız · NC-3 (seeder'a link) → ayrışma testi + **mevcut suite'in iki testi** =
+harness'ı üretim şekline çekmenin **ölçülmüş bedeli**, bu yüzden §Karar 2 olarak ayrı kutuya
+açıldı ve **sessizce yapılmadı**.
+
+**DÜRÜST SINIR: kusur DÜZELTİLMEDİ, #703 KAPATILMADI.** Karar belgesi
+`docs/decisions/closure_i703_instrument_mapping_writer_2026-08-30.md` — **üç karar, on bir
+kutu, hiçbiri dolu değil.** `RD-09.c4` kapatılmadı ve yeniden sınıflandırılmadı; kabul borcu
+tavanlarına dokunulmadı. Harness değiştirilmedi. Frontend kapıları koşulmadı.
+
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 140 · `docs/ADIM140_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği açık kalemlerden biri — DÖRDÜ İMZA, İKİSİ KOD, BİRİ BLOCKER**
+
+1. **#703 / `instrument_mapping_ref` — yazıcı kim?** (İMZA, sonra KOD). **YENİ:**
+   `closure_i703_instrument_mapping_writer_2026-08-30.md`, **üç karar / on bir kutu, hepsi
+   BOŞ**. Seçenekler ölçülmüş: (a) statüko · (b) link'ten türet (**fail-open riski ölçüldü**) ·
+   (c) Market Data desenini aynala (**emsali aynı repoda sevk edilmiş**) · (d) predicate'i
+   gevşet (**NC-1 bedelini ölçtü**). §Karar 2 harness'ın kaderini, §Karar 3 `RD-09.c4`'ü sorar.
+2. **#534 md. 3 — same-candle sayacı** (İMZA). **Dört kutu, dördü BOŞ.** Kutu işareti `[ ]`.
+3. **#854 — dış import pin'i taşınıyor** (İMZA). **Dokuz kutu (`☐`), dokuzu BOŞ.**
+4. **Composite Result'ın provenance'ı** (KOD, ama önce issue + imza) — ADIM 136/137'den devir.
+5. **ADR-0002 §13.1'in OD-2 satırı + üç bayat docstring** (İMZA/adjudication, ADIM 136'dan devir).
+6. **RD-09.c4** (KOD) — md. 1 çözülmeden kapatmak, mapping'i fixture'da elle set etmek olur =
+   #703'ün kör noktasının tekrarı. §Karar 3 bunu açıkça sorar.
+7. **A-08 (#514)** — **tek blocker**, ayrı hat, insan denetimi ister.

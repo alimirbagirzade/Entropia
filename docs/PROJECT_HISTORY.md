@@ -19365,3 +19365,105 @@ fonksiyon sayar, parametreleri değil).
   (orijinalde `:213`, eklemeden sonra `:227`) — **bu slice yaratmadı** ve CI kapısı
   (`mypy src`) **temiz**.
 * Frontend kapıları **koşulmadı** (`frontend/src`'te sıfır satır).
+## ADIM 140 — GH #703'ÜN İKİNCİ KAPISI: BİR FIXTURE'IN **YAPMADIĞI** ŞEY DE BİR İDDİADIR, VE O EKSİKLİK KAPIYI GÜVENLİ TARAFA DÜŞÜRÜYORDU
+
+**Taban:** `origin/main` @ `7f2d8317` (ADIM 138). **Diff:** bir yeni test dosyası (3 case),
+bir yeni karar belgesi (11 boş kutu) + kapanış belgeleri ve üretilmiş artefaktlar.
+**`backend/src`'te SIFIR SATIR** · migration **YOK** · `ENGINE_VERSION` **DEĞİŞMEDİ** ·
+golden **el değmedi** · OpenAPI **değişmedi** · `SHARED_ALLOCATION_STATUS` **el değmedi** ·
+`frontend/src`'te **sıfır satır**.
+**Blocker sayısı DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### Oturum beş kalemle açıldı; dördü ölçümde kapandı
+
+Devir promptu beş kalem sayıyordu. **Dördü durdu, ölçülerek:** `#534` md. 3'ün karar
+belgesinde **dört kutu, dördü de boş** (`[ ]`) · `#854`'te **dokuz kutu, dokuzu da boş**
+(`☐`) — promptun kendi uyardığı gibi iki belge **farklı kutu işareti** kullanıyor ve tek bir
+grep ikisini birden ölçmez, o yüzden ikisi de kutu kutu okundu · `RD-09.c4` (3)'e bağlı ·
+`A-08` (#514) `human-only`. Geriye tek kalem kaldı: **`instrument_mapping_ref`**, ve prompt
+onu doğru sınıflandırmıştı — *bir yazıcı eklemek bir ÜRÜN KARARIDIR*.
+
+### Öncül ÖLÇÜLDÜ ve çürümedi — ama resmi promptun çizdiğinden GENİŞ çıktı
+
+`instrument_mapping_ref` `backend/src`'te dört kez okunur, **yazan sıfır satır** vardır
+(`commands/research_data.py` içinde token **0 kez**); `routes/research_data.py`'deki tek hit
+bir **response** modeli, `frontend/src`'teki iki hit de okuma tarafı. Kardeş kolon
+`linked_market_dataset_revision_id` ise `create_research_dataset`'te **koşulsuz** yazılır —
+`CreateDatasetRequest.market_entity_id` `str`'dir, `| None` değil, ve DR3 gereği
+`_resolve_market_link` koşulsuz çağrılır. Yani her app-created **kök** `has_link == has_ref`
+denklemini `True == False` tarafında doğar.
+
+**ASIL BULGU — kapı İKİ düzlemde vuruyor ve ADIM 138 yalnız birini pinlemişti.** Aynı
+predicate (`time_policy::instrument_mapping_is_valid`) hem `queries/funding.py` üzerinden
+worker'da fail-closed olur (ADIM 138'in pinlediği), hem de
+`readiness/validators.py::_research_market_compatibility_issues` içinde
+**`INSTRUMENT_MAPPING_INVALID` / `Sev.BLOCKER`** olarak Ready Check'te — yani **admission'da,
+worker'dan önce**. O düzlem üretim yolunda **hiç koşulmamıştı**. Bu slice koştu ve ölçtü:
+`['INSTRUMENT_MAPPING_INVALID', 'RESEARCH_COVERAGE_LIMITED']`, `state: not_ready`.
+
+### İKİNCİ BULGU (slice'ın adı): harness'ın **eksik** yaptığı şey kapıyı güvenli tarafa düşürüyordu
+
+`test_readiness_research_data.py::_seed_research_revision` revizyonu elle `session.add` eder
+ve `linked_market_dataset_revision_id`'yi **hiç set etmez** → `False == False` → predicate
+**coherent** der → BLOCKER hiç doğmaz. Üretim o şekli **üretemez**.
+
+Bu, ADIM 138'in dersinin **ayna görüntüsüdür ve daha sinsi bir kılıktadır**: orada fake
+*fazladan* bir şey yapıyordu (pointer'ı set ediyordu, ve düzeltmeyi oraya koymak onu
+fake'lere yazdırırdı); burada harness *eksik* bir şey yapıyor ve o eksiklik iddiayı
+yanlışlanamaz kılmıyor — **tersine çeviriyor**. Ders tek cümlede: **bir fixture'ın YAPMADIĞI
+şey de bir iddiadır.** Karşıtlık ölçüldü: aynı kompozisyon şekli, elle tohumlanmış
+revizyonla `ready_with_warnings` verir ve admission'ı **geçer**
+(`test_warned_research_revision_is_ready_with_warnings_not_blocked`).
+
+### ÜÇ NEGATİF KONTROL, ÜÇÜ AYIRT EDİCİ, ÜÇÜ FARKLI KÜME
+
+Taban üç dosya / **12 test** yeşil. Her yama uygulandı, ölçüldü ve **bellekteki anlık
+görüntüden** geri yazıldı (`git checkout` ile değil — ADIM 111'in dersi); her turdan sonra
+`git status` doğrulandı.
+
+| NC | Yama | Kırmızıya dönen | Ölçtüğü |
+|---|---|---|---|
+| NC-1 | predicate `return True` | yeni 2 test + ADIM 138'in worker testi | **`readiness_research_data`'nın 6 testi YEŞİL KALIR** = boşluğun ölçümü |
+| NC-2 | yalnız Ready Check kapısı sökülür | **yalnız** yeni 2 test | iki düzlem **bağımsız**; yeni testler worker düzleminin gölgesi değil |
+| NC-3 | seeder'a `md_rev_1` linki eklenir | ayrışma testi + **mevcut suite'in 2 testi** | harness'ı üretim şekline çekmenin **ölçülmüş bedeli** |
+
+**NC-3 bir kapsam kararını ölçüye bağladı:** harness'ı "düzeltmek" masum bir temizlik değil
+— mevcut iki testin (usage-scope ve warning-not-blocking) bugünkü yeşilliği o şekle dayanır
+ve Karar 1 (a) altında o testler konularını **ölçemez** hale gelir. Bu yüzden §Karar 2 olarak
+ayrı kutuya açıldı, sessizce yapılmadı.
+
+### ÜÇÜNCÜ BULGU: R1 bir alt sistemin YOKLUĞU değil, sevk edilmiş bir desenin AYNALANMAMASI
+
+`time_policy.py` boşluğu *"canonical instrument-resolution wiring is still backlog R1"* diye
+adlandırır. Ölçüldü: **altyapı vardır ve sevk edilmiştir** — `instrument_registry`
+(`resolution_key` UNIQUE) + `instrument_alias` (`alias_norm` UNIQUE) +
+`queries/instrument.py::resolve_scope` / `::resolve_scope_id` + kendi commands/repo katmanı.
+**Ve Market Data tarafı bu deseni zaten kullanıyor:** route gövdesi `instrument_id` **ya da**
+serbest metinli `instrument_scope` alır, `commands/market_data.py` onu `resolve_scope_id` ile
+kanonik id'ye çözer, çözülemezse **fail-closed 422** verir — kendi ifadesiyle *"no flow ever
+silently persists a free-text instrument assumption"*. Doc 12 §430 de aynı ikiliyi adlandırır
+(*"instrument_scope / instrument_mapping_ref … or explicitly document market-wide/
+provider-defined scope"*). Yani seçenek (c) spekülatif değil, **aynı repoda emsali olan**
+hamledir.
+
+**Ve (b)'nin ön koşulu ölçülünce zayıfladı:** `MarketDatasetRevision.instrument_id` de
+**nullable**'dır ve yalnız çağıran scope/id verdiyse dolar → link'ten kopyalamak kusuru bir
+katman öteye taşıyabilir (fail-open). Bu, ADIM 122'nin dersinin uygulanmasıdır: *bir karar
+sorusu cevabının ön koşulunu sessizce varsayabilir* — varsayılmadı, ölçüldü ve şıkkın
+bedeline yazıldı.
+
+### DÜRÜST SINIR
+
+- **KUSUR DÜZELTİLMEDİ ve #703 KAPATILMADI.** `backend/src`'te sıfır satır. Karar belgesi
+  `docs/decisions/closure_i703_instrument_mapping_writer_2026-08-30.md` — **üç karar, on bir
+  kutu, hiçbiri dolu değil.** Varsayılan **seçilmedi**.
+- **`RD-09.c4` kapatılmadı ve yeniden sınıflandırılmadı**; kabul borcu defterine ve
+  tavanlara **dokunulmadı** (B→D taşımak D tavanını yükseltir = adjudication, ADIM 42).
+- **Harness DEĞİŞTİRİLMEDİ** — NC-3 bedelini ölçtü, imza §Karar 2'de bekliyor.
+- **`quality_rules._check_instrument_mapping` (WARNING düzlemi) ele alınmadı** — aynı
+  asimetriyi bildirir ama approval'ı bloklamaz.
+- **Üretimde kaç revizyonun etkilendiği SAYILMADI** (üretim DB sorgusu, `G15` §Ölçüm 3 ile
+  aynı sınır) — ve ikame edilmedi. Karar bu sayı olmadan verilebilir: kod yolu kusurun
+  **her** app-created kökte doğduğunu gösterir, bir örnekleme değil.
+- **Frontend'e dokunulmadı**, frontend kapıları **koşulmadı**.
+- **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**

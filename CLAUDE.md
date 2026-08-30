@@ -271,6 +271,40 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> **el değmedi** · **`backend/src`'te SIFIR SATIR** · `frontend/src` **sıfır satır**.
+> **Son dalga — ADIM 140 (GH #703'ün İKİNCİ kapısı Ready Check düzleminde ölçüldü; karar
+> AÇILDI, kusur DÜZELTİLMEDİ).** Oturum **beş** kalemle açıldı, **dördü ölçümde kapandı**
+> (#534 dört kutu · #854 dokuz kutu, hepsi BOŞ — **iki belge FARKLI kutu işareti kullanır**
+> (`[ ]` ↔ `☐`) ve tek grep ikisini ölçmez; `RD-09.c4` bağımlı; A-08 `human-only`). Kalan tek
+> kalem `instrument_mapping_ref` ve devir notu onu doğru sınıflandırmıştı: **yazıcı eklemek
+> bir ÜRÜN KARARIDIR.** **ASIL BULGU: kapı İKİ düzlemde vuruyor, ADIM 138 yalnız birini
+> pinlemişti** — aynı predicate (`time_policy::instrument_mapping_is_valid`) hem worker'da
+> fail-closed olur hem `readiness/validators.py::_research_market_compatibility_issues`
+> içinde **`INSTRUMENT_MAPPING_INVALID` / `Sev.BLOCKER`** olarak **admission'da**, yani
+> kullanıcının **önce** çarptığı düzlemde; o düzlem üretim yolunda **hiç koşulmamıştı**.
+> Koşuldu: `['INSTRUMENT_MAPPING_INVALID', 'RESEARCH_COVERAGE_LIMITED']` / `not_ready`.
+> **İKİNCİ BULGU (slice'ın adı): `_seed_research_revision` `linked_market_dataset_revision_id`'yi
+> HİÇ SET ETMEZ** → `False == False` → predicate *coherent* der → BLOCKER doğmaz; üretim o
+> şekli **üretemez** (`market_entity_id` zorunlu). ADIM 138'in dersinin **ayna görüntüsü, daha
+> sinsi kılıkta**: orada fake *fazladan* bir şey yapıyordu, burada harness *eksik* bir şey
+> yapıyor ve eksiklik iddiayı yanlışlanamaz kılmakla kalmıyor, **tersine çeviriyor** →
+> **bir fixture'ın YAPMADIĞI şey de bir iddiadır.** **ÜÇÜNCÜ: R1 bir alt sistemin YOKLUĞU
+> DEĞİL, sevk edilmiş bir desenin AYNALANMAMASI** — `instrument_registry`/`instrument_alias` +
+> `resolve_scope_id` vardır ve **Market Data onu zaten kullanır** (`instrument_scope` →
+> kanonik id → fail-closed 422); **(b)'nin ön koşulu da ölçülünce zayıfladı**
+> (`MarketDatasetRevision.instrument_id` de nullable, yazıcısı koşullu → kusur bir katman
+> öteye taşınabilir). **ÜÇ NC, üçü ayırt edici:** NC-1 → mevcut **altı** Ready Check testi
+> **YEŞİL KALIR** (boşluğun ölçümü) · NC-2 → **yalnız** yeni iki test (düzlemler bağımsız) ·
+> NC-3 → ayrışma testi + **mevcut suite'in İKİ testi** = harness'ı üretim şekline çekmenin
+> **ölçülmüş bedeli**, bu yüzden §Karar 2 olarak ayrı kutuya açıldı, **sessizce yapılmadı**.
+> **DÜRÜST SINIR: #703 KAPATILMADI, kusur DÜZELTİLMEDİ** — karar belgesi
+> `docs/decisions/closure_i703_instrument_mapping_writer_2026-08-30.md`, **üç karar, ON BİR
+> kutu, hiçbiri dolu değil** · `RD-09.c4` `partial` kalır, **kabul defterine ve tavanlara
+> dokunulmadı** · harness **değiştirilmedi** · WARNING düzlemi (`quality_rules`) ele alınmadı ·
+> üretimdeki etkilenen revizyon sayısı **sayılmadı ve ikame edilmedi** · frontend kapıları
+> **koşulmadı**. **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 140 · `docs/ADIM140_LANDED_KICKOFF.md`.
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `capabilities.py` **EL
 > DEĞMEDİ** · **`backend/src` ve `frontend/src`'te SIFIR SATIR**. **Son dalga — ADIM 139
 > (GH #540: kapasite-matrisi muhafızı 9/14 → 14/14 + registry anti-drift ekseni).** Oturum üç

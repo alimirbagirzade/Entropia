@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 139 — GH #540: kapasite-matrisi muhafızı 9/14 → 14/14 + registry anti-drift ekseni (LANDED KICKOFF)
 

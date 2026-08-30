@@ -19670,3 +19670,153 @@ değil **ölçümü**. Her turdan sonra `git checkout -- src` + `__pycache__` d�
   (ADIM 42/128 kuralı).
 - **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
 - **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+
+
+## ADIM 143 — GH #536 MD. 2'NİN SON YARISI: BİR SAYACIN ÜRETİM YAZICISI VARDI, YAYIMLANIYORDU, TOPLANIYORDU — VE HİÇ OKUNMUYORDU, ÇÜNKÜ TEK YAZICISI HİÇBİR TESTİN SÜRMEDİĞİ YOLDAYDI
+
+**Taban** `origin/main` @ `6fec0e51` (ADIM 142 **indi**, PR #881). **`backend/src`'te SIFIR
+SATIR** · `frontend/src` **sıfır satır** · migration **YOK** · `ENGINE_VERSION`
+**DEĞİŞMEDİ** (`backtest-engine-v18-policy-provenance-completed`) · golden **el değmedi** ·
+OpenAPI **değişmedi** (`--check` exit 0). Toplanan test **3898 → 3901** (statik, yalnız
+fonksiyon; modül düzeyinde 11 → 16 case). **Blocker DEĞİŞMEDİ (1 — yalnız A-08) → RC
+verdict BLOCKED.**
+
+ADIM 142 kendi modül docstring'ine bir **HONEST BOUNDARY** yazmıştı: *"driving a
+`logic:<block_id>` entry through a CUSTOM priority order at the ENGINE plane is not covered
+here … building one is a fixture slice of its own."* Bu slice o borcu kapatır.
+
+### Öncül ölçüldü, ve KISMEN ÇÜRÜDÜ
+
+Devir notu *"motor seviyesinde logic-stop fixture'ı YOK"* diyordu. Ağaçta ölçüldü — yarısı
+doğru, yarısı değil:
+
+- `logic:` anahtarının suite'teki **her** kullanımı ya `_resolve_stop`'a **doğrudan**
+  besleniyor (`test_backtest_logic_stop.py`, resolver düzlemi) ya da
+  `stop_priority_sequence`'e **literal** olarak veriliyor
+  (`test_backtest_policy_provenance.py:185-187`).
+- **AMA** bir motor-düzlemi koşusu bir stop planı **kuruyor**:
+  `integration/test_logic_based_stop.py::test_run_engine_builds_and_consumes_the_stop_plan`
+  `logic_stop_blocks == 1` assert eder. Yani *"fixture yok"* harfi harfine yanlıştı.
+- **Ayrım taşıyıcı:** o koşu **24 düz bar** (hepsi 100) replay eder → blok **hiç ateşlenmez**.
+  **WIRING'i kanıtlar, FIRING'i değil**, ve hiçbir `stop_priority_order` yapılandırmaz.
+  Ayrıca `builtin_breakout_fixture=True` ile koşar — üretimin **reddettiği** bir şekil.
+
+**Ders: bir alt sistemin motor düzlemine ULAŞMASI, o düzlemde ÖLÇÜLDÜĞÜ anlamına gelmez.**
+`logic_stop_blocks == 1` bir sayımdır; `logic_stop_triggers` bir **olaydır** ve ikisi aynı
+koşuda ayrışır.
+
+### ASIL BULGU: yayımlanan, toplanan, hiç okunmayan bir sayaç
+
+`logic_stop_triggers` — `engine.py::_emit_stop_resolution` içinde artırılır,
+`execution/output.py` ile **her Result'ta yayımlanır**, `execution/portfolio.py`'nin
+toplayıcı listesinde **portföy roll-up'ına girer** — ve `backend/tests`'te **SIFIR
+assertion** taşır (ölçüldü, `6fec0e51`). Sebebi tam olarak yukarıdaki ayrımdır: tek
+yazıcısı, bir logic stop'un **motor düzleminde ateşlenmesini** ister.
+
+NC-2'de ölçüldü: sayacı sabit `0`'a çivilemek — yayımlanan bir diagnostics alanını
+sessizce yalanlamak — **tek bir mevcut testi bile düşürmüyordu**.
+
+### İKİNCİ BULGU: şemanın yazılı vaadi hiç sürülmemişti
+
+`config.py::stop_priority_order`'ın kendi `description`'ı iki şey söyler: girdiler
+`'percentage' | 'trailing' | 'absolute' | 'logic:<block_id>'` olabilir, ve `null` iken
+**kanonik §9.2 sırası** kullanılır (*"logic blocks in display order, then percentage,
+trailing, absolute"*). **İkisi de `run_engine` üzerinden hiç doğrulanmamıştı.**
+
+### Sevk edilen — üç eksen, tek fixture
+
+`_logic_stop_plan()` paylaşılan giriş planının **`replace`** ile türevi (F-24 sözleşmesi:
+her motor fixture'ı aynı `ta.sma` girişini sürer), tek farkı bir stop bloğu pinlemesi.
+`length=3` **geometriye karşı seçildi ve gerekçesi yazıldı**: 20 düz barda MA düz fiyatta
+durur ve hiç kesişmez; breakout barı MA'nın **üstünde** kapanır (`long` — long pozisyona
+**ters değil**, tetiklemez); düşüş barı 95'te, MA 99'da → **aşağı kesişir** = motorun
+`logic:stop_1`'e çevirdiği ters sinyal. (2, 3, 5 **ölçüldü**, üçü de aynı.)
+
+1. **`test_a_logic_block_takes_its_place_in_the_stop_priority_order_that_governed`** (×3) —
+   `priority_order` çözünürlüğü altında bir **yarışma**. İddia **yanlışlanabilirdir çünkü
+   GERÇEK PARA oynar**, sadece bir etiket değil: aynı barlar `95.00`'te ya da `100.98`'de
+   çıkar, hangi anahtarın önde olduğuna göre.
+
+   | saklanan `stop_priority_order` | executed | exit |
+   |---|---|---|
+   | `null` (kanonik, logic önde) | `logic:stop_1` | `95.00` |
+   | `["logic:stop_1", "percentage"]` | `logic:stop_1` | `95.00` |
+   | `["percentage", "logic:stop_1"]` | **`percentage`** | **`100.98`** |
+
+   **Yarışma muhafızı taşıyıcıdır:** `triggered` **ikisini birden** içermelidir, aksi halde
+   precedence hiçbir şeye karar vermez ve her sıralama tesadüfen aynı fikirde olur.
+   Kazanan `resolved` sırasındaki **en erken TETİKLENMİŞ** anahtar olarak assert edilir —
+   `resolved[0] == executed` **daha zayıf ve bazen yanlış** olurdu (öndeki anahtarın
+   tetiklenmiş olması gerekmez).
+
+2. **`test_the_logic_stop_trigger_counter_counts_a_real_engine_firing`** — sayacın **1** ve
+   **0** kolları. Sıfır kolu iddiayı yanlışlanabilir yapan şeydir (sabit `1` dönen bir sayaç
+   yalnız ateşleme yarısını geçerdi) ve kendi **vacuity muhafızını** taşır: ikinci koşu yine
+   stop-out yapmalıdır (yüzde kuralında), yoksa sıfır sadece *"hiç stop yok"* demek olurdu.
+
+3. **`test_the_stop_resolution_event_names_all_active_as_the_requirement_that_governed`** —
+   ADIM 142'nin **ulaşamadığı** literal. Ölçüldü: suite'teki her `all_active` ya
+   `_resolve_stop`'ta ya diagnostics echo'sunda durur; **hiçbir test onu bir
+   `stop_resolution` OLAYINDAN okumaz**. ADIM 142'nin case'i yalnız `any_active` pinler
+   çünkü fixture'ının bir AND'i karşılayacak **ikinci kuralı yoktur** — logic-stop fixture'ı
+   onu sağlar.
+
+### NEGATİF KONTROLLER — biri REDDEDİLDİ, dördü ayırt edici, biri gölge ölçtü
+
+Taban: komşuluk kümesi (`test_conflict_policy_coverage` + `test_backtest_logic_stop` +
+`test_backtest_policy_provenance` + `oracles/test_oracle_protection_stops` +
+`test_backtest_intrabar_execution`) = **73 passed**.
+
+- **NC-1 REDDEDİLDİ — "doğru sebep, YANLIŞ KAPSAM" (ADIM 105'in şekli).** `fills.py`'nin
+  çözücüsüne yapılandırılmış sırayı **hiç** vermemek (her zaman kanonik) kırmızı verdi, ama
+  **üç** testte: benimkinin yanında **iki mevcut** test de düştü
+  (`test_priority_order_custom_executes_the_highest_priority_triggered_rule`,
+  `test_an_explicit_priority_order_overrides_the_default_ranking`). Yani *"custom sıra
+  okunuyor"* iddiası **fiyat stopları için zaten korunuyordu** → bu kontrol benim boşluğumu
+  ölçmüyordu.
+- **NC-1′ (yerine kurulan) — AYIRT EDİCİ, ve boşluğun ÖLÇÜSÜ.** Custom sıradan **yalnız
+  `logic:` anahtarlarını** süz (gerçekçi bir bug: sırayı yalnız fiyat-stop anahtarlarına
+  karşı doğrulayan bir validator). Fiyat-stop-only sıralar **etkilenmez**. Sonuç: **tam
+  olarak 1 test kırmızı** (benim `explicit, logic still leads` param'ım), **diğer 72 YEŞİL**
+  — iki mevcut priority testi ve provenance'ın tekil-türetim muhafızı dahil. *Bir logic
+  anahtarının yapılandırılmış konumunu sessizce kaybetmesi suite'e tamamen görünmezdi.*
+- **NC-2 — AYIRT EDİCİ.** Sayacı dondur → **yalnız** sayaç testi kırmızı.
+- **NC-3 — AYIRT EDİCİ.** `"requirement"` echo'sunu `"any_active"`'e çivile → **yalnız**
+  yeni `all_active` testi kırmızı; **ADIM 142'nin `any_active` assertion'ı YEŞİL KALIR**
+  (çivilenmiş `any_active`'i göremez — iki literal iki ayrı eksendir).
+- **NC-4 — AYIRT EDİCİ, ve hangi param'ın taşıyıcı olduğunu ÖLÇTÜ.** Yayımlanan sırayı
+  logic anahtarları olmadan üret (fills yine doğru sıralar) = #534'ün tam kusuru,
+  *"yayımlanan ≠ yöneten"*. **Yalnız `null` param'ı** kırmızı — diğer ikisi logic anahtarını
+  **kendi custom listelerinden** taşır, yani bu drift'i **yalnız kanonik case görebilir**.
+- **NC-5 — GÖLGE TESTİ (ADIM 101 kuralı: gölgeyi kaydetmekle yetinme, KALDIRMAYI dene).**
+  Yayımlanan sırayı **ters çevir** (üyelik aynı, SIRA yanlış): `sorted(resolved)` assertion'ı
+  sıraya duyarsız olduğu için **geçer**, ve üç param da **`:478`'de** — *"en erken
+  tetiklenmiş anahtar"* assertion'ında — düşer (satır okunarak doğrulandı, çıkarımla değil).
+  → o assertion **gölgelenmiş değil**, kendi ağırlığını taşıyor.
+
+Her turdan sonra ağaç git'ten geri yazıldı **ve türetilmiş bytecode temizlendi**
+(ADIM 141'in dersi), `git status --porcelain backend/src` her seferinde **boş** doğrulandı.
+
+### Ölçülen, taşınMAYAN
+
+Üretilmiş artefaktlar tazelendi ve **delta okundu**: `repository_facts.{json,md}` +
+README'nin gömülü bloğunda **tek satır**, `3898 → 3901`, dosya sayısı **372 sabit**. Başka
+hiçbir alan oynamadı → **main temizdi ve yabancı drift absorbe EDİLMEDİ** (ADIM 139'un
+kuralı).
+
+### DÜRÜST SINIR
+
+- **#536 KAPATILMADI.** Bu slice **md. 2'yi tamamlar**; issue'nun kalanı açık.
+- **Yarışma `priority_order` altında sürülür** — `stop_priority_order`'ın gerçekten
+  **yönettiği** çözünürlük budur. Bir logic bloğunun **`most_conservative`** (sıranın yalnız
+  tie-break olduğu) ya da **`first_trigger_wins`** altında yarışması **KAPSANMADI**.
+- **Md. 4 (Gap C guard) kapsam dışı** — tasarım kararı, ADIM 141/142'nin gerekçesi değişmedi.
+- **`record_all_execute_highest` hâlâ ikiz olarak PİNLİ, DÜZELTİLMEDİ** (ürün kararı).
+- **Şema prozası düzeltilmedi** (adjudication).
+- **`integration/test_logic_based_stop.py` EL DEĞMEDİ** — onun düz-bar koşusu bilerek
+  bırakıldı; wiring'i kanıtlar ve o iş bu slice'ın konusu değildi.
+- **`test_backtest_logic_stop.py` EL DEĞMEDİ** — yeni fixture #536'nın modülüne yazıldı,
+  çünkü konu bir conflict-precedence boşluğudur ve o modül zaten `_run`/`_config`/`_patched`
+  idiomlarını taşır; üçüncü bir harness icat edilmedi.
+- **Frontend kapıları KOŞULMADI** (`frontend/src`'te sıfır satır).
+- **A-08 (#514) AÇIK, el değmedi, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**

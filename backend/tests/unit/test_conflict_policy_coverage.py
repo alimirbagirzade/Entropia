@@ -42,21 +42,35 @@ That measurement also turned up a second twin: ``record_all_execute_highest`` an
 ``priority_order`` share one branch and produce byte-identical runs. It is pinned the same
 way Gap A is -- as a deliberate, defended duplicate rather than an accident.
 
-HONEST BOUNDARY: driving a ``logic:<block_id>`` entry through a CUSTOM priority order at
-the ENGINE plane is not covered here. No engine-level logic-stop fixture exists (the
-engine cases in ``test_backtest_logic_stop`` run with ``logic_stop_blocks == 0``), and
-building one is a fixture slice of its own rather than an assertion this module was
-missing.
+**Gap B (``stop_priority_order`` over a logic block).** ADIM 142 left this as an honest
+boundary -- no engine-level logic-stop fixture existed, and building one was judged a
+slice of its own. It is built below. The measurement that motivated it: the schema
+documents ``logic:<block_id>`` as a valid precedence entry and names a canonical default
+("logic blocks in display order, then percentage, trailing, absolute"), and neither had
+ever been driven through ``run_engine``. Every ``logic:`` key in the suite was fed to
+``_resolve_stop`` directly or handed to ``stop_priority_sequence`` as a literal; the one
+engine-plane run that builds a stop plan replays flat bars, so its block never fires.
+``logic_stop_triggers`` -- published on every Result and aggregated across a portfolio --
+had zero assertions anywhere, because its only writer sits on that unreached path.
+
+HONEST BOUNDARY: the contest is driven under ``priority_order``, which is the resolution
+``stop_priority_order`` actually governs. A logic block competing under
+``most_conservative`` (where the order is only a tie-break) or under ``first_trigger_wins``
+is not covered. Gap C (md. 4) remains out of scope, and ``record_all_execute_highest``
+remains pinned as a twin rather than fixed -- both are decisions, not assertions.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
+from entropia.domain.backtest.indicators import IndicatorPlan, IndicatorSpec
+from tests.unit.engine_signal_plan import sma_entry_plan
 from tests.unit.test_backtest_engine import (
     _config,
     _long_breakout_then_stop,
@@ -339,3 +353,181 @@ def test_record_all_execute_highest_is_a_deliberate_twin_of_priority_order() -> 
         "rule in the ledger' claim is now either true or still fiction, and which one it "
         "is has become a DISCLOSURE decision, see GH #536."
     )
+
+
+# --------------------------------------------------------------------------- #
+# Gap B (3) -- stop_priority_order over a logic:<block_id>, at the ENGINE plane #
+# --------------------------------------------------------------------------- #
+
+_STOP_BLOCK_ID = "stop_1"
+_LOGIC_KEY = f"logic:{_STOP_BLOCK_ID}"
+
+
+def _logic_stop_plan() -> IndicatorPlan:
+    """The shared entry plan plus a Logic-Based Stop Block that fires on the stop-out bar.
+
+    Built with ``replace`` off ``sma_entry_plan`` rather than re-declared, so the entry
+    signal stays the one every engine fixture drives (F-24) and this plan differs from
+    its neighbours in exactly one respect: it pins a stop block.
+
+    ``length=3`` is chosen against the fixture's geometry, not arbitrarily. Over the 20
+    flat bars the MA rests at the flat price and never crosses; the breakout bar closes
+    ABOVE it (a ``long`` signal, which is not adverse to a long position and so triggers
+    nothing); the drop bar closes at 95 against an MA of 99 and crosses BELOW, which is
+    the adverse signal the engine turns into ``logic:stop_1``. A longer span would still
+    cross on that bar -- 2, 3 and 5 were measured identical -- but 3 is the shortest that
+    keeps the flat run cross-free.
+    """
+    return replace(
+        sma_entry_plan(),
+        stop_specs=(
+            IndicatorSpec(
+                block_id=_STOP_BLOCK_ID,
+                canonical_key="ta.sma",
+                length=3,
+                direction="long_and_short",
+                requirement="required",
+                validity="current_candle_only",
+            ),
+        ),
+    )
+
+
+def _priority_config(order: list[str] | None, *, requirement: str = "any_active") -> Any:
+    """``priority_order`` resolution, so ``stop_priority_order`` is what decides.
+
+    Under the default ``most_conservative`` the order is only a tie-break, so a test that
+    left the resolution alone would be measuring distance, not precedence.
+    """
+    protection: dict[str, Any] = {
+        "stop_conflict_resolution": "priority_order",
+        "stop_trigger_requirement": requirement,
+    }
+    if order is not None:
+        protection["stop_priority_order"] = order
+    return _patched(_config(), {"protection_stop_logic": protection})
+
+
+#: label -> (saved ``stop_priority_order``, executed rule, exit price).
+#: Measured on ``origin/main`` @ ``6fec0e51``. Entry is 102.00, so the 1% percentage stop
+#: rests at 100.98 and the logic block exits at the drop bar's close, 95.00.
+_PRIORITY_CONTESTS: dict[str, tuple[list[str] | None, str, str]] = {
+    # The schema's documented default: "logic blocks in display order, then percentage,
+    # trailing, absolute". Never driven through the engine before.
+    "null -- canonical order, logic leads": (None, _LOGIC_KEY, "95.00"),
+    "explicit, logic still leads": ([_LOGIC_KEY, "percentage"], _LOGIC_KEY, "95.00"),
+    # The one that matters: an explicit order OVERRIDES the canonical logic-first rule.
+    "explicit, percentage promoted over the logic block": (
+        ["percentage", _LOGIC_KEY],
+        "percentage",
+        "100.98",
+    ),
+}
+
+
+@pytest.mark.parametrize("label", sorted(_PRIORITY_CONTESTS))
+def test_a_logic_block_takes_its_place_in_the_stop_priority_order_that_governed(
+    label: str,
+) -> None:
+    """``stop_priority_order`` accepts ``logic:<block_id>``; nothing drove one end to end.
+
+    Measured on ``origin/main`` @ ``6fec0e51``: every ``logic:`` key in the suite is
+    either fed to ``_resolve_stop`` directly (``test_backtest_logic_stop``) or handed to
+    ``stop_priority_sequence`` as a literal (``test_backtest_policy_provenance``). The one
+    engine-plane run that builds a stop plan at all
+    (``integration/test_logic_based_stop::test_run_engine_builds_and_consumes_the_stop_plan``)
+    replays 24 flat bars, so its block never fires -- it proves WIRING, not FIRING, and it
+    configures no priority order. This is the ADIM 142 honest boundary being discharged.
+
+    The claim is falsifiable because the order moves REAL MONEY, not just a label: the
+    same bars exit at 95.00 or at 100.98 depending on which key leads.
+    """
+    order, expected_rule, expected_exit = _PRIORITY_CONTESTS[label]
+    out = _run(
+        _priority_config(order), _long_breakout_then_stop(), indicator_plan=_logic_stop_plan()
+    )
+
+    events = [e for e in out.signal_events if e.event_type == "stop_resolution"]
+    assert len(events) == 1, "one bar resolves the stop, so exactly one trace is recorded"
+    detail = events[0].detail
+    triggered = sorted(detail["triggered"])
+
+    # Contest guard: BOTH rules must fire on the same bar, else precedence decides nothing
+    # and every ordering would agree by default -- the case would measure zero.
+    assert triggered == ["logic:stop_1", "percentage"], (
+        f"no contest: only {triggered} fired, so the order was never consulted"
+    )
+
+    # Half 1 -- the behaviour: this order picked THIS rule, at THIS price.
+    assert out.summary["total_trades"] == 1
+    assert out.summary["total_stops"] == 1
+    assert detail["executed"] == expected_rule
+    assert str(out.trades[0].exit_price) == expected_exit
+    assert out.trades[0].exit_reason == "stop_loss"
+
+    # Half 2 -- the disclosure: the SAVED order is echoed verbatim (``null`` stays null),
+    # and the RESOLVED order is total and actually explains the winner.
+    assert out.diagnostics["stop_priority_order"] == order
+    resolved = out.diagnostics["stop_priority_order_resolved"]
+    assert sorted(resolved) == sorted([_LOGIC_KEY, "percentage", "trailing", "absolute"]), (
+        "the resolved order must stay TOTAL -- an omitted key has no defined precedence"
+    )
+    # The winner is the earliest TRIGGERED key in the resolved order. Asserting
+    # ``resolved[0] == executed`` would be weaker and sometimes wrong: the leading key
+    # need not have triggered at all.
+    assert next(key for key in resolved if key in detail["triggered"]) == expected_rule
+
+
+def test_the_logic_stop_trigger_counter_counts_a_real_engine_firing() -> None:
+    """``logic_stop_triggers`` is written, published and aggregated -- and never read.
+
+    Measured on ``origin/main`` @ ``6fec0e51``: the counter has ZERO assertions in
+    ``backend/tests``. It is incremented in ``engine.py``'s ``_emit_stop_resolution``,
+    published by ``execution/output.py``, and carried through portfolio aggregation
+    (``execution/portfolio.py``) -- so a Result and a portfolio roll-up both report it,
+    and nothing checked it. Its only writer needs a logic stop to fire at the engine
+    plane, which is precisely the path no test drove.
+
+    The zero arm is what makes this falsifiable: a counter hard-wired to 1 would pass the
+    firing half alone.
+    """
+    fired = _run(
+        _priority_config(None), _long_breakout_then_stop(), indicator_plan=_logic_stop_plan()
+    )
+    # Same config and same bars; the ONLY difference is that no stop block is pinned.
+    not_fired = _run(_priority_config(None), _long_breakout_then_stop())
+
+    assert fired.diagnostics["logic_stop_blocks"] == 1
+    assert fired.diagnostics["logic_stop_triggers"] == 1
+
+    assert not_fired.diagnostics["logic_stop_blocks"] == 0
+    assert not_fired.diagnostics["logic_stop_triggers"] == 0
+    # Vacuity guard: the second run must still stop out (on the percentage rule), else the
+    # zero above would just be the absence of any stop at all.
+    assert not_fired.summary["total_stops"] == 1
+
+
+def test_the_stop_resolution_event_names_all_active_as_the_requirement_that_governed() -> None:
+    """The requirement echo, on the literal ADIM 142 could not reach.
+
+    Measured on ``origin/main`` @ ``6fec0e51``: every ``all_active`` case in the suite
+    stops at ``_resolve_stop`` or at the diagnostics echo. No test reads
+    ``all_active`` off a ``stop_resolution`` EVENT -- the parametrized case above pins
+    only ``any_active``, because its fixture has no second rule that could satisfy an AND.
+
+    The logic-stop fixture supplies one: both rules fire on the drop bar, so ``all_active``
+    is satisfied and the trace records the requirement that actually governed.
+    """
+    out = _run(
+        _priority_config(["percentage", _LOGIC_KEY], requirement="all_active"),
+        _long_breakout_then_stop(),
+        indicator_plan=_logic_stop_plan(),
+    )
+
+    event = next(e for e in out.signal_events if e.event_type == "stop_resolution")
+    # Load-bearing: under all_active a single-rule bar fires nothing, so the AND is only
+    # satisfied here because BOTH rules triggered.
+    assert sorted(event.detail["triggered"]) == ["logic:stop_1", "percentage"]
+    assert event.detail["requirement"] == "all_active"
+    assert out.diagnostics["stop_trigger_requirement"] == "all_active"
+    assert out.summary["total_stops"] == 1

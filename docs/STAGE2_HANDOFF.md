@@ -10330,3 +10330,61 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 142 · `docs/ADIM142_LANDED_KICKOFF.md`.
 6. **#677 — Lighthouse'un dört donmuş eksiği** (KOD) — Compose + Lighthouse koşabilen ortam
    ister.
 7. **A-08 (#514)** — **TEK BLOCKER**, `human-only`. Çıkış kriterleri **0/4** → kapatılamaz.
+
+
+## Stage ADIM 143 — GH #536 md. 2 tamamlandı: `logic:<block_id>` motor düzleminde bir custom `stop_priority_order` ile sürüldü (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `6fec0e51` (ADIM 142 **indi**, PR #881). **`backend/src`'te SIFIR
+SATIR** · `frontend/src` **sıfır satır** · migration **YOK** · `ENGINE_VERSION`
+**DEĞİŞMEDİ** · golden **el değmedi** · OpenAPI **değişmedi**. Toplanan test
+**3898 → 3901**. **Blocker DEĞİŞMEDİ (1 — yalnız A-08) → BLOCKED.**
+
+ADIM 142'nin modül docstring'ine yazdığı **HONEST BOUNDARY** kapatıldı: motor düzleminde bir
+logic-stop fixture'ı kuruldu ve `logic:<block_id>` bir custom precedence yarışmasına sokuldu.
+
+**Öncül kısmen çürüdü:** *"motor seviyesinde logic-stop fixture'ı YOK"* harfi harfine
+yanlıştı — `integration/test_logic_based_stop.py::test_run_engine_builds_and_consumes_the_stop_plan`
+bir stop planı **kurar** (`logic_stop_blocks == 1`). Ama **24 düz bar** replay eder, blok
+**hiç ateşlenmez**, hiçbir `stop_priority_order` yapılandırmaz → **WIRING'i kanıtlar,
+FIRING'i değil**. *Bir alt sistemin motor düzlemine ULAŞMASI, orada ÖLÇÜLDÜĞÜ demek değildir.*
+
+**ASIL BULGU:** `logic_stop_triggers` — `engine.py`'de artırılır, `output.py` ile **her
+Result'ta yayımlanır**, `portfolio.py` ile **portföy roll-up'ına girer** — ve `backend/tests`'te
+**SIFIR assertion** taşır. Tek yazıcısı tam olarak hiçbir testin sürmediği yoldadır; NC-2'de
+ölçüldü: sayacı `0`'a çivilemek **tek bir mevcut testi bile düşürmüyordu**.
+
+**Sevk edilen (hepsi `tests/unit/test_conflict_policy_coverage.py`):** `_logic_stop_plan()`
+(paylaşılan giriş planının `replace` türevi, F-24) · üç eksen — precedence yarışması (×3,
+`null` / logic-önde / percentage-önde → exit **95.00** ya da **100.98**, yani **gerçek para**),
+sayacın 1-ve-0 kolları, `all_active`'in **olay** düzlemi (ADIM 142 yalnız `any_active`
+pinliyordu).
+
+**NC'ler:** taban 73 passed. **NC-1 REDDEDİLDİ** (doğru sebep, yanlış kapsam — iki mevcut
+testi de düşürdü ⇒ *"custom sıra okunuyor"* fiyat stopları için zaten korunuyor).
+**NC-1′** (custom sıradan yalnız `logic:` anahtarlarını süz) → **tam 1 test kırmızı, 72
+YEŞİL** = boşluğun ölçüsü. NC-2/NC-3/NC-4 ayırt edici (NC-3'te ADIM 142'nin `any_active`
+assertion'ı **yeşil kalır**; NC-4 yalnız `null` param'ını vurur = hangi param'ın taşıyıcı
+olduğunun ölçümü). **NC-5** gölge testi: sırayı ters çevir → `sorted()` geçer, üç param
+**`:478`'de** düşer ⇒ *"en erken tetiklenmiş anahtar"* assertion'ı **gölgelenmemiş**.
+
+**DÜRÜST SINIR:** #536 **KAPATILMADI** (md. 2 tamamlandı, kalanı açık) · yarışma **yalnız
+`priority_order`** altında sürüldü — `most_conservative` / `first_trigger_wins` altında bir
+logic bloğu **kapsanmadı** · md. 4 (Gap C) **kapsam dışı** · `record_all_execute_highest`
+hâlâ **ikiz olarak pinli, düzeltilmedi** · şema prozası **düzeltilmedi** ·
+`integration/test_logic_based_stop.py` ve `test_backtest_logic_stop.py` **el değmedi** ·
+frontend kapıları **koşulmadı** · **A-08 (#514) AÇIK**.
+
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 143 · `docs/ADIM143_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği açık kalemlerden biri — DÖRDÜ İMZA, İKİSİ KOD, BİRİ BLOCKER**
+
+1. **#703 / `instrument_mapping_ref` — yazıcı kim?** (İMZA)
+   `closure_i703_..._2026-08-30.md`, **üç karar / on bir kutu (`☐`), hepsi BOŞ**.
+2. **#854 — dış import pin'i** (İMZA). **Dokuz kutu (`☐`), dokuzu BOŞ.**
+3. **#534 — AYRIŞMA** (İMZA): issue **CLOSED** ama **kapanış yorumu YOK** ve karar belgesi
+   **dört kutu (`[ ]`) BOŞ** → ADIM 90 gereği md. 3 **açık**.
+4. **#536'nın kalanı** — **md. 4** (Gap C guard) bir **tasarım kararı**; **`record_all`
+   ikizliği** bir **ÜRÜN KARARI**; ayrıca **KOD olarak** bir logic bloğunun
+   `most_conservative` / `first_trigger_wins` altında yarışması (ADIM 143'ün dürüst sınırı).
+5. **#677 — Lighthouse'un dört donmuş eksiği** (KOD) — Compose + Lighthouse ortamı ister.
+6. **A-08 (#514)** — **TEK BLOCKER**, `human-only`. Çıkış kriterleri **0/4** → kapatılamaz.

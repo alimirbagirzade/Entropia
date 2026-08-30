@@ -272,6 +272,40 @@ Before stopping a working session, produce **ALL** of the following:
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
+> SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 143 (GH #536 md. 2 TAMAMLANDI:
+> `logic:<block_id>` motor düzleminde bir custom `stop_priority_order` yarışmasına sokuldu).**
+> ADIM 142 bunu kendi docstring'ine **HONEST BOUNDARY** olarak yazmıştı; alındı. Diğer kalemler
+> ölçüldü, girilmedi: #703 (**11 kutu BOŞ**) · #854 (**9 kutu BOŞ**) · #534 (issue `CLOSED`,
+> **kapanış yorumu YOK**, 4 kutu BOŞ → **ADIM 90: otorite imza kutusudur** → açık) · #677
+> (Lighthouse ortamı yok) · #514 `human-only`. **ÖNCÜL KISMEN ÇÜRÜDÜ:** *"motor seviyesinde
+> logic-stop fixture'ı YOK"* **harfi harfine yanlıştı** —
+> `integration/test_logic_based_stop.py` bir stop planı **kurar** (`logic_stop_blocks == 1`),
+> ama **24 DÜZ BAR** replay eder → blok **hiç ateşlenmez** ve hiçbir `stop_priority_order`
+> yapılandırmaz. **Taşıyıcı ayrım: ULAŞMAK ≠ ATEŞLEMEK.** **ASIL BULGU: `logic_stop_triggers`
+> yayımlanıyordu, portföye toplanıyordu ve HİÇ OKUNMUYORDU** — `engine.py` artırır,
+> `output.py` **her Result'ta** yayımlar, `portfolio.py` roll-up'a katar, `backend/tests`'te
+> **SIFIR assertion**; tek yazıcısı tam da hiçbir testin sürmediği yolda. NC-2'de ölçüldü:
+> sayacı `0`'a çivilemek **tek bir mevcut testi bile düşürmüyordu**. **İKİNCİ: şemanın kendi
+> yazılı vaadi hiç sürülmemişti** (`stop_priority_order` girdileri + `null`'daki kanonik
+> §9.2 sırası). Yarışma **gerçek para oynatır**: aynı barlar **95.00** ya da **100.98**'de
+> çıkar. **BEŞ NC ve BİRİ REDDEDİLDİ:** NC-1 kırmızıydı ama **iki MEVCUT testi de** düşürdü
+> ⇒ *"custom sıra okunuyor"* fiyat stopları için **zaten korunuyordu**, boşluğu ölçmüyordu
+> (ADIM 105'in *"doğru sebep, yanlış kapsam"* şekli) → `logic:`-anahtarına özgü **NC-1′** ile
+> değiştirildi: **tam 1 kırmızı, 72 YEŞİL** = boşluğun ölçüsü. NC-3'te **ADIM 142'nin
+> `any_active` assertion'ı YEŞİL KALIR**; NC-4 **yalnız `null` param'ını** vurur (hangi
+> param'ın taşıyıcı olduğunun ölçümü); **NC-5 gölge testi** — sırayı ters çevir, `sorted()`
+> geçer, üç param **`:478`'de** düşer ⇒ assertion **gölgelenmemiş** (satır **okundu**).
+> **DÜRÜST SINIR: #536 KAPATILMADI** — yarışma **yalnız `priority_order`** altında sürüldü,
+> **`most_conservative` / `first_trigger_wins` altında bir logic bloğu KAPSANMADI** (sıradaki
+> doğal KOD kalemi), **md. 4 kapsam dışı**, **`record_all` hâlâ ikiz olarak pinli,
+> DÜZELTİLMEDİ**, şema prozası **düzeltilmedi**, `integration/test_logic_based_stop.py` ve
+> `test_backtest_logic_stop.py` **EL DEĞMEDİ**, frontend kapıları **koşulmadı**. Toplanan test
+> **3898 → 3901**. **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 143 · `docs/ADIM143_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
 > SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 142 (GH #536 md. 2: politika
 > echo'su İKİ düzlemde ilk kez pinlendi; `record_all_execute_highest` bir İKİZ çıktı).**
 > ADIM 141 md. 2'yi *"test işidir, imzasız yapılabilir"* diye borç bırakmıştı; alındı. Diğer

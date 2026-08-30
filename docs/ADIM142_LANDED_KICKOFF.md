@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 142 landed — GH #536 md. 2 (politika echo'su iki düzlemde pinlendi + `record_all` ikiz tripwire'ı)
 
 ## Nerede olduğumuz

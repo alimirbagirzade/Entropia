@@ -10076,3 +10076,66 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 138 · `docs/ADIM138_LANDED_KICKOFF.md`.
 
 **Ajan bunlardan hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
 `docs/ADIM138_LANDED_KICKOFF.md` sonunda.
+
+## Stage ADIM 139 — GH #540: kapasite muhafızı 9/14 → 14/14 + registry anti-drift ekseni (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `7f2d8317`. **ÜRÜN KODUNDA SIFIR SATIR** — diff bir test dosyası +
+üç üretilmiş artefakt. Migration **YOK** · `ENGINE_VERSION` **değişmedi** · golden **el
+değmedi** · OpenAPI **değişmedi** · `capabilities.py` **EL DEĞMEDİ** · `frontend/src` sıfır
+satır. Blocker **DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+
+Oturum üç imza kalemiyle açıldı ve **üçü de ölçümde kapandı** (#534 dört kutu · #854 dokuz
+kutu, hepsi BOŞ; A-08 `human-only`). **Devir prompt'unun kod adayı da bayattı** — `ADIM 137`'yi
+son slice sanıyordu, oysa **ADIM 138 inmişti** ve #703'ün kalan yarısı bir **ürün kararıdır**.
+Bu yüzden açık issue listesi tarandı ve **imza istemeyen** tek ölçülmüş kalem alındı: **#540**.
+
+**ASIL BULGU: muhafızın kendi muhafızı yoktu.** `test_matrix_enumerates_every_schema_literal`
+matris üzerinde değil **registry** (`_SCHEMA_FIELDS`) üzerinde parametrize → kaydedilmemiş bir
+`field_path` hakkında **hiçbir soru sorulmuyordu** ve CI yeşil kalıyordu. `_SCHEMA_FIELDS`
+ağaçta yalnız iki yerde geçiyor (tanımı + `parametrize`); **tamlığını hiçbir test iddia
+etmiyordu.** Kodun kendi yorumundaki *"this test then proves it complete"* **yanlıştı**.
+
+**BOŞLUK İDDİA EDİLMEDİ, ÖLÇÜLDÜ (NC-0):** düzeltmeden önce matrisin gerçekten kapıladığı
+`LimitOrderDetails.price_rule`'a sahte bir literal enjekte edildi → **exit 0, 79 passed,
+tamamen yeşil.**
+
+**ÖLÇÜM TASARIMI BELİRLEDİ:** beş alanın **beşi de** matrisle zaten uyuşuyordu → kayıt
+**tamamen eklemeli**, **sıfır yeni matris satırı**, ve issue'nun riskli dalı (*"çalışmayan
+literal çıkarsa DUR"*) hiç tetiklenmedi. Model/alan çiftleri tahmin edilmedi; dotted path
+`StrategyConfig`'ten `get_type_hints` ile çözülerek ölçüldü (annotation'lar `ForwardRef`
+gelir, `model_fields[...].annotation` tek başına yetmez).
+
+**DÖRT NC, her biri farklı bir şey kanıtlıyor.** NC-1: NC-0'ın **birebir aynı** mutasyonu artık
+**tam olarak bir** testi düşürüyor (aynı mutasyon, zıt sonuç). NC-2: registry'den bir giriş
+silinince **yalnız eksen 2** kırmızı, **13 eksen-1 parametresi yeşil kalır** (eksen 1'in
+drift'e kör olduğunun kanıtı). NC-3: on beşinci bir `field_path` → eksen 2 kırmızı (+ TS ayna,
+gizlenmedi). **NC-4 asıl ölçüm:** aynı enjeksiyon **düzeltme öncesi** dünyada **yalnız** TS
+ayna testini düşürüyor — ve o testin doğal çaresi *"aynayı yeniden üret"*tir, ki yeşili geri
+getirirken alanı **kalıcı olarak kaydedilmemiş** bırakır. **Beş alanın nasıl sızdığı
+varsayılmadı, ölçüldü.** Bir NC **reddedildi** (ilk NC-3 `SyntaxError` verdi = yanlış sebeple
+kırmızı).
+
+**Üretilmiş artefaktlar tazelendi (ADIM 60):** `--check` kırmızı verdi ve önce **main'in temiz
+olduğu** doğrulandı → bayatlığı bu slice yarattı. İki sayı farklı şey ölçer: dosya koşusu
+**79 → 85** (5 parametre + 1 fonksiyon), depo geneli **statik** toplama **3888 → 3889**
+(yalnız fonksiyon).
+
+**Ölçülüp kapatılmayan:** **#540 KAPATILMADI** (insan kararı) · **#536'nın altı alanı kapsam
+dışı** (ayrı kusur sınıfı — orada her literal çalışır) · kabul defteri **el değmedi** ·
+`capabilities.py` **el değmedi**.
+
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 139 · `docs/ADIM139_LANDED_KICKOFF.md`.
+
+## Next (ADIM 139 sonrası): **açık kalemlerin DÖRDÜ imza, BİRİ blocker**
+
+1. **#534 md. 3** (İMZA) — dört kutu, **ADIM 139'da yeniden ölçüldü: dördü de BOŞ**. İşaret
+   `[ ]`. `(c)` şıkkı sıfır kod ile #534'ü kapatır.
+2. **#854** (İMZA) — dokuz kutu (`☐`), dokuzu da BOŞ.
+3. **`instrument_mapping_ref`** (İMZA, sonra KOD) — ADIM 138'de ölçüldü, backlog R1.
+4. **#536** (ÖNCE ÖLÇ) — ADIM 139'un kardeşi ama **ayrı kusur sınıfı**: orada her literal
+   çalışır, kaydedilmemiş değer zararsızdır. İçinde ürün sorusu (`overlapping_signal_policy`
+   inert mi) var; kapsamı ölçmeden slice açma.
+5. **A-08 (#514)** — **tek blocker**, human-only, repo içinden kapatılamaz.
+
+**Ajan bunlardan hiçbirini kendi başına seçemez.** Paste-ready resume prompt:
+`docs/ADIM139_LANDED_KICKOFF.md` sonunda.

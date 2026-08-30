@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 
 # ADIM 138 — GH #703'ün `native_asset_id` yarısı kapandı (LANDED KICKOFF)
 

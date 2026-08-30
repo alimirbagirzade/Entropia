@@ -19266,3 +19266,102 @@ kapandı, başlığının iddiası ikinci kapı yüzünden ayakta.
 * **Karar belgesi yazılmadı** — bu bir adjudication değil; seçenekler ölçüldü ve `(b)`'nin
   tek yanlışlanabilir seam olduğu gösterildi, reddedilen üçüncü yol kayda geçti.
 * Frontend kapıları **koşulmadı** (`frontend/src`'te sıfır satır).
+
+## ADIM 139 — GH #540: BİR MUHAFIZIN KENDİ MUHAFIZI YOKTU; VE ONUN NASIL DRIFT ETTİĞİ İDDİA EDİLMEDİ, DÖRDÜNCÜ NEGATİF KONTROLDE ÖLÇÜLDÜ
+
+**Taban** `origin/main` @ `7f2d8317`. **Ürün kodunda SIFIR SATIR** — diff bir test dosyası +
+üç üretilmiş artefakt. Migration **YOK** · `ENGINE_VERSION` **değişmedi** · golden **el
+değmedi** · OpenAPI **değişmedi** (`backend/src`'te sıfır satır → yapı gereği) ·
+`SHARED_ALLOCATION_STATUS` **el değmedi** · `capabilities.py` **EL DEĞMEDİ** ·
+`frontend/src` **sıfır satır**. **Blocker DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED.**
+
+### OTURUM ÜÇ İMZA KALEMİYLE AÇILDI, ÜÇÜ DE ÖLÇÜMDE KAPANDI — VE PROMPT'UN KOD ADAYI BAYATTI
+
+Devir prompt'u `ADIM 137`'yi son slice sanıyordu; ölçüldü, **ADIM 138 inmişti** (#877). Bu
+promptun adlandırdığı kod adayını (**#703**) geçersiz kılar: gövdesinin yarısı ADIM 138'de
+kapandı, kalan yarısı (`instrument_mapping_ref`) **backlog R1** olarak kaydedilmiş bir **ürün
+kararıdır**. İmza kalemleri yeniden ölçüldü: **#534 md. 3 → dört kutu, dördü de BOŞ**
+(`[ ]` işaretiyle) · **#854 → dokuz kutu, dokuzu da BOŞ** (`☐` işaretiyle) · **A-08 (#514)
+`human-only`**. Üçü de durdurma koşulu → **hiçbiri seçilmedi, varsayılan atanmadı.**
+
+Bu yüzden açık issue listesi tarandı ve **imza istemeyen** tek ölçülmüş kalem alındı: **#540**.
+
+### ÖNCÜL YENİDEN ÖLÇÜLDÜ VE ÇÜRÜMEDİ
+
+Issue kendi ölçümünü `53c28de`'de yapmıştı (**stale-by-default**). Güncel main'de yeniden
+ölçüldü: matris **14** ayrık `field_path` yayımlıyor, `_SCHEMA_FIELDS` **9**'unu kaydediyor,
+ve eksik beş **tam olarak** issue'nun adlandırdıkları. Öncül ayakta.
+
+### ASIL BULGU: MUHAFIZIN KENDİ MUHAFIZI YOKTU
+
+`test_matrix_enumerates_every_schema_literal` **matris üzerinde değil, REGISTRY üzerinde**
+parametrize. Yani kaydedilmemiş bir `field_path` hakkında **hiçbir soru sorulmaz** ve CI
+yeşil kalır. `_SCHEMA_FIELDS` ağaçta yalnız **iki yerde** geçiyor: kendi tanımı ve o
+`parametrize` satırı — **hiçbir test onun matrisi tam kapsadığını iddia etmiyordu**. Kodun
+kendi yorumu *"a new enumerated field must be registered here too (and this test then proves
+it complete)"* diyor; **parantez içindeki iddia yanlıştı** — o test registry'nin
+tamlığını değil, yalnız kaydedilenlerin doğruluğunu kanıtlar. Beş alanın süresiz kaydedilmemiş
+kalabilmesinin sebebi budur.
+
+### BOŞLUK İDDİA EDİLMEDİ, ÖLÇÜLDÜ (NC-0)
+
+Düzeltmeden **önce**, matrisin **gerçekten kapıladığı** bir alana (`LimitOrderDetails.price_rule`)
+sahte bir literal enjekte edildi. Sonuç: **exit 0, 79 passed, tamamen yeşil** — yani yeni bir
+enum değeri Strategy editörüne **sınıflandırılmamış** olarak ulaşır ve **hiçbir test düşmez**.
+Matrisin var olma sebebi tam olarak budur.
+
+### ÖLÇÜM TASARIMI BELİRLEDİ: SIFIR YENİ MATRİS SATIRI
+
+Beş alanın **beşi de** şema literalleriyle matris satırları arasında **zaten uyuşuyordu**
+(dotted path'ler `StrategyConfig`'ten `get_type_hints` ile çözülerek ölçüldü — annotation'lar
+`ForwardRef` olarak gelir, `model_fields[...].annotation` tek başına yetmez). Sonuç: kayıt
+**tamamen eklemeli**, ve issue'nun riskli dalı (*"çalışmayan bir literal çıkarsa DUR ve
+raporla"*) **hiç tetiklenmedi**. Kaydedilen model/alan çiftleri tahmin edilmedi, o çözümleyici
+ölçtü: `LimitOrderDetails` ×2 · `FormulaBasedSizing` · `ScalingLogic` ×2.
+
+### İKİ EKSEN (ADIM 136'nın şekli)
+
+* **Eksen 1** — beş `field_path` `_SCHEMA_FIELDS`'e kaydedildi. Muhafız **9 → 14/14**.
+* **Eksen 2** — YENİ `test_the_registry_covers_every_matrix_field_path`:
+  `set(_SCHEMA_FIELDS) == {o.field_path for o in CAPABILITY_MATRIX}`. Registry drift'i artık
+  **CI'ı kırar**. Karşılaştırma sevk edilmiş `MATRIX_FIELD_PATHS` türevine değil **kanona**
+  (`CAPABILITY_MATRIX`) karşı yapılır — türevin kendisi bozulursa test onu takip etmesin diye.
+
+### DÖRT NEGATİF KONTROL, HER BİRİ FARKLI BİR ŞEY KANITLIYOR
+
+* **NC-1** — NC-0'ın **birebir aynı** mutasyonu, düzeltmeden sonra: **tam olarak bir**
+  başarısızlık, `…[data.order_config.limit.price_rule]`. *Aynı mutasyon, zıt sonuç* — eksen
+  1'in gerçekten ısırdığının ölçümü.
+* **NC-2** — `scaling_logic.method` registry'den silinir (#540'ın **birebir kusur şekli**):
+  **tam olarak bir** başarısızlık ve o **eksen 2**; kalan **13 eksen-1 parametresi YEŞİL
+  KALIR**. Eksen 1'in registry drift'ine **kör** olduğunun kanıtı.
+* **NC-3** — matrise **on beşinci** bir `field_path` eklenir (gerçekçi tekrar senaryosu):
+  eksen 2 kırmızı. Yanında TS ayna paritesi de kırmızı (ayna gerçekten bayat) — **gizlenmedi**.
+* **NC-4 — ASIL ÖLÇÜM.** Aynı enjeksiyon **düzeltme ÖNCESİ** dünyada koşuldu: **yalnız**
+  `test_generated_typescript_mirror_is_up_to_date` düşüyor. O başarısızlığın doğal çaresi
+  *"aynayı yeniden üret"*tir — ve bu, yeşili geri getirirken alanı **kalıcı olarak
+  kaydedilmemiş** bırakır. Beş alanın nasıl içeri sızdığı böylece **varsayılmadı, ölçüldü**.
+
+**Bir NC reddedildi:** ilk NC-3 denemesi `SyntaxError` verdi (enjeksiyon noktası yanlıştı) —
+kırmızıydı ama **yanlış sebeple**, hiçbir şey kanıtlamaz; liste sınırında yeniden kuruldu.
+
+### ÜRETİLMİŞ ARTEFAKTLAR TAZELENDİ (ADIM 60'ın dersi)
+
+`repository_facts --check` **kırmızı verdi** ve önce **main'in temiz olduğu** doğrulandı
+(pristine ağaçta exit 0) → bayatlığı bu slice yarattı. Yeniden üretildi.
+**İki sayı FARKLI şey ölçer ve ikisi de doğru:** dosya düzeyinde koşu **79 → 85** (beş yeni
+parametre + bir yeni fonksiyon), depo geneli **statik** toplama **3888 → 3889** (yalnız
+fonksiyon sayar, parametreleri değil).
+
+### DÜRÜST SINIR
+
+* **#540 KAPATILMADI** — kapatmak **insan kararıdır** (bu depoda issue durumu ajanın işi değil).
+* **Kabul defterine DOKUNULMADI**; hiçbir tavan oynamadı, hiçbir kriter `covered` işaretlenmedi.
+* **`capabilities.py` EL DEĞMEDİ** — sıfır yeni matris satırı gerekti (ölçüldü), yani hiçbir
+  alanın statüsü bu slice'ta yeniden sınıflandırılmadı.
+* **#536'nın altı alanı KAPSAM DIŞI** — ayrı issue, ayrı kusur sınıfı (orada **her** literal
+  çalışır, kaydedilmemiş değer zararsızdır); bu slice onlara dokunmadı.
+* `mypy tests/…` bu dosyada **önceden var olan** bir `attr-defined` hatası taşıyor
+  (orijinalde `:213`, eklemeden sonra `:227`) — **bu slice yaratmadı** ve CI kapısı
+  (`mypy src`) **temiz**.
+* Frontend kapıları **koşulmadı** (`frontend/src`'te sıfır satır).

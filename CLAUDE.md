@@ -270,6 +270,40 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `capabilities.py` **EL
+> DEĞMEDİ** · **`backend/src` ve `frontend/src`'te SIFIR SATIR**. **Son dalga — ADIM 139
+> (GH #540: kapasite-matrisi muhafızı 9/14 → 14/14 + registry anti-drift ekseni).** Oturum üç
+> imza kalemiyle açıldı, **üçü de ölçümde kapandı** (#534 dört kutu · #854 dokuz kutu, hepsi
+> BOŞ; A-08 `human-only`) — ve **devir prompt'unun kod adayı da bayattı** (`ADIM 137`'yi son
+> slice sanıyordu, **ADIM 138 inmişti**) → açık issue listesi tarandı, **imza istemeyen** tek
+> ölçülmüş kalem alındı. **ASIL BULGU: muhafızın kendi muhafızı yoktu** —
+> `test_matrix_enumerates_every_schema_literal` matris üzerinde değil **registry**
+> (`_SCHEMA_FIELDS`) üzerinde parametrizeydi, yani kaydedilmemiş bir `field_path` hakkında
+> **hiçbir soru sorulmuyordu**; kodun kendi yorumundaki *"this test then proves it complete"*
+> **yanlıştı**. **Boşluk iddia edilmedi, ÖLÇÜLDÜ (NC-0):** düzeltmeden önce matrisin gerçekten
+> kapıladığı `LimitOrderDetails.price_rule`'a sahte literal enjekte edildi → **exit 0, 79
+> passed, tamamen yeşil**. **Ölçüm tasarımı belirledi:** beş alanın **beşi de** matrisle zaten
+> uyuşuyordu → kayıt **tamamen eklemeli**, **sıfır yeni matris satırı**, issue'nun riskli dalı
+> hiç tetiklenmedi; model/alan çiftleri tahmin edilmedi, `get_type_hints` ile **ölçüldü**
+> (annotation'lar `ForwardRef` gelir). İkinci eksen yeni:
+> `test_the_registry_covers_every_matrix_field_path` **kanona** karşı karşılaştırır, sevk
+> edilmiş `MATRIX_FIELD_PATHS` türevine değil. **DÖRT NC:** NC-1 aynı mutasyon artık **tam
+> olarak bir** testi düşürür (zıt sonuç) · NC-2'de **yalnız eksen 2** kırmızı, **13 eksen-1
+> parametresi YEŞİL KALIR** (eksen 1 drift'e **kör**) · NC-3 on beşinci alan · **NC-4 ASIL
+> ÖLÇÜM:** düzeltme öncesi dünyada aynı enjeksiyon **yalnız TS ayna testini** düşürür ve o
+> testin doğal çaresi *"aynayı yeniden üret"*tir → yeşili geri getirirken alanı **kalıcı olarak
+> kaydedilmemiş** bırakır = **beş alanın nasıl sızdığının ölçümü**. Bir NC **reddedildi**
+> (`SyntaxError` = yanlış sebeple kırmızı). Üretilmiş artefaktlar tazelendi (ADIM 60) ve önce
+> **main'in temiz olduğu** doğrulandı; toplanan **3888 → 3889** (statik, yalnız fonksiyon —
+> dosya koşusu ayrı: 79 → 85). **DÜRÜST SINIR: #540 KAPATILMADI** (insan kararı) · **#536'nın
+> altı alanı kapsam dışı** (ayrı kusur sınıfı) · kabul defteri **el değmedi**, hiçbir tavan
+> oynamadı · `mypy tests/…`'in bu dosyadaki `attr-defined` hatası **önceden vardı**, CI kapısı
+> `mypy src` **temiz** · frontend kapıları **koşulmadı**.
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 139 · `docs/ADIM139_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK** — kolon zaten vardı) ·
 > `ENGINE_VERSION` **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** ·
 > `SHARED_ALLOCATION_STATUS` **el değmedi** · `queries/funding.py` (okuma yolu) **EL DEĞMEDİ** ·

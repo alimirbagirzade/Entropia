@@ -10482,10 +10482,10 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 145 · `docs/ADIM145_LANDED_KICKOFF
 
 ## Next: **#884'ün CI artefaktından TAVANLARI sıkıştır, sonra ürün sahibinin seçeceği kalem**
 
-1. **#884 açıksa — İKİNCİ COMMIT (kod değil, ölçüm):** Lighthouse job'ının
-   `lighthouse-report` artefaktındaki `lighthouse-baseline.tightened.json` → `floors` →
-   `frontend/e2e/lighthouse-baseline.json`. **PAZARLIKSIZ:** `panel-management.performance`
-   **98'de KALIR** (`provenance.do_not_tighten`), tightened map 100 önerse bile.
+1. **TAVANLAR SIKIŞTIRILDI (bu slice'ta, PR #884):** `seo` **82 → 100, 23/23 rota**,
+   kanıt PR'ın **kendi** CI koşusu (`33334644272`, `LH_REPEATS=3`, seeded stack).
+   `panel-management.performance` **98'de kaldı** (`do_not_tighten`), `performance` ve
+   `best-practices` el değmedi. **Yeni bir tavanı ASLA yerel koşudan alma.**
 2. **#677'nin kalanı:** `errors-in-console` (CI artefaktından `routes[].deductions`; ipucu:
    oturumsuz 401 / `/api/v1/events`) ve CLS `panel-management` (gerçek layout işi).
 3. **İMZA kalemleri:** #703 (11 kutu `☐` BOŞ) · #854 (9 kutu `☐` BOŞ) · #534 (CLOSED ama

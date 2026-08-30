@@ -20065,7 +20065,11 @@ CLS 1/23).
   ulaşılabilen oturumsuz sayfalarda konsol hataları `/api/v1/events` (SSE) ve
   `/api/v1/manual/stream` üzerinde **401**'di. Audit'in puanladığı oturumlu vaka bu değildir.
 * **CLS / `panel-management` el değmedi**; performans tavanı **98'de kalmalı**.
-* **Tavanlar sıkıştırılmadı** (ikinci commit, CI artefaktından).
+* **Tavanlar SIKIŞTIRILDI ve kanıtı PR'ın KENDİ CI koşusundan geldi** — E2E run
+  `33334644272`, `LH_REPEATS=3`, seeded stack: **`seo` 82 → 100, 23/23 rota**.
+  `performance` ve `best-practices` **el değmedi**; `panel-management/performance`
+  **98'de kaldı** (`do_not_tighten`; o koşuda medyan zaten 98'di, tightened map
+  yükseltmeyi **önermedi** bile). Uygulayıcı hiçbir tavanı indirmez, pinli olanı hiç oynatmaz.
 * Route / react-query key / OCC token / `Idempotency-Key` / SSE taksonomisi / `lib/*.ts`
   **el değmedi**; **görsel değişiklik yok** (v18 presentation-only sınırı korundu).
 * Backend kapıları **koşulmadı** — `backend/` içinde sıfır satır; otorite **CI**.

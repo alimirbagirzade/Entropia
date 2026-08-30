@@ -72,7 +72,9 @@ etkisi ölçülünce düzeltmedir.** Audit **geçersiz** dosyada düşer, kısı
   hataları `/api/v1/events` (SSE) ve `/api/v1/manual/stream` üzerinde **401**'di.
   Audit'in puanladığı **oturumlu** vaka bu değildir.
 - **CLS / `panel-management` EL DEĞMEDİ**; performans tavanı **98'de KALMALI**.
-- **Tavanlar bu commit'te sıkıştırılmadı** (yukarıdaki gerekçe).
+- **Tavanlar SIKIŞTIRILDI** — PR'ın kendi CI koşusundan (`33334644272`): **`seo` 82 → 100,
+  23/23 rota**. `panel-management/performance` **98** (`do_not_tighten`), `performance` ve
+  `best-practices` el değmedi, hiçbir tavan indirilmedi.
 - Route / react-query key / OCC token / `Idempotency-Key` / SSE taksonomisi / `lib/*.ts`
   **el değmedi**; görsel değişiklik yok (v18 presentation-only sınırı korundu).
 - **A-08 (#514) AÇIK** — tek blocker, `human-only`, çıkış kriterleri 0/4.

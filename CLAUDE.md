@@ -338,7 +338,15 @@ Before stopping a working session, produce **ALL** of the following:
 > #677 KAPATILMADI** — `errors-in-console` (23/23) **TEŞHİS EDİLMEDİ** (yerel stack oturumlu
 > sayfaya sürülemedi; **ipucu, sonuç değil:** oturumsuz sayfalarda 401 / `/api/v1/events` +
 > `/api/v1/manual/stream`), **CLS `panel-management` el değmedi ve tavanı 98'de KALMALI**,
-> tavanlar **sıkıştırılmadı**, backend kapıları **koşulmadı** (sıfır satır → otorite CI).
+> **tavanlar SIKIŞTIRILDI** — `seo` **82 → 100, 23/23**, kanıt PR'ın **kendi** CI koşusu
+> (`33334644272`); `panel-management/performance` **98** (`do_not_tighten`), hiçbir tavan
+> indirilmedi; backend kapıları **koşulmadı** (sıfır satır → otorite CI).
+> **BEŞİNCİ BULGU — ÖZ GOL, ve ratchet yakaladı:** `robots.txt` önce `Disallow: /` ile indi
+> = *doğru okunan* politika; CI ölçtü: **seo 82 → 63**, çünkü ağırlığı 1 olan iki audit
+> kapanırken ağırlığı **4.04** olan `is-crawlable` açıldı → net **−19**, taban altı, job
+> **kırmızı**. Boş `Disallow:` ile düzeltildi. **Bir kesintiyi kapatmak daha ağırını
+> açabilir; "düzeltme" ancak NET etkisi ölçülünce düzeltmedir** — audit **geçersiz**
+> dosyada düşer, kısıtlayıcıda değil.
 > **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
 > `PROJECT_HISTORY.md` §ADIM 145 · `docs/ADIM145_LANDED_KICKOFF.md`.
 >

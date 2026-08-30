@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 140 landed — GH #703'ün İKİNCİ kapısı ölçüldü, karar açıldı (kod YOK)
 
 ## Nerede olduğumuz

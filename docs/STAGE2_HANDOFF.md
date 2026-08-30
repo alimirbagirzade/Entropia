@@ -10198,3 +10198,67 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 140 · `docs/ADIM140_LANDED_KICKOFF.md`.
 6. **RD-09.c4** (KOD) — md. 1 çözülmeden kapatmak, mapping'i fixture'da elle set etmek olur =
    #703'ün kör noktasının tekrarı. §Karar 3 bunu açıkça sorar.
 7. **A-08 (#514)** — **tek blocker**, ayrı hat, insan denetimi ister.
+
+## Stage ADIM 141 — GH #536 Gap A + Gap B: sevk edilen conflict literalleri ilk kez sürüldü (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `31593c79`. **`backend/src`'te SIFIR SATIR** · migration **YOK** ·
+`ENGINE_VERSION` **değişmedi** · golden **el değmedi** · OpenAPI **değişmedi** ·
+`frontend/src` sıfır satır. Blocker **DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+
+On iki açık issue ölçüldü: beşi `product-decision`, üçü imza kutusu bekliyor (#703 · #854 ·
+#534), #514 `human-only`, #582 `C9` hattı → imzasız ilerleyebilen iki kalem: **#677** ve
+**#536**. #677 **bilerek alınmadı** (kabul kriteri düzeltme + tavan sıkılaştırmasını birlikte
+ister; Lighthouse Compose stack'i bu ortamda koşulamaz → kanıtsız kalırdı).
+
+**Öncül kısmen çürüdü ve çürüyen yarı ADIM 139'un işiydi:** issue *"six fields outside the
+guard"* diyor; `_SCHEMA_FIELDS` bugün **14 alan** taşıyor (#878 onu 9→14 yaptı) ve
+`conflict_position_handling.opposite_direction_hedge` içeride. `ConflictPositionHandling`
+**beş** Literal alan bildirir → **biri guard'da, dördü dışarıda**. **Gap C kapsam dışı**:
+kalan dördü eklemek her literal için matris satırı ister, her satır bir sınıflandırma kararı.
+
+**Gap B:** `same_candle_entry_exit` beş literal sevk eder, suite'te alan için üç hit vardı ve
+**üçü de `exit_first`**. `stop_first` / `ignore_trade` / `conservative_rule` hiç sürülmemişti.
+Yalnız bastırmayı assert etmek zayıf yarıdır (iki literal sessizce tek koda çökse trade sayısı
+yine 0) → her case **kendi `entry_exit_collision.detail["policy"]`'sini** de pinler; GH #532'nin
+(ADIM 136) taksonomiye kaydettiği alanı literal başına yanlışlanabilir kılan şey budur.
+
+**Gap A:** `overlapping_signal_policy`'nin dört literali **bayt bayt aynı** koşu üretir, motorun
+dalı yoktur, ve vacuity savı **yalnız bir kaynak yorumunda** yaşıyordu. Yeni case onu
+**kasıtlı, savunulmuş** bir no-op'a çevirir ve bir **tripwire**'dır: toplama modeli değişip
+politika ısırırsa kırmızı verir ve disclosure kararını zorlar.
+
+**ÜÇ NC, üçü ayırt edici:** NC-1 (policy echo sabitlenir) → yeni iki case + **mevcut** default
+case · NC-2 (diagnostics echo dondurulur) → **yalnız** Gap A · NC-3 (`conservative_rule` admit
+etmeye başlar) → **yalnız** yeni case, `test_backtest_engine.py`'nin tamamı **YEŞİL KALIR** =
+boşluğun ölçümü.
+
+**TUZAK:** NC turlarından sonra `RESTORE VERIFY` kırmızı verdi ama `git status` **temizdi** —
+sebep bayat `__pycache__`'ti. **Ağacı geri yazmak yetmez, türetilmiş artefaktları da geri al.**
+
+**DÜRÜST SINIR: #536 KAPATILMADI** — issue dört madde ister, bu slice **md. 1 + md. 3**'ü
+sevk eder; **md. 2** (`stop_conflict_resolution` / `stop_priority_order`) **yazılmadı**,
+**md. 4** (guard genişletme ya da yeni-literal allowlist guard'ı) **kapsam dışı**. Gap A'nın
+disclosure yarısı (capability satırı / diagnostics ifadesi) **sevk edilmedi** — golden'ı
+oynatır ve bump ister, yani kapsam kararıdır.
+
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 141 · `docs/ADIM141_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği açık kalemlerden biri — DÖRDÜ İMZA, ÜÇÜ KOD, BİRİ BLOCKER**
+
+1. **#703 / `instrument_mapping_ref` — yazıcı kim?** (İMZA) `closure_i703_..._2026-08-30.md`,
+   **üç karar / on bir kutu, hepsi BOŞ**.
+2. **#854 — dış import pin'i** (İMZA). **Dokuz kutu (`☐`), dokuzu BOŞ.**
+3. **#534 — AYRIŞMA (YENİ):** issue **CLOSED** (2026-08-30, **kapanış yorumu YOK**), ama karar
+   belgesi `doc-status: current` + **dört kutu (`[ ]`) BOŞ**. ADIM 90 kuralı gereği otorite
+   **imza kutusudur** → md. 3 açık sayılır. Karar: belge `historical` mı, issue yeniden mi
+   açılsın, yoksa kutu mu imzalansın.
+4. **#536'nın kalanı** (KOD + bir tasarım kararı) — md. 2 (`stop_conflict_resolution`
+   explicit + `stop_priority_order` `logic:<block_id>`) test işidir ve **imzasız yapılabilir**;
+   md. 4 (guard) bir tasarım kararıdır.
+5. **#677 — Lighthouse'un dört donmuş eksiği** (KOD) — `errors-in-console` 23/23,
+   `meta-description` 23/23, `robots-txt` 23/23, CLS 1/23. **Compose + Lighthouse koşabilen
+   bir ortam ister** (tavan sıkılaştırması kanıtla birlikte inmeli).
+6. **Composite Result provenance** (KOD, kapsamı karar) — `combine_item_runs` diagnostics'i
+   provenance almıyor (ölçüldü); composite'te çelişen politikalar `"mixed"` mi, per-item mi?
+7. **A-08 (#514)** — **tek blocker**, `human-only`. Ölçüldü: çıkış kriterleri **0/4**, rota
+   **0/46**, akış **0/20**, SR-1 hiç başlamadı → **kapatılmamalı**.

@@ -10262,3 +10262,71 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 141 · `docs/ADIM141_LANDED_KICKOFF.md`.
    provenance almıyor (ölçüldü); composite'te çelişen politikalar `"mixed"` mi, per-item mi?
 7. **A-08 (#514)** — **tek blocker**, `human-only`. Ölçüldü: çıkış kriterleri **0/4**, rota
    **0/46**, akış **0/20**, SR-1 hiç başlamadı → **kapatılmamalı**.
+
+## Stage ADIM 142 — GH #536 md. 2: politika echo'su iki düzlemde pinlendi, `record_all` ikizi ölçüldü (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `17bb495f` (ADIM 141 **indi**, PR #880). **`backend/src`'te SIFIR
+SATIR** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · golden **el değmedi** ·
+OpenAPI **değişmedi** · `frontend/src` sıfır satır. Toplanan test **3895 → 3898**
+(modül 5 → 11 case). Blocker **DEĞİŞMEDİ (1 — A-08)**, verdict **BLOCKED**.
+
+ADIM 141 md. 2'yi *"yazılmadı — test işidir, imzasız yapılabilir"* diye borç bırakmıştı; bu
+slice onu aldı. Diğer kalemler ölçüldü ve girilmedi: **#703** (11 kutu BOŞ) · **#854** (9 kutu
+BOŞ) · **#534** (issue `CLOSED/COMPLETED` ama tek yorumu **2026-08-04** tarihli, kapanış
+`2026-08-30T06:59Z` → **kapanış yorumu YOK**, 4 kutu BOŞ; ADIM 90 gereği otorite **imza
+kutusu** → açık) · **#677** (Lighthouse ortamı yok) · **#514** (`human-only`).
+
+**ÖNCÜL KISMEN ÇÜRÜDÜ — md. 2'nin üç yarısından İKİSİ zaten kapalıydı:**
+`most_conservative` **açıkça set ediliyordu** (`test_oracle_protection_stops.py:135`, `:308`);
+`stop_priority_order`'ın `logic:<block_id>` girdileri **ADIM 137'de** kapanmıştı
+(`test_backtest_policy_provenance.py:185`/`:187`); `all_active` **diagnostics'ten assert
+ediliyordu** (`test_backtest_logic_stop.py:372`/`:381`). **Ayakta kalan tek şey ECHO'ydu** ve
+o **iki düzlemde** yayımlanıyordu: `diagnostics["stop_conflict_resolution"]` (**0** assertion),
+`stop_resolution` → `detail["resolution"]` (**0**), `detail["requirement"]` (**0**). Ayrıca
+`record_all_execute_highest` **motor düzlemine hiç ulaşmamıştı**.
+
+**ASIL BULGU: `record_all_execute_highest`, `priority_order`'ın BAYT BAYT İKİZİ.** Literalin
+`backend/src`'teki tamamı **dört hit**: biri `execution/fills.py`'de **paylaşılan dal**, üçü
+şema literali/prozası. Şema farkı *"record_all also records every co-triggered rule in the
+ledger"* der; `_StopOutcome.triggered` **her dalda aynı** kurulur → vaat dört literalin
+dördü tarafından karşılanır ve **hiçbirini ayırt etmez**.
+
+**İKİNCİ BULGU, ölçüldü: mevcut test bunu GÖREMİYOR.**
+`test_record_all_execute_highest_records_every_triggered_rule` NC-3'te literal dalından
+düşürüldüğünde **YEŞİL KALDI** — iki assertion'ı da o fixture'da her iki dal için doğru.
+
+**ÜÇÜNCÜ (TUZAK): ADIM 141'in `_fingerprint`'i bu soruyu CEVAPLAYAMAZ.** O `diagnostics`'i
+tümüyle dışlar (Gap A için yeterliydi) ama `signal_events`'i **hash'ler**, ve bu echo oraya da
+damgalanıyor → olduğu gibi kullanmak tripwire'ı **doğuştan tatmin edilemez** yapardı (ölçüldü:
+dört ayrı fingerprint). `_stop_fingerprint` echo'yu **iki düzlemden de** sıyırır.
+
+**DÖRT NC, dördü ayırt edici, DÖRDÜNDE DE mevcut 41 test YEŞİL:** NC-1 (diagnostics echo
+sabite) → 4 yeni test, `:326`'da · NC-2 (event echo sabite) → 4 yeni test, **`:328`**'de
+(farklı satır → iki bağımsız eksen) · NC-3 (`record_all` daldan düşer) → **yalnız 2** · NC-4
+(beşinci literal) → **yalnız 1**.
+
+**DÜRÜST SINIR: #536 KAPATILMADI.** `logic:<block_id>`'nin **MOTOR düzlemi kapsanmadı**
+(motor seviyesinde logic-stop fixture'ı **yok**; `test_backtest_logic_stop`'un motor case'leri
+`logic_stop_blocks == 0` ile koşar) · **md. 4 kapsam dışı** · **`record_all` bulgusu
+KAYDEDİLDİ + PİNLENDİ, DÜZELTİLMEDİ** (düzeltmek ürün kararı; **dördüncü bir imzasız karar
+belgesi AÇILMADI** — ADIM 141 emsali) · şema prozası **düzeltilmedi** (adjudication) ·
+frontend kapıları **koşulmadı**.
+
+Tam kayıt `PROJECT_HISTORY.md` §ADIM 142 · `docs/ADIM142_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği açık kalemlerden biri — DÖRDÜ İMZA, İKİSİ KOD, BİRİ BLOCKER**
+
+1. **#703 / `instrument_mapping_ref` — yazıcı kim?** (İMZA) `closure_i703_..._2026-08-30.md`,
+   **üç karar / on bir kutu, hepsi BOŞ**.
+2. **#854 — dış import pin'i** (İMZA). **Dokuz kutu (`☐`), dokuzu BOŞ.**
+3. **#534 — AYRIŞMA** (İMZA): issue **CLOSED** ama **kapanış yorumu YOK** ve karar belgesi
+   `current` + **dört kutu (`[ ]`) BOŞ** → ADIM 90 gereği md. 3 **açık**.
+4. **#536'nın kalanı** — **md. 4** (Gap C guard) bir **tasarım kararı**; ayrıca ADIM 142'nin
+   ölçtüğü **`record_all` ikizliği** bir **ÜRÜN KARARI** (literale gerçek etki ver, ya da
+   kaldır — ikincisi saklanan config'leri kırar).
+5. **#536 md. 2'nin KALAN YARISI** (KOD, imzasız yapılabilir) — `logic:<block_id>` girdisini
+   **motor düzleminde** bir custom `stop_priority_order` ile sür. **Motor seviyesinde
+   logic-stop fixture'ı YOK**; onu kurmak bu slice'ın işidir.
+6. **#677 — Lighthouse'un dört donmuş eksiği** (KOD) — Compose + Lighthouse koşabilen ortam
+   ister.
+7. **A-08 (#514)** — **TEK BLOCKER**, `human-only`. Çıkış kriterleri **0/4** → kapatılamaz.

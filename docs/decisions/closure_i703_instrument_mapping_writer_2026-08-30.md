@@ -138,12 +138,14 @@ alan `execution_key`'e girmez, run manifest'inin research bölümünde taşını
 
 ## §Karar 1 — `instrument_mapping_ref`'i kim yazar?
 
+### Karar kutusu — **İMZALI: `(b)` LİNK'TEN TÜRET (2026-08-31)**
+
 ☐ **(a) STATÜKO — kusur kabul edilir.** App-created hiçbir research revizyonu funding
   koşusunda kullanılamaz; #703 başlığındaki iddia doğru kalır ve issue açık kalır.
   **Bedeli:** `RD-09.c4` kapatılamaz durumda kalır (funding-enabled bir RUN, ref'i elle set
   etmeden kurulamaz — ki bu tam olarak ADIM 138'in kör noktasının şeklidir).
 
-☐ **(b) LİNK'TEN TÜRET.** Research create/revise, linkli market revizyonunun
+☑ **(b) LİNK'TEN TÜRET.** Research create/revise, linkli market revizyonunun
   `instrument_id`'sini `instrument_mapping_ref`'e kopyalar. **Ölçülmüş bedeli:**
   `MarketDatasetRevision.instrument_id` de **nullable**'dır ve yalnız çağıran `instrument_id`
   ya da `instrument_scope` verdiyse dolar — yani kaynak boşsa ref sessizce `None` kalır ve
@@ -163,6 +165,32 @@ alan `execution_key`'e girmez, run manifest'inin research bölümünde taşını
   conjunct'ını üründen düşürür.
 
 ☐ **Başka:** ______________________________________________
+
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** Karar oturum içinde, ADIM 140'ın yedi ölçümü sunulduktan sonra verildi
+> (2026-08-31). **Seçilen şıkkın kendisine sunulan metni verbatim:** *"(b) LİNK'TEN TÜRET.
+> Research create/revise, linkli market revizyonunun `instrument_id`'sini
+> `instrument_mapping_ref`'e kopyalar."* Rakipleri karşısındaki konumu da sunulduğu gibidir:
+> `(a)` kusuru kabul eder ve `RD-09.c4`'ü kapatılamaz bırakır; `(c)` aynı sonucu **yeni bir
+> API alanıyla** verir ve v18 mockup otoritesi yüzünden **önce mockup güncellemesi** ister
+> (ADIM 114'ün `commission_basis` emsali); `(d)` fail-open'dır ve doc 12 §8.4 rule 2'nin
+> mapping conjunct'ını üründen düşürür.
+>
+> **BU İMZA ŞIKKI SEÇER, ALT ÇATALINI ÇÖZMEZ — ve şıkkın kendi metni o çatalı adlandırır.**
+> `MarketDatasetRevision.instrument_id` de **nullable**'dır ve yalnız çağıran `instrument_id`
+> ya da `instrument_scope` verdiyse dolar. Dolayısıyla kopyalamanın davranışı ayrıca
+> kararlaştırılmalıdır:
+>
+> * **(b1) FAIL-OPEN:** kaynak boşsa ref sessizce `None` kalır → **aynı kusur bir katman
+>   öteye taşınır** (belgenin kendi ifadesi). #703'ün başlığındaki iddia bu dünyada
+>   *bazı* revizyonlar için ayakta kalır.
+> * **(b2) FAIL-CLOSED:** kaynak boşsa research create/revise reddedilir → bugün scope'suz
+>   kurulmuş market revizyonlarına bağlı research kayıtlarını **retroaktif olarak bloklar**.
+>   Üretimdeki etkilenen satır sayısı **ölçülmemiştir** (ADIM 140 §dürüst sınır).
+>
+> Uygulama, `(b1)` / `(b2)` imzalanmadan **başlatılamaz**. Bu ek çatal bir kapsam genişletmesi
+> değildir: `(b)`'nin sunulan metninde **"ölçülmüş bedeli"** olarak zaten yazılıydı.
 
 ## §Karar 2 — Mevcut Ready Check harness'ı ne olacak?
 
@@ -197,7 +225,9 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
 
 - **Kusur DÜZELTİLMEDİ.** ADIM 140 yalnız ikinci düzlemin testini sevk eder; `backend/src`'te
   **sıfır satır** değişti. NC yamaları uygulandı, ölçüldü ve **bayt bayt geri alındı**.
-- **#703 KAPATILMADI** ve durumu değiştirilmedi — insan kararı.
+- **#703 KAPATILMADI** ve durumu değiştirilmedi — insan kararı. **§Karar 1 2026-08-31'de
+  `(b)` olarak İMZALANDI**, ama kusur **hâlâ düzeltilmedi**: imza şıkkı seçer, `(b1)`/`(b2)`
+  alt çatalı açık kalır ve uygulama ondan önce başlayamaz. §Karar 2 ve §Karar 3 **İMZASIZ**.
 - **Frontend'e dokunulmadı**, frontend kapıları koşulmadı.
 - **Üretimde kaç research revizyonunun etkilendiği SAYILMADI** — bu bir üretim DB sorgusudur
   (`G15` §Ölçüm 3 ve #854 ile aynı sınır). Karar bu sayı olmadan verilebilir: Ölçüm 2 kusurun

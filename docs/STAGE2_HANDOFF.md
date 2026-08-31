@@ -10493,3 +10493,30 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 145 · `docs/ADIM145_LANDED_KICKOFF
    product decision"*, 0 yorum) · #536'nın kalanı (md. 4 tasarım + `record_all` ürün kararı).
 4. **#582 — BAYAT:** öncülü çürütüldü; kapatmak **insan kararı**.
 5. **A-08 (#514)** — TEK BLOCKER, `human-only`, çıkış kriterleri 0/4.
+
+## Stage ADIM 146 — Lighthouse raporu kesintinin adını taşıyıp içeriğini atıyordu (PR #885)
+
+**Tek dosya** (`specs/21-lighthouse.spec.ts`) · **ürün kodunda SIFIR SATIR** · **kapı mantığı
+EL DEĞMEDİ** (floor/`armed`/`expect`/baseline/tightened — grep'le kanıtlı) · blocker DEĞİŞMEDİ.
+
+#677 *"read the actual console output"* diyordu ama artefakt `{id,title,weight}` tutup
+`audit.details`'i atıyordu → talimat **yerine getirilemiyordu**. Her kesinti artık
+`evidence: string[]` taşıyor (genel renderer, 5×300 sınırlı, boş = cevap).
+
+**Kanıt okundu** (run `33360933696`): 23/23 rota **401**; `/api/v1/events` **×46**; 20/23
+rota kendi veri ucunda da. **Rotalar aynı ekranı render etmiyor** (23 farklı LCP) →
+*"oturumsuz kabuk"* okuması desteklenmiyor. **HENÜZ BELİRLENMEDİ:** Lighthouse'un kendi
+sekmesi oturumu taşıyor mu — **düzeltmenin harness'ta mı üründe mi olduğuna karar veren
+ölçüm budur.**
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 146 · `docs/ADIM146_LANDED_KICKOFF.md`.
+
+## Next: **#677 Faz 2 — ve ilk adım bir ÖLÇÜM, düzeltme değil**
+
+1. **AYIRT EDİCİ ÖLÇÜM:** Lighthouse'un kendi sekmesi oturumu taşıyor mu?
+   Taşımıyorsa kusur **harness'ta** (ve #677'den daha ağır); taşıyorsa **üründe**
+   (istekler token eklenmeden önce atılıyor; `/events` için ayrıca `EventSource`
+   özel başlık gönderemez). **TAHMİN ETME, ÖLÇ.**
+2. **CLS `panel-management`** — gerçek layout işi; tavanı **98'de BIRAK**.
+3. **İMZA kalemleri:** #703 (11 kutu) · #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum).
+4. **#582 BAYAT** — kapatmak insan kararı. **#514 A-08** — tek blocker.

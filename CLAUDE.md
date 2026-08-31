@@ -310,6 +310,34 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **ÜRÜN KODUNDA SIFIR
+> SATIR** · **kapı mantığı EL DEĞMEDİ**. **Son dalga — ADIM 146 (GH #677: rapor kesintinin
+> ADINI taşıyıp İÇERİĞİNİ atıyordu; PR #885).** Tek dosya: `specs/21-lighthouse.spec.ts`.
+> **ASIL BULGU: issue'nun kendi talimatı sevk edilen artefakttan YERİNE GETİRİLEMİYORDU** —
+> #677 *"read the actual console output"* diyor, `deductions` ise `{id,title,weight}` tutup
+> `audit.details`'i **atıyordu**; 23/23 rotada tekrarlayan bir kusurun **tüm kaydı** buydu ve
+> ADIM 145'te **iki oturum** yerel stack'te konsolu yeniden üretmeye harcandı. **Bir kusuru
+> kanıtı olmadan adlandırmanın bedeli budur.** Her kesinti artık audit'in **kendi**
+> `details.items`'ından `evidence: string[]` taşıyor; renderer **GENEL** (audit'e özel olsa
+> bir sonraki kesintiyi **aynı körlükte** bırakırdı), **SINIRLI** (5×300 — devasa artefakt
+> aynı kusurun başka kılığı), ve **boş `evidence` bir CEVAPTIR** (`is-crawlable` item'sız düşer).
+> **KANIT OKUNDU ve soruyu KESKİNLEŞTİRDİ, KAPATMADI** (run `33360933696`): 23/23 rota
+> **401**, `/api/v1/events` **×46**, 20/23 rota kendi veri ucunda da. **Ölçülen ile
+> ölçülmeyen AYRI TUTULDU:** rotalar aynı ekranı render **etmiyor** (**23 farklı LCP, 8
+> farklı CLS**) → *"hepsi oturumsuz kabuk"* okuması **desteklenmiyor**; SPA auth'u
+> localStorage'daki **opak Bearer** (`apiClient.ts:153`). **HENÜZ BELİRLENMEDİ: Lighthouse'un
+> KENDİ SEKMESİ oturumu taşıyor mu** (spec `disableStorageReset` ile taşıdığını **iddia
+> ediyor**) — **düzeltmenin HARNESS'ta mı ÜRÜNDE mi olduğuna karar veren ölçüm budur** ve bu
+> slice onu **yapmadı**; `/events` için akla yatkın bir mekanizma var (`EventSource` özel
+> başlık gönderemez) ama **kanıtlanmadı**. **DÜRÜST SINIR: #677 KAPATILMADI,
+> `errors-in-console` DÜZELTİLMEDİ** — teşhis edilebilir kılındı; CLS `panel-management` el
+> değmedi ve tavanı **98'de kalır**; tavanlara/`armed`/`do_not_tighten`'a dokunulmadı;
+> backend kapıları koşulmadı (sıfır satır → otorite CI).
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 146 · `docs/ADIM146_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
 > **el değmedi** · **`backend/` içinde SIFIR SATIR**. **Son dalga — ADIM 145 (GH #677: iki
 > bütün-uygulama Lighthouse kesintisi kaynağında düzeltildi; PR #884).** Sevk edilen iki

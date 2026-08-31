@@ -218,7 +218,14 @@ async def test_a_successor_approval_leaves_a_finished_runs_manifest_unchanged(se
         pinned["market_entity_id"] = market_entity_id
         return block
 
-    composition_id, _root, _rev = await _ready_composition(session, USER1, funding_for=_funding_for)
+    composition_id, _root, _rev = await _ready_composition(
+        session,
+        USER1,
+        funding_for=_funding_for,
+        # GH #703 §Karar 1a = `(b2)`: the funding revision copies its mapping ref
+        # from this market revision, which therefore has to name an instrument.
+        market_instrument_id="BTCUSDT",
+    )
     run = await _completed_funded_run(session, composition_id)
 
     manifest_row = await bt_repo.get_manifest_by_run(session, run["run_id"])
@@ -297,7 +304,14 @@ async def test_a_successor_approval_leaves_a_RUNNING_runs_manifest_unchanged(ses
         pinned["market_entity_id"] = market_entity_id
         return block
 
-    composition_id, _root, _rev = await _ready_composition(session, USER1, funding_for=_funding_for)
+    composition_id, _root, _rev = await _ready_composition(
+        session,
+        USER1,
+        funding_for=_funding_for,
+        # GH #703 §Karar 1a = `(b2)`: the funding revision copies its mapping ref
+        # from this market revision, which therefore has to name an instrument.
+        market_instrument_id="BTCUSDT",
+    )
     admit = await backtest_cmd.request_backtest_run(session, USER1, composition_id=composition_id)
     await session.commit()
     assert admit["state"] == "queued"

@@ -110,7 +110,13 @@ async def _seed(session) -> None:
 
 async def _approved_market(session) -> str:
     root, _ = await md_cmd.create_market_dataset(
-        session, ADMIN, market_data_type=MarketDataType.OHLCV, payload={"v": 1}
+        session,
+        ADMIN,
+        market_data_type=MarketDataType.OHLCV,
+        payload={"v": 1},
+        # GH #703 §Karar 1a = `(b2)` (signed 2026-08-31): a market revision naming
+        # no instrument can no longer be a research link source.
+        instrument_id="instr_seed_btcusdt",
     )
     await session.flush()
     revision = await md_repo.get_revision(session, root.current_revision_id or "")

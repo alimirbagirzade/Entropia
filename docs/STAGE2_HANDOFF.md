@@ -10664,3 +10664,61 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 148 · `docs/ADIM148_LANDED_KICKOFF
 5. **Ayrıca açık:** Lighthouse **harness düzeltmesi** (ADIM 147'nin bıraktığı — 23 skoru
    oynatır, tavanlar **CI'dan** yeniden dondurulur) · `errors-in-console` (23/23) ·
    #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · **#514 A-08 — tek blocker**.
+## Stage ADIM 149 — GH #703'ün yazıcısı sevk edildi; ölçüm imzanın öngördüğünden geniş çıktı (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `5e271b45` (ADIM 148). Yazıldığı taban `6d50b6be` (#886) idi;
+ADIM 147 (#887) ve ADIM 148 (#888) bu PR yazılırken indi ve dal ikisinin üzerine
+**REBASE edildi** — *"Update branch"* düğmesi KULLANILMADI (ADIM 61). İki belge
+çakışması **iki taraf da korunarak** çözüldü ve bir **başlık-kaybı muhafızı** ile
+doğrulandı (`PROJECT_HISTORY` 163 başlık = 162 + ADIM 149); üretilmiş olgular doğru
+birleşti (backend **3909**, frontend **733**, E2E **84**). **MIGRATION YOK**
+(kolon zaten vardı) · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden
+**el değmedi** · **`frontend/` içinde SIFIR SATIR**.
+
+**Ne indi.** `instrument_mapping_ref`'in **yazıcısı** — #703'ün dört imzalı kararının
+uygulaması, hepsi tek slice'ta: `§1 = (b)` linkten türet · `§1a = (b2)` fail-closed düz ·
+`§2 = A` harness üretim şekline çekildi · `§3 = A` `RD-09.c4` `partial` kaldı.
+Ürün kodu iki dosya; tek türetim noktası
+`commands/research_data.py::_instrument_mapping_ref_for` — linkli market revizyonunun
+**kendi `instrument_id`'sini KOPYALAR** (arama değil: market head'i ilerlerken bu revizyon
+tek bir revizyon id'sine pinli kalır), kaynak boşsa `DependencyBlocked` (**O-31 — yeni
+taksonomi kodu YOK**). Çağrı **`run_idempotent`'ın DIŞINDA** (reddedilen deneme anahtarı
+yakmaz) ve **yalnız link pinleyen dalda** (hiçbir yarısı olmayan çift tutarlıdır).
+
+**ASIL BULGU — ikinci kapı da kapandı.** ADIM 138 *"başlıktaki iddia ikinci kapı yüzünden
+ayakta"* diye bir dürüst sınır bırakmıştı; o sınır **düştü ve ölçüldü**:
+`resolve_funding_schedule` app-created bir funding revizyonunu artık **hiç reddetmiyor**
+(ADIM 138'in kendi testi `DID NOT RAISE` verdi). Öncülü ölen **üç** test **kasıtlı**
+tersine çevrildi, silinmedi — *"üretim BLOKLANIR"* → *"üretim admit edilir ve run yazar"*.
+
+**ÜÇÜNCÜ BULGU — kullanılamaz şeklin yaygınlığı SAYILDI:** `(b2)` inince **dört dosya /
+29 test** kırmızıya döndü, dördünün de sebebi kendi market yardımcısının `instrument_id`
+vermemesiydi. Varsayılanlar **değiştirilmedi**; yalnız research'e bağlanan çağrı yerleri
+düzeltildi.
+
+**NC:** beşi de ayırt edici (**NC-1′ 2 · NC-2 1 · NC-3 1 · NC-4 1 · NC-5 5**), biri
+**REDDEDİLDİ** (sabit `ref` iki ekseni birden kırdı). **TUZAK:** NC koşucusu SIGTERM'de
+ağacı yamalı bıraktı ve `git diff --stat` **göremedi** (eksik satır bu slice'ın kendi
+eklediği satırdı) → geri yükleme artık **`sha256`** ile doğrulanıyor, doğrulanmamış tabana
+karşı ölçülen sayılar **atıldı**.
+
+**DÜRÜST SINIR:** **§Ön koşul PRE-1 KOŞULMADI** (0 tag / 0 release / 0 deploy eden
+workflow) ⇒ `(b2)` **"doğrulanmış" SAYILAMAZ**, sayı **İKAME EDİLMEDİ** · `RD-09.c4`
+**`partial` KALDI**, kabul defteri ve tavanlar **EL DEĞMEDİ** · **#703 KAPATILMADI**
+(insan kararı) · frontend kapıları **koşulmadı** · `queries/funding.py` ve
+`domain/research_data/time_policy.py` **el değmedi** — kural değişmedi, ona uyan veri
+artık üretimde doğuyor. **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → BLOCKED.**
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 149 · `docs/ADIM149_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin seçeceği kalem — ÖNCE ÖLÇ, öncüller iki kez çürüdü**
+
+1. **`RD-09.c4` artık kapatılabilir** (üretimin ürettiği bir ref var) — ama bu bir
+   **KABUL BORCU slice'ıdır**: `partial` ve `debt_class.B` tavanlarını oynatır, ratchet
+   yeniden dondurulur. ADIM 149 **bilerek** dokunmadı (§Karar 3 = `A`).
+2. **#677 açık kalanları:** `errors-in-console` (23/23) **teşhis edilmedi** · Lighthouse
+   **harness düzeltmesi** (ADIM 147 oturumun sekmeye taşınmadığını ölçtü) — 23 skoru
+   oynatır ve tavanların **CI'dan** yeniden dondurulmasını zorunlu kılar.
+3. **§Ön koşul PRE-1** ilk gerçek deploy'da koşulur; bugün **ölçülemez**, ikame etme.
+4. **İmza kalemleri:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · **#582 BAYAT** —
+   kapatmak insan kararı. **#514 A-08** — tek blocker, `human-only`.

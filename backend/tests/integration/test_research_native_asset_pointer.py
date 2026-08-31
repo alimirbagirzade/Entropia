@@ -15,15 +15,19 @@ The revision is created, time-policied, analysed and approved through the real c
 and the real ``run_analysis``; only the S3 half is faked, and the fake writes the asset
 ROW for real (that is the seam's stated contract — swap S3/Polars, keep the database).
 
-Honest boundary — this does NOT make funding reachable on its own. A second, unrelated
-gap sits behind the same door: ``instrument_mapping_ref`` is also never written by
-production, while ``linked_market_dataset_revision_id`` always is (a market link is
-required at create), so ``instrument_mapping_is_valid``'s ``has_link == has_ref`` is
-False for every application-created revision and ``build_funding_schedule`` fails closed
-on it. That is backlog R1 (canonical instrument-resolution wiring), named in
-``domain/research_data/time_policy.py``, and it is out of scope here. Both halves are
-pinned below rather than left to be rediscovered: one case proves the native-asset gate
-is now passed, the other proves the mapping gate still stops the run.
+ADIM 138 left an honest boundary here: this alone did NOT make funding reachable,
+because a second gap sat behind the same door -- ``instrument_mapping_ref`` was also
+never written by production while ``linked_market_dataset_revision_id`` always was, so
+``instrument_mapping_is_valid``'s ``has_link == has_ref`` was False for every
+application-created revision and the resolver failed closed on it. That boundary is
+GONE: ADIM 149 shipped the mapping writer (GH #703 §Karar 1 = `(b)`, signed
+2026-08-31), so BOTH halves of the issue's title claim are now written by production.
+
+The case that used to assert "the mapping gate still stops the run" was rewritten, not
+deleted -- inverted onto the same axis, it is now the worker-plane proof that nothing
+stops it. And the schedule case no longer hand-sets the mapping ref: assigning it would
+overwrite what production wrote and re-hide the very provenance this file exists to
+prove, which is the same fixture mistake in a third disguise.
 """
 
 from __future__ import annotations
@@ -52,8 +56,8 @@ from entropia.domain.research_data.value_objects import (
 )
 from entropia.domain.strategy.config import FundingPolicy
 from entropia.infrastructure.postgres.models import ResearchNativeAsset
+from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import research_data as rd_repo
-from entropia.shared.errors import FundingSourceInvalid
 from tests.integration.test_research_data_persistence import (
     ADMIN,
     OWNER,
@@ -181,17 +185,29 @@ async def test_analysis_pins_the_revision_to_the_native_asset_it_wrote(session) 
 
 
 @pytest.mark.asyncio
-async def test_the_native_asset_gate_is_passed_by_a_pipeline_built_revision(session) -> None:
-    """The resolver no longer stops at ``has no parsed native asset to read``.
+async def test_both_of_the_issues_gates_are_passed_by_a_pipeline_built_revision(
+    session,
+) -> None:
+    """GH #703's two written-by-nobody fields, both now written, measured together.
 
-    It still fails closed — on the SECOND gap (instrument mapping, backlog R1) — so this
-    case asserts WHICH gate refuses, not that the resolve succeeds. Asserting only
-    ``pytest.raises(FundingSourceInvalid)`` would pass identically before and after the
-    fix; the discriminating half is the message.
+    ADIM 138 could only assert WHICH gate refused, because the mapping half was still
+    unwritten and the resolver still failed closed. With the writer shipped there is no
+    refusal left to name, so the claim inverts: the resolve completes.
+
+    The two halves are asserted as PROVENANCE, not presence -- nothing in this file
+    assigns either one, and the mapping ref is compared to the linked market revision's
+    own ``instrument_id`` rather than to a literal.
     """
     entity_id, revision = await _analysed_funding_revision(session)
     revision = await _approve(session, entity_id, revision)
     assert revision.revision_state == ResearchRevisionState.APPROVED
+
+    linked_id = revision.linked_market_dataset_revision_id
+    assert linked_id is not None
+    linked_market = await md_repo.get_revision(session, linked_id)
+    assert linked_market is not None and linked_market.instrument_id
+    assert revision.instrument_mapping_ref == linked_market.instrument_id
+    assert revision.native_asset_id is not None
 
     policy = FundingPolicy(
         enabled=True,
@@ -199,33 +215,27 @@ async def test_the_native_asset_gate_is_passed_by_a_pipeline_built_revision(sess
         source_revision_id=revision.revision_id,
         source_content_hash=revision.content_hash,
     )
-    with pytest.raises(FundingSourceInvalid) as excinfo:
-        await resolve_funding_schedule(session, policy, load_rows=_rows)
-    message = str(excinfo.value)
-    assert "native asset" not in message, (
-        "GH #703 is closed: the native-asset gate must no longer be the refusal"
-    )
-    # The surviving gap, named so it is not rediscovered as a regression of this fix.
-    assert "instrument mapping" in message.lower()
-    assert revision.instrument_mapping_ref is None
-    assert revision.linked_market_dataset_revision_id is not None
+    # No ``pytest.raises``: the fail-closed resolver has nothing left to refuse.
+    schedule = await resolve_funding_schedule(session, policy, load_rows=_rows)
+    assert schedule is not None
 
 
 @pytest.mark.asyncio
 async def test_a_pipeline_written_pointer_feeds_a_real_funding_schedule(session) -> None:
     """The end the issue names: a funding schedule built off an app-created revision.
 
-    Only the backlog-R1 half is supplied by hand (``instrument_mapping_ref``); the
-    pointer this slice fixes is still the one production wrote, so the schedule is
-    reached through the real asset row rather than a seeded id.
+    ADIM 138 had to hand-set ``instrument_mapping_ref`` here to get past rule 2's other
+    conjunct. That line is GONE, and its removal is the point: assigning the field would
+    overwrite what production now writes, so the schedule below is reached through TWO
+    production-written halves instead of one plus a fixture.
     """
     entity_id, revision = await _analysed_funding_revision(session)
     revision = await _approve(session, entity_id, revision)
     pipeline_written_pointer = revision.native_asset_id
     assert pipeline_written_pointer is not None
-    # Out of scope for GH #703, in scope for the schedule: satisfy rule 2's other conjunct.
-    revision.instrument_mapping_ref = "imap_test_1"
-    await session.flush()
+    assert revision.instrument_mapping_ref is not None, (
+        "no longer supplied by this test: production must have written it"
+    )
 
     policy = FundingPolicy(
         enabled=True,

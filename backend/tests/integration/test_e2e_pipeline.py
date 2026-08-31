@@ -164,6 +164,9 @@ async def _approved_market(session) -> dict[str, str]:
         market_data_type=MarketDataType.OHLCV,
         payload={"instrument": "BTCUSDT", "candles": [1, 2, 3]},
         title="BTCUSDT 1h",
+        # GH #703 §Karar 1a = `(b2)` (signed 2026-08-31): a market revision naming
+        # no instrument can no longer be a research link source.
+        instrument_id="BTCUSDT",
     )
     await session.flush()
     revision = await md_repo.get_revision(session, root.current_revision_id or "")

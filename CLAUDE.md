@@ -270,6 +270,42 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK** — kolon zaten vardı) ·
+> `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** ·
+> `SHARED_ALLOCATION_STATUS` **el değmedi** · **`frontend/` içinde SIFIR SATIR**. **Son dalga —
+> ADIM 149 (GH #703'ün YAZICISI sevk edildi; ölçüm imzanın öngördüğünden GENİŞ çıktı).**
+> #703'ün dört imzalı kararının uygulaması tek slice'ta: **`§1 = (b)` linkten türet · `§1a = (b2)`
+> fail-closed düz · `§2 = A` harness üretim şekline çekildi · `§3 = A`**. Ürün kodu **iki dosya**;
+> tek türetim noktası `commands/research_data.py::_instrument_mapping_ref_for` — linkli market
+> revizyonunun **kendi `instrument_id`'sini KOPYALAR** (arama DEĞİL: market head'i ilerlerken bu
+> revizyon tek bir revizyon id'sine pinli kalır), kaynak boşsa `DependencyBlocked` (**O-31 — yeni
+> taksonomi kodu YOK**). Çağrının YERİ iki eksende karardır: **`run_idempotent`'ın DIŞINDA**
+> (reddedilen deneme anahtarı **yakmaz**) ve **yalnız link PİNLEYEN dalda** (hiçbir yarısı olmayan
+> çift **tutarlıdır**; kapıyı `if`'ten çıkarmak imzanın taşımadığı bir kural icat ederdi).
+> **ASIL BULGU: imza BİR kapıyı hedefliyordu, ölçüm İKİSİNİ de kapattı** — ADIM 138'in *"başlıktaki
+> iddia ikinci kapı yüzünden ayakta"* dürüst sınırı **düştü**: `resolve_funding_schedule`
+> app-created bir funding revizyonunu artık **hiç reddetmiyor** (ADIM 138'in kendi testi
+> `DID NOT RAISE` verdi). Öncülü ölen **üç** test **KASITLI** tersine çevrildi, silinmedi.
+> **İKİNCİ: bir fixture'ın ELLE YAZDIĞI da bir iddiadır** — ADIM 138 `instrument_mapping_ref`'i
+> elle set ediyordu ve bugün o satır **üretimin yazdığının üzerine** yazıyordu → kaldırıldı
+> (ADIM 138 fazladan · ADIM 140 eksik · burası **üzerine**). **ÜÇÜNCÜ: kullanılamaz şeklin
+> YAYGINLIĞI sayıldı** — `(b2)` inince **dört dosya / 29 test** kırmızıya döndü, dördünün de sebebi
+> kendi market yardımcısının `instrument_id` vermemesiydi; **varsayılanlar DEĞİŞTİRİLMEDİ**.
+> **BEŞ NC, beşi ayırt edici** (NC-1′ **2** · NC-2 **1** · NC-3 **1** · NC-4 **1** · NC-5 **5** =
+> boşluğun ölçüsü) ve **BİRİ REDDEDİLDİ** (sabit `ref` kimlik **ve** fail-closed eksenlerini birden
+> kırdı — ADIM 105'in şekli). **TUZAK — ADIM 100'ün ÜÇÜNCÜ şekli: `git diff --stat` bir RESTORE
+> KONTROLÜ DEĞİLDİR.** NC koşucusu SIGTERM'de ağacı **yamalı** bıraktı, diff **temiz göründü**
+> çünkü eksik satır bu slice'ın **kendi eklediği** satırdı → doğrulanmamış tabana karşı ölçülen NC
+> sayıları **atıldı**, geri yükleme artık **`sha256`** ile doğrulanıyor. **DÜRÜST SINIR: §Ön koşul
+> PRE-1 KOŞULMADI** (bu depoda hâlâ **0 tag / 0 release / 0 deploy eden workflow** → *"üretim"*
+> gözlenebilir bir olay değil) ⇒ **`(b2)` "doğrulanmış" SAYILAMAZ**, sayı **İKAME EDİLMEDİ** ·
+> **`RD-09.c4` `partial` KALDI**, kabul defteri ve **hiçbir tavan** oynamadı (§Karar 3 = `A`) ·
+> **#703 KAPATILMADI** (insan kararı) · `queries/funding.py` ve `time_policy.py` **el değmedi**
+> (kural değişmedi, ona uyan veri artık üretimde doğuyor) · frontend kapıları **koşulmadı**.
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 149 · `docs/ADIM149_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`floors`/`armed`/`policy`
 > EL DEĞMEDİ** (kapı davranışı bayt bayt aynı) · **ÜRÜN KODUNDA SIFIR SATIR**. **Son dalga —

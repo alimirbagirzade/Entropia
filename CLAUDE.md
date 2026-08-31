@@ -302,6 +302,40 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`floors`/`armed`/`policy`
+> EL DEĞMEDİ** · **backend'de SIFIR SATIR**. **Son dalga — ADIM 148 (GH #677: panel-management'in
+> CLS'i KAYNAĞINDA düzeltildi).** CI artefaktı okundu (run `33366049022`): **23 rotanın yalnız
+> BİRİ** performance 100'ün altında ve kesintinin **tamamı** ağırlığı **25** olan tek bir
+> `cumulative-layout-shift` audit'i. **ARTEFAKT SUÇLUYU ADLANDIRAMIYORDU** — kayan elemanı
+> adlandıran `layout-shifts` audit'inin **ağırlığı 0** ve ADIM 146'nın `weight > 0` yüklemi onu
+> **eliyor** (ayrıca LH 13'te ad `layout-shift-elements` DEĞİL). **YEREL REPRODÜKSİYON ÜÇ KEZ
+> YANLIŞ DÜNYAYI KURDU ve her seferinde ölçüm söyledi:** 0 ms stub → CLS **0** (değişken
+> **gecikme**) · 200/600 ms → iki rota **birebir aynı** sayı, çünkü rota hiç render olmuyordu
+> (`layout-shifts` düğümü **AUTH-02 boot gate**'ini gösterdi — stub `/meta`'ya 401 dönüyordu;
+> ADIM 140'ın *"bir fixture'ın YAPMADIĞI şey de bir iddiadır"* dersi) · `/meta` **ve**
+> `/health/live` 200 (CI'ın şekli) → **reprodüksiyon TAM**: yerel **0.0898 / 0.0361** ↔ CI
+> **0.085 / 0.035**. **Ara adım da kaydedildi:** banner açıkken **oran doğru (2.44 ↔ 2.43), mutlak
+> değer yanlıştı** — *doğru oran, doğru ölçüm demek değildir*. **SUÇLU:**
+> `section.card.panel-card[aria-labelledby="actors-h"]` (**System actors**), skor **0.0898** =
+> CLS'in tamamı; gövde uçuşta **166px**, oturunca **244px** → üç kart **234px** aşağı itiyor.
+> **Sevk edilen:** `.panel-card-async { min-height: 244px }` + üç kartın **yalnız loading dalı**;
+> `min-height`, asla `height` → oturmuş kart **hiç değişmiyor** (v18 sapması yok),
+> presentation-only. **Öncesi/sonrası aynı harness'ta: 0.0898 → 0.0000516** (skor 0.92 → **1**),
+> dokunulmamış kontrol rotası `create-package` **0.0361 → 0.0358** (değişmedi). **ASIL BULGU:
+> KAPI BU DÜZELTMEYİ KORUYAMIYOR** — tavan `do_not_tighten` gereği **98'de kalıyor**, yani geri
+> alınsa performance yine 98 olur ve kapı **YEŞİL** kalır → muhafız zorunlu
+> (`panelManagement.test.tsx`, NC **tam 1** testi kırdı, 11 yeşil). `tightened_2026_08_30`'un
+> *"CLS açık kalır"* iddiası **aynı PR'da** `cls_fixed_2026_08_31` ile düzeltildi.
+> **DÜRÜST SINIR: #677 KAPATILMADI** (`errors-in-console` el değmedi) · **tavan
+> SIKIŞTIRILMADI ve sıkıştırılmamalı** · **iddia EDİLMEYEN:** oturum açık rotanın shift'i
+> olmadığı (ölçüm oturumsuz kabukta, ADIM 147) · yerel Lighthouse sayıları **teşhis, tavan
+> DEĞİL** · backend kapıları koşulmadı → otorite CI. Frontend **743 passed / 72 dosya**,
+> üretilmiş olgular tazelendi (unit call sites **732 → 733**).
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 148 · `docs/ADIM148_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
 > SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 144 (GH #536 md. 2'nin
 > KALANI: `most_conservative` tie-break'i + `first_trigger_wins` yapısal dışlaması).**

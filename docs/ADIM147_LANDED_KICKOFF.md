@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 147 landed — kapı 23 rotanın 23'ünü de OTURUMSUZ puanlıyor, ve artık bunu söylüyor
 
 ## Nerede olduğumuz

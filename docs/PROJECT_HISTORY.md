@@ -20261,4 +20261,95 @@ bırakıyor (`browser.isConnected() === true`, token yerinde) ve Playwright cont
   `npx tsc --noEmit -p e2e/tsconfig.json` (ADIM 108) **koşuldu, temiz**; eslint temiz.
 * Üretilmiş olgular **bayatlamadı** — generator'ın kendi regex'iyle yeniden sayıldı:
   E2E call sites **84 in 22 specs**, değişmedi (yeni `test(` eklenmedi).
+## ADIM 148 — 23 ROTANIN TEK BİRİ 100'ÜN ALTINDAYDI; KESİNTİNİN TAMAMI BİR KARTIN AŞAĞI KAYMASIYDI VE KAPI ONU KORUYAMIYOR
+
+**Taban** `origin/main` @ `5e766910` (ADIM 146). **Dört dosya**: `frontend/src/styles/global.css`
+· `frontend/src/pages/PanelManagement.tsx` · `frontend/src/test/panelManagement.test.tsx` ·
+`frontend/e2e/lighthouse-baseline.json` (yalnız `provenance` prozası) + üretilmiş artefaktlar.
+**Backend'de SIFIR SATIR** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI
+**değişmedi** · **`floors` / `armed` / `policy` EL DEĞMEDİ**. **Blocker DEĞİŞMEDİ (1 — yalnız
+A-08) → BLOCKED.**
+
+### Hedef ölçülerek daraldı
+
+CI'ın kendi artefaktı okundu (run `33366049022`, ADIM 146'nın sevk ettiği `evidence` sayesinde):
+**23 rotanın yalnız BİRİ** performance 100'ün altında (`panel-management`, **98**) ve kesintinin
+**tamamı** tek bir **ağırlığı 25** olan `cumulative-layout-shift` audit'i. CLS medyanı **0.085**;
+ikinci en yüksek rota `create-package` **0.035** — **2.4× daha düşük** ve o 100 alıyor.
+
+### ARTEFAKT SUÇLUYU ADLANDIRAMIYORDU — ADIM 146'nın filtresinin ölçülmüş sınırı
+
+Kesintiyi adlandıran audit `cumulative-layout-shift`, **kayan elemanı** adlandıran audit ise
+`layout-shifts` ve onun **ağırlığı 0**. ADIM 146'nın `weight > 0` yüklemi onu **eliyor** →
+sevk edilen rapordan hangi düğümün kaydığı **okunamıyordu**. (Ayrıca LH 13'te audit'in adı
+`layout-shift-elements` **değil** `layout-shifts`.)
+
+### YEREL REPRODÜKSİYON ÜÇ KEZ YANLIŞ DÜNYAYI KURDU — ve her seferinde ölçüm bunu söyledi
+
+1. **0 ms stub** → CLS **0**. Reprodüksiyon yok; değişken **gecikme**.
+2. **200/600 ms gecikme** → iki rota da **birebir aynı** `0.004984…`. Rota-bağımsız bir sayı,
+   yani rota hiç render olmuyor. `layout-shifts` düğümü söyledi: *"Cannot reach the server /
+   could not load its runtime configuration"* → **AUTH-02 boot gate'i** (`RuntimeAuthProvider`).
+   Stub `/meta`'ya 401 döndüğü için uygulama fail-closed açılıyordu. **Bir fixture'ın
+   YAPMADIĞI şey de bir iddiadır** (ADIM 140) — burada `/meta`'yı 200 döndürmemek.
+3. **`/meta` 200 + `/health/live` 200** (CI'ın şekli — `include_router(health.router,
+   prefix=base)` olduğu için CI'da banner **çıkmaz**) → **reprodüksiyon TAM**:
+
+| rota | yerel | CI | fark |
+|---|---|---|---|
+| `panel-management` | **0.0898** | 0.085 | %5 |
+| `create-package` | **0.0361** | 0.035 | %3 |
+
+**Ara adım da kaydedildi:** `/health/live` 401 iken (banner AÇIK) sayılar 0.152 / 0.062 —
+oran (2.44) CI'ınkiyle (2.43) aynı ama **mutlak değer yanlış**; CI'da olmayan bir eleman
+ölçüme giriyordu. **Doğru oran, doğru ölçüm demek değildir.**
+
+### SUÇLU VE MEKANİZMA — ikisi de ölçüldü
+
+`layout-shifts` düğümü: `main#main-content > section.card.panel-card[aria-labelledby="actors-h"]`
+(**System actors**), skor **0.0898** — yani CLS'in tamamı. `topbar-status` **0.0000177**,
+ihmal edilebilir. Sebep DOM ölçümüyle: her kartın gövdesi sorgu uçuştayken **166px**, oturduğunda
+**244px** → kart başına **78px**, üç kart **234px** aşağı itiyor.
+
+### SEVK EDİLEN — ölçülmüş bir yer ayırma, sihirli sayı değil
+
+`.panel-card-async { min-height: 244px }` + üç kartın **yalnız loading dalının** sarılması.
+`min-height`, asla `height` — oturmuş gövde daha uzunsa normal büyür; oturmuş kartın görünümü
+**hiç değişmez** (v18 sapması yok). Presentation-only: route path, react-query key, OCC token,
+`Idempotency-Key`, hook, `lib/*.ts` **el değmedi**.
+
+**Öncesi/sonrası, AYNI harness, aynı gecikme:** `panel-management` **0.0898 → 0.0000516**
+(audit skoru **0.92 → 1**), dokunulmamış kontrol rotası `create-package` **0.0361 → 0.0358**
+(**değişmedi**) ⇒ düzeltme hedefli, genel bir yan etki değil.
+
+### ASIL BULGU — KAPI BU DÜZELTMEYİ KORUYAMIYOR
+
+Tavan `do_not_tighten` gereği **98'de kalıyor** (ve bu slice onu **oynatmadı**). Dolayısıyla
+düzeltme geri alınırsa CLS 0.09'a döner, performance yine **98** olur ve **Lighthouse kapısı
+YEŞİL kalır**. Muhafız bu yüzden bir tercih değil **zorunluluk**:
+`panelManagement.test.tsx::"reserves each async panel card's height while its query is in
+flight"` — üç yuvayı ve loading-yalnızlığını yapısal olarak pinler.
+
+**Negatif kontrol:** üç sarmalayıcının `className`'i düşürüldü → **tam 1 test kırmızı**
+(`expected to have a length of 3 but got +0`), **11 test yeşil kaldı** ⇒ ayırt edici, blanket
+değil. Ağaç bayt bayt geri yüklendi.
+
+### `lighthouse-baseline.json` — bayatlayacak bir iddia aynı PR'da düzeltildi
+
+`tightened_2026_08_30` *"cumulative-layout-shift (panel-management) açık kalır"* diyordu; bu
+slice onu yanlışlıyor. `cls_fixed_2026_08_31` eklendi. **`floors`/`armed`/`policy` el değmedi.**
+
+### DÜRÜST SINIR
+
+* **#677 KAPATILMADI** — `errors-in-console` (23/23) **DÜZELTİLMEDİ**, bu slice ona dokunmadı.
+* **TAVAN SIKIŞTIRILMADI ve sıkıştırılmamalı** — `do_not_tighten` yürürlükte; bir sonraki koşu
+  100 medyanlarsa `lighthouse-baseline.tightened.json` yükseltmeyi **önerecek**, öneri
+  **reddedilmeli**.
+* **İDDİA EDİLMEYEN:** oturum açık rotanın layout shift'i olmadığı. Bu kapının her sayısı gibi
+  ölçüm **oturumsuz kabukta** yapıldı (ADIM 147). Oturumlu dünyada loading → **içerik** geçişi
+  hâlâ büyür; `min-height` sıçramayı **küçültür**, sildiğini iddia etmez.
+* **Diğer 7 rotanın CLS'ine dokunulmadı** (hepsi ≤ 0.035 ve hepsi zaten 100).
+* Yerel Lighthouse sayıları **teşhis içindir, tavan değildir** — runner sınıfı farklı
+  (`sensitivity_boundary`); tavan yalnız CI'dan dondurulur.
+* Backend kapıları **koşulmadı** (backend'de sıfır satır) → otorite **CI**.
 * **A-08 (#514) AÇIK** — tek blocker.

@@ -10600,3 +10600,67 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 147 · `docs/ADIM147_LANDED_KICKOFF
    `sensitivity_boundary`). Bu bir **slice**'tır, bir düzeltme satırı değil.
 4. **İMZA kalemleri:** #854 (9 kutu) · #534 (CLOSED ama kapanış yorumu YOK, 4 kutu) ·
    #547 (0 yorum). **#582 BAYAT** — kapatmak insan kararı. **#514 A-08** — tek blocker.
+## Stage ADIM 148 — 23 rotanın tek biri 100'ün altındaydı; kesintinin tamamı bir kartın aşağı kaymasıydı (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `5e766910` (ADIM 146). Dört dosya: `frontend/src/styles/global.css` ·
+`frontend/src/pages/PanelManagement.tsx` · `frontend/src/test/panelManagement.test.tsx` ·
+`frontend/e2e/lighthouse-baseline.json` (yalnız `provenance` prozası) + üretilmiş artefaktlar.
+**Backend'de SIFIR SATIR** · migration **YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI
+**değişmedi** · **`floors`/`armed`/`policy` EL DEĞMEDİ**. **Blocker DEĞİŞMEDİ (1 — yalnız
+A-08), BLOCKED.**
+
+CI artefaktı okundu (run `33366049022`): **23 rotanın yalnız BİRİ** performance 100'ün altında
+(`panel-management` **98**) ve kesintinin **tamamı** ağırlığı **25** olan tek bir
+`cumulative-layout-shift` audit'i (CLS **0.085**; ikinci en yüksek rota **0.035** ve o 100).
+
+**ARTEFAKT SUÇLUYU ADLANDIRAMIYORDU:** kayan elemanı adlandıran audit `layout-shifts` ve
+**ağırlığı 0** → ADIM 146'nın `weight > 0` yüklemi onu **eliyor**. (Ayrıca LH 13'te ad
+`layout-shift-elements` değil `layout-shifts`.) Yerel reprodüksiyon **üç kez yanlış dünyayı
+kurdu** ve her seferinde ölçüm bunu söyledi: 0 ms stub → CLS 0 (değişken **gecikme**);
+200/600 ms → iki rota **birebir aynı** sayı, çünkü rota hiç render olmuyordu (`layout-shifts`
+düğümü **AUTH-02 boot gate**'ini gösterdi — stub `/meta`'ya 401 dönüyordu); `/meta` **ve**
+`/health/live` 200 (CI'ın şekli) → **reprodüksiyon TAM**: yerel **0.0898 / 0.0361** ↔ CI
+**0.085 / 0.035**. Ara adımda banner açıkken **oran doğru (2.44 ↔ 2.43), mutlak değer
+yanlıştı** — *doğru oran, doğru ölçüm demek değildir*.
+
+**Suçlu ve mekanizma ölçüldü:** `main#main-content > section.card.panel-card
+[aria-labelledby="actors-h"]` (**System actors**), skor **0.0898** = CLS'in tamamı. Her kartın
+gövdesi uçuştayken **166px**, oturduğunda **244px** → kart başına **78px**, üç kart **234px**
+aşağı itiyor. **Sevk edilen:** `.panel-card-async { min-height: 244px }` + üç kartın **yalnız
+loading dalının** sarılması; `min-height`, asla `height` → oturmuş kartın görünümü **hiç
+değişmiyor** (v18 sapması yok), presentation-only sınırı korundu. **Öncesi/sonrası, aynı
+harness:** **0.0898 → 0.0000516** (audit skoru **0.92 → 1**); dokunulmamış kontrol rotası
+`create-package` **0.0361 → 0.0358** (değişmedi) ⇒ hedefli.
+
+**ASIL BULGU — KAPI BU DÜZELTMEYİ KORUYAMIYOR:** tavan `do_not_tighten` gereği **98'de
+kalıyor**, dolayısıyla düzeltme geri alınırsa performance yine 98 olur ve **Lighthouse kapısı
+YEŞİL kalır**. Muhafız bu yüzden zorunlu:
+`panelManagement.test.tsx::"reserves each async panel card's height while its query is in
+flight"`; **negatif kontrol tam 1 testi** kırmızıya çevirdi, 11 test yeşil kaldı.
+`lighthouse-baseline.json`'ın `tightened_2026_08_30`'u *"CLS açık kalır"* diyordu — bu slice
+onu yanlışlıyor, `cls_fixed_2026_08_31` ile düzeltildi.
+
+**DÜRÜST SINIR: #677 KAPATILMADI** (`errors-in-console` el değmedi) · **tavan SIKIŞTIRILMADI
+ve sıkıştırılmamalı** (sonraki koşu 100 medyanlarsa `tightened.json` yükseltmeyi önerecek,
+öneri **reddedilir**) · **iddia EDİLMEYEN:** oturum açık rotanın shift'i olmadığı — ölçüm
+oturumsuz kabukta (ADIM 147), `min-height` sıçramayı **küçültür** · diğer 7 rotanın CLS'ine
+dokunulmadı (hepsi ≤0.035 ve 100) · yerel Lighthouse sayıları **teşhis**, tavan değil ·
+backend kapıları koşulmadı (sıfır satır) → otorite CI. Yerelde: lint + typecheck temiz,
+vitest **743 passed / 72 dosya** (+1 = bu slice'ın muhafızı), coverage kapısı yeşil,
+üretilmiş olgular tazelendi (frontend unit call sites **732 → 733**).
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 148 · `docs/ADIM148_LANDED_KICKOFF.md`.
+
+## Next: **#886 → #887 → #888 merge sırası, sonra #703 uygulaması (KOD)**
+
+1. **#886** (#703'ün dört imzası, docs-only) — **#703 kod slice'ının otorite kaydı**; ağaçta
+   olmadan uygulamaya başlanamaz (main'de kutular hâlâ boş, ölçüldü).
+2. **#887 (ADIM 147)** — Lighthouse'un sekmesi oturumu **taşımıyor**; kapı 23 rotayı
+   **oturumsuz** puanlıyor. Ölçüm, düzeltme değil.
+3. **#888 (ADIM 148, bu slice)** — CLS kaynağında düzeltildi, **tavan 98'de bırakıldı**.
+4. **Sonra: #703 uygulaması** — `(b)` + `(b2)` + harness + `RD-09.c4`, **dördü AYNI slice'ta**;
+   `test_readiness_research_data`'nın iki testi **kasıtlı** güncellenecek. **PRE-1** ilk
+   deploy'da.
+5. **Ayrıca açık:** Lighthouse **harness düzeltmesi** (ADIM 147'nin bıraktığı — 23 skoru
+   oynatır, tavanlar **CI'dan** yeniden dondurulur) · `errors-in-console` (23/23) ·
+   #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · **#514 A-08 — tek blocker**.

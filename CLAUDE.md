@@ -310,6 +310,48 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · `SHARED_ALLOCATION_STATUS`
+> **el değmedi** · **`backend/` içinde SIFIR SATIR**. **Son dalga — ADIM 145 (GH #677: iki
+> bütün-uygulama Lighthouse kesintisi kaynağında düzeltildi; PR #884).** Sevk edilen iki
+> dosya: `frontend/index.html` (`<meta name="description">`) + `frontend/public/robots.txt`.
+> **ASIL BULGU: ikisi de SAYFA değil KABUK kusuruydu** — rota sayısının **23/23** olmasının
+> sebebi buydu. Ölçüldü, çıkarılmadı: `GET /robots.txt` → **`200 text/html` + `<!doctype html>`**
+> (dosya yok → nginx `try_files` SPA fallback'i → Lighthouse geçersiz robots okuyor); çözüm
+> `public/` → `dist/`, **build çıktısında kanıtlı**. `Disallow: /` tedbir değil **doğru
+> politika** (her rota login arkasında; audit **geçersiz** dosyada düşer, kısıtlayıcıda değil).
+> **İKİNCİ BULGU: tavanı YERELDEN sıkıştırmak bir PROVENANCE İHLALİ olurdu** —
+> `lighthouse-baseline.json`'ın `provenance`'ı ölçümü **2-vCPU GitHub runner**'a pinler,
+> `sensitivity_boundary` skoru **yalnız kendi runner sınıfında** karşılaştırılabilir sayar →
+> Apple Silicon koşusundan tavan almak **çırpınan bir kapı** kurardı (`do_not_tighten`
+> tuzağının genel hâli) ⇒ tavanlar **PR'ın KENDİ CI artefaktından**, ikinci commit'te.
+> **ÜÇÜNCÜ (ölçüm dersi): host'tan `curl` tarayıcının kanıtı DEĞİLDİR** — `curl` sessizce
+> IPv6'ya kaçıyordu, ama kök o değildi; teşhisi **ekran görüntüsü** koydu:
+> `NETWORK_UNAVAILABLE: Request timed out after 15s` — API **soğukken** `/meta` istemcinin
+> fail-closed 15 sn'sini aşıyor, ısınınca **0.36 sn** (2.32 → 0.67 → 0.36 ölçüldü).
+> **DÖRDÜNCÜ: `--no-file-parallelism` yeniden doğrulandı** — düz `npm run test` **8 hata /
+> 3 dosya**, aynı dosyalar seri kipte **42 passed / 0 failed** (yük timeout'u, regresyon değil).
+> **KENDİ HATAM: yeşil exit code kanıt değildir** — ilk wrapper'ım `echo EXIT=$?` yüzünden
+> `exit 0` raporladı, oysa koşu düşmüştü. **ADAY SEÇİMİ: devir prompt'unun listesi BAYATTI** —
+> açık issue taramasında saymadığı iki kalem çıktı: **#582 ÖNCÜLÜ ÇÜRÜK** (containment ADIM
+> 132'de kalktı, `SHARED_ALLOCATION_STATUS = active_v1`; kapatmak **insan kararı**) ve **#547
+> gövdesinde İMZA bekliyor** (*"Blocked on a product decision"*, 0 yorum). **DÜRÜST SINIR:
+> #677 KAPATILMADI** — `errors-in-console` (23/23) **TEŞHİS EDİLMEDİ** (yerel stack oturumlu
+> sayfaya sürülemedi; **ipucu, sonuç değil:** oturumsuz sayfalarda 401 / `/api/v1/events` +
+> `/api/v1/manual/stream`), **CLS `panel-management` el değmedi ve tavanı 98'de KALMALI**,
+> **tavanlar SIKIŞTIRILDI** — `seo` **82 → 100, 23/23**, kanıt PR'ın **kendi** CI koşusu
+> (`33334644272`); `panel-management/performance` **98** (`do_not_tighten`), hiçbir tavan
+> indirilmedi; backend kapıları **koşulmadı** (sıfır satır → otorite CI).
+> **BEŞİNCİ BULGU — ÖZ GOL, ve ratchet yakaladı:** `robots.txt` önce `Disallow: /` ile indi
+> = *doğru okunan* politika; CI ölçtü: **seo 82 → 63**, çünkü ağırlığı 1 olan iki audit
+> kapanırken ağırlığı **4.04** olan `is-crawlable` açıldı → net **−19**, taban altı, job
+> **kırmızı**. Boş `Disallow:` ile düzeltildi. **Bir kesintiyi kapatmak daha ağırını
+> açabilir; "düzeltme" ancak NET etkisi ölçülünce düzeltmedir** — audit **geçersiz**
+> dosyada düşer, kısıtlayıcıda değil.
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 145 · `docs/ADIM145_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
 > SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 143 (GH #536 md. 2 TAMAMLANDI:
 > `logic:<block_id>` motor düzleminde bir custom `stop_priority_order` yarışmasına sokuldu).**

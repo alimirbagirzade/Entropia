@@ -10453,3 +10453,43 @@ Tam kayıt `PROJECT_HISTORY.md` §ADIM 144 · `docs/ADIM144_LANDED_KICKOFF.md`.
    **#536'nın imzasız KOD işi TÜKENDİ** (md. 1/2/3 kapandı).
 5. **#677 — Lighthouse'un dört donmuş eksiği** (KOD) — Compose + Lighthouse ortamı ister.
 6. **A-08 (#514)** — **TEK BLOCKER**, `human-only`. Çıkış kriterleri **0/4** → kapatılamaz.
+
+## Stage ADIM 145 — GH #677: iki bütün-uygulama Lighthouse kesintisi kaynağında düzeltildi (PR #884)
+
+**`backend/` içinde SIFIR SATIR** · migration YOK · `ENGINE_VERSION` DEĞİŞMEDİ · OpenAPI
+değişmedi · golden el değmedi · blocker DEĞİŞMEDİ (1 — yalnız A-08) → **BLOCKED**.
+
+Sevk edilen: `frontend/index.html` (`<meta name="description">`) + `frontend/public/robots.txt`.
+
+**Asıl bulgu:** iki kesinti de **sayfa** kusuru değil **kabuk** kusuruydu — rota sayısının
+23/23 olmasının sebebi buydu. Ölçüldü: `GET /robots.txt` → `200 text/html` + `<!doctype html>`
+(dosya yok → nginx SPA fallback'i). Çözüm `public/` → `dist/`; **build çıktısında kanıtlandı**.
+
+**Tavanlar BİLEREK sıkıştırılmadı:** `lighthouse-baseline.json`'ın `provenance`'ı ölçümü
+2-vCPU GitHub runner'a pinler; yerel Apple Silicon koşusundan tavan almak **çırpınan bir
+kapı** kurardı (`do_not_tighten` tuzağının genel hâli). Tavanlar PR'ın **kendi CI
+artefaktından** ikinci bir commit'te gelir.
+
+**Dürüst sınır:** `#677` **KAPATILMADI**; `errors-in-console` (23/23) **teşhis edilmedi**
+(yerel stack oturumlu sayfaya sürülemedi — API soğukken `/meta` 15 sn'yi aşıyor, ısınınca
+0.36 sn); CLS `panel-management` el değmedi ve tavanı **98'de kalmalı**.
+
+**Yan ölçümler:** `#582`'nin öncülü **bayat** (containment ADIM 132'de kalktı,
+`SHARED_ALLOCATION_STATUS = active_v1`) · `#547` gövdesinde **imza bekliyor** (0 yorum) ·
+vitest'in 8 hatası `--no-file-parallelism` ile **42 passed / 0 failed** → yük timeout'u.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 145 · `docs/ADIM145_LANDED_KICKOFF.md`.
+
+## Next: **#884'ün CI artefaktından TAVANLARI sıkıştır, sonra ürün sahibinin seçeceği kalem**
+
+1. **TAVANLAR SIKIŞTIRILDI (bu slice'ta, PR #884):** `seo` **82 → 100, 23/23 rota**,
+   kanıt PR'ın **kendi** CI koşusu (`33334644272`, `LH_REPEATS=3`, seeded stack).
+   `panel-management.performance` **98'de kaldı** (`do_not_tighten`), `performance` ve
+   `best-practices` el değmedi. **Yeni bir tavanı ASLA yerel koşudan alma.**
+2. **#677'nin kalanı:** `errors-in-console` (CI artefaktından `routes[].deductions`; ipucu:
+   oturumsuz 401 / `/api/v1/events`) ve CLS `panel-management` (gerçek layout işi).
+3. **İMZA kalemleri:** #703 (11 kutu `☐` BOŞ) · #854 (9 kutu `☐` BOŞ) · #534 (CLOSED ama
+   kapanış yorumu YOK, 4 kutu `[ ]` BOŞ → ADIM 90 gereği AÇIK) · #547 (*"Blocked on a
+   product decision"*, 0 yorum) · #536'nın kalanı (md. 4 tasarım + `record_all` ürün kararı).
+4. **#582 — BAYAT:** öncülü çürütüldü; kapatmak **insan kararı**.
+5. **A-08 (#514)** — TEK BLOCKER, `human-only`, çıkış kriterleri 0/4.

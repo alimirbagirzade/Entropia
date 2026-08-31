@@ -1511,6 +1511,22 @@ p a { text-decoration: underline; }
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
 .panel-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); padding: 14px; }
 
+/* Reserved space for a panel card's in-flight body, so the cards BELOW it do not
+   jump when the query lands. Not cosmetic: /panel/management was the only one of
+   23 audited routes scoring below 100 on Lighthouse performance, and the whole
+   deduction was one 25-weight CLS audit whose named node was the System actors
+   card sliding down (evidence in lighthouse-report/lighthouse-results.json).
+
+   244px is MEASURED, not chosen: at 1440x900 the three cards' bodies render
+   166px while loading and 244px once settled - 78px of growth each, 234px of
+   downward push in total. Reserving the settled height removes the jump for the
+   loading -> settled transition instead of hiding it.
+
+   min-height, never height: a settled body taller than this (the authenticated
+   tables) still grows normally. This shrinks the jump; it does not claim to
+   delete it, and nothing here changes what a settled card looks like. */
+.panel-card-async { min-height: 244px; }
+
 /* ---- v18 Panel: Management / Logs work-context tabs (doc 19, mockup Panel dropdown) ---- */
 .panel-tabs {
   display: inline-flex;

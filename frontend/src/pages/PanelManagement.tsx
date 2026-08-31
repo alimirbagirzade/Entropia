@@ -78,7 +78,12 @@ function UsersCard() {
         Registered users
       </h3>
       {users.isLoading ? (
-        <Loading label="Loading user registry…" />
+        // Reserved height, not decoration: without it this body grows 166 -> 244px
+        // when the query lands and shoves every card below it down the page. See
+        // .panel-card-async in global.css for the measurement.
+        <div className="panel-card-async">
+          <Loading label="Loading user registry…" />
+        </div>
       ) : users.isError ? (
         <ErrorState error={users.error} onRetry={() => void users.refetch()} />
       ) : users.data ? (
@@ -228,7 +233,9 @@ function SystemActorsCard() {
         System actors
       </h3>
       {actors.isLoading ? (
-        <Loading label="Loading system actors…" />
+        <div className="panel-card-async">
+          <Loading label="Loading system actors…" />
+        </div>
       ) : actors.isError ? (
         <ErrorState error={actors.error} onRetry={() => void actors.refetch()} />
       ) : actors.data ? (
@@ -274,7 +281,9 @@ function RoleMatrixCard() {
         Role scope matrix
       </h3>
       {matrix.isLoading ? (
-        <Loading label="Loading role matrix…" />
+        <div className="panel-card-async">
+          <Loading label="Loading role matrix…" />
+        </div>
       ) : matrix.isError ? (
         <ErrorState error={matrix.error} onRetry={() => void matrix.refetch()} />
       ) : matrix.data ? (

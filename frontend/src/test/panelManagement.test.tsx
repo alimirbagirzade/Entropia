@@ -142,6 +142,32 @@ describe("Panel / Management page", () => {
     expect(screen.getByText("2026-06-role-matrix-v1")).toBeInTheDocument();
   });
 
+  // The Lighthouse ratchet CANNOT protect this, which is why it is pinned here.
+  // /panel/management was the only one of 23 audited routes below performance
+  // 100, and the entire deduction was a 25-weight CLS audit naming the System
+  // actors card sliding down: each card's body grows 166 -> 244px when its query
+  // lands and shoves everything below it. Reserving the settled height collapsed
+  // the measured CLS from 0.0898 to 0.0000516 while an untouched control route
+  // stayed put. But the floor is FROZEN AT 98 by the baseline's `do_not_tighten`,
+  // so a regression would score 98 again and the gate would stay GREEN. A
+  // structural assertion is the only thing that notices.
+  it("reserves each async panel card's height while its query is in flight", async () => {
+    stubApi(BASE_ROUTES);
+    renderPage();
+
+    // First paint: every async card is loading, and each reserves its own box.
+    const reserved = document.querySelectorAll(".panel-card-async");
+    expect(reserved).toHaveLength(3);
+    for (const slot of reserved) {
+      expect(slot.textContent).toMatch(/Loading /);
+    }
+
+    // Reservation is a loading-only concern: once settled the real body sets the
+    // height, so the class must not linger and silently floor a short card.
+    expect(await screen.findByText("alice")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelectorAll(".panel-card-async")).toHaveLength(0));
+  });
+
   it("links to the separate Logs work context", async () => {
     stubApi(BASE_ROUTES);
     renderPage();

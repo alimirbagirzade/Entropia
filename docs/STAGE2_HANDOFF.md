@@ -10518,5 +10518,13 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 146 · `docs/ADIM146_LANDED_KICKOFF
    (istekler token eklenmeden önce atılıyor; `/events` için ayrıca `EventSource`
    özel başlık gönderemez). **TAHMİN ETME, ÖLÇ.**
 2. **CLS `panel-management`** — gerçek layout işi; tavanı **98'de BIRAK**.
-3. **İMZA kalemleri:** #703 (11 kutu) · #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum).
+3. **#703 — DÖRT KARARIN DÖRDÜ DE İMZALI (2026-08-31, PR #886); artık KOD kalemi.**
+   `§1 = (b)` linkten türet · `§1a = (b2)` fail-closed **düz** · `§2 = A` harness üretim
+   şekline çekilsin · `§3 = A` `RD-09.c4` bağlıdır. **Dördü AYNI slice'ta inmeli** (ayrı
+   inerlerse `test_readiness_research_data`'nın iki testinin arada hangi dünyayı ölçtüğü
+   tanımsız kalır; o iki test **kasıtlı** güncellenecek — bedel NC-3'te ölçüldü).
+   `RD-09.c4` **`partial` KALIR**, tavanlar **el değmez**. **Ön koşul PRE-1** (üretimde
+   bloklanacak satır sayımı) **ilk gerçek deploy'da** koşulur — bugün ölçülemez
+   (`0 tag / 0 release / 0 deploy workflow`); sonuç `0` değilse `(b2)` yeniden açılır.
+   **Kalan imzalar:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum).
 4. **#582 BAYAT** — kapatmak insan kararı. **#514 A-08** — tek blocker.

@@ -78,6 +78,46 @@ const REPEATS = Number(process.env.LH_REPEATS ?? 3);
 
 const MAX_WAIT_FOR_LOAD_MS = 20_000;
 
+// GH #677 asked whoever picked up `errors-in-console` to "read the actual
+// console output before assuming it is cosmetic" — and the shipped artefact
+// made that impossible: it recorded the audit's NAME and dropped its CONTENTS.
+// Two sessions were spent trying to reproduce the console locally instead,
+// which is the cost of naming a defect without carrying its evidence.
+// Bounded on purpose: an audit like `unused-javascript` can list every asset,
+// and an artefact nobody opens because it is 40 MB is the same failure again.
+const MAX_EVIDENCE_ITEMS = 5;
+const MAX_EVIDENCE_CHARS = 300;
+
+/**
+ * Render one `audit.details.items` entry as a single line. Deliberately generic
+ * rather than shaped for `errors-in-console`: the next deduction to need
+ * diagnosis will be a different audit, and a per-audit renderer would leave it
+ * as blind as this one was. `description` and `url`/`sourceLocation.url` are
+ * Lighthouse's own conventional keys, so they lead when present.
+ */
+const renderEvidence = (item: Record<string, unknown>): string => {
+  const primitive = (v: unknown): string | null => {
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    return null;
+  };
+  const loc = item.sourceLocation as Record<string, unknown> | undefined;
+  const lead = [
+    primitive(item.description),
+    primitive(item.url) ?? (loc ? primitive(loc.url) : null),
+  ].filter((x): x is string => Boolean(x));
+  const rest = lead.length
+    ? []
+    : Object.entries(item)
+        .map(([k, v]) => {
+          const p = primitive(v);
+          return p ? `${k}=${p}` : null;
+        })
+        .filter((x): x is string => Boolean(x));
+  const line = [...lead, ...rest].join(" :: ") || JSON.stringify(item);
+  return line.length > MAX_EVIDENCE_CHARS ? `${line.slice(0, MAX_EVIDENCE_CHARS)}…` : line;
+};
+
 // Reported beside the scores but NOT gated. A category score is a bounded,
 // quantised number and survives being ratcheted; a raw millisecond on a shared
 // runner is the weather docs/performance/README.md section 1 refuses to gate on.
@@ -129,7 +169,10 @@ interface RouteScores {
    * about the deductions already frozen into the floor, which is how a known
    * defect turns into an invisible one.
    */
-  deductions: Record<Category, Array<{ id: string; title: string; weight: number }>>;
+  deductions: Record<
+    Category,
+    Array<{ id: string; title: string; weight: number; evidence: string[] }>
+  >;
 }
 
 const median = (xs: number[]): number => {
@@ -219,11 +262,20 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
         deductions[c] = (lhr.categories[c]?.auditRefs ?? [])
           .map((ref) => ({ ref, audit: lhr.audits[ref.id] }))
           .filter(({ ref, audit }) => (ref.weight ?? 0) > 0 && audit && audit.score !== null && audit.score < 1)
-          .map(({ ref, audit }) => ({
-            id: ref.id,
-            title: audit?.title ?? ref.id,
-            weight: ref.weight ?? 0,
-          }));
+          .map(({ ref, audit }) => {
+            const items = (audit?.details as { items?: unknown[] } | undefined)?.items ?? [];
+            return {
+              id: ref.id,
+              title: audit?.title ?? ref.id,
+              weight: ref.weight ?? 0,
+              // Empty is a real answer, not a gap: plenty of audits fail with no
+              // item list at all (`is-crawlable` is one), and pretending
+              // otherwise would send the next reader looking for missing data.
+              evidence: items
+                .slice(0, MAX_EVIDENCE_ITEMS)
+                .map((it) => renderEvidence(it as Record<string, unknown>)),
+            };
+          });
       }
       return { scores, metrics, deductions };
     };

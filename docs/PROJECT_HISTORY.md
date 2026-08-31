@@ -20074,3 +20074,78 @@ CLS 1/23).
   **el değmedi**; **görsel değişiklik yok** (v18 presentation-only sınırı korundu).
 * Backend kapıları **koşulmadı** — `backend/` içinde sıfır satır; otorite **CI**.
 * **A-08 (#514) AÇIK** — tek blocker, `human-only`, çıkış kriterleri 0/4.
+
+## ADIM 146 — BİR KAPI KESİNTİNİN ADINI TAŞIYIP İÇERİĞİNİ ATIYORDU; İKİ OTURUM O BOŞLUĞA HARCANDI
+
+**PR #885** · taban `f5f22504` (ADIM 145) · **tek dosya**: `frontend/e2e/specs/21-lighthouse.spec.ts` ·
+**ürün kodunda SIFIR SATIR** · `backend/` **el değmedi** · migration YOK · `ENGINE_VERSION`
+**DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **kapı mantığı EL DEĞMEDİ**
+(floor / `armed` / `expect(...)` / baseline okuma / tightened yazma — diff üzerinde grep'le
+kanıtlandı) · **blocker DEĞİŞMEDİ (1 — yalnız A-08), BLOCKED**.
+
+### ASIL BULGU: talimat sevk edilen artefakttan yerine getirilemiyordu
+
+GH #677 açıkça *"Whoever picks this up should read the actual console output before assuming
+it is cosmetic"* diyor. Ölçüldü (ADIM 145'in artefaktı, run `33334644272`):
+
+```
+route keys:     [slug, path, median, min, max, metrics, deductions]
+bp deductions:  [{"id":"errors-in-console",
+                  "title":"Browser errors were logged to the console","weight":1}]
+```
+
+**23/23 rotada tekrarlayan bir kusurun tüm kaydı buydu.** `deductions` audit'in ADINI
+tutuyor, `audit.details`'i **atıyordu** — yani rapor puanı hangi audit'in götürdüğünü
+söylüyor, **ne gördüğünü** hiç söylemiyordu. ADIM 145'te iki oturum yerel stack'te konsolu
+yeniden üretmeye harcandı; **bir kusuru kanıtı olmadan adlandırmanın bedeli budur.**
+
+### Sevk edilen
+
+Her kesinti artık audit'in **kendi** `details.items`'ından türetilen `evidence: string[]`
+taşıyor. İki tasarım kararı bilinçli:
+
+* **GENEL, `errors-in-console`'a özel DEĞİL** — teşhis gerektiren bir sonraki kesinti başka
+  bir audit olacak; audit'e özel bir renderer onu **aynı körlükte** bırakırdı.
+* **SINIRLI** (5 kalem × 300 karakter) — `unused-javascript` her varlığı listeleyebilir;
+  kimsenin açmadığı devasa bir artefakt aynı kusurun başka kılığıdır.
+* **Boş `evidence` bir CEVAPTIR, boşluk değil** — `is-crawlable` hiç item listesi olmadan düşer.
+
+Renderer beş şekle karşı sürüldü (gerçek `errors-in-console` kalemi · yalnız-url · ikisi de
+yok · aşırı uzun · boş); birincisi
+`Failed to load resource: … (Unauthorized) :: http://…/api/v1/events` olarak render oluyor.
+
+### KANIT OKUNDU — ve soruyu KESKİNLEŞTİRDİ, kapatmadı
+
+Run `33360933696`, 23/23 rota, **23 farklı kanıt satırı**, hepsi `401 (Unauthorized)`:
+
+| adet | uç |
+|---|---|
+| **46** | `/api/v1/events` (SSE) |
+| 7 | `/api/v1/mainboards/default` |
+| 3+3 | `/api/v1/rationale-families` (+ `?state=active`) |
+| 2+2 | `/api/v1/strategy-drafts` · `/api/v1/create-package/requests` |
+| 1×6 | `library` · `package-imports` · `package-rationale-assignments` · `research-datasets` · `backtest-results` |
+
+**20/23 rota kendi veri ucunda da 401 alıyor**, 3'ünün tek hatası `/events`.
+
+**Ölçülen ve ölçülmeyen, ayrı tutuldu:**
+* Rotalar **aynı ekranı render etmiyor** — **23 farklı LCP, 8 farklı CLS** → *"hepsi
+  oturumsuz kabuk"* okuması bununla **desteklenmiyor** (uygulama login'e yönlendirmiyor).
+* SPA kimlik doğrulaması **localStorage'daki opak Bearer token** (`apiClient.ts:153`,
+  `session.ts`), `Authorization: Bearer` olarak eklenir.
+* **HENÜZ BELİRLENMEDİ:** Lighthouse'un **kendi sekmesi** oturumu taşıyor mu (spec
+  `disableStorageReset` ile taşıdığını **iddia ediyor**), yoksa uygulama token eklenmeden
+  **önce** mi istek atıyor. **Düzeltmenin HARNESS'ta mı ÜRÜNDE mi olduğuna karar veren
+  ölçüm budur** ve bu slice onu yapmadı. `/events`'in ayrışması için akla yatkın bir
+  mekanizma var (`EventSource` özel başlık gönderemez) ama **kanıtlanmadı**, ve kalan
+  401'ler düz `fetch`.
+
+### DÜRÜST SINIR
+
+* **#677 KAPATILMADI** ve `errors-in-console` **DÜZELTİLMEDİ** — bu slice onu
+  **teşhis edilebilir** kıldı, eksik olan adım buydu.
+* Yukarıdaki *"henüz belirlenmedi"* sorusu **açık bırakıldı ve iddia edilmedi**.
+* **CLS `panel-management` el değmedi**; performans tavanı **98'de kalır**.
+* Tavanlara, `armed`'a, `do_not_tighten`'a **dokunulmadı**.
+* Backend kapıları **koşulmadı** (backend'de sıfır satır) → otorite **CI**.
+* **A-08 (#514) AÇIK** — tek blocker, `human-only`, çıkış kriterleri 0/4.

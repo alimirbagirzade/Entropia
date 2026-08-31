@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 145 landed — GH #677: iki bütün-uygulama Lighthouse kesintisi kaynağında düzeltildi
 
 ## Nerede olduğumuz

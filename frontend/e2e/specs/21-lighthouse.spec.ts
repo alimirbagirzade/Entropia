@@ -44,15 +44,19 @@
 //    reproduce a real slow device, and the score is only comparable inside its
 //    own runner class — exactly the constraint docs/performance/README.md
 //    section 2 records for the load baseline.
-//  * WHOSE SESSION IT SCORES. Lighthouse opens its own tab, and that tab does
-//    not necessarily carry the login this file performs. The run MEASURES which
-//    world it scored and reports it as
-//    `conditions.session_carried_into_lighthouse_tab`; the DEBUG_PORT note below
-//    carries the measured chain. A score is only comparable to a floor frozen in
-//    the SAME world, so this flag is provenance, not decoration.
+//  * WHOSE SESSION IT SCORES — resolved at ADIM 150, and still reported every
+//    run. Lighthouse opens its own tab in the browser's DEFAULT context, so the
+//    login has to happen there; until ADIM 150 it did not, and all 23 routes
+//    were scored signed out. The run still MEASURES which world it scored and
+//    reports it as `conditions.session_carried_into_lighthouse_tab`, and now
+//    FAILS when that is not the signed-in one: a score is only comparable to a
+//    floor frozen in the SAME world. The DEBUG_PORT note below carries the
+//    measured chain, and the flag is a live probe rather than a constant so the
+//    day a dependency changes the mechanism, the run says so.
 
-import { chromium, test, expect, type Browser, type Page } from "@playwright/test";
+import { chromium, test, expect, type Page } from "@playwright/test";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -70,27 +74,29 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8080";
 // which Playwright does not expose from `browser.wsEndpoint()`. The browser is
 // launched with an explicit debugging port and Lighthouse attaches to it.
 //
-// WHAT THIS COMMENT USED TO CLAIM, AND WHY IT WAS WRONG. It said "both tools
-// drive the same profile, so the localStorage session token written by
-// `ensureAdmin` is still there when Lighthouse opens its own tab". Same PROFILE,
-// yes — same BROWSER CONTEXT, no, and localStorage is partitioned per context.
-// Measured end to end against the installed packages, not inferred:
-//   1. `browser.newContext()` below makes a SEPARATE context; `ensureAdmin`
-//      writes the token there.
-//   2. `lighthouse(url, {port}, cfg)` is called with no `page` argument, so
+// WHICH BROWSER CONTEXT THE LOGIN HAS TO LAND IN, AND WHY IT IS NOT A DETAIL.
+// Until ADIM 150 this spec called `browser.newContext()` and logged in there,
+// and every route was scored SIGNED OUT. The chain is measured against the
+// installed packages, not inferred — re-verified at ADIM 150:
+//   1. `lighthouse(url, {port}, cfg)` is called with no `page` argument, so
 //      lighthouse@13.4.1 `core/gather/navigation-runner.js:278-282` takes the
 //      `puppeteer.connect({browserURL}).newPage()` path.
-//   3. puppeteer-core `cdp/Browser.js:204` sends that to `#defaultContext`,
-//      constructed at `:76` with an id of `undefined`, so `:211-213` issues
-//      `Target.createTarget` with NO `browserContextId` — the DEFAULT context.
-//   4. A tab opened exactly that way reads the key back as `null` while the
-//      Playwright context still reads the token. (ADIM 147 probe.)
-// `disableStorageReset: true` is therefore necessary but NOT sufficient: it
-// stops Lighthouse from clearing storage it was never going to see.
-//
-// The consequence is measured and reported, not fixed here: every route is
-// scored SIGNED OUT. Fixing it moves all 23 scores and forces a floor
-// re-freeze from CI, which is a separate slice.
+//   2. puppeteer-core `CdpBrowser.newPage` delegates straight to
+//      `#defaultContext`, which is constructed with an id of `undefined`, so
+//      `_createPageInContext` issues `Target.createTarget` with
+//      `browserContextId: undefined` — the DEFAULT context. (Symbols, not line
+//      numbers, because the numbers already drifted: ADIM 147 read `newPage` at
+//      `cdp/Browser.js:204` and puppeteer-core 25.6.0 has it at `:203`.)
+//   3. localStorage is partitioned per context, so a token written into a
+//      Playwright-created context is invisible from that tab.
+// THE FIX IS THEREFORE NOT A FLAG BUT A PLACE: `launchPersistentContext`
+// returns the browser's DEFAULT context, so `ensureAdmin` writes the token into
+// the very partition Lighthouse's tab reads. Measured app-independently against
+// a synthetic origin, driving lighthouse's own puppeteer-core rather than a
+// model of it (ADIM 150 probe) — `browser.newContext()`: Playwright sees the
+// token, the Lighthouse tab reads `null`; `launchPersistentContext`: both read
+// it. `disableStorageReset: true` remains necessary but was never sufficient —
+// it stopped Lighthouse clearing storage it was never going to see.
 const DEBUG_PORT = Number(process.env.LH_DEBUG_PORT ?? 9222);
 
 // The key `frontend/src/lib/session.ts` stores the bearer token under. Read
@@ -248,10 +254,14 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
     // keeps this spec loadable under either module emit.
     const { default: lighthouse } = await import("lighthouse");
 
-    const browser: Browser = await chromium.launch({
+    // launchPersistentContext, NOT launch + newContext: this returns the
+    // browser's DEFAULT context, which is the one Lighthouse's own tab opens in
+    // (see the DEBUG_PORT note above). The user-data dir is a throwaway per run
+    // — a reused profile would carry a previous run's cache and session into
+    // the scores, which is the opposite of what a ratchet wants.
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "entropia-lh-"));
+    const context = await chromium.launchPersistentContext(userDataDir, {
       args: [`--remote-debugging-port=${DEBUG_PORT}`],
-    });
-    const context = await browser.newContext({
       baseURL: BASE_URL,
       viewport: { width: 1440, height: VIEWPORT_HEIGHT },
     });
@@ -397,8 +407,10 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
         );
       }
     } finally {
+      // A persistent context owns its browser: closing it closes both. There is
+      // no separate `browser` handle to close, and the profile dir goes with it.
       await context.close();
-      await browser.close();
+      fs.rmSync(userDataDir, { recursive: true, force: true });
     }
 
     // ---- artefacts -------------------------------------------------------
@@ -416,10 +428,11 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
             throttling: "simulate, cpuSlowdownMultiplier 1",
             max_wait_for_load_ms: MAX_WAIT_FOR_LOAD_MS,
             accessibility_category: "NOT RUN — axe-core is the shipped authority",
-            // Which world the numbers above describe. `false` means every route
-            // was scored SIGNED OUT, so the deductions and metrics belong to the
-            // shell, not to the authenticated app — and a floor frozen from this
-            // run may only ever be compared with another `false` run.
+            // Which world the numbers above describe. Floors are world-scoped:
+            // a floor frozen from a `true` run may only ever be compared with
+            // another `true` run. `false` means every route was scored SIGNED
+            // OUT, so the deductions and metrics would belong to the shell, not
+            // to the authenticated app — the gate below refuses that run.
             session_carried_into_lighthouse_tab: sessionCarried,
           },
           routes: results,
@@ -457,28 +470,27 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
     console.log(`\nlighthouse repeat spread over ${REPEATS} passes:\n  ${spread}`);
 
     // ---- whose session did this run score? --------------------------------
-    // Not a gate. Today's floors were frozen in the signed-out world, so failing
-    // here would turn main red for a defect the floors already encode; and
-    // passing silently is what let 23 route scores read as the app ever since
-    // the floors were measured (baseline provenance: 2026-08-12T06:58:12Z).
-    // A warning plus a recorded field is the honest middle.
+    // NOW A GATE, and it became one the moment the floors moved. Under ADIM 147
+    // this was a warning on purpose: the floors encoded the signed-out world, so
+    // failing here would have turned main red for a defect the floors already
+    // described. ADIM 150 re-froze every floor from the SIGNED-IN world, which
+    // inverts the argument — a run that silently drops back to the signed-out
+    // shell is now measuring a different app than the one the floors describe,
+    // and comparing the two is exactly the mistake the flag exists to catch.
+    //
+    // `null` (probe never ran) and `false` (ran, scored signed out) are kept
+    // distinct in the artefact but fail the same way here: neither can say the
+    // scores below are comparable to the floors.
     expect(
       sessionCarried,
-      "the session probe never ran, so this run cannot say which world it " +
-        "scored — a report that omits that is the defect ADIM 146 fixed one " +
-        "level down (see conditions.session_carried_into_lighthouse_tab)",
-    ).not.toBeNull();
-    if (sessionCarried === false) {
-      console.log(
-        "\n::warning::Lighthouse scored every route SIGNED OUT. The tab it opens " +
-          "lives in the default browser context and cannot see the token " +
-          "`ensureAdmin` wrote into Playwright's context, so these scores, " +
-          "deductions and metrics describe the signed-out shell — including the " +
-          "errors-in-console deduction declared in GH #677. The frozen floors " +
-          "were measured in this same world and stay comparable; a harness fix " +
-          "moves all of them and must re-freeze from CI.",
-      );
-    }
+      "Lighthouse did not score the authenticated app. The tab it opens lives " +
+        "in the browser's DEFAULT context, so the spec must log in THERE — see " +
+        "the DEBUG_PORT note: `launchPersistentContext`, never `launch` + " +
+        "`newContext`. Every floor in lighthouse-baseline.json was frozen " +
+        "signed IN (provenance.session_carried_2026_08_31), so a signed-out run " +
+        "is not comparable to them and its scores must not be read as a pass. " +
+        "`null` here means the probe never ran at all",
+    ).toBe(true);
 
     // ---- gate ------------------------------------------------------------
     if (!baseline.armed) {

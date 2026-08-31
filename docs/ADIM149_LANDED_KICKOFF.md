@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 149 landed — GH #703'ün yazıcısı sevk edildi ve ölçüm imzanın öngördüğünden geniş çıktı
 
 ## Nerede duruyoruz

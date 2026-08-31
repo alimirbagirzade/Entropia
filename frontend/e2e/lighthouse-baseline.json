@@ -46,7 +46,9 @@
     "do_not_tighten": "panel-management/performance must stay at 98. It is the one route with measured repeat variance (98-100 across 3 passes), so a run whose median reads 100 will make the tightened map suggest raising it. Taking that suggestion arms a gate that fails the next time the same route medians at 98 - a flapping gate nobody asked for. Every other floor may be tightened normally when a real improvement lands.",
     "tightened_2026_08_30": "GH #677 / ADIM 145 (PR #884). The `seo` floor was raised 82 -> 100 on all 23 routes after `meta-description` and `robots-txt` were fixed in the SPA shell. Measured by the SAME gate that enforces it: E2E workflow run 33334644272, job 'Lighthouse', LH_REPEATS=3, seeded Compose stack \u2014 NOT from a developer machine. An earlier local run was deliberately NOT used: this file's own `sensitivity_boundary` records that the score is comparable only inside its own runner class, so a floor copied off Apple Silicon would arm a gate that fails on the next CI pass. `performance` and `best-practices` floors are UNCHANGED, and panel-management/performance stays at 98 per `do_not_tighten` (that run medianed 98, so the tightened map did not even suggest raising it). Two deductions remain open and are declared in #677: errors-in-console (23/23) and cumulative-layout-shift (panel-management).",
     "session_state_2026_08_31": "ADIM 147. EVERY FLOOR IN THIS FILE WAS MEASURED SIGNED OUT, and until 2026-08-31 nothing said so. The spec logs in with `ensureAdmin(page)`, but that page lives in a Playwright-created browser context while Lighthouse - called with no `page` argument - attaches over the DevTools port and opens its own tab in the DEFAULT context, which has a separate localStorage partition. Measured end to end against the installed packages, not inferred: lighthouse@13.4.1 core/gather/navigation-runner.js:278-282 takes the `puppeteer.connect({browserURL}).newPage()` path; puppeteer-core cdp/Browser.js:204 routes that to `#defaultContext`, constructed at :76 with an id of `undefined`, so :211-213 issues Target.createTarget with NO browserContextId; a tab opened exactly that way reads the session key back as null while the Playwright context still reads the token. `disableStorageReset: true` is necessary but not sufficient - it stops Lighthouse clearing storage it was never going to see. CONSEQUENCE FOR THIS FILE: the floors are NOT wrong, they are floors for a world nobody had named. They remain enforceable and comparable against any other run that also reports `session_carried_into_lighthouse_tab: false` (the spec now measures and reports that per run). THEY MUST NOT BE COMPARED WITH AN AUTHENTICATED RUN. Fixing the harness moves all 23 routes and REQUIRES a full re-freeze from a CI run, per this file's own `sensitivity_boundary` - never from a developer machine. NOT CLAIMED: that the app is free of console errors when signed in. The errors-in-console deduction declared in `tightened_2026_08_30` is a property of the signed-out shell; whether it also holds for the authenticated app is UNMEASURED.",
-    "cls_fixed_2026_08_31": "ADIM 148. The cumulative-layout-shift deduction named in `tightened_2026_08_30` is FIXED at its source, so that clause is now correct only as history. panel-management was the ONLY route below performance 100, and its whole deduction was one 25-weight CLS audit; the `layout-shifts` diagnostic named the System actors card sliding down. Cause: each panel card's body renders 166px while its query is in flight and 244px once settled - 78px of growth each, 234px of downward push - so every card shoved the ones beneath it. Fix: .panel-card-async reserves the settled height for the in-flight body (min-height, never height). Measured in a local harness that first reproduced this gate's own numbers (panel-management 0.0898 vs CI 0.085; create-package 0.0361 vs CI 0.035): CLS 0.0898 -> 0.0000516, audit score 0.92 -> 1, while the untouched control route create-package stayed at 0.036. THE FLOOR IS DELIBERATELY NOT TIGHTENED. `do_not_tighten` still governs panel-management/performance and it stays at 98; a run that now medians 100 will make lighthouse-baseline.tightened.json suggest raising it, and that suggestion must still be refused. NOTE THE CONSEQUENCE: with the floor at 98 this gate CANNOT fail if the fix is reverted, so the reservation is pinned by frontend/src/test/panelManagement.test.tsx instead ('reserves each async panel card's height while its query is in flight'), whose negative control failed exactly one test. NOT CLAIMED: that the authenticated route has no layout shift - like every number in this file it was measured against the signed-out shell, which is what this gate scores (measured separately in ADIM 147 / PR #887)."
+    "cls_fixed_2026_08_31": "ADIM 148. The cumulative-layout-shift deduction named in `tightened_2026_08_30` is FIXED at its source, so that clause is now correct only as history. panel-management was the ONLY route below performance 100, and its whole deduction was one 25-weight CLS audit; the `layout-shifts` diagnostic named the System actors card sliding down. Cause: each panel card's body renders 166px while its query is in flight and 244px once settled - 78px of growth each, 234px of downward push - so every card shoved the ones beneath it. Fix: .panel-card-async reserves the settled height for the in-flight body (min-height, never height). Measured in a local harness that first reproduced this gate's own numbers (panel-management 0.0898 vs CI 0.085; create-package 0.0361 vs CI 0.035): CLS 0.0898 -> 0.0000516, audit score 0.92 -> 1, while the untouched control route create-package stayed at 0.036. THE FLOOR IS DELIBERATELY NOT TIGHTENED. `do_not_tighten` still governs panel-management/performance and it stays at 98; a run that now medians 100 will make lighthouse-baseline.tightened.json suggest raising it, and that suggestion must still be refused. NOTE THE CONSEQUENCE: with the floor at 98 this gate CANNOT fail if the fix is reverted, so the reservation is pinned by frontend/src/test/panelManagement.test.tsx instead ('reserves each async panel card's height while its query is in flight'), whose negative control failed exactly one test. NOT CLAIMED: that the authenticated route has no layout shift - like every number in this file it was measured against the signed-out shell, which is what this gate scores (measured separately in ADIM 147 / PR #887).",
+    "session_carried_2026_08_31": "ADIM 150. THE HARNESS IS FIXED: specs/21-lighthouse.spec.ts now logs in inside the browser's DEFAULT context (chromium.launchPersistentContext), which is the context Lighthouse's own tab opens in, so every route is scored SIGNED IN. The mechanism was measured app-independently against a synthetic origin, driving lighthouse's own puppeteer-core rather than a model of it: with `browser.newContext()` the Playwright page reads the token and the Lighthouse tab reads null; with `launchPersistentContext` both read it. The spec's own probe (chromium.connectOverCDP -> contexts()[0]) was cross-checked against that real puppeteer path and agrees in BOTH worlds, which is why the probe can now be a gate: conditions.session_carried_into_lighthouse_tab must be `true` or the run fails, because a signed-out run is not comparable to the floors below. THE FLOORS BELOW ARE NOW THE SIGNED-IN ONES -- see `refrozen_2026_08_31` for the run that produced them and for what changed. The gate is armed on that flag: conditions.session_carried_into_lighthouse_tab must be `true` or the run fails, because a signed-out run is not comparable to these floors.",
+    "refrozen_2026_08_31": "ADIM 150, second commit. EVERY FLOOR RE-FROZEN FROM THE SIGNED-IN WORLD, measured by the same gate that enforces it: E2E workflow run 33388366150, job 99476037000 ('Lighthouse'), LH_REPEATS=3, seeded Compose stack, 23/23 routes, conditions.session_carried_into_lighthouse_tab = true -- NOT from a developer machine (`sensitivity_boundary`). This is a WORLD CHANGE re-freeze, not the forbidden 'lower a floor to make CI green': that rule governs a drop WITHIN one world, and the previous floors describe a signed-out shell this spec no longer scores. WHAT MOVED, of 69 route/category pairs: 23 ROSE, 3 FELL, 43 unchanged. (1) best-practices 96 -> 100 on ALL 23 ROUTES, because `errors-in-console` DEDUCTS ON ZERO ROUTES when signed in. That audit -- the 23/23 deduction GH #677 called out first and asked someone to 'read the actual console output' about -- was a HARNESS ARTEFACT, not a product defect: the console errors ADIM 146 captured were the 401s of a signed-out shell, and they do not exist in the authenticated app. (2) performance FELL on exactly three routes -- create-package 100 -> 99, package-library 100 -> 98, panel-management 98 -> 93 -- and the ENTIRE deduction on each is one 25-weight `cumulative-layout-shift` audit. Authenticated CLS, from this run's own `evidence` field (the one ADIM 146 added, first load-bearing use): panel-management 0.165, package-library 0.096, create-package 0.068, and future-dev 0.059 -- that last one still medians 100, so it is a deduction costing under half a point. (3) `do_not_tighten` IS SUPERSEDED FOR panel-management/performance AND ITS REASON IS KEPT. Its 98 was a signed-out number, pinned because that route flapped 98-100 there; in this world it medians 93. Repeat spread in this run was 0 points on ALL 23 routes and ALL THREE categories -- but `stability` above records that zero spread is a property of one run, not of this gate (the original measuring run also saw 0 and the very next one did not), so 93 is frozen as measured and MUST NOT be tightened on a single higher run; that needs a second confirming run, exactly as every other floor here does. (4) NOT A REGRESSION AND NOT A REVERT: ADIM 148's CLS fix (`.panel-card-async` min-height) is untouched and still correct -- it fixed the SIGNED-OUT shift, 0.0898 -> 0.0000516. Its own honest boundary said the authenticated route's shift was UNMEASURED. It is measured now, it is 0.165, and it is a DIFFERENT shift that fix does not cover. That is newly VISIBLE work, not damage done by this slice: the old gate could not see it at all. STILL OPEN after this re-freeze: the authenticated `cumulative-layout-shift` on 4 routes."
   },
   "policy": {
     "categories": "performance, best-practices, seo",
@@ -57,117 +59,117 @@
   "floors": {
     "mainboard": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "strategy-details": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "outsource-signal": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "trading-signal": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "trade-log": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "create-package": {
-      "performance": 100,
-      "best-practices": 96,
+      "performance": 99,
+      "best-practices": 100,
       "seo": 100
     },
     "pre-check": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "package-library": {
-      "performance": 100,
-      "best-practices": 96,
+      "performance": 98,
+      "best-practices": 100,
       "seo": 100
     },
     "embedded-packages": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "rationale-families": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "market-data": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "research-data": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "portfolio": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "ready-check": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "run-results": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "results-history": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "arrange-metrics": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "analysis-lab": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "panel-management": {
-      "performance": 98,
-      "best-practices": 96,
+      "performance": 93,
+      "best-practices": 100,
       "seo": 100
     },
     "panel-logs": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "trash": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "user-manual": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     },
     "future-dev": {
       "performance": 100,
-      "best-practices": 96,
+      "best-practices": 100,
       "seo": 100
     }
   }

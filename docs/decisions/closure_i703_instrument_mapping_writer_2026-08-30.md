@@ -337,7 +337,19 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
   bu PR'da **yapılmadı**, uygulama Karar 1 ile aynı slice'a aittir. **§Karar 3 2026-08-31'de `A` olarak İMZALANDI** — `RD-09.c4`
   `partial` KALIR, kabul borcu defterine ve tavanlara **dokunulmaz**; kriter ancak `(b)` +
   `(b2)` uygulaması indikten sonra, üretimin ürettiği bir ref üzerinde kapatılabilir.
-  **#703'ün DÖRT kararının DÖRDÜ de imzalı; kusur hâlâ DÜZELTİLMEDİ.**
+  **#703'ün DÖRT kararının DÖRDÜ de imzalı.**
+- **UYGULANDI — ADIM 149 (2026-08-31).** Yukarıdaki *"kusur hâlâ DÜZELTİLMEDİ"* cümlesi
+  bu belgenin kendi tabanında doğruydu ve artık **tarihseldir**: `(b)` + `(b2)` iki yazma
+  yüzeyinde de sevk edildi (`commands/research_data.py::_instrument_mapping_ref_for`),
+  §Karar 2 = `A` uyarınca harness üretim şekline çekildi ve öncülü ölen testler **kasıtlı**
+  yeniden yazıldı. Ölçülen sonuç imzanın öngördüğünden **geniş**: #703'ün İKİNCİ kapısı da
+  kapandı — `resolve_funding_schedule` app-created bir revizyonu artık hiç reddetmiyor, yani
+  ADIM 138'in *"başlıktaki iddia ikinci kapı yüzünden ayakta"* dürüst sınırı düştü.
+  **Değişmeyenler:** **§Ön koşul PRE-1 KOŞULMADI** (bu depoda hâlâ 0 tag / 0 release /
+  0 deploy eden workflow → *"üretim"* gözlenebilir bir olay değil) ⇒ `(b2)` **doğrulanmış
+  sayılamaz**, sorgu ilk gerçek deploy'da koşulur ve `0` değilse `(b2-g)` yeniden açılır ·
+  §Karar 3 = `A` uyarınca `RD-09.c4` **`partial` KALDI**, kabul defterine ve tavanlara
+  **dokunulmadı** · **#703 KAPATILMADI** (insan kararı) · frontend'e dokunulmadı.
 - **Frontend'e dokunulmadı**, frontend kapıları koşulmadı.
 - **Üretimde kaç research revizyonunun etkilendiği SAYILMADI** — bu bir üretim DB sorgusudur
   (`G15` §Ölçüm 3 ve #854 ile aynı sınır). Karar bu sayı olmadan verilebilir: Ölçüm 2 kusurun

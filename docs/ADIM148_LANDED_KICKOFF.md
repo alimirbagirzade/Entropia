@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 148 landed — panel-management'in CLS'i kaynağında düzeltildi; ve kapı onu koruyamıyor
 
 ## Nerede olduğumuz

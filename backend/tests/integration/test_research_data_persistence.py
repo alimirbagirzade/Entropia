@@ -81,9 +81,20 @@ async def _seed_principals(session) -> None:
 
 
 async def _approved_market(session) -> str:
-    """Create + approve a market dataset; return its entity_id."""
+    """Create + approve a market dataset; return its entity_id.
+
+    Carries an ``instrument_id`` since GH #703 §Karar 1a = `(b2)` (signed 2026-08-31):
+    a research revision copies its ``instrument_mapping_ref`` from the market revision
+    it links to, and a market revision naming no instrument is refused as a link
+    source. Passing one here is not test convenience -- it is the shape a usable
+    market dataset has, and the shipped UI's instrument picker sends it.
+    """
     root, _ = await md_cmd.create_market_dataset(
-        session, ADMIN, market_data_type=MarketDataType.OHLCV, payload={"v": 1}
+        session,
+        ADMIN,
+        market_data_type=MarketDataType.OHLCV,
+        payload={"v": 1},
+        instrument_id="instr_seed_btcusdt",
     )
     await session.flush()
     revision = await md_repo.get_revision(session, root.current_revision_id or "")

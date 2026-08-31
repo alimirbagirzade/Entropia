@@ -119,6 +119,53 @@ async def _resolve_market_link(
         ) from exc
 
 
+async def _instrument_mapping_ref_for(session: AsyncSession, bundle: dict[str, Any]) -> str:
+    """GH #703 §Karar 1 = `(b)` LINK'TEN TÜRET, §Karar 1a = `(b2)` FAIL-CLOSED DÜZ.
+
+    Signed 2026-08-31. Until then `instrument_mapping_ref` had a declaration, two
+    readers and ZERO writers, so every revision the app created was incoherent by
+    construction: `time_policy.instrument_mapping_is_valid` requires
+    ``has_link == has_ref``, and a linked revision naming no mapping fails it. That
+    is what made funding-enabled runs unusable with any app-created revision.
+
+    `(b)` is a COPY, never a lookup: the ref is the linked market revision's own
+    ``instrument_id``, read once here and pinned on the row. Resolving it later
+    would re-open the question the copy closes, because the market root's head can
+    move while this revision stays pinned to one revision id.
+
+    `(b2)` is why this returns ``str`` and not ``str | None``: the source column is
+    itself nullable and an ordinary create request that sends neither
+    ``instrument_id`` nor ``instrument_scope`` produces a market revision with none
+    (measured on the shipped API). Letting the ref fall silently to ``None`` there
+    is `(b1)`, which the signature rejected in writing - it would move the same
+    defect one layer along and keep #703's claim alive for a subset of rows.
+
+    Only reached when a link is actually being pinned. A revision that pins NO link
+    keeps a null ref and stays coherent - that is the predicate's own third case,
+    not an exemption invented here.
+
+    No new taxonomy code: `DEPENDENCY_BLOCKED` is the shipped code for "the upstream
+    you linked is not usable", which is exactly this (O-31 - the shipped name wins).
+    """
+    revision = await md_repo.get_revision(session, bundle["revision_id"])
+    ref = ((getattr(revision, "instrument_id", None) or "") if revision else "").strip()
+    if not ref:
+        raise DependencyBlocked(
+            "The linked Market Data revision names no instrument, so this Research "
+            "Data version cannot pin an instrument mapping.",
+            remediation=(
+                "Create the Market Data revision with an instrument_id or an "
+                "instrument_scope, approve it, then link this Research Data version "
+                "to that revision."
+            ),
+            suggested_action="link_instrumented_market_revision",
+            scope_type="market_dataset_revision",
+            scope_id=bundle["revision_id"],
+            field_path="instrument_mapping_ref",
+        )
+    return ref
+
+
 def _audit_and_outbox(
     session: AsyncSession,
     actor: Actor,
@@ -172,6 +219,9 @@ async def create_research_dataset(
     """
     require_authenticated(actor)
     bundle = await _resolve_market_link(session, actor, market_entity_id)
+    # Outside `_op`: a rejected create must not consume the idempotency key, and
+    # this is a pure precondition read, exactly like `_resolve_market_link` above.
+    mapping_ref = await _instrument_mapping_ref_for(session, bundle)
 
     async def _op() -> dict[str, Any]:
         root, revision = await rd_repo.create_research_dataset(
@@ -185,6 +235,7 @@ async def create_research_dataset(
             provider_name=provider_name,
             usage_scope=usage_scope,
             linked_market_dataset_revision_id=bundle["revision_id"],
+            instrument_mapping_ref=mapping_ref,
         )
         rd_repo.add_market_link(
             session,
@@ -439,8 +490,15 @@ async def create_research_dataset_revision(
 
     market_id = market_entity_id
     bundle: dict[str, Any] | None = None
+    # `(b2)` was signed "no grandfathering, existing records included", so a revise
+    # that pins a link is checked exactly like a create. It is scoped to the pinning
+    # branch and not to every revise, because a revision that pins NO link keeps a
+    # null ref and `instrument_mapping_is_valid` calls that pair coherent; rejecting
+    # those would invent a rule the signature did not carry.
+    mapping_ref: str | None = None
     if market_id is not None:
         bundle = await _resolve_market_link(session, actor, market_id)
+        mapping_ref = await _instrument_mapping_ref_for(session, bundle)
 
     async def _op() -> dict[str, Any]:
         # Concurrency checks INSIDE the body so a completed-key replay returns the
@@ -460,6 +518,7 @@ async def create_research_dataset_revision(
             provider_name=provider_name,
             usage_scope=usage_scope,
             linked_market_dataset_revision_id=linked_id,
+            instrument_mapping_ref=mapping_ref,
         )
         revision.source_timezone_mode = timezone_spec.mode
         revision.source_timezone_iana = timezone_spec.iana

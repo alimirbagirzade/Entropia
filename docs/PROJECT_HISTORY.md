@@ -20353,3 +20353,118 @@ slice onu yanlışlıyor. `cls_fixed_2026_08_31` eklendi. **`floors`/`armed`/`po
   (`sensitivity_boundary`); tavan yalnız CI'dan dondurulur.
 * Backend kapıları **koşulmadı** (backend'de sıfır satır) → otorite **CI**.
 * **A-08 (#514) AÇIK** — tek blocker.
+## ADIM 149 — GH #703'ÜN YAZICISI SEVK EDİLDİ; ÖLÇÜM İMZANIN ÖNGÖRDÜĞÜNDEN GENİŞ ÇIKTI: İKİNCİ KAPI DA KAPANDI
+
+**PR:** (bu slice) · **Taban:** `origin/main` @ `6d50b6be` (#886 — §Karar 1'in imzası) ·
+**alembic head `0044_drop_net_conflict_policy` — MIGRATION YOK** (kolon zaten vardı) ·
+`ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** ·
+`SHARED_ALLOCATION_STATUS` **el değmedi** · **`frontend/` içinde SIFIR SATIR**.
+
+### Ne indi
+
+`instrument_mapping_ref`'in **yazıcısı**. #703'ün imzalı dört kararının uygulaması:
+**§Karar 1 = `(b)` LİNK'TEN TÜRET** · **§Karar 1a = `(b2)` FAIL-CLOSED DÜZ** ·
+**§Karar 2 = `A` HARNESS ÜRETİM ŞEKLİNE ÇEKİLSİN** · **§Karar 3 = `A`** (aşağıda).
+
+Ürün kodu **iki dosya**:
+
+* `infrastructure/postgres/repositories/research_data.py` — iki yazıcı (`create_research_dataset`,
+  `append_research_dataset_revision`) opsiyonel `instrument_mapping_ref` alır, varsayılan `None`.
+* `application/commands/research_data.py::_instrument_mapping_ref_for` (YENİ) — linkli market
+  revizyonunun **kendi `instrument_id`'sini KOPYALAR**. Kopya, arama değil: market kökünün head'i
+  ilerlerken bu revizyon tek bir revizyon id'sine pinli kalır, sonradan çözmek kapatılan soruyu
+  yeniden açardı. Kaynak boşsa `DependencyBlocked` (**O-31: sevk edilen ad kazanır, YENİ taksonomi
+  kodu YOK**), `field_path=instrument_mapping_ref`, `suggested_action=link_instrumented_market_revision`.
+
+**Çağrının YERİ bir karardır, iki eksende:**
+
+1. **`run_idempotent`'ın DIŞINDA.** İçeride olsaydı reddedilen bir deneme anahtarını
+   **kaydederdi** ve remediation'ı *"market'i düzelt, sonra bağla"* olan çağıran, kalıcı bir
+   error replay'iyle cevaplanırdı. NC-2 bunu doğrudan ölçer.
+2. **Yalnız link PİNLEYEN dalda.** `instrument_mapping_is_valid` **hiçbir yarısı olmayan**
+   revizyonu tutarlı sayar (mapping tablosundan değil, revizyon id'sinden çözülen koşuya ulaşır).
+   Kapıyı `if`'ten dışarı çıkarmak imzanın taşımadığı bir kural icat ederdi; NC-3 bunu ölçer.
+
+### ASIL BULGU — imza bir kapıyı hedefliyordu, ölçüm İKİSİNİ de kapattı
+
+ADIM 138 kendi dürüst sınırını yazmıştı: *"#703 KAPATILMADI (başlığındaki iddia **ikinci kapı**
+yüzünden ayakta)"*. O sınır **düştü ve iddia edilmedi, ölçüldü**:
+`test_the_native_asset_gate_is_passed_by_a_pipeline_built_revision` — ADIM 138'in *"hangi kapı
+reddediyor"*u pinleyen testi — bu yamayla **`DID NOT RAISE FundingSourceInvalid`** verdi. Yani
+`resolve_funding_schedule` app-created bir funding revizyonunu artık **hiç reddetmiyor**: funding
+uçtan uca çözülebilir. #703'ün başlığındaki iki *"yazıcısı olmayan alan"*ın **ikisi de** artık
+üretim tarafından yazılıyor.
+
+**Bunun bedeli ÜÇ testin öncülünün ölmesiydi ve üçü de KASITLI yeniden yazıldı, silinmedi:**
+ADIM 140'ın `test_readiness_research_production_shape.py`'si *"üretim BLOKLANIR / elle tohumlanan
+şekil SESSİZ"* ayrışmasını assert ediyordu; eksenleri korunup **tersine çevrildi** —
+*"üretim admit edilir ve run satırını yazar"* (kusurun **kullanılabilir işi** blokladığının en
+güçlü ifadesi) ve *"elle tohumlanan şekil artık ayrışmıyor"* (§Karar 2 = `A`'nın bedeli, ödenmiş
+olmakla kalmayıp **yanlışlanabilir** kılındı).
+
+### İKİNCİ BULGU — bir fixture'ın ELLE YAZDIĞI da bir iddiadır (ADIM 140'ın dersinin üçüncü kılığı)
+
+ADIM 138'in `test_a_pipeline_written_pointer_feeds_a_real_funding_schedule`'ı
+`revision.instrument_mapping_ref = "imap_test_1"` **elle set ediyordu** — o gün zorunluydu, bugün
+üretimin yazdığının **üzerine yazıyor** ve tam da dosyanın kanıtlamak için var olduğu provenance'ı
+yeniden gizliyor. Satır **kaldırıldı**; artık schedule **iki üretim-yazımı** yarıdan geçilerek
+kuruluyor, biri artı bir fixture'dan değil. (ADIM 138: fake *fazladan* bir şey yapıyordu ·
+ADIM 140: harness *eksik* bir şey yapıyordu · burası: fixture *üzerine* yazıyordu.)
+
+### ÜÇÜNCÜ BULGU — kullanılamaz şeklin YAYGINLIĞI sayıldı, tahmin edilmedi
+
+`(b2)` inince **dört ayrı test dosyası** kırmızıya döndü (**29 test**), ve dördünün de sebebi
+aynıydı: kendi market yardımcıları `instrument_id` **vermeden** market veri seti kuruyordu —
+`test_research_point_in_time_parity.py` (21) · `test_e2e_pipeline.py` (3) ·
+`test_idempotency_new_ops.py` (3) · `test_research_successor_manifest_immutability.py` (2, ortak
+`_ready_composition`'ın `market_instrument_id=None` varsayılanı üzerinden). Bu sayı bir engel
+değil **ölçüm**: kullanılamaz market şekli suite genelinde bu kadar yerde tohumlanmıştı.
+**Varsayılanlar DEĞİŞTİRİLMEDİ** (`market_instrument_id=None` funding'siz kompozisyonlar için hâlâ
+doğru) — yalnız research'e bağlanan çağrı yerleri düzeltildi.
+
+### NEGATİF KONTROLLER — beşi de ayırt edici, biri REDDEDİLDİ
+
+| NC | ne bozulur | kırmızı |
+|---|---|---|
+| **NC-1 (REDDEDİLDİ)** | `ref` sabit döner | **5** — kimlik **ve** fail-closed eksenlerini birden kırdı (ADIM 105'in *"doğru sebep, yanlış kapsam"* şekli) |
+| **NC-1′** | `ref` sabit döner ama fail-closed **sağlam** | **tam 2** — iki düzlemin de kimlik case'i; `(b2)` case'leri **YEŞİL** ⇒ iki eksen bağımsız |
+| **NC-2** | önkoşul `run_idempotent` **içine** taşınır | **tam 1** — idempotency anahtarı case'i |
+| **NC-3** | kapı pin dalından **dışarı** çıkarılır | **tam 1** — *"link yok → null ref"* case'i |
+| **NC-4** | düzeltme **yalnız create**'e uygulanır | **tam 1** — revise yüzeyi |
+| **NC-5** | yazıcı **tamamen** kaldırılır | **5** — Ready Check **ve** worker düzlemlerinde; `(b2)` case'leri yeşil (reddedecek şey yok) = **boşluğun ölçüsü** |
+
+Kimlik assertion'ları **literale değil**, linkli market satırının **kendi `instrument_id`'sine**
+karşı yapılır — herhangi bir sabiti pinleyen bir yazıcı literali geçer, bunu geçemez.
+
+### TUZAK — ADIM 100'ün ÜÇÜNCÜ şekli: `git diff --stat` bir RESTORE KONTROLÜ DEĞİLDİR
+
+NC koşucusunun ilk sürümü araç zaman aşımıyla **SIGTERM** aldı, `finally` koşmadı ve ağacı
+**NC-4 yamalı** bıraktı. Hemen `git status --porcelain` + `git diff --stat` koştum ve **temiz
+göründü** — çünkü eksik satır *bu slice'ın kendi eklediği* satırdı, yani diff hâlâ yalnız
+"insertions" raporluyordu. Sonraki iki NC turu **doğrulanmamış bir tabana karşı** ölçüldü ve
+sayıları **geçersizdi**; gördüğüm kırmızı bir kusur değil **NC-4'ün kendisiydi**.
+
+**Ders:** yamalayan bir kontrol harness'i, geri yüklemeyi **bayt düzeyinde** doğrulamalı
+(`sha256` karşılaştırması) — bir diff özeti, silinen satırın kendisi henüz commit edilmemişse
+onu **göremez**. NC'ler bu muhafızla (+ SIGTERM/SIGINT handler + `atexit`) **baştan yeniden
+koşuldu**; yukarıdaki tablonun tamamı doğrulanmış tabana aittir, ve her turda `restore_ok=True`.
+
+### DÜRÜST SINIR
+
+* **§Ön koşul PRE-1 KOŞULMADI.** Karar belgesi *"bu sorgu ilk gerçek deploy'da koşulur; sonuç
+  `0` değilse `(b2)` imzası yeniden değerlendirilir"* diyor. Bu depoda hâlâ **0 tag / 0 release /
+  0 deploy eden workflow** var (ADIM 124'ün birebir ölçümü) → *"üretim"* gözlenebilir bir olay
+  değil. **`(b2)` bu yüzden "doğrulanmış" SAYILAMAZ**; sayı **alınmadı ve İKAME EDİLMEDİ**.
+* **`RD-09.c4` `partial` KALDI** — §Karar 3 = `A`. Kabul borcu defterine ve **hiçbir tavana
+  dokunulmadı**. Kriter artık kapatılabilir hâle geldi (üretimin ürettiği bir ref var), ama onu
+  kapatmak bir **kabul borcu slice'ıdır**, bu değil.
+* **#703 KAPATILMADI** ve durumu değiştirilmedi — insan kararı.
+* **Frontend'e sıfır satır** dokunuldu → frontend kapıları **koşulmadı**.
+* `queries/funding.py` ve `domain/research_data/time_policy.py` **EL DEĞMEDİ** — kural
+  değişmedi, ona uyan veri artık üretimde doğuyor.
+* **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+* Toplanan backend testi **3904 → 3909** (372 → 373 dosya): yeni `(b2)` dosyası **4**,
+  `test_readiness_research_production_shape.py` **3 → 4**. Üretilmiş olgular tazelendi
+  (ADIM 60'ın dersi). **Geçen sayının ve coverage'ın otoritesi bir CI koşusudur.**
+* OpenAPI değişmezliği **iddia edilmedi, ölçüldü**: uygulamanın şeması ile
+  `docs/openapi.json` sıralı JSON karşılaştırmasında **birebir aynı**.

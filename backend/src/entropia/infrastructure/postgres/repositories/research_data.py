@@ -54,6 +54,10 @@ async def create_research_dataset(
     provider_name: str | None = None,
     usage_scope: UsageScope | None = None,
     linked_market_dataset_revision_id: str | None = None,
+    # Pinned beside the link, never derived downstream: `instrument_mapping_is_valid`
+    # requires the two halves to be COHERENT, so whoever writes the link owns the ref.
+    # Defaults to None so a caller that pins no link stays coherent (both empty).
+    instrument_mapping_ref: str | None = None,
     revision_state: ResearchRevisionState = ResearchRevisionState.DRAFT,
     lifecycle_state: str | None = "active",
 ) -> tuple[EntityRegistry, ResearchDatasetRevision]:
@@ -91,6 +95,7 @@ async def create_research_dataset(
         provider_name=provider_name,
         usage_scope=usage_scope,
         linked_market_dataset_revision_id=linked_market_dataset_revision_id,
+        instrument_mapping_ref=instrument_mapping_ref,
         payload=payload,
         content_hash=content_hash(payload),
         created_by_principal_id=created_by_principal_id,
@@ -115,6 +120,7 @@ async def append_research_dataset_revision(
     provider_name: str | None = None,
     usage_scope: UsageScope | None = None,
     linked_market_dataset_revision_id: str | None = None,
+    instrument_mapping_ref: str | None = None,
 ) -> ResearchDatasetRevision:
     """Insert revision N+1, advance the head pointer + row_version."""
     prior_no = await _max_revision_no(session, root.entity_id)
@@ -132,6 +138,7 @@ async def append_research_dataset_revision(
         provider_name=provider_name,
         usage_scope=usage_scope,
         linked_market_dataset_revision_id=linked_market_dataset_revision_id,
+        instrument_mapping_ref=instrument_mapping_ref,
         payload=payload,
         content_hash=content_hash(payload),
         created_by_principal_id=created_by_principal_id,

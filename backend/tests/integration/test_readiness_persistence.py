@@ -85,6 +85,11 @@ async def _seed_market_revision(session, state: MarketRevisionState) -> None:
                 payload={},
                 content_hash="a" * 64,
                 created_by_principal_id="user_1",
+                # GH #703 (signed 2026-08-31): a market revision naming no instrument
+                # can no longer be a research link source, so a hand-seeded one that
+                # omits this is a shape production refuses -- not a neutral fixture.
+                # Matches ``_strategy_payload``'s own ``data.instrument_id`` pin.
+                instrument_id="BTCUSDT",
             )
         )
         root.current_revision_id = "md_rev_1"

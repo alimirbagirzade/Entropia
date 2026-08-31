@@ -69,6 +69,9 @@ async def _market_dataset(session, key: str | None = None):
         market_data_type=MarketDataType.OHLCV,
         payload={"instrument": "DEMO"},
         title="Demo",
+        # GH #703 §Karar 1a = `(b2)` (signed 2026-08-31): a market revision naming
+        # no instrument can no longer be a research link source.
+        instrument_id="DEMO",
         idempotency_key=key,
     )
 

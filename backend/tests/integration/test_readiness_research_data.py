@@ -95,6 +95,15 @@ async def _seed_research_revision(
     revision.available_time_policy = available_time_policy
     revision.available_delay_seconds = None
     revision.validation_status = validation_status
+    # GH #703 §Karar 2 = `A` (signed 2026-08-31): pull the seed to the production shape.
+    # Before the writer landed, this helper set NEITHER half, and the coherence rule
+    # calls "neither" coherent -- so six green cases here were consistent with the very
+    # defect ADIM 140 measured. Both halves are now what ``create_research_dataset``
+    # leaves behind: the link points at the market revision ``_strategy_payload`` pins
+    # (equal, so the sibling DEPENDENCY_BLOCKED cannot fire) and the mapping ref is that
+    # revision's own ``instrument_id``, copied.
+    revision.linked_market_dataset_revision_id = "md_rev_1"
+    revision.instrument_mapping_ref = "BTCUSDT"
     await session.flush()
 
 

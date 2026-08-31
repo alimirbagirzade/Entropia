@@ -20149,3 +20149,116 @@ Run `33360933696`, 23/23 rota, **23 farklı kanıt satırı**, hepsi `401 (Unaut
 * Tavanlara, `armed`'a, `do_not_tighten`'a **dokunulmadı**.
 * Backend kapıları **koşulmadı** (backend'de sıfır satır) → otorite **CI**.
 * **A-08 (#514) AÇIK** — tek blocker, `human-only`, çıkış kriterleri 0/4.
+
+---
+
+## ADIM 147 — ADIM 146'NIN AÇIK BIRAKTIĞI AYIRT EDİCİ SORU ÖLÇÜLDÜ: KAPI 23 ROTANIN 23'ÜNÜ DE OTURUMSUZ PUANLIYOR
+
+**Taban** `origin/main` @ `5e766910` (ADIM 146). **İki dosya**:
+`frontend/e2e/specs/21-lighthouse.spec.ts` + `frontend/e2e/lighthouse-baseline.json`.
+**Ürün kodunda SIFIR SATIR** (`backend/`, `frontend/src`, `alembic` el değmedi) · migration
+**YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · **`floors` / `armed` /
+`policy` EL DEĞMEDİ** → kapının davranışı **bayt bayt aynı**. **Blocker DEĞİŞMEDİ
+(1 — yalnız A-08) → BLOCKED.**
+
+### Neden bu slice
+
+ADIM 146 `errors-in-console`'u teşhis edilebilir kıldı ve kendi kickoff'unda **tek bir
+soruyu açık bıraktı**: *"Lighthouse'un KENDİ SEKMESİ oturumu taşıyor mu?"* — ve o sorunun
+neden taşıyıcı olduğunu da yazdı: **düzeltmenin HARNESS'ta mı ÜRÜNDE mi olduğuna karar
+veren ölçüm budur.** Bu slice o ölçümü yaptı. **Düzeltme değil, ölçüm** (kullanıcının
+seçtiği şıkkın kendi metni).
+
+### ASIL BULGU — TAŞIMIYOR, VE ZİNCİR ALTI HALKADA KAYNAKTAN KANITLANDI
+
+| # | halka | kanıt |
+|---|---|---|
+| 1 | spec token'ı **Playwright'ın kendi context'ine** yazar | `21-lighthouse.spec.ts` `browser.newContext()` + `ensureAdmin(page)` |
+| 2 | `lighthouse(url, {port}, cfg)` **`page` argümanı olmadan** çağrılır | aynı dosya, `runOnce` |
+| 3 | `page` yoksa lighthouse **kendi sekmesini açar** | `lighthouse@13.4.1` `core/gather/navigation-runner.js:278-282` → `puppeteer.connect({browserURL}).newPage()` |
+| 4 | puppeteer `newPage()` → `#defaultContext` | `puppeteer-core` `cdp/Browser.js:204` |
+| 5 | default context'in id'si **`undefined`** → `Target.createTarget`'ta **`browserContextId` GÖNDERİLMEZ** | `cdp/Browser.js:76` + `:211-213` |
+| 6 | o partisyon token'ı **görmüyor** | probe: aynı anahtar Playwright context'inde `"PROBE-TOKEN-123"`, default context'te **`null`** |
+
+**Ölçüm uygulamadan BAĞIMSIZ yapıldı** — sentetik bir origin üzerinde, Entropia hiç
+devrede değil; soru Chromium'un **depolama bölümlemesi**, ürünün davranışı değil. Yerel
+stack'i sürmeyi iki oturum boyunca yenen sorun böylece tamamen atlandı.
+
+**`disableStorageReset: true` gerekli ama YETERLİ DEĞİL** — Lighthouse'un zaten
+göremeyeceği bir depolamayı temizlemesini engelliyor, o kadar.
+
+**Yan gözlem, illüzyonun neden bu kadar yaşadığını açıklıyor:** `connectOverCDP` **tek
+bir context** raporluyor ve o context'in `pages()`'i **iki sayfayı birden** listeliyor —
+biri token'lı, biri `null`. Aracın kendi görünümü iki partisyonu tek kaba katlıyor.
+
+### ADIM 146'NIN BİR ÇIKARIMI DÜZELTİLDİ (gözlemi değil)
+
+ADIM 146 *"rotalar aynı ekranı render etmiyor (23 farklı LCP, 8 farklı CLS) → 'hepsi
+oturumsuz kabuk' okuması **desteklenmiyor**"* demişti. **Gözlem doğru, çıkarım fazlaydı:**
+SPA'nın anonim → `/login` yönlendirmesi **yok** (bu depo o kararı kendi kaydında taşıyor),
+dolayısıyla 23 **farklı** oturumsuz kabuk 23 farklı LCP üretir. İki ölçüm çelişmiyor.
+ADIM 146'nın kaydı **donmuş kayıttır ve değiştirilmedi**; düzeltme burada.
+
+### SEVK EDİLEN — bir düzeltme değil, artefaktın kendi provenance'ı
+
+`lighthouseTabSeesSession()`: Lighthouse'un açtığı sekmenin **aynısını** açar (aynı port,
+aynı `127.0.0.1` — lighthouse'un kendi `DEFAULT_HOSTNAME`'i de `127.0.0.1`, ölçüldü) ve
+oturumun oradan görünüp görünmediğini **her koşuda** sorar. Sonuç:
+
+* `lighthouse-results.json` → `conditions.session_carried_into_lighthouse_tab` (**boolean**)
+* `false` iken bir `::warning::` — **kapı DEĞİL**
+* `expect(sessionCarried).not.toBeNull()` — probe hiç koşmadıysa **kırmızı**
+
+**Neden kapı değil:** bugünkü tavanlar **aynı oturumsuz dünyada** donduruldu; kırmızıya
+çevirmek main'i, tavanların zaten kodladığı bir kusur için kırmızı yapardı. Sessizce
+geçmek ise 23 rota skorunun uygulamaymış gibi okunmasına devam etmek olurdu. Uyarı +
+kayıtlı alan dürüst orta yol. **`null` ile `false` bilerek ayrı**: *"oturumsuz puanladık"*
+ile *"kimse sormadı"* farklı iddialardır.
+
+**Neden sabit değil, canlı probe:** cevap kurulu Playwright/Lighthouse/puppeteer üçlüsünün
+bir özelliği. Biri değiştiği gün koşu bunu **söyler**, bir yorum sessizce bayatlamaz.
+
+### `lighthouse-baseline.json` — bir PROVENANCE YALANI düzeltildi
+
+`provenance.conditions` **`"Admin session"`** diyordu. Bu, ölçüldüğü an bile
+karşı-olgusaldı. Düzeltildi ve gerekçesi `session_state_2026_08_31` anahtarında (ADIM
+124/145'in tarihli-anahtar biçimi). **Tavanlar YANLIŞ DEĞİL** — adı konmamış bir dünyanın
+tavanlarıydı; `session_carried_into_lighthouse_tab: false` raporlayan her koşuyla
+karşılaştırılabilir kalırlar, **oturumlu bir koşuyla KARŞILAŞTIRILAMAZLAR**.
+
+### NEGATİF KONTROL — sevk edilen fonksiyonun KENDİ METNİ, iki dünyada
+
+Fonksiyon yeniden yazılmadı: **kaynaktan `awk` ile kesilip** koşuldu.
+
+| dünya | token nerede | `lighthouseTabSeesSession()` |
+|---|---|---|
+| **sevk edilen** | yalnız Playwright context'i | **`false`** |
+| **harness düzeltilmiş** | default context'te de var | **`true`** |
+
+⇒ fonksiyon **sabit değil**, iki dünyayı ayırt ediyor ve harness düzeltildiği gün
+**kendiliğinden** `true`'ya döner. Ayrıca **mid-flight güvenliği ölçüldü**: probe'un
+`connectOverCDP` + `close()`'u çağıranın tarayıcısını, context'ini ve sayfasını sağlam
+bırakıyor (`browser.isConnected() === true`, token yerinde) ve Playwright context'inin
+`pages()` sayısını **hiç değiştirmiyor** (1 → 1).
+
+### DÜRÜST SINIR
+
+* **#677 KAPATILMADI** ve `errors-in-console` **DÜZELTİLMEDİ**. Bu slice yalnız
+  **hangi dünyada** ölçüldüğünü söyler.
+* **HARNESS DÜZELTİLMEDİ.** Düzeltmek 23 rotanın **hepsinin** skorunu oynatır ve
+  tavanların **CI'dan** yeniden dondurulmasını zorunlu kılar (`sensitivity_boundary`:
+  asla geliştirici makinesinden) → **ayrı slice**.
+* **İDDİA EDİLMEYEN:** uygulamanın oturum **açıkken** konsol hatası olmadığı. `#677`'nin
+  `errors-in-console` kesintisi oturumsuz kabuğun bir özelliğidir; oturumlu dünyada da
+  geçerli mi **ÖLÇÜLMEDİ**.
+* **Tavanlara, `armed`'a, `do_not_tighten`'a, `policy`'ye dokunulmadı** (JSON diff ile
+  kanıtlandı: `floors`/`armed`/`policy`/`_README` **birebir aynı**).
+* Spec **yerelde uçtan uca koşulmadı** — seeded Compose stack + Lighthouse ister; ölçüm
+  bilerek ondan **bağımsız** kuruldu. Sevk edilen probe'un canlı kanıtı **PR'ın kendi CI
+  koşusudur**.
+* Backend kapıları **koşulmadı** (backend'de sıfır satır) → otorite **CI**.
+  Frontend `src` **el değmedi** → vitest etkilenmiyor; e2e'nin gerçek kapısı
+  `npx tsc --noEmit -p e2e/tsconfig.json` (ADIM 108) **koşuldu, temiz**; eslint temiz.
+* Üretilmiş olgular **bayatlamadı** — generator'ın kendi regex'iyle yeniden sayıldı:
+  E2E call sites **84 in 22 specs**, değişmedi (yeni `test(` eklenmedi).
+* **A-08 (#514) AÇIK** — tek blocker.

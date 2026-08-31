@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 146 landed — Lighthouse raporu kesintinin adını taşıyıp içeriğini atıyordu
 
 ## Nerede olduğumuz

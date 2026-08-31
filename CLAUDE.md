@@ -271,6 +271,37 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`floors`/`armed`/`policy`
+> EL DEĞMEDİ** (kapı davranışı bayt bayt aynı) · **ÜRÜN KODUNDA SIFIR SATIR**. **Son dalga —
+> ADIM 147 (GH #677 Faz 2: ADIM 146'nın açık bıraktığı ayırt edici soru ÖLÇÜLDÜ).**
+> **CEVAP: Lighthouse'un kendi sekmesi oturumu TAŞIMIYOR → kusur ÜRÜNDE değil HARNESS'ta;
+> kapı 23 rotanın 23'ünü de OTURUMSUZ puanlıyor** ve tavanlar (ADIM 145'in `seo` 82→100'ü
+> dahil) **o dünyada** donduruldu. Zincir **altı halkada kurulu paketlerin KAYNAĞINDAN**
+> kanıtlandı: `browser.newContext()` ayrı context (token oraya yazılır) → `lighthouse(...)`
+> **`page`'siz** çağrılır → `navigation-runner.js:278-282` `puppeteer.connect(...).newPage()`
+> → `cdp/Browser.js:204` `#defaultContext` → `:76`+`:211-213` `Target.createTarget`
+> **`browserContextId` GÖNDERMEDEN** → o partisyon **`null`** okur. **`disableStorageReset`
+> gerekli ama YETERLİ DEĞİL.** Ölçüm **uygulamadan BAĞIMSIZ** kuruldu (sentetik origin) —
+> yerel stack'i iki oturum yenen sorun atlandı. **ADIM 146'nın bir ÇIKARIMI düzeltildi
+> (gözlemi değil):** anonim→`/login` yönlendirmesi **yok**, yani 23 **farklı** oturumsuz
+> kabuk 23 farklı LCP üretir; donmuş kayıt **değiştirilmedi**. Sevk edilen bir düzeltme
+> değil **provenance**: `lighthouseTabSeesSession()` her koşuda
+> `conditions.session_carried_into_lighthouse_tab`'ı yazar, `false`'ta `::warning::` verir,
+> probe hiç koşmadıysa **kırmızı** (`null` ≠ `false`, bilerek) — **kapı DEĞİL**, çünkü
+> kırmızıya çevirmek main'i tavanların zaten kodladığı bir kusur için kırmızı yapardı.
+> `lighthouse-baseline.json`'ın `provenance.conditions`'ındaki **`"Admin session"` bir
+> PROVENANCE YALANIYDI**, düzeltildi (`session_state_2026_08_31`). **NC: fonksiyonun KENDİ
+> METNİ kaynaktan kesilip iki dünyada koşuldu** → sevk edilende `false`, düzeltilmişte
+> `true` ⇒ sabit değil. **DÜRÜST SINIR: #677 KAPATILMADI, HARNESS DÜZELTİLMEDİ** (düzeltmek
+> 23 skoru oynatır + tavanların **CI'dan** yeniden dondurulmasını zorunlu kılar → ayrı
+> slice) · **iddia EDİLMEYEN: oturum açıkken konsol hatası olmadığı — ÖLÇÜLMEDİ** · spec
+> yerelde uçtan uca koşulmadı (canlı kanıt PR'ın kendi CI'ı) · üretilmiş olgular bayatlamadı
+> (E2E call sites **84/22**, generator'ın kendi regex'iyle). **A-08 (#514) AÇIK, blocker
+> DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 147 · `docs/ADIM147_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **DEĞİŞMEDİ** · OpenAPI **değişmedi** · golden **el değmedi** · **`backend/src`'te SIFIR
 > SATIR** · `frontend/src` **sıfır satır**. **Son dalga — ADIM 144 (GH #536 md. 2'nin
 > KALANI: `most_conservative` tie-break'i + `first_trigger_wins` yapısal dışlaması).**

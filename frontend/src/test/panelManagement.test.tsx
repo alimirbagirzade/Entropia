@@ -162,6 +162,15 @@ describe("Panel / Management page", () => {
       expect(slot.textContent).toMatch(/Loading /);
     }
 
+    // ADIM 151: the gate now scores the SIGNED-IN app (ADIM 150), where each
+    // card settles to a different, shorter height than the old shared 244px —
+    // so the reserve is per card, and losing a modifier silently brings back
+    // that card's settle-shift while the Lighthouse floor (93, do_not_tighten)
+    // stays green. Pin each one.
+    for (const modifier of ["users", "actors", "matrix"]) {
+      expect(document.querySelector(`.panel-card-async--${modifier}`)).not.toBeNull();
+    }
+
     // Reservation is a loading-only concern: once settled the real body sets the
     // height, so the class must not linger and silently floor a short card.
     expect(await screen.findByText("alice")).toBeInTheDocument();

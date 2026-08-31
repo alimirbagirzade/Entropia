@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 150 landed — Lighthouse artık OTURUM AÇIK ölçüyor; #677'nin baş kesintisi bir HARNESS ARTEFAKTI çıktı
 
 ## Nerede duruyoruz

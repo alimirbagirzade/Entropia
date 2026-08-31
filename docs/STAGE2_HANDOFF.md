@@ -10767,3 +10767,41 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 150 · `docs/ADIM150_LANDED_KICKOFF
 3. **`RD-09.c4`** hâlâ kapatılabilir bir **kabul borcu** slice'ı (tavan oynatır).
 4. **İmza kalemleri:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · #582 (öncülü bayat) ·
    **#514 A-08 — tek blocker, `human-only`**.
+
+## Stage 151 — oturum açık CLS dört rotada kaynağında düzeltildi (bu PR)
+
+**MIGRATION YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** ·
+**backend'de SIFIR SATIR** · `floors`/`armed`/`policy` **el değmedi**. Ürün: beş frontend dosyası,
+hepsi **yalnız loading dalları** (presentation-only).
+
+CI'ın kendi Compose+seed dünyası İLK KEZ yerelde kuruldu ve **doğrulandı** (yerel maks geçişler ↔ CI:
+0.1475↔0.165 · 0.0949↔0.096 · 0.0680↔0.068 · 0.0581↔0.059; kontrol mainboard 0.0265↔0.027).
+Layout Instability `sources` probe'u suçluları ADLANDIRDI: panel-management'te ADIM 148'in 244px
+rezervi **oturumsuz settled** değeriydi — oturum açık dünyada kartlar daha kısa oturuyor ve
+**rezervin kendisi shift kaynağı olmuştu** (306→174/118/237); library/future-dev'de kartlar otururken
+**büyüyor**; create-package'ta loading settled'dan **büyük** (min-height çare olamaz → kompakt markup).
+
+Sevk edilen: `.panel-card-async` kart başına ölçülmüş modifier'lar (`--users 112 · --actors 56 ·
+--matrix 175 · --capabilities 322 · --library-pool 610`) + CP şeridinde tek satırlık
+`role="status"` loading. **Sonrası aynı harness'ta: dört rota ≤ 0.0021, kontrol bayt bayt aynı.**
+Kapı koruyamaz (tavanlar düzeltme-sonrası skorların altında, do_not_tighten) → `clsReserves.test.tsx`
+(3 DOM muhafızı + kaynak-düzeyi değer pini) + `panelManagement.test.tsx` modifier pinleri.
+**Beş NC, beşi tam-1-kırmızı, restore sha256; BİR NC REDDEDİLDİ** (`?raw` import boş dize döndü →
+pin iki dünyada da kırmızıydı = bozuk enstrüman; fs-okumasına çevrildi).
+
+**DÜRÜST SINIR:** skorların otoritesi CI; tavan oynatılmadı ve CI'daki iyileşme önerisi
+**REDDEDİLECEK** (tek koşuyla sıkıştırma yok) · oturumsuz kabukta küçülme-shift'i yerine
+büyüme-shift'i takası var (ölçülmedi, kapı o dünyayı puanlamıyor; CSS yorumunda yazılı) ·
+mainboard'un kendi 0.0265'i ölçüldü, alınmadı (performance 100) · **#677 KAPATILMADI** (kalan tek
+kalemi bu slice düzeltti; kapatmak insan kararı) · backend kapıları koşulmadı.
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 151 · `docs/ADIM151_LANDED_KICKOFF.md`.
+
+## Next: **#677 kapanış kararı (insan) + RD-09.c4 ya da imza kalemleri**
+
+1. **#677 kapatılabilir mi** — dört kesintinin dördü de artık ele alındı (meta-description +
+   robots-txt ADIM 145 · errors-in-console ADIM 150'de harness artefaktı çıktı · oturum açık CLS
+   **ADIM 151'de düzeltildi**; CI'daki post-merge Lighthouse koşusu dört rotada iyileşmeyi
+   raporlamalı). **İnsan kararı.**
+2. **`RD-09.c4`** — kapatılabilir kabul borcu slice'ı (tavan oynatır, ratchet yeniden dondurulur).
+3. **İmza kalemleri:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · #582 (öncülü bayat) ·
+   **#514 A-08 — tek blocker, `human-only`**.

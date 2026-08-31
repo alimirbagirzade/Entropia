@@ -78,10 +78,12 @@ function UsersCard() {
         Registered users
       </h3>
       {users.isLoading ? (
-        // Reserved height, not decoration: without it this body grows 166 -> 244px
-        // when the query lands and shoves every card below it down the page. See
-        // .panel-card-async in global.css for the measurement.
-        <div className="panel-card-async">
+        // Reserved height, not decoration - and PER CARD since ADIM 151: the
+        // gate now scores the signed-in app (ADIM 150), where this card SETTLES
+        // SHORTER than the old shared 244px reserve, so the settle itself became
+        // the layout shift. Each modifier pins the measured signed-in settled
+        // body height; see .panel-card-async in global.css for the measurement.
+        <div className="panel-card-async panel-card-async--users">
           <Loading label="Loading user registry…" />
         </div>
       ) : users.isError ? (
@@ -233,7 +235,7 @@ function SystemActorsCard() {
         System actors
       </h3>
       {actors.isLoading ? (
-        <div className="panel-card-async">
+        <div className="panel-card-async panel-card-async--actors">
           <Loading label="Loading system actors…" />
         </div>
       ) : actors.isError ? (
@@ -281,7 +283,7 @@ function RoleMatrixCard() {
         Role scope matrix
       </h3>
       {matrix.isLoading ? (
-        <div className="panel-card-async">
+        <div className="panel-card-async panel-card-async--matrix">
           <Loading label="Loading role matrix…" />
         </div>
       ) : matrix.isError ? (

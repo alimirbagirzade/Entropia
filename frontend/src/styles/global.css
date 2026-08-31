@@ -1517,15 +1517,42 @@ p a { text-decoration: underline; }
    deduction was one 25-weight CLS audit whose named node was the System actors
    card sliding down (evidence in lighthouse-report/lighthouse-results.json).
 
-   244px is MEASURED, not chosen: at 1440x900 the three cards' bodies render
-   166px while loading and 244px once settled - 78px of growth each, 234px of
-   downward push in total. Reserving the settled height removes the jump for the
-   loading -> settled transition instead of hiding it.
+   Every value below is MEASURED, not chosen - and measured in the world the
+   Lighthouse gate actually scores. The original 244px was the SESSIONLESS
+   settled height (ErrorState after the 401): correct while the gate scored the
+   signed-out shell (ADIM 148), wrong once ADIM 150 made the gate log in. In the
+   signed-in seeded world the settled bodies are SHORTER than 244px, so the same
+   reserve that deleted the sessionless jump became the jump: each card shrank
+   on settle and pulled everything below it up (measured via layout-shift
+   sources at 1440x900: users 306->174, actors 306->118, matrix 306->237 card
+   heights - the whole logged-in CLS of /panel/management).
 
-   min-height, never height: a settled body taller than this (the authenticated
-   tables) still grows normally. This shrinks the jump; it does not claim to
-   delete it, and nothing here changes what a settled card looks like. */
-.panel-card-async { min-height: 244px; }
+   So the reserve is now PER CARD, sized to that card's signed-in settled body:
+   loading and settled render the same height and the settle moves nothing. The
+   compact .state override exists because the spinner block's natural height
+   (~163px with its default 56px padding) is taller than the smallest reserves;
+   without it min-height could only grow, never match.
+
+   min-height, never height: a settled body taller than the reserve (more rows
+   than the seeded world) still grows normally. Nothing here changes what a
+   settled card looks like - the class lives only on loading branches.
+
+   Honest boundary: these values encode the signed-in SEEDED heights. In the
+   sessionless shell the settled ErrorState (~244px) is now taller than the
+   loading reserve, so that unmeasured world trades a shrink-jump for a
+   grow-jump. The gate scores only the signed-in world (ADIM 150 hard gate). */
+.panel-card-async {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 244px;
+}
+.panel-card-async > .state { padding: 4px 24px; }
+.panel-card-async--users { min-height: 112px; }
+.panel-card-async--actors { min-height: 56px; }
+.panel-card-async--matrix { min-height: 175px; }
+.panel-card-async--capabilities { min-height: 322px; }
+.panel-card-async--library-pool { min-height: 610px; }
 
 /* ---- v18 Panel: Management / Logs work-context tabs (doc 19, mockup Panel dropdown) ---- */
 .panel-tabs {

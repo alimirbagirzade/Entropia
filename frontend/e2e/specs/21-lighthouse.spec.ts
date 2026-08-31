@@ -44,6 +44,12 @@
 //    reproduce a real slow device, and the score is only comparable inside its
 //    own runner class — exactly the constraint docs/performance/README.md
 //    section 2 records for the load baseline.
+//  * WHOSE SESSION IT SCORES. Lighthouse opens its own tab, and that tab does
+//    not necessarily carry the login this file performs. The run MEASURES which
+//    world it scored and reports it as
+//    `conditions.session_carried_into_lighthouse_tab`; the DEBUG_PORT note below
+//    carries the measured chain. A score is only comparable to a floor frozen in
+//    the SAME world, so this flag is provenance, not decoration.
 
 import { chromium, test, expect, type Browser, type Page } from "@playwright/test";
 import * as fs from "node:fs";
@@ -62,10 +68,63 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:8080";
 
 // Chosen, not defaulted: Lighthouse needs the DevTools HTTP endpoint (a port),
 // which Playwright does not expose from `browser.wsEndpoint()`. The browser is
-// launched with an explicit debugging port and both tools drive the same
-// profile, so the localStorage session token written by `ensureAdmin` is still
-// there when Lighthouse opens its own tab (`disableStorageReset` below).
+// launched with an explicit debugging port and Lighthouse attaches to it.
+//
+// WHAT THIS COMMENT USED TO CLAIM, AND WHY IT WAS WRONG. It said "both tools
+// drive the same profile, so the localStorage session token written by
+// `ensureAdmin` is still there when Lighthouse opens its own tab". Same PROFILE,
+// yes — same BROWSER CONTEXT, no, and localStorage is partitioned per context.
+// Measured end to end against the installed packages, not inferred:
+//   1. `browser.newContext()` below makes a SEPARATE context; `ensureAdmin`
+//      writes the token there.
+//   2. `lighthouse(url, {port}, cfg)` is called with no `page` argument, so
+//      lighthouse@13.4.1 `core/gather/navigation-runner.js:278-282` takes the
+//      `puppeteer.connect({browserURL}).newPage()` path.
+//   3. puppeteer-core `cdp/Browser.js:204` sends that to `#defaultContext`,
+//      constructed at `:76` with an id of `undefined`, so `:211-213` issues
+//      `Target.createTarget` with NO `browserContextId` — the DEFAULT context.
+//   4. A tab opened exactly that way reads the key back as `null` while the
+//      Playwright context still reads the token. (ADIM 147 probe.)
+// `disableStorageReset: true` is therefore necessary but NOT sufficient: it
+// stops Lighthouse from clearing storage it was never going to see.
+//
+// The consequence is measured and reported, not fixed here: every route is
+// scored SIGNED OUT. Fixing it moves all 23 scores and forces a floor
+// re-freeze from CI, which is a separate slice.
 const DEBUG_PORT = Number(process.env.LH_DEBUG_PORT ?? 9222);
+
+// The key `frontend/src/lib/session.ts` stores the bearer token under. Read
+// here, never written — the probe below only asks whether a tab can see it.
+const SESSION_TOKEN_KEY = "entropia.sessionToken";
+
+/**
+ * Opens a tab the same way Lighthouse does — over the DevTools port, in the
+ * default browser context — and reports whether the login is visible from it.
+ *
+ * Deliberately a live probe and not a constant: the answer is a property of the
+ * installed Playwright/Lighthouse/puppeteer trio, and the day one of them
+ * changes, this run says so instead of a comment quietly going stale. Measured
+ * safe mid-flight: the connect/disconnect leaves the caller's own browser,
+ * context and page untouched.
+ */
+const lighthouseTabSeesSession = async (): Promise<boolean> => {
+  const viaCdp = await chromium.connectOverCDP(`http://127.0.0.1:${DEBUG_PORT}`);
+  try {
+    const probe = await viaCdp.contexts()[0].newPage();
+    try {
+      await probe.goto(new URL("/", BASE_URL).toString());
+      const token = await probe.evaluate(
+        (key: string) => window.localStorage.getItem(key),
+        SESSION_TOKEN_KEY,
+      );
+      return token !== null;
+    } finally {
+      await probe.close();
+    }
+  } finally {
+    await viaCdp.close();
+  }
+};
 
 // accessibility is deliberately absent — see the authority note in the header.
 const CATEGORIES = ["performance", "best-practices", "seo"] as const;
@@ -281,8 +340,16 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
     };
 
     const results: RouteScores[] = [];
+    // `null` means the probe never ran. Kept distinct from `false` on purpose:
+    // "we scored signed out" and "nobody asked" are different claims, and the
+    // assertion below refuses to let the second one pass as the first.
+    let sessionCarried: boolean | null = null;
     try {
       await ensureAdmin(page);
+
+      // Which world are the scores below measured in? Asked BEFORE the warm-up
+      // so the answer describes the same browser every route is scored against.
+      sessionCarried = await lighthouseTabSeesSession();
 
       // Warm-up, discarded: the first Lighthouse run of a process pays for V8
       // warm-up, the browser's first paint of the bundle and a cold HTTP cache.
@@ -349,6 +416,11 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
             throttling: "simulate, cpuSlowdownMultiplier 1",
             max_wait_for_load_ms: MAX_WAIT_FOR_LOAD_MS,
             accessibility_category: "NOT RUN — axe-core is the shipped authority",
+            // Which world the numbers above describe. `false` means every route
+            // was scored SIGNED OUT, so the deductions and metrics belong to the
+            // shell, not to the authenticated app — and a floor frozen from this
+            // run may only ever be compared with another `false` run.
+            session_carried_into_lighthouse_tab: sessionCarried,
           },
           routes: results,
         },
@@ -383,6 +455,30 @@ test.describe("@lighthouse Lighthouse ratchet — every audited route", () => {
       return `${c}: worst repeat spread ${worst} point(s)`;
     }).join("\n  ");
     console.log(`\nlighthouse repeat spread over ${REPEATS} passes:\n  ${spread}`);
+
+    // ---- whose session did this run score? --------------------------------
+    // Not a gate. Today's floors were frozen in the signed-out world, so failing
+    // here would turn main red for a defect the floors already encode; and
+    // passing silently is what let 23 route scores read as the app ever since
+    // the floors were measured (baseline provenance: 2026-08-12T06:58:12Z).
+    // A warning plus a recorded field is the honest middle.
+    expect(
+      sessionCarried,
+      "the session probe never ran, so this run cannot say which world it " +
+        "scored — a report that omits that is the defect ADIM 146 fixed one " +
+        "level down (see conditions.session_carried_into_lighthouse_tab)",
+    ).not.toBeNull();
+    if (sessionCarried === false) {
+      console.log(
+        "\n::warning::Lighthouse scored every route SIGNED OUT. The tab it opens " +
+          "lives in the default browser context and cannot see the token " +
+          "`ensureAdmin` wrote into Playwright's context, so these scores, " +
+          "deductions and metrics describe the signed-out shell — including the " +
+          "errors-in-console deduction declared in GH #677. The frozen floors " +
+          "were measured in this same world and stay comparable; a harness fix " +
+          "moves all of them and must re-freeze from CI.",
+      );
+    }
 
     // ---- gate ------------------------------------------------------------
     if (!baseline.armed) {

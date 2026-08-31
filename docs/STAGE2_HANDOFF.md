@@ -10520,3 +10520,75 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 146 · `docs/ADIM146_LANDED_KICKOFF
 2. **CLS `panel-management`** — gerçek layout işi; tavanı **98'de BIRAK**.
 3. **İMZA kalemleri:** #703 (11 kutu) · #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum).
 4. **#582 BAYAT** — kapatmak insan kararı. **#514 A-08** — tek blocker.
+
+## Stage ADIM 147 — Lighthouse'un sekmesi oturumu TAŞIMIYOR: kapı 23 rotayı oturumsuz puanlıyor (PR sıra bekliyor)
+
+**Taban** `origin/main` @ `5e766910` (ADIM 146). İki dosya:
+`frontend/e2e/specs/21-lighthouse.spec.ts` + `frontend/e2e/lighthouse-baseline.json`.
+**Ürün kodunda SIFIR SATIR** · migration **YOK** · `ENGINE_VERSION` **değişmedi** ·
+OpenAPI **değişmedi** · **`floors`/`armed`/`policy`/`_README` EL DEĞMEDİ** (JSON diff ile
+kanıtlı) → kapı davranışı **bayt bayt aynı**. **Blocker DEĞİŞMEDİ (1 — yalnız A-08),
+BLOCKED.**
+
+ADIM 146 tek bir soruyu açık bırakmıştı ve neden taşıyıcı olduğunu da yazmıştı:
+**düzeltmenin harness'ta mı üründe mi olduğuna karar veren ölçüm buydu.** Ölçüldü.
+
+**ASIL BULGU — TAŞIMIYOR, zincir ALTI halkada kurulu paketlerin KAYNAĞINDAN kanıtlandı:**
+`browser.newContext()` ayrı bir context açar ve `ensureAdmin` token'ı **oraya** yazar →
+`lighthouse(url,{port},cfg)` **`page` argümanı olmadan** çağrılır →
+`lighthouse@13.4.1 core/gather/navigation-runner.js:278-282` `puppeteer.connect(...)
+.newPage()` yolunu alır → `puppeteer-core cdp/Browser.js:204` bunu `#defaultContext`'e
+yollar → `:76`'da id'si **`undefined`** kurulduğu için `:211-213` `Target.createTarget`'ı
+**`browserContextId` GÖNDERMEDEN** çağırır → o partisyon anahtarı **`null`** okur
+(Playwright context'i aynı anda token'ı okurken). **`disableStorageReset: true` gerekli
+ama YETERLİ DEĞİL.** Ölçüm **uygulamadan bağımsız** kuruldu (sentetik origin) — yerel
+stack'i sürmeyi iki oturum boyunca yenen sorun böylece atlandı.
+
+**ADIM 146'nın bir ÇIKARIMI düzeltildi (gözlemi değil):** *"23 farklı LCP → oturumsuz
+kabuk okuması desteklenmiyor"* — anonim → `/login` yönlendirmesi **yok**, yani 23 **farklı**
+oturumsuz kabuk 23 farklı LCP üretir. ADIM 146'nın donmuş kaydı **değiştirilmedi**.
+
+**Sevk edilen bir düzeltme değil, artefaktın PROVENANCE'ı:** `lighthouseTabSeesSession()`
+Lighthouse'un açtığı sekmenin aynısını açar (aynı port, aynı `127.0.0.1` — lighthouse'un
+kendi `DEFAULT_HOSTNAME`'i de o, ölçüldü) ve cevabı **her koşuda** rapora yazar
+(`conditions.session_carried_into_lighthouse_tab`), `false` iken `::warning::` verir,
+probe hiç koşmadıysa **kırmızıya döner** (`null` ≠ `false`, bilerek). **Kapı DEĞİL:**
+tavanlar aynı oturumsuz dünyada donduruldu, kırmızıya çevirmek main'i tavanların zaten
+kodladığı bir kusur için kırmızı yapardı. `lighthouse-baseline.json`'ın
+`provenance.conditions`'ındaki **`"Admin session"` ifadesi bir provenance yalanıydı** —
+düzeltildi, gerekçe `session_state_2026_08_31`'de.
+
+**NEGATİF KONTROL — fonksiyonun KENDİ METNİ, kaynaktan kesilip iki dünyada koşuldu:**
+sevk edilen şekilde **`false`**, harness düzeltilmiş şekilde **`true`** ⇒ sabit değil,
+düzeltildiği gün **kendiliğinden** döner. Mid-flight güvenliği ayrıca ölçüldü (probe'un
+connect/disconnect'i çağıranın tarayıcısını, context'ini ve `pages()` sayısını bozmuyor).
+
+**DÜRÜST SINIR: #677 KAPATILMADI, `errors-in-console` DÜZELTİLMEDİ, HARNESS DÜZELTİLMEDİ**
+(düzeltmek 23 skorun hepsini oynatır ve tavanların **CI'dan** yeniden dondurulmasını
+zorunlu kılar → ayrı slice) · **iddia EDİLMEYEN:** uygulamanın oturum açıkken konsol
+hatası olmadığı — **ölçülmedi** · spec yerelde uçtan uca **koşulmadı** (canlı kanıt PR'ın
+kendi CI koşusu) · backend kapıları koşulmadı (sıfır satır) → otorite CI · `frontend/src`
+el değmedi → vitest etkilenmiyor; e2e'nin gerçek tip kapısı
+`npx tsc --noEmit -p e2e/tsconfig.json` **koşuldu, temiz**, eslint temiz · üretilmiş
+olgular **bayatlamadı** (generator'ın kendi regex'iyle yeniden sayıldı: E2E call sites
+**84 in 22 specs**, değişmedi).
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 147 · `docs/ADIM147_LANDED_KICKOFF.md`.
+
+## Next: **ürün sahibinin bu oturumda verdiği sıra — (a) CLS · (b) #703 (kod) · (c) harness fix**
+
+1. **CLS `panel-management`** — gerçek layout işi; tavanı **98'de BIRAK** (`do_not_tighten`).
+2. **#703 uygulaması (KOD, artık imza kalemi DEĞİL)** — dört karar da **PR #886'da
+   İMZALI**: `(b)` linkten türet · `(b2)` fail-closed **düz** · `§2 = A` harness üretim
+   şekline çekilsin · `§3 = A` `RD-09.c4` bağlıdır. **#886 MERGE OLMADAN BAŞLAMA** —
+   imza otoritesi o belgede ve **ağaçta henüz yok** (main'de 11 kutu boş, ölçüldü).
+   Dördü **AYNI slice'ta**; `test_readiness_research_data`'nın iki testi **kasıtlı**
+   güncellenecek (bedel ADIM 140 NC-3'te ölçüldü). `RD-09.c4` **`partial` KALIR**,
+   tavanlar **el değmez**. **PRE-1** (üretimde bloklanacak satır sayımı) ilk gerçek
+   deploy'da koşulur — bugün ölçülemez (`0 tag / 0 release / 0 deploy workflow`).
+3. **Harness düzeltmesi (ADIM 147'nin açık bıraktığı)** — Playwright'ın sayfasını
+   **default context'e** almak (`launchPersistentContext`). **23 skorun HEPSİNİ oynatır**
+   ve tavanların **CI'dan yeniden dondurulmasını** zorunlu kılar (asla yerel koşudan —
+   `sensitivity_boundary`). Bu bir **slice**'tır, bir düzeltme satırı değil.
+4. **İMZA kalemleri:** #854 (9 kutu) · #534 (CLOSED ama kapanış yorumu YOK, 4 kutu) ·
+   #547 (0 yorum). **#582 BAYAT** — kapatmak insan kararı. **#514 A-08** — tek blocker.

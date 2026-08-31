@@ -292,16 +292,35 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
 
 ## §Karar 3 — `RD-09.c4` bu karara bağlanıyor mu?
 
+### Karar kutusu — **İMZALI: `A` EVET, BAĞLIDIR (2026-08-31)**
+
 `RD-09.c4` (funding-enabled bir RUN üzerinden research revizyon değişmezliği) bugün ancak
 `instrument_mapping_ref` **elle** set edilerek kurulabilir — ADIM 138'in kör noktasının aynısı.
 
-☐ **A — EVET, bağlıdır.** Karar 1 (b)/(c) inene kadar `RD-09.c4` `partial` kalır; kabul
+☑ **A — EVET, bağlıdır.** Karar 1 (b)/(c) inene kadar `RD-09.c4` `partial` kalır; kabul
   borcu defterine **dokunulmaz**.
 
 ☐ **B — HAYIR.** `RD-09.c4` elle set edilmiş bir ref üzerinde kapatılabilir sayılır.
   **Bedeli:** kriter, üretimin üretemeyeceği bir dünyada `covered` işaretlenir.
 
 ☐ **C — ŞİMDİ ÇÖZME, ADIYLA DEVRET.**
+
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** `B` reddedildi ve gerekçesi şıkkın kendi bedel cümlesinde yazılıydı:
+> `RD-09.c4`'ü **elle set edilmiş** bir ref üzerinde `covered` işaretlemek, kriteri
+> **üretimin üretemeyeceği bir dünyada** kapatmak olurdu — ADIM 138'in kör noktasının
+> ve ADIM 140'ın *"bir fixture'ın YAPMADIĞI şey de bir iddiadır"* dersinin birebir tekrarı.
+> Bu depo o şekli iki kez ölçtü; üçüncüsüne imza atılmadı.
+>
+> `C` (adıyla devret) konusuz kaldı: Karar 1, 1a ve 2 aynı gün imzalandı, devredilecek
+> açık bir soru yok.
+>
+> **SONUCU BİR KISITTIR, BİR İŞ DEĞİL:** `RD-09.c4` **`partial` KALIR** ve
+> `docs/audit/acceptance_coverage_baseline.json` ile borç defterine **DOKUNULMAZ** —
+> hiçbir tavan oynamaz. Kriter ancak `(b)` + `(b2)` uygulaması indikten **sonra**,
+> üretimin gerçekten ürettiği bir ref üzerinde kapatılabilir. Ratchet yalnız aşağı iner;
+> bu imza onu **yukarı oynatmaz**.
 
 ---
 
@@ -315,7 +334,10 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
   **Ön koşul PRE-1** (üretim sayımı) ilk deploy'da koşulmayı bekler. §Karar 2 ve §Karar 3
   **İMZASIZ**. **§Karar 2 2026-08-31'de `A` olarak İMZALANDI** — harness üretim şekline
   çekilecek ve `test_readiness_research_data`'nın iki testi **kasıtlı** güncellenecek;
-  bu PR'da **yapılmadı**, uygulama Karar 1 ile aynı slice'a aittir. **§Karar 3 İMZASIZ.**
+  bu PR'da **yapılmadı**, uygulama Karar 1 ile aynı slice'a aittir. **§Karar 3 2026-08-31'de `A` olarak İMZALANDI** — `RD-09.c4`
+  `partial` KALIR, kabul borcu defterine ve tavanlara **dokunulmaz**; kriter ancak `(b)` +
+  `(b2)` uygulaması indikten sonra, üretimin ürettiği bir ref üzerinde kapatılabilir.
+  **#703'ün DÖRT kararının DÖRDÜ de imzalı; kusur hâlâ DÜZELTİLMEDİ.**
 - **Frontend'e dokunulmadı**, frontend kapıları koşulmadı.
 - **Üretimde kaç research revizyonunun etkilendiği SAYILMADI** — bu bir üretim DB sorgusudur
   (`G15` §Ölçüm 3 ve #854 ile aynı sınır). Karar bu sayı olmadan verilebilir: Ölçüm 2 kusurun

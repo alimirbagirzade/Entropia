@@ -255,10 +255,12 @@ yazılır; **koşulmadan `(b2)` "doğrulanmış" sayılamaz.**
 
 ## §Karar 2 — Mevcut Ready Check harness'ı ne olacak?
 
+### Karar kutusu — **İMZALI: `A` HARNESS ÜRETİM ŞEKLİNE ÇEKİLSİN (2026-08-31)**
+
 NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_research_data`'nın
 **iki** testini kırar. O iki testin bugünkü yeşilliği, üretimin üretemeyeceği bir şekle dayanır.
 
-☐ **A — HARNESS ÜRETİM ŞEKLİNE ÇEKİLSİN.** Seeder link yazar; kırılan iki test **kasıtlı**
+☑ **A — HARNESS ÜRETİM ŞEKLİNE ÇEKİLSİN.** Seeder link yazar; kırılan iki test **kasıtlı**
   güncellenir. Yalnız Karar 1 (b)/(c) ile tutarlıdır — (a) altında o iki test kalıcı olarak
   `not_ready` olur ve konularını (usage-scope, warning-not-blocking) **ölçemez** hale gelir.
 
@@ -266,6 +268,27 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
   gelemez. (Bu slice'ın **sevk ettiği** durumdur; imza onu onaylar, değiştirmez.)
 
 ☐ **C — KARAR 1 ÇÖZÜLENE KADAR ERTELE.**
+
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** `A`, şıkkın kendi metnine göre **yalnız Karar 1 `(b)`/`(c)` ile tutarlıdır**
+> ve Karar 1 aynı gün `(b)` olarak imzalandı — yani bu imza bir tercih değil, verilmiş bir
+> kararın **zorunlu sonucudur**. `B` (harness olduğu gibi kalsın) `(b)` altında ADIM 140'ın
+> ölçtüğü ayrışmayı kalıcılaştırırdı: `_seed_research_revision`
+> `linked_market_dataset_revision_id`'yi **hiç set etmiyor**, dolayısıyla predicate
+> `False == False` ile *coherent* diyor ve **BLOCKER hiç doğmuyor** — üretimin
+> **üretemeyeceği** bir şekil. `C` (ertele) konusuz kaldı: Karar 1 çözüldü.
+>
+> **BEDELİ ÖLÇÜLDÜ, TAHMİN EDİLMEDİ.** NC-3 (ADIM 140, gerçek Postgres, izole DB):
+> seeder'a market linki eklemek `test_readiness_research_data`'nın **iki** testini kırar.
+> O iki testin bugünkü yeşilliği üretimin üretemeyeceği bir şekle dayanıyor, yani kırılma
+> bir regresyon değil **düzeltmenin kendisidir**; iki test **kasıtlı** güncellenecek ve bu
+> imza o güncellemeye yetki verir. Sessizce yapılmaması için ADIM 140 kapsam dışı bırakıp
+> ayrı kutuya açmıştı — kutu şimdi dolduruldu.
+>
+> **BU İMZA KOD DEĞİLDİR.** Harness bu PR'da **değiştirilmedi**; `backend/` içinde sıfır
+> satır. Uygulama, Karar 1 `(b)` + Karar 1a `(b2)` ile **aynı slice'ta** yapılmalıdır —
+> ayrı inerlerse iki testin arada hangi dünyayı ölçtüğü tanımsız kalır.
 
 ## §Karar 3 — `RD-09.c4` bu karara bağlanıyor mu?
 
@@ -290,7 +313,9 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
   `(b)` olarak, **§Karar 1a `(b2)` FAIL-CLOSED DÜZ olarak İMZALANDI**, ama kusur **hâlâ
   düzeltilmedi** — `backend/src`'te sıfır satır. Karar kapısı kalktı, uygulama başlayabilir.
   **Ön koşul PRE-1** (üretim sayımı) ilk deploy'da koşulmayı bekler. §Karar 2 ve §Karar 3
-  **İMZASIZ**.
+  **İMZASIZ**. **§Karar 2 2026-08-31'de `A` olarak İMZALANDI** — harness üretim şekline
+  çekilecek ve `test_readiness_research_data`'nın iki testi **kasıtlı** güncellenecek;
+  bu PR'da **yapılmadı**, uygulama Karar 1 ile aynı slice'a aittir. **§Karar 3 İMZASIZ.**
 - **Frontend'e dokunulmadı**, frontend kapıları koşulmadı.
 - **Üretimde kaç research revizyonunun etkilendiği SAYILMADI** — bu bir üretim DB sorgusudur
   (`G15` §Ölçüm 3 ve #854 ile aynı sınır). Karar bu sayı olmadan verilebilir: Ölçüm 2 kusurun

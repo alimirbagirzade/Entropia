@@ -138,12 +138,14 @@ alan `execution_key`'e girmez, run manifest'inin research bölümünde taşını
 
 ## §Karar 1 — `instrument_mapping_ref`'i kim yazar?
 
+### Karar kutusu — **İMZALI: `(b)` LİNK'TEN TÜRET (2026-08-31)**
+
 ☐ **(a) STATÜKO — kusur kabul edilir.** App-created hiçbir research revizyonu funding
   koşusunda kullanılamaz; #703 başlığındaki iddia doğru kalır ve issue açık kalır.
   **Bedeli:** `RD-09.c4` kapatılamaz durumda kalır (funding-enabled bir RUN, ref'i elle set
   etmeden kurulamaz — ki bu tam olarak ADIM 138'in kör noktasının şeklidir).
 
-☐ **(b) LİNK'TEN TÜRET.** Research create/revise, linkli market revizyonunun
+☑ **(b) LİNK'TEN TÜRET.** Research create/revise, linkli market revizyonunun
   `instrument_id`'sini `instrument_mapping_ref`'e kopyalar. **Ölçülmüş bedeli:**
   `MarketDatasetRevision.instrument_id` de **nullable**'dır ve yalnız çağıran `instrument_id`
   ya da `instrument_scope` verdiyse dolar — yani kaynak boşsa ref sessizce `None` kalır ve
@@ -164,12 +166,101 @@ alan `execution_key`'e girmez, run manifest'inin research bölümünde taşını
 
 ☐ **Başka:** ______________________________________________
 
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** Karar oturum içinde, ADIM 140'ın yedi ölçümü sunulduktan sonra verildi
+> (2026-08-31). **Seçilen şıkkın kendisine sunulan metni verbatim:** *"(b) LİNK'TEN TÜRET.
+> Research create/revise, linkli market revizyonunun `instrument_id`'sini
+> `instrument_mapping_ref`'e kopyalar."* Rakipleri karşısındaki konumu da sunulduğu gibidir:
+> `(a)` kusuru kabul eder ve `RD-09.c4`'ü kapatılamaz bırakır; `(c)` aynı sonucu **yeni bir
+> API alanıyla** verir ve v18 mockup otoritesi yüzünden **önce mockup güncellemesi** ister
+> (ADIM 114'ün `commission_basis` emsali); `(d)` fail-open'dır ve doc 12 §8.4 rule 2'nin
+> mapping conjunct'ını üründen düşürür.
+>
+> **BU İMZA ŞIKKI SEÇER, ALT ÇATALINI ÇÖZMEZ — ve şıkkın kendi metni o çatalı adlandırır.**
+> `MarketDatasetRevision.instrument_id` de **nullable**'dır ve yalnız çağıran `instrument_id`
+> ya da `instrument_scope` verdiyse dolar. Dolayısıyla kopyalamanın davranışı ayrıca
+> kararlaştırılmalıdır:
+>
+> * **(b1) FAIL-OPEN:** kaynak boşsa ref sessizce `None` kalır → **aynı kusur bir katman
+>   öteye taşınır** (belgenin kendi ifadesi). #703'ün başlığındaki iddia bu dünyada
+>   *bazı* revizyonlar için ayakta kalır.
+> * **(b2) FAIL-CLOSED:** kaynak boşsa research create/revise reddedilir → bugün scope'suz
+>   kurulmuş market revizyonlarına bağlı research kayıtlarını **retroaktif olarak bloklar**.
+>   Üretimdeki etkilenen satır sayısı **ölçülmemiştir** (ADIM 140 §dürüst sınır).
+>
+> Bu ek çatal bir kapsam genişletmesi değildir: `(b)`'nin sunulan metninde **"ölçülmüş
+> bedeli"** olarak zaten yazılıydı. **Aynı gün `§Karar 1a` olarak `(b2)` imzalandı** —
+> uygulamanın önündeki karar kapısı kalktı.
+
+## §Karar 1a — `(b)`'nin davranışı: kaynak boşsa ne olur?
+
+`(b)` kopyalamayı seçer ama **kopyalanacak şey yoksa** ne olacağını söylemez, ve bu boşluk
+şıkkın kendi *"ölçülmüş bedeli"* cümlesinde adlandırılmıştı. **Ölçüldü (2026-08-31):**
+
+| Ölçüm | Sonuç |
+|---|---|
+| `market_dataset_revision.instrument_id` (`market_data.py:84`) | `nullable=True` |
+| Create route'ta `instrument_id` (`routes/market_data.py:32`) | `str \| None = None` — **opsiyonel** |
+| Create route'ta `instrument_scope` (`:36`) | `dict \| None = None` — **opsiyonel** |
+| `resolved_instrument_id` (`commands/market_data.py:140`) | `= instrument_id`; **yalnız** `instrument_scope` verilirse çözülür |
+
+⇒ **İkisini de göndermeyen SIRADAN bir istek `instrument_id = NULL` bir market revizyonu
+üretir.** Yani `(b2)`'nin retroaktif bloklama riski **hipotetik değil, sevk edilmiş API ile
+üretilebilir**. Risk *iddia edilmedi, yapısal olarak gösterildi.*
+
+### Karar kutusu — **İMZALI: `(b2)` FAIL-CLOSED, DÜZ (2026-08-31)**
+
+☐ **(b1) FAIL-OPEN.** Kaynak boşsa ref sessizce `None` kalır. **Bedeli:** aynı kusur bir
+  katman öteye taşınır; #703'ün iddiası bir alt küme için ayakta kalır.
+
+☑ **(b2) FAIL-CLOSED, DÜZ.** Kaynak boşsa research create/revise **reddedilir** — mevcut
+  kayıtlar dahil, ayrım yapılmadan.
+
+☐ **(b2-g) FAIL-CLOSED, GRANDFATHER'LI.** Kural yalnız yeni create/revise'a uygulanır;
+  mevcut satırlar dokunulmaz. Retroaktif bloklama olmaz, ama **iki dünya** doğar.
+
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** Ürün sahibi önce **sayıyı istedi**; sayı **alınamadı ve ikame edilmedi**
+> (§Ön koşul PRE-1). Karar o ölçümün *yokluğuyla* değil, onun yerine geçen **yapısal**
+> ölçümle verildi: kusurlu şekil üretilebilir, dolayısıyla `(b1)` kusuru gerçekten bir
+> katman öteye taşırdı. `(b2-g)` reddedildi çünkü bugün **deploy edilmiş bir üretim yok**
+> (0 tag / 0 release / 0 deploy workflow) — retroaktif bloklama boş kümeyi bloklar ve iki
+> dünyanın kalıcı bakım maliyeti karşılığında hiçbir şey satın alınmaz. Grandfather'lı
+> varyant **reddedilmedi, GEREKSİZ bulundu**; ilk deploy'dan sonra aynı soru yeniden
+> sorulmalıdır ve PRE-1 tam olarak bunu zorlar.
+
+### Ön koşul PRE-1 — uygulamadan önce DEĞİL, ilk deploy'da koşulur
+
+**ADIM 124'ün `B0` emsali:** ölçülemeyen bir sayı, uygulamayı bloklamak yerine **kaydedilir
+ve ölçülebilir hale geldiği anda koşulur**. Bu depoda `0 tag / 0 release / 0 deploy eden
+workflow` var, yani *"üretim"* bugün gözlenebilir bir olay değildir (ADIM 124'ün birebir
+ölçümü). Sorgu, tablo ve kolon adları **koddan doğrulanmıştır**, tahmin değildir:
+
+```sql
+-- (b2) altında retroaktif olarak bloklanacak research revizyonları.
+-- 0 dönerse (b2) düz güvenlidir. >0 dönerse (b2-g) YENİDEN AÇILMALIDIR.
+SELECT count(*) AS blocked_research_revisions
+FROM research_dataset_revision r
+JOIN market_dataset_revision m
+  ON m.revision_id = r.linked_market_dataset_revision_id
+WHERE r.linked_market_dataset_revision_id IS NOT NULL
+  AND m.instrument_id IS NULL;
+```
+
+**Zorunluluk:** bu sorgu ilk gerçek deploy'da koşulur. Sonucu **`0` değilse `(b2)` imzası
+yeniden değerlendirilir** — `(b2-g)` o noktada gereksiz olmaktan çıkar. Sonuç bu belgeye
+yazılır; **koşulmadan `(b2)` "doğrulanmış" sayılamaz.**
+
 ## §Karar 2 — Mevcut Ready Check harness'ı ne olacak?
+
+### Karar kutusu — **İMZALI: `A` HARNESS ÜRETİM ŞEKLİNE ÇEKİLSİN (2026-08-31)**
 
 NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_research_data`'nın
 **iki** testini kırar. O iki testin bugünkü yeşilliği, üretimin üretemeyeceği bir şekle dayanır.
 
-☐ **A — HARNESS ÜRETİM ŞEKLİNE ÇEKİLSİN.** Seeder link yazar; kırılan iki test **kasıtlı**
+☑ **A — HARNESS ÜRETİM ŞEKLİNE ÇEKİLSİN.** Seeder link yazar; kırılan iki test **kasıtlı**
   güncellenir. Yalnız Karar 1 (b)/(c) ile tutarlıdır — (a) altında o iki test kalıcı olarak
   `not_ready` olur ve konularını (usage-scope, warning-not-blocking) **ölçemez** hale gelir.
 
@@ -178,12 +269,35 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
 
 ☐ **C — KARAR 1 ÇÖZÜLENE KADAR ERTELE.**
 
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** `A`, şıkkın kendi metnine göre **yalnız Karar 1 `(b)`/`(c)` ile tutarlıdır**
+> ve Karar 1 aynı gün `(b)` olarak imzalandı — yani bu imza bir tercih değil, verilmiş bir
+> kararın **zorunlu sonucudur**. `B` (harness olduğu gibi kalsın) `(b)` altında ADIM 140'ın
+> ölçtüğü ayrışmayı kalıcılaştırırdı: `_seed_research_revision`
+> `linked_market_dataset_revision_id`'yi **hiç set etmiyor**, dolayısıyla predicate
+> `False == False` ile *coherent* diyor ve **BLOCKER hiç doğmuyor** — üretimin
+> **üretemeyeceği** bir şekil. `C` (ertele) konusuz kaldı: Karar 1 çözüldü.
+>
+> **BEDELİ ÖLÇÜLDÜ, TAHMİN EDİLMEDİ.** NC-3 (ADIM 140, gerçek Postgres, izole DB):
+> seeder'a market linki eklemek `test_readiness_research_data`'nın **iki** testini kırar.
+> O iki testin bugünkü yeşilliği üretimin üretemeyeceği bir şekle dayanıyor, yani kırılma
+> bir regresyon değil **düzeltmenin kendisidir**; iki test **kasıtlı** güncellenecek ve bu
+> imza o güncellemeye yetki verir. Sessizce yapılmaması için ADIM 140 kapsam dışı bırakıp
+> ayrı kutuya açmıştı — kutu şimdi dolduruldu.
+>
+> **BU İMZA KOD DEĞİLDİR.** Harness bu PR'da **değiştirilmedi**; `backend/` içinde sıfır
+> satır. Uygulama, Karar 1 `(b)` + Karar 1a `(b2)` ile **aynı slice'ta** yapılmalıdır —
+> ayrı inerlerse iki testin arada hangi dünyayı ölçtüğü tanımsız kalır.
+
 ## §Karar 3 — `RD-09.c4` bu karara bağlanıyor mu?
+
+### Karar kutusu — **İMZALI: `A` EVET, BAĞLIDIR (2026-08-31)**
 
 `RD-09.c4` (funding-enabled bir RUN üzerinden research revizyon değişmezliği) bugün ancak
 `instrument_mapping_ref` **elle** set edilerek kurulabilir — ADIM 138'in kör noktasının aynısı.
 
-☐ **A — EVET, bağlıdır.** Karar 1 (b)/(c) inene kadar `RD-09.c4` `partial` kalır; kabul
+☑ **A — EVET, bağlıdır.** Karar 1 (b)/(c) inene kadar `RD-09.c4` `partial` kalır; kabul
   borcu defterine **dokunulmaz**.
 
 ☐ **B — HAYIR.** `RD-09.c4` elle set edilmiş bir ref üzerinde kapatılabilir sayılır.
@@ -191,13 +305,39 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
 
 ☐ **C — ŞİMDİ ÇÖZME, ADIYLA DEVRET.**
 
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** `B` reddedildi ve gerekçesi şıkkın kendi bedel cümlesinde yazılıydı:
+> `RD-09.c4`'ü **elle set edilmiş** bir ref üzerinde `covered` işaretlemek, kriteri
+> **üretimin üretemeyeceği bir dünyada** kapatmak olurdu — ADIM 138'in kör noktasının
+> ve ADIM 140'ın *"bir fixture'ın YAPMADIĞI şey de bir iddiadır"* dersinin birebir tekrarı.
+> Bu depo o şekli iki kez ölçtü; üçüncüsüne imza atılmadı.
+>
+> `C` (adıyla devret) konusuz kaldı: Karar 1, 1a ve 2 aynı gün imzalandı, devredilecek
+> açık bir soru yok.
+>
+> **SONUCU BİR KISITTIR, BİR İŞ DEĞİL:** `RD-09.c4` **`partial` KALIR** ve
+> `docs/audit/acceptance_coverage_baseline.json` ile borç defterine **DOKUNULMAZ** —
+> hiçbir tavan oynamaz. Kriter ancak `(b)` + `(b2)` uygulaması indikten **sonra**,
+> üretimin gerçekten ürettiği bir ref üzerinde kapatılabilir. Ratchet yalnız aşağı iner;
+> bu imza onu **yukarı oynatmaz**.
+
 ---
 
 ## Bu belgenin kapsamadıkları (dürüst sınır)
 
 - **Kusur DÜZELTİLMEDİ.** ADIM 140 yalnız ikinci düzlemin testini sevk eder; `backend/src`'te
   **sıfır satır** değişti. NC yamaları uygulandı, ölçüldü ve **bayt bayt geri alındı**.
-- **#703 KAPATILMADI** ve durumu değiştirilmedi — insan kararı.
+- **#703 KAPATILMADI** ve durumu değiştirilmedi — insan kararı. **§Karar 1 2026-08-31'de
+  `(b)` olarak, **§Karar 1a `(b2)` FAIL-CLOSED DÜZ olarak İMZALANDI**, ama kusur **hâlâ
+  düzeltilmedi** — `backend/src`'te sıfır satır. Karar kapısı kalktı, uygulama başlayabilir.
+  **Ön koşul PRE-1** (üretim sayımı) ilk deploy'da koşulmayı bekler. §Karar 2 ve §Karar 3
+  **İMZASIZ**. **§Karar 2 2026-08-31'de `A` olarak İMZALANDI** — harness üretim şekline
+  çekilecek ve `test_readiness_research_data`'nın iki testi **kasıtlı** güncellenecek;
+  bu PR'da **yapılmadı**, uygulama Karar 1 ile aynı slice'a aittir. **§Karar 3 2026-08-31'de `A` olarak İMZALANDI** — `RD-09.c4`
+  `partial` KALIR, kabul borcu defterine ve tavanlara **dokunulmaz**; kriter ancak `(b)` +
+  `(b2)` uygulaması indikten sonra, üretimin ürettiği bir ref üzerinde kapatılabilir.
+  **#703'ün DÖRT kararının DÖRDÜ de imzalı; kusur hâlâ DÜZELTİLMEDİ.**
 - **Frontend'e dokunulmadı**, frontend kapıları koşulmadı.
 - **Üretimde kaç research revizyonunun etkilendiği SAYILMADI** — bu bir üretim DB sorgusudur
   (`G15` §Ölçüm 3 ve #854 ile aynı sınır). Karar bu sayı olmadan verilebilir: Ölçüm 2 kusurun

@@ -189,8 +189,69 @@ alan `execution_key`'e girmez, run manifest'inin research bölümünde taşını
 >   kurulmuş market revizyonlarına bağlı research kayıtlarını **retroaktif olarak bloklar**.
 >   Üretimdeki etkilenen satır sayısı **ölçülmemiştir** (ADIM 140 §dürüst sınır).
 >
-> Uygulama, `(b1)` / `(b2)` imzalanmadan **başlatılamaz**. Bu ek çatal bir kapsam genişletmesi
-> değildir: `(b)`'nin sunulan metninde **"ölçülmüş bedeli"** olarak zaten yazılıydı.
+> Bu ek çatal bir kapsam genişletmesi değildir: `(b)`'nin sunulan metninde **"ölçülmüş
+> bedeli"** olarak zaten yazılıydı. **Aynı gün `§Karar 1a` olarak `(b2)` imzalandı** —
+> uygulamanın önündeki karar kapısı kalktı.
+
+## §Karar 1a — `(b)`'nin davranışı: kaynak boşsa ne olur?
+
+`(b)` kopyalamayı seçer ama **kopyalanacak şey yoksa** ne olacağını söylemez, ve bu boşluk
+şıkkın kendi *"ölçülmüş bedeli"* cümlesinde adlandırılmıştı. **Ölçüldü (2026-08-31):**
+
+| Ölçüm | Sonuç |
+|---|---|
+| `market_dataset_revision.instrument_id` (`market_data.py:84`) | `nullable=True` |
+| Create route'ta `instrument_id` (`routes/market_data.py:32`) | `str \| None = None` — **opsiyonel** |
+| Create route'ta `instrument_scope` (`:36`) | `dict \| None = None` — **opsiyonel** |
+| `resolved_instrument_id` (`commands/market_data.py:140`) | `= instrument_id`; **yalnız** `instrument_scope` verilirse çözülür |
+
+⇒ **İkisini de göndermeyen SIRADAN bir istek `instrument_id = NULL` bir market revizyonu
+üretir.** Yani `(b2)`'nin retroaktif bloklama riski **hipotetik değil, sevk edilmiş API ile
+üretilebilir**. Risk *iddia edilmedi, yapısal olarak gösterildi.*
+
+### Karar kutusu — **İMZALI: `(b2)` FAIL-CLOSED, DÜZ (2026-08-31)**
+
+☐ **(b1) FAIL-OPEN.** Kaynak boşsa ref sessizce `None` kalır. **Bedeli:** aynı kusur bir
+  katman öteye taşınır; #703'ün iddiası bir alt küme için ayakta kalır.
+
+☑ **(b2) FAIL-CLOSED, DÜZ.** Kaynak boşsa research create/revise **reddedilir** — mevcut
+  kayıtlar dahil, ayrım yapılmadan.
+
+☐ **(b2-g) FAIL-CLOSED, GRANDFATHER'LI.** Kural yalnız yeni create/revise'a uygulanır;
+  mevcut satırlar dokunulmaz. Retroaktif bloklama olmaz, ama **iki dünya** doğar.
+
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-08-31
+
+> **Gerekçe.** Ürün sahibi önce **sayıyı istedi**; sayı **alınamadı ve ikame edilmedi**
+> (§Ön koşul PRE-1). Karar o ölçümün *yokluğuyla* değil, onun yerine geçen **yapısal**
+> ölçümle verildi: kusurlu şekil üretilebilir, dolayısıyla `(b1)` kusuru gerçekten bir
+> katman öteye taşırdı. `(b2-g)` reddedildi çünkü bugün **deploy edilmiş bir üretim yok**
+> (0 tag / 0 release / 0 deploy workflow) — retroaktif bloklama boş kümeyi bloklar ve iki
+> dünyanın kalıcı bakım maliyeti karşılığında hiçbir şey satın alınmaz. Grandfather'lı
+> varyant **reddedilmedi, GEREKSİZ bulundu**; ilk deploy'dan sonra aynı soru yeniden
+> sorulmalıdır ve PRE-1 tam olarak bunu zorlar.
+
+### Ön koşul PRE-1 — uygulamadan önce DEĞİL, ilk deploy'da koşulur
+
+**ADIM 124'ün `B0` emsali:** ölçülemeyen bir sayı, uygulamayı bloklamak yerine **kaydedilir
+ve ölçülebilir hale geldiği anda koşulur**. Bu depoda `0 tag / 0 release / 0 deploy eden
+workflow` var, yani *"üretim"* bugün gözlenebilir bir olay değildir (ADIM 124'ün birebir
+ölçümü). Sorgu, tablo ve kolon adları **koddan doğrulanmıştır**, tahmin değildir:
+
+```sql
+-- (b2) altında retroaktif olarak bloklanacak research revizyonları.
+-- 0 dönerse (b2) düz güvenlidir. >0 dönerse (b2-g) YENİDEN AÇILMALIDIR.
+SELECT count(*) AS blocked_research_revisions
+FROM research_dataset_revision r
+JOIN market_dataset_revision m
+  ON m.revision_id = r.linked_market_dataset_revision_id
+WHERE r.linked_market_dataset_revision_id IS NOT NULL
+  AND m.instrument_id IS NULL;
+```
+
+**Zorunluluk:** bu sorgu ilk gerçek deploy'da koşulur. Sonucu **`0` değilse `(b2)` imzası
+yeniden değerlendirilir** — `(b2-g)` o noktada gereksiz olmaktan çıkar. Sonuç bu belgeye
+yazılır; **koşulmadan `(b2)` "doğrulanmış" sayılamaz.**
 
 ## §Karar 2 — Mevcut Ready Check harness'ı ne olacak?
 
@@ -226,8 +287,10 @@ NC-3 ölçtü: `_seed_research_revision`'a market linki eklemek `test_readiness_
 - **Kusur DÜZELTİLMEDİ.** ADIM 140 yalnız ikinci düzlemin testini sevk eder; `backend/src`'te
   **sıfır satır** değişti. NC yamaları uygulandı, ölçüldü ve **bayt bayt geri alındı**.
 - **#703 KAPATILMADI** ve durumu değiştirilmedi — insan kararı. **§Karar 1 2026-08-31'de
-  `(b)` olarak İMZALANDI**, ama kusur **hâlâ düzeltilmedi**: imza şıkkı seçer, `(b1)`/`(b2)`
-  alt çatalı açık kalır ve uygulama ondan önce başlayamaz. §Karar 2 ve §Karar 3 **İMZASIZ**.
+  `(b)` olarak, **§Karar 1a `(b2)` FAIL-CLOSED DÜZ olarak İMZALANDI**, ama kusur **hâlâ
+  düzeltilmedi** — `backend/src`'te sıfır satır. Karar kapısı kalktı, uygulama başlayabilir.
+  **Ön koşul PRE-1** (üretim sayımı) ilk deploy'da koşulmayı bekler. §Karar 2 ve §Karar 3
+  **İMZASIZ**.
 - **Frontend'e dokunulmadı**, frontend kapıları koşulmadı.
 - **Üretimde kaç research revizyonunun etkilendiği SAYILMADI** — bu bir üretim DB sorgusudur
   (`G15` §Ölçüm 3 ve #854 ile aynı sınır). Karar bu sayı olmadan verilebilir: Ölçüm 2 kusurun

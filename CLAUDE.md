@@ -270,6 +270,39 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **ÜRÜN KODUNDA SIFIR SATIR**
+> (backend ve `frontend/src` el değmedi). **Son dalga — ADIM 150 (Lighthouse artık OTURUM AÇIK
+> ölçüyor; #677'nin baş kesintisi bir HARNESS ARTEFAKTI çıktı, PR #890).** ADIM 147 kusuru ölçüp
+> düzeltmeyi ayrı slice'a bırakmıştı. **Düzeltme bir BAYRAK değil bir YER:** `lighthouse()` `page`
+> argümanı olmadan çağrılınca kendi sekmesini **varsayılan** bağlamda açar
+> (`navigation-runner.js:278-282` → `CdpBrowser.newPage` → `#defaultContext`) ve localStorage bağlam
+> başına bölümlendiği için Playwright bağlamına yazılan token oradan görünmez → spec artık
+> **`chromium.launchPersistentContext`** kullanıyor. **UYGULAMADAN BAĞIMSIZ ÖLÇÜLDÜ** (sentetik
+> origin, **lighthouse'un KENDİ puppeteer-core'u** sürülerek): eski dünyada sekme **`null`**,
+> yenisinde **token**. Spec'in kendi probe'u o gerçek yolla **iki dünyada da uyuşuyor** → bayrak
+> artık **GATE** (`expect(sessionCarried).toBe(true)`), **negatif kontrolü sevk edilen dünyanın
+> kendisidir**. **ASIL BULGU:** CI'da (`33388366150`, `session_carried: true`) `best-practices`
+> **96 → 100, 23/23** — çünkü **`errors-in-console` oturum açıkken SIFIR rotada düşüyor**. #677'nin
+> *"read the actual console output"* dediği 23/23 kesinti **ürün kusuru DEĞİL, HARNESS
+> ARTEFAKTIYMIŞ**; ADIM 146'nın gördüğü hatalar **oturumsuz kabuğun 401'leriydi** ve ADIM 145 iki
+> oturumu **hiç var olmayan** bir kusuru aramaya harcamıştı. `performance` tam **üç** rotada düştü
+> (100→99 · 100→98 · **98→93**) ve kesintinin **tamamı** tek bir 25 ağırlıklı CLS. **Tavanlar PR'ın
+> KENDİ CI artefaktından donduruldu** — bu bir **dünya değişimi** yeniden dondurmasıdır, yasak kural
+> **tek dünya içindeki** düşüşü yönetir ve dosyanın kendi sözleşmesi tavanları zaten dünya-kapsamlı
+> ilan ediyor; `do_not_tighten` `panel-management` için **aşıldı, gerekçesi korundu** (spread bu
+> koşuda 0 ama `stability` sıfır spread'in **koşuya** ait olduğunu yazıyor → **tek koşuyla
+> sıkıştırma**). **ADIM 148 GERİ ALINMADI** — o **oturumsuz** shift'i düzeltti ve kendi sınırında
+> oturum açığın **ölçülmediğini** yazmıştı; şimdi ölçüldü: **0.165**, **farklı** bir shift.
+> **KENDİ HATAM:** tırnaksız heredoc kabuğun backtick'lerimi çalıştırmasına izin verdi,
+> `` `stability` `` sessizce **boş dizeye** döndü (sayılar değil **proza** bozuldu) → **metin içeren
+> heredoc TIRNAKLI olmalı**. **DÜRÜST SINIR: #677 KAPATILMADI** — dört kesintiden **üçü kapalı**,
+> **kalan tek kalem oturum açık CLS** (dört rota) ve o **DÜZELTİLMEDİ, görünür kılındı** · spec
+> yerelde koşulmadı, skorların otoritesi **CI** · backend kapıları koşulmadı.
+> **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+> `PROJECT_HISTORY.md` §ADIM 150 · `docs/ADIM150_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK** — kolon zaten vardı) ·
 > `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** ·
 > `SHARED_ALLOCATION_STATUS` **el değmedi** · **`frontend/` içinde SIFIR SATIR**. **Son dalga —

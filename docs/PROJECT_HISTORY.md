@@ -20468,3 +20468,111 @@ koşuldu**; yukarıdaki tablonun tamamı doğrulanmış tabana aittir, ve her tu
   (ADIM 60'ın dersi). **Geçen sayının ve coverage'ın otoritesi bir CI koşusudur.**
 * OpenAPI değişmezliği **iddia edilmedi, ölçüldü**: uygulamanın şeması ile
   `docs/openapi.json` sıralı JSON karşılaştırmasında **birebir aynı**.
+
+
+## ADIM 150 — LIGHTHOUSE ARTIK OTURUM AÇIK ÖLÇÜYOR; #677'NİN BAŞ KESİNTİSİ BİR HARNESS ARTEFAKTI ÇIKTI
+
+**PR #890** · taban `be92c28e` (ADIM 149) · **MIGRATION YOK** · `ENGINE_VERSION` **değişmedi** ·
+OpenAPI **değişmedi** · golden **el değmedi** · **ürün kodunda SIFIR SATIR** (backend ve
+`frontend/src` el değmedi) · dokunulan iki dosya: `frontend/e2e/specs/21-lighthouse.spec.ts` +
+`frontend/e2e/lighthouse-baseline.json`. **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → BLOCKED.**
+
+### Neden bu slice
+
+ADIM 147 ayırt edici soruyu **ölçmüş ve cevabı bırakmıştı**: Lighthouse'un kendi sekmesi oturumu
+**taşımıyor**, yani kapı 23 rotanın 23'ünü de **oturumsuz kabukta** puanlıyordu. O slice düzeltmeyi
+bilerek ertelemişti (*"23 skoru oynatır + tavanların CI'dan yeniden dondurulmasını zorunlu kılar →
+ayrı slice"*). Bu, o ayrı slice.
+
+### Düzeltme bir BAYRAK değil, bir YER
+
+`lighthouse(url, {port}, cfg)` `page` argümanı olmadan çağrılınca
+`navigation-runner.js:278-282` `puppeteer.connect({browserURL}).newPage()` yolunu alır;
+`CdpBrowser.newPage` bunu doğrudan `#defaultContext`'e devreder (id'si `undefined` →
+`Target.createTarget` `browserContextId` **göndermez**). localStorage bağlam başına bölümlendiği
+için Playwright'ın **kendi** bağlamına yazılan token oradan görünmez. Sevk edilen düzeltme:
+`chromium.launchPersistentContext` — dönen bağlam **varsayılan** bağlamdır, `ensureAdmin` token'ı
+tam da Lighthouse'un okuduğu bölüme yazar. `disableStorageReset: true` **artık gerçekten yük
+taşıyor** (`navigation-runner.js:236` → storage temizlenmiyor); eskiden hiç görmeyeceği bir depoyu
+koruyordu.
+
+### Ölçüldü, çıkarılmadı — ve UYGULAMADAN BAĞIMSIZ
+
+ADIM 147 emsali (sentetik origin), ama bir adım ileri: **lighthouse'un KENDİ puppeteer-core'u**
+sürüldü, modeli değil.
+
+| dünya | Playwright bağlamı | Lighthouse'un kendi sekmesi |
+|---|---|---|
+| `browser.newContext()` (sevk edilen) | token | **`null`** |
+| `launchPersistentContext` (düzeltme) | token | **token** |
+
+**İkinci eksen, ADIM 147'nin ölçmediği:** spec'in **kendi** probe'u
+(`connectOverCDP -> contexts()[0]`) o gerçek puppeteer yoluyla **iki dünyada da uyuşuyor** — hard
+gate'in yanlış kırmızı vermeyeceğinin ölçüsü budur. Çağıranın sayfası probe sırasında bozulmuyor
+(docstring'in iddiası, kalıcı bağlamda da ölçüldü).
+
+### Bayrak artık yük taşıyor
+
+ADIM 147'de **bilerek** uyarıydı: tavanlar oturumsuz dünyayı kodluyordu, kırmızıya çevirmek main'i
+tavanların zaten anlattığı bir kusur için kırardı. Tavanlar oturum açık dünyadan yeniden
+dondurulunca argüman **tersine döner** → `expect(sessionCarried).toBe(true)`. **Negatif kontrol
+sevk edilen dünyanın kendisidir:** orada probe `false` verir, kapı düşer.
+
+### ASIL BULGU: #677'NİN BAŞ KESİNTİSİ BİR ÜRÜN KUSURU DEĞİLDİ
+
+CI koşusu (E2E run `33388366150`, job `99476037000`, `session_carried_into_lighthouse_tab: true`)
+69 rota/kategori çiftinin **23'ünü YÜKSELTTİ, 3'ünü DÜŞÜRDÜ, 43'ünü değiştirmedi**.
+
+* **`best-practices` 96 → 100, 23 rotanın 23'ünde.** Sebebi: **`errors-in-console` oturum açıkken
+  SIFIR rotada düşüyor.** #677'nin ilk sırada adlandırdığı, *"read the actual console output"*
+  dediği 23/23 kesinti **bir HARNESS ARTEFAKTIYMIŞ** — ADIM 146'nın yakaladığı konsol hataları
+  oturumsuz kabuğun 401'leriydi ve oturum açık uygulamada **yoklar**. ADIM 145 iki oturumu
+  bu kusuru yerelde yeniden üretmeye harcamıştı; **hiç var olmayan bir ürün kusuru aranıyordu.**
+* **`performance` tam üç rotada düştü** — `create-package` 100→99, `package-library` 100→98,
+  `panel-management` 98→93 — ve her birinde kesintinin **tamamı** tek bir 25 ağırlıklı
+  `cumulative-layout-shift`. Oturum açık CLS, koşunun **kendi `evidence` alanından** (ADIM 146'nın
+  eklediği alanın **ilk yük taşıyan kullanımı**): `panel-management` **0.165** ·
+  `package-library` 0.096 · `create-package` 0.068 · `future-dev` 0.059 (bu sonuncusu hâlâ **100**
+  medyanlıyor → yarım puanın altında bir kesinti).
+
+### Tavanlar: dünya değişimi yeniden dondurmasıdır, "yeşil olsun diye indirmek" DEĞİL
+
+Tavanlar PR'ın **kendi** CI artefaktından alındı, geliştirici makinesinden **değil**
+(`sensitivity_boundary`). Yasak olan kural **tek dünya içindeki** düşüşü yönetir; bu dosyanın kendi
+sözleşmesi (`session_state_2026_08_31` + `conditions`) tavanları zaten **dünya-kapsamlı** ilan
+ediyor. `do_not_tighten` `panel-management/performance` için **aşıldı, gerekçesi korundu**: 98
+oturumsuz bir sayıydı ve o dünyada 98–100 çırpındığı için pinlenmişti. Bu koşuda spread **23
+rotanın ve üç kategorinin hepsinde 0 puan** — ama `stability` sıfır spread'in **koşuya** ait
+olduğunu, kapıya ait olmadığını yazıyor, o yüzden **93 ölçüldüğü gibi donuyor ve tek bir yüksek
+koşuyla sıkıştırılamaz.**
+
+### ADIM 148 GERİ ALINMADI — bu, eski kapının göremediği YENİ GÖRÜNÜR iş
+
+`.panel-card-async` min-height **el değmedi** ve hâlâ doğru: o **oturumsuz** shift'i düzeltti
+(0.0898 → 0.0000516). ADIM 148'in kendi dürüst sınırı *"oturum açık rotanın shift'i ÖLÇÜLMEDİ"*
+diyordu. **Şimdi ölçüldü: 0.165**, ve o düzeltmenin **kapsamadığı FARKLI** bir shift.
+
+### İki kaynak atfı düzeltildi
+
+`navigation-runner.js:278-282` **yeniden doğrulandı** (ilk düzenlemem onu yanlışlıkla `:277`
+yapmıştı, geri alındı). ADIM 147'nin `cdp/Browser.js:204` atfı **kaymış**: puppeteer-core 25.6.0'da
+`newPage` `:203`'te. Atıf artık **sembol adı** taşıyor (§Conventions kuralı).
+
+### KENDİ HATAM, kaydediliyor
+
+Provenance metnini yazarken **tırnaksız heredoc** kullandım (`<<PY`), kabuk metnimdeki backtick'leri
+**komut olarak çalıştırdı** ve `` `stability` `` sessizce **boş dizeye** dönüştü
+(*"but  above records"*). Sayılar bozulmadı (JSON'dan geliyorlardı), **proza bozuldu**. Yakalayan
+şey kabuğun `command not found: stability` satırıydı; yakalamasaydı bayat bir atıf sevk edilecekti.
+**Metin içeren her heredoc tırnaklı olmalı** (`<<'PY'`), değişken gerekiyorsa ortamdan geçir.
+
+### DÜRÜST SINIR
+
+* **#677 KAPATILMADI.** Dört donmuş kesintiden **üçü artık kapalı** (`meta-description` +
+  `robots-txt` ADIM 145'te, `errors-in-console` burada **çözüldü — düzeltilerek değil,
+  var olmadığı ölçülerek**); **kalan tek kalem oturum açık CLS**, dört rotada. Kapatmak **insan
+  kararı**.
+* **CLS DÜZELTİLMEDİ** — bu slice onu ilk kez **görünür** kıldı.
+* Lighthouse spec'i **yerelde koşulmadı**; mekanizma yerelde ölçüldü, **skorların otoritesi CI**.
+* Ürün kodunda sıfır satır → backend kapıları **koşulmadı** (CI'da yeşil).
+* **A-08 (#514) AÇIK** — tek blocker, `human-only`, el değmedi.

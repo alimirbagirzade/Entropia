@@ -10722,3 +10722,48 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 149 · `docs/ADIM149_LANDED_KICKOFF
 3. **§Ön koşul PRE-1** ilk gerçek deploy'da koşulur; bugün **ölçülemez**, ikame etme.
 4. **İmza kalemleri:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · **#582 BAYAT** —
    kapatmak insan kararı. **#514 A-08** — tek blocker, `human-only`.
+
+
+## Stage 150 — Lighthouse artık OTURUM AÇIK ölçüyor; #677'nin baş kesintisi HARNESS ARTEFAKTI çıktı (PR #890)
+
+**MIGRATION YOK** · `ENGINE_VERSION` **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** ·
+**ürün kodunda SIFIR SATIR**. İki dosya: `frontend/e2e/specs/21-lighthouse.spec.ts` +
+`frontend/e2e/lighthouse-baseline.json`.
+
+ADIM 147 kusuru ölçmüş, düzeltmeyi ayrı slice'a bırakmıştı. **Düzeltme bir bayrak değil bir yer:**
+Lighthouse `page` argümanı olmadan çağrılınca kendi sekmesini **varsayılan** bağlamda açar ve
+localStorage bağlam başına bölümlendiği için Playwright bağlamına yazılan token oradan görünmez →
+spec artık `chromium.launchPersistentContext` kullanıyor. **Uygulamadan bağımsız ölçüldü**
+(sentetik origin, **lighthouse'un kendi puppeteer-core'u** sürülerek): eski dünyada Lighthouse
+sekmesi `null`, yenisinde token. Spec'in kendi probe'u o gerçek yolla **iki dünyada da uyuşuyor** →
+bayrak artık **gate** (`expect(sessionCarried).toBe(true)`), negatif kontrolü sevk edilen dünyadır.
+
+**ASIL BULGU:** CI'da (`33388366150`, `session_carried: true`) `best-practices` **96 → 100, 23/23** —
+çünkü **`errors-in-console` oturum açıkken SIFIR rotada düşüyor**. #677'nin baş kesintisi bir **ürün
+kusuru değil, HARNESS ARTEFAKTIYMIŞ**; ADIM 146'nın gördüğü konsol hataları oturumsuz kabuğun
+401'leriydi. `performance` tam üç rotada düştü (100→99 · 100→98 · 98→93) ve kesintinin tamamı tek
+bir 25 ağırlıklı CLS: `panel-management` **0.165** · `package-library` 0.096 · `create-package`
+0.068 · `future-dev` 0.059 (hâlâ 100 medyanlıyor).
+
+Tavanlar PR'ın **kendi** CI artefaktından donduruldu. Bu bir **dünya değişimi** yeniden dondurmasıdır;
+yasak kural tek dünya içindeki düşüşü yönetir. `do_not_tighten` `panel-management` için **aşıldı,
+gerekçesi korundu** (98 oturumsuz bir sayıydı). **ADIM 148 geri alınmadı** — o oturumsuz shift'i
+düzeltti ve kendi sınırında oturum açık shift'in ölçülmediğini yazmıştı; şimdi ölçüldü.
+
+**DÜRÜST SINIR:** **#677 KAPATILMADI** — dört kesintiden üçü kapalı, **kalan tek kalem oturum açık
+CLS** (dört rota), **DÜZELTİLMEDİ, görünür kılındı** · spec yerelde koşulmadı, skorların otoritesi
+CI · backend kapıları koşulmadı (sıfır satır). **A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → BLOCKED.**
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 150 · `docs/ADIM150_LANDED_KICKOFF.md`.
+
+## Next: **oturum açık CLS — ilk kez görünür oldu, dört rotada**
+
+1. **Oturum açık `cumulative-layout-shift`** (`panel-management` 0.165 · `package-library` 0.096 ·
+   `create-package` 0.068 · `future-dev` 0.059). ADIM 148'in `.panel-card-async` düzeltmesi
+   **oturumsuz** shift içindi ve **kapsamıyor**. Teşhis için `layout-shifts` audit'i **ağırlığı 0**
+   olduğu için `deductions` listesinde **görünmez** (ADIM 148'in tuzağı) — artefaktın ham
+   `lighthouse-results.json`'ından oku ya da yerel harness kur.
+2. **#677 kapatılabilir mi** — üç kesinti kapalı, biri açık; **insan kararı**.
+3. **`RD-09.c4`** hâlâ kapatılabilir bir **kabul borcu** slice'ı (tavan oynatır).
+4. **İmza kalemleri:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · #582 (öncülü bayat) ·
+   **#514 A-08 — tek blocker, `human-only`**.

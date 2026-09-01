@@ -81,8 +81,18 @@ async def get_record_batch_for_job(
 
 
 def link_batch_to_revision(batch: CanonicalTradeRecordBatch, work_object_revision_id: str) -> None:
-    """Pin a record batch to the Trade Log work-object revision it backs."""
-    batch.work_object_revision_id = work_object_revision_id
+    """Pin a record batch to the Trade Log work-object revision it backs.
+
+    SET-ONCE (GH #854, Karar 1 = (b), signed 2026-09-01): the FIRST save wins.
+    A later revision that reuses the same canonical batch keeps the original pin,
+    so the model's ``# Set once at Save time`` comment is enforced here rather
+    than merely declared. The signed cost: a user who explicitly repins the
+    Mainboard item to the newer revision (K3's own act) leaves THAT revision
+    without a backing row — the breakage moved, it did not vanish
+    (``closure_i854_external_import_pin_stability_2026-08-28.md`` §Ölçüm 6).
+    """
+    if batch.work_object_revision_id is None:
+        batch.work_object_revision_id = work_object_revision_id
 
 
 __all__ = [

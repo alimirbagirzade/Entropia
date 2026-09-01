@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 154 landed — on karar tek oturumda imzalandı; beş issue kapandı, üç kod işi imzalı kuyruğa girdi
 
 ## Nerede duruyoruz

@@ -10899,3 +10899,25 @@ sağlanmadı, tavanlar yerinde. Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 154
    ladder exhaustion = custom_sequence emsali; `ENGINE_VERSION` PR'da açıkça değerlendirilir.
 4. **Tavan takibi:** 4. ardışık kusursuz post-fix koşu inince sıkıştırma slice'ı (tavanlar o
    PR'ın KENDİ CI artefaktından). **A-08 (#514) tek blocker, human-only.**
+
+## Stage 155 — #854 set-once sevk edildi; test kasıtlı ters çevrildi, bedel pinlendi landed (bu PR)
+
+**ÜRÜN KODU DEĞİŞTİ (iki dosyada birer satır):** `link_batch_to_revision` +
+`link_normalized_to_revision` artık yalnız kolon `None` iken yazar (imza: Karar 1 = (b),
+ADIM 154). Migration yok · `ENGINE_VERSION`/OpenAPI/golden/ratchet el değmedi · blocker
+DEĞİŞMEDİ (1 — A-08) → BLOCKED. **Closes #854.**
+
+Test dosyası kendi docstring'inin talebiyle kasıtlı ters çevrildi: pin N'de kalır, READY
+kompozisyon READY kalır, **imzalı bedel** (N+1'i taşıyan satır yok) gerçek olarak pinli.
+İki NC ayırt edici (yüzey başına bir); komşu 53 test fix altında yeşil; restore'lar sha256.
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 155 · `docs/ADIM155_LANDED_KICKOFF.md`.
+
+## Next: **imzalı kuyruk devam — (1) #546+#536 matrix slice'ı · (2) #547 timeframe-by-layer**
+
+1. **#546+#536 matrix slice'ı:** `restrictions_filters.filters.action` capability matrix'e +
+   #536 Gap C allow-list muhafızı (yeni conflict literal'i ya matris'te ya açık allow-list'te).
+   Davranış DEĞİŞMEZ; TS aynası yeniden üretilir. Slice #546 VE #536'yı kapatır.
+2. **#547 feature slice'ı:** Increasing Timeframe by Layer (exhaustion = custom_sequence
+   emsali; `ENGINE_VERSION` PR'da açıkça değerlendirilir). Slice #547'yi kapatır.
+3. **Tavan takibi:** 4. ardışık kusursuz post-fix koşu inince sıkıştırma slice'ı (tavanlar o
+   PR'ın KENDİ CI artefaktından). **A-08 (#514) tek blocker, human-only.**

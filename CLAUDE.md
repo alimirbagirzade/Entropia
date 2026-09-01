@@ -271,6 +271,20 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · ratchet **el değmedi**
+> (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 155 (#854 SET-ONCE SEVK EDİLDİ; Closes #854).**
+> İki pin yazıcısı (`link_batch_to_revision` · `link_normalized_to_revision`) yalnız kolon
+> `None` iken yazar — modellerin `# Set once at Save time` yorumu artık zorlanan kural.
+> Test kasıtlı ters çevrildi (kendi docstring'inin talebi): pin N'de KALIR, READY kompozisyon
+> READY kalır, **imzalı bedel pinli** (N+1'i taşıyan satır YOK — kırılma kullanıcının açık
+> repin'ine taşındı, §Ölçüm 6). İki NC yüzey başına ayırt edici; komşu 53 test yeşil;
+> restore'lar sha256 (**TUZAK: commit'lenmemiş fix varken git'ten geri alma fix'i de siler —
+> ters-yama + sha256 kullan**). Yerel: ruff/format/mypy yeşil, hedef 2/2; otorite CI.
+> Kuyrukta: (1) #546+#536 matrix slice'ı → (2) #547. Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 155 · `docs/ADIM155_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **backend/test'te SIFIR
 > SATIR; tek ürün satırı `frontend/Dockerfile`'da CVE yaması** (`apk upgrade` listesine
 > `libexpat` — CVE-2026-66046 · CVE-2026-76641, HIGH, fix 2.8.4-r0; SBOM kapısı PR açıkken

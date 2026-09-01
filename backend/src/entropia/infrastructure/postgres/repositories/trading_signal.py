@@ -88,8 +88,15 @@ async def get_normalized_revision_for_job(
 def link_normalized_to_revision(
     normalized: NormalizedSignalEventRevision, work_object_revision_id: str
 ) -> None:
-    """Pin a normalized revision to the Trading Signal work-object revision it backs."""
-    normalized.work_object_revision_id = work_object_revision_id
+    """Pin a normalized revision to the Trading Signal work-object revision it backs.
+
+    SET-ONCE (GH #854, Karar 1 = (b), signed 2026-09-01): the FIRST save wins —
+    the exact twin of ``trade_log.link_batch_to_revision``, changed together
+    because the defect was one class, not two bugs. See that docstring for the
+    signed cost.
+    """
+    if normalized.work_object_revision_id is None:
+        normalized.work_object_revision_id = work_object_revision_id
 
 
 __all__ = [

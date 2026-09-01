@@ -10969,3 +10969,31 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 157 · `docs/ADIM157_LANDED_KICKOFF
    koşusu inince sıkıştırma slice'ı (tavanlar o PR'ın KENDİ CI artefaktından, yerelden ASLA).
 3. Yeni imza/karar inerse: `docs/decisions/` kutusunu ADIM 90'ın üç ölçümüyle doğrula;
    imzasız karar kalemine kod yazılmaz.
+
+## Stage 158 — A-08 muhasebesi: kanıt paketi + stack yeniden doğrulaması landed (bu PR)
+
+**ÜRÜN/TEST KODUNDA SIFIR SATIR.** İnsan kanıtı EKLENMEDİ (görevin kendi kuralı: *"Never
+fabricate human evidence"*). #514 OPEN (`human-only`, yeniden açılıştan beri sıfır
+etkinlik) ↔ defter (2/184 · 0/10 · 0 bulgu · 0/4) — **ayrışma YOK**; 46 rota oturumu +
+20 akış koşusu tek tek hesaplandı (0/46 tam · 1/46 kısmî · 0/20) →
+`docs/releases/evidence/2026-09-01/A08_acceptance_evidence_bundle.md`. Stack `9c48b0da`
+üzerinde **denetçinin kendi Mac'inde** 9/9 yeniden doğrulandı ve **denetçi için AYAKTA
+bırakıldı** (`http://127.0.0.1:18280`; indirme insan komutu). Precheck ×3: K-5 22/23
+yeniden doğrulandı (üye üye aynı küme), K-2/K-4 tripwire sessiz, **K-7 bu host'ta 15–19
+KARARSIZ** — mekanizma kaynakta (`Loading.tsx` kendisi `role="status"` canlı bölge →
+ilk-DOM yarışının TERS YÖNÜ); runner-class 21/23 bilerek korundu (defter §6.1d). Defter
+§STATUS/§5/§6.1a/§6.1d + RC raporu banner'ı dated notlarla güncellendi; sözleşme kapısı
+21/21 yeşil. D-10/D-11 imzalı sapma olarak aynen duruyor. Blocker DEĞİŞMEDİ (1 — A-08)
+→ **BLOCKED**. Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 158 ·
+`docs/ADIM158_LANDED_KICKOFF.md`.
+
+## Next: **A-08 İNSAN OTURUMU — stack AYAKTA, kart hazır**
+
+1. **SR-2 devamı (İNSAN):** stack `http://127.0.0.1:18280` AYAKTA (Admin `e2e_admin`);
+   runbook §0 kartı: rota 1 `/`, hücre **A-3** (yeniden yazılmış soru), sonra A-4…A-8,
+   sonra rota 2–23, sonra B-1…B-10. Oturum bitince `scripts/a11y-audit-stack.sh down`.
+2. **SR-1 zamanlaması (İNSAN):** Windows + NVDA makinesi ve denetçi ataması — oturum
+   değil zamanlama adımı; repo içinden yapılamaz.
+3. **Tavan takibi (koşullu):** 4. kusursuz Lighthouse main koşusu inince sıkıştırma
+   slice'ı (tavanlar o PR'ın KENDİ CI artefaktından, yerelden ASLA).
+4. Yeni imza/karar inerse: `docs/decisions/` kutusunu ADIM 90 üç-ölçüm kuralıyla doğrula.

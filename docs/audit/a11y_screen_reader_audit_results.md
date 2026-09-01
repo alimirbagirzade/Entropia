@@ -39,6 +39,17 @@
 > carries the `human-only` label; an agent or automated scan must not close it —
 > nor re-open it.
 >
+> **Re-verified 2026-09-01** (`origin/main` @ `9c48b0da`, ADIM 158): every count
+> above is **unchanged** — #514 still OPEN with zero activity since the re-open
+> (`updatedAt` = `2026-08-12T11:08:58Z`), the session log still holds exactly one
+> row, **2 / 184** cells, **0 / 10** flows, **0** findings, exit criteria
+> **0 / 4**. What did move is the *environment*: the stack was re-validated on
+> current main (9 passed / 0 failed) **on the auditor's own Mac** and left
+> RUNNING for the next session, and the §6 reach counts were re-measured three
+> times (§6.1d — the 2026-08-25 daemon obstacle of §6.1a does not exist on this
+> machine). The dated accounting of all 46 route sessions and 20 flow executions:
+> [`docs/releases/evidence/2026-09-01/A08_acceptance_evidence_bundle.md`](../releases/evidence/2026-09-01/A08_acceptance_evidence_bundle.md).
+>
 > Recipe and rationale: [`a11y_screen_reader_audit_checklist.md`](../implementation/a11y_screen_reader_audit_checklist.md).
 > Environment: `scripts/a11y-audit-stack.sh up`.
 
@@ -412,6 +423,13 @@ small to have produced one.
 > person wore headphones. A second non-audit slice followed on the same date (base
 > `42c6377`) and **corrected those three notes plus a fourth it found** (§6.1b); it
 > changed advisory prose only, filled no cell, and likewise gets no row.
+>
+> **A third non-audit slice ran on 2026-09-01** (base `9c48b0da`, ADIM 158): it
+> re-validated the stack on current main (9 / 9, left RUNNING for the next
+> session), re-measured the §6 reach counts three times (§6.1d), re-derived this
+> table (still one row) and produced the dated release evidence bundle
+> (`docs/releases/evidence/2026-09-01/`). It heard nothing, filled no cell, and
+> gets no row.
 
 **Where the next session picks up:** the runbook's **§0 card** is the one-page version
 of this paragraph — combination, route, cells, order — and it is what to hand the
@@ -505,10 +523,10 @@ the count: the run printed the skip verbatim, which is what makes K-4's side eff
 | K-2 | ~~**No skip link.** The first tabbable element on every route is the shell's `Log out` button, not an in-page jump target — so each route begins by tabbing the whole menu bar. WCAG 2.4.1.~~ → **FIXED 2026-08-12 (PO decision, PR #685).** `Layout.tsx` renders a clipped `Skip to main content` link as the shell's first child; `<main>` carries `id="main-content"` + `tabIndex={-1}`. **Recorded with the fix:** 2.4.1 was **already met** through the banner/navigation/main landmarks (technique ARIA11) — which is why axe's `bypass` rule stayed green throughout — so this was an **ergonomics** fix for keyboard users, not a conformance one. | was 23 / 23 routes | **FIXED** | Nothing structural. If the link is announced misleadingly (wrong name, wrong destination), file it as a **new** finding. |
 | K-3 | ~~**No `contentinfo` landmark.** The shell renders no `<footer>`; checklist A-2 expects four landmarks and only three exist.~~ → **ADJUDICATED 2026-08-13 — PO-signed decision D-11** (`../implementation/a11y_ci_ratchet_and_adjudication.md` §4b). **The expectation was wrong, not the product:** no WCAG success criterion requires a `contentinfo` landmark (1.3.1 asks that *existing* structure be conveyed), Entropia ships no footer, and the v18 mockup describes none. Checklist **A-2 now expects THREE** landmarks — `banner` / `navigation` / `main`. A visible footer was priced and declined (23 baselines + Lighthouse re-baseline + a v18 deviation record); an **empty or visually-hidden `<footer>` was explicitly rejected** — it would satisfy the counter and give a rotor user nothing. | was 23 / 23 routes | **PO-APPROVE (D-11)** — the precheck advisory is **NOT silenced**; it stays a measurement, the decision only fixes its disposition | Nothing. Do **not** re-file it. If the product later ships real footer *content*, that is a **new** decision — D-11 does not cover it. |
 | K-4 | ~~**`/user-manual` has no `<h1>`.** It names itself with `<h2 class="page-title">` (`UserManual.tsx:181`).~~ → **FIXED 2026-08-12 (PO decision, PR #685).** The page now uses `<h1 class="page-title">` like the other 22 routes; `.page-title` is class-based, so the change is semantic only. Regression pin: `specs/17-page-coverage.spec.ts` declares `level: 1` (a *blocking* precheck for a missing `<h1>` was considered and **deliberately not added** — that probe races each page's first data render, and a flapping gate is worse than none). **Side effect, not hidden:** this page's outline is now `h1 → h3` where it was `h2 → h3`, so it **entered K-5's set** — measured, not predicted: CI job `94221023796` printed `/user-manual — heading outline: h1 "User Manual" -> h3 "ENTROPIA USER MANUAL"`, taking K-5 from `21 / 23` to `22 / 23`. | was 1 route | **FIXED** | A-1 still applies: is the page title announced on load? The fix changed the level, not the announcement. |
-| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is now — with K-2 and K-4 fixed — the highest-reach observation left in the set. `/packages/library` carries a second skip (`h2 "Import package" → h5 "Recent imports"`). **`/market-data` is a different defect and the earlier "skips two levels" wording understated it** (re-read 2026-08-13): the four numbered guide steps are `<h4>` inside `section.data-guide-card` (`MarketData.tsx:272–325`) and come **first in DOM order**, ahead of the page's real `<h3>` sections (`:497`, `:805`, `:942`) — so the rotor list reads `h1 → h4 h4 h4 h4 → h3 h3 h3`: the steps nest under nothing, then the outline pops back **up** a level. That is mis-nesting, not a numbering gap; whether it becomes its own item is **still open**. | **22 / 23 routes** — re-measured 2026-08-12 (ADIM 48, CI job `94221023796`); was `21 / 23`. **The +1 is `/user-manual`**, which K-4's fix moved into this set (`h1 "User Manual" → h3 "ENTROPIA USER MANUAL"`) — a known, accepted cost, not a discovery. Only `/` is now outside the set. ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? **A-3 was rewritten on 2026-08-13 to ask exactly that** — it used to ask for the skip count, which the precheck already produces, so the audit could not have closed this item however many routes were walked (checklist `§A-3 notu`). Answer it **before** anyone proposes re-cutting 22 pages' outlines — the measured cost is **204 headings across ~40 files** (`<h3>` 98, `<h4>` 76, `<h5>` 28, `<h6>` 2; 42 unique files), plus **six** tag-scoped CSS rules that silently drop a heading to the UA default if a tag moves without them: `.card h3`, `.card h4`, `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3` **and `.data-guide-card h4`** (`global.css:2261`) — the sixth was missing from every earlier statement of this cost; re-counted 2026-08-13 over the whole of `styles/`, which is one file. **What this cost is NOT:** a v18 deviation. The mockup contains `h1: 0 · h2: 1 · h3: 0 · h4: 14 · h5: 0` — the shipped levels were never copied from it. v18 governs *appearance*, appearance lives in CSS, so the correct order is **decouple the six rules first, then move tags**. |
+| K-5 | **Heading outline skips h2 almost everywhere** — `h1 → h3` directly (e.g. `/backtest/run`: `h1 "RUN & Backtest Results" → h3 "Composition"`). This is checklist **A-3**'s exact question, and it is now — with K-2 and K-4 fixed — the highest-reach observation left in the set. `/packages/library` carries a second skip (`h2 "Import package" → h5 "Recent imports"`). **`/market-data` is a different defect and the earlier "skips two levels" wording understated it** (re-read 2026-08-13): the four numbered guide steps are `<h4>` inside `section.data-guide-card` (`MarketData.tsx:272–325`) and come **first in DOM order**, ahead of the page's real `<h3>` sections (`:497`, `:805`, `:942`) — so the rotor list reads `h1 → h4 h4 h4 h4 → h3 h3 h3`: the steps nest under nothing, then the outline pops back **up** a level. That is mis-nesting, not a numbering gap; whether it becomes its own item is **still open**. | **22 / 23 routes** — re-measured 2026-08-12 (ADIM 48, CI job `94221023796`); was `21 / 23`. **The +1 is `/user-manual`**, which K-4's fix moved into this set (`h1 "User Manual" → h3 "ENTROPIA USER MANUAL"`) — a known, accepted cost, not a discovery. Only `/` is now outside the set. **Re-confirmed 2026-09-01** (warm ×2 → 22, §6.1d). ⚠ see caveat | Open — reported, not gated | A-3: does rotor heading navigation actually mislead, or does the jump read as harmless? **A-3 was rewritten on 2026-08-13 to ask exactly that** — it used to ask for the skip count, which the precheck already produces, so the audit could not have closed this item however many routes were walked (checklist `§A-3 notu`). Answer it **before** anyone proposes re-cutting 22 pages' outlines — the measured cost is **204 headings across ~40 files** (`<h3>` 98, `<h4>` 76, `<h5>` 28, `<h6>` 2; 42 unique files), plus **six** tag-scoped CSS rules that silently drop a heading to the UA default if a tag moves without them: `.card h3`, `.card h4`, `.ready-report-card h3`, `.state h3`, `.manual-drawer-header h3` **and `.data-guide-card h4`** (`global.css:2261`) — the sixth was missing from every earlier statement of this cost; re-counted 2026-08-13 over the whole of `styles/`, which is one file. **What this cost is NOT:** a v18 deviation. The mockup contains `h1: 0 · h2: 1 · h3: 0 · h4: 14 · h5: 0` — the shipped levels were never copied from it. v18 governs *appearance*, appearance lives in CSS, so the correct order is **decouple the six rules first, then move tags**. |
 | K-6a | **Focus indicator not detectable by computed style** on the probed shell button: `outline: none; box-shadow: none`. The UA default ring may still paint — a computed-style probe cannot see it. WCAG 2.4.7. | probe: 1 element | Open — **needs a human eye**, not a machine | Whether a keyboard user can see where focus is. This is precisely the class the automation cannot settle. **A-08 settles this one; nothing else does.** |
 | K-6b | **Focus-ring contrast below WCAG 1.4.11 Non-text Contrast (AA).** `global.css :focus-visible` painted `2px solid var(--accent)`, and **#00a9e8 measures 2.68:1 on white / 2.46:1 on #f5f5f5** — a focus indicator is a non-text UI component and owes **3:1**. Nothing in the repo measured this: axe does not run a focus-ring contrast rule, and the green ratchet was never evidence. **Separate criterion from K-1/D-10**, which is the 1.4.3 *text* axis. | every focusable node, 23 / 23 routes | **CLOSED 2026-08-12** — ring re-pointed to `var(--text)` (`#222222`) | Nothing. **Measured after the change:** 15.91:1 on white, 14.59:1 on #f5f5f5, 12.98:1 on the #e8e8e8 title bar, 5.94:1 on the #00a9e8 `dropdown-blue` panel, 4.92:1 on the #8f8f8f dropdown panel, and **4.50:1 on the #0092c8 menu-blue hover — the worst surface in the app**. All ≥ 3:1. `--accent` itself was not touched. |
-| **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
+| **K-7** | **No `aria-live` region in the initial DOM** on most routes. The probe reports the *initial* DOM only, so this does **not** mean a status region never appears — it means none is present before anything happens. WCAG 4.1.3 Status Messages (AA). **Measured since ADIM 28 but never listed here**; added 2026-08-12. | **21 / 23 routes** — ⚠ see caveat; **2026-09-01: swung 15–19 on the auditor's Mac** — host-timing-sensitive in BOTH directions, runner-class figure deliberately kept (§6.1d) | Open — reported, not gated | Checklist **B-3 / B-4 / B-6** are exactly this question with a person attached: is the Ready Check verdict announced? the RUN queued→running→completed transition? a 409 OCC conflict? A region injected only at the moment of the update may or may not be announced — that is what you are there to hear. |
 
 > **Why this table has eight rows and not eleven.** Until `056aafe` (**#698**, ADIM 57) it
 > carried **eight IDs across eleven rows**: `K-4` appeared as **FIXED** *and* as Open, `K-5`
@@ -622,6 +640,14 @@ count is a DOM count either way. It would tell the next auditor how many routes 
 currently in K-5's and K-7's sets. Until someone re-runs it on a real stack (**twice**,
 discarding the cold run), read the K-table's reach column as *"as of 2026-08-12"*.
 
+> **Superseded 2026-09-01 — the refresh finally ran.** Not because the obstacle
+> above was fixed, but because the slice ran on a machine where it never existed:
+> the auditor's own Mac has a live Docker daemon. Three runs against a freshly
+> seeded stack at `9c48b0da`; results and one instrument lesson in **§6.1d**.
+> K-5 re-confirmed at **22 / 23**; K-7 turned out to be **host-timing-sensitive
+> in both directions**, so its runner-class figure deliberately stays at its
+> 2026-08-12 provenance.
+
 ### 6.1b — the stale advisory **notes** are CORRECTED (2026-08-25)
 
 **Status: closed.** The `note` strings named below — the three this section originally
@@ -685,4 +711,55 @@ Re-derived 2026-08-25 from `frontend/e2e/utils/screenshotMatrix.ts::TARGET_PAGES
 **23 entries**, doc numbers 1–22 with doc 19 contributing two (`/panel/management`,
 `/panel/logs`), in the same order as §1's tables. §1, §4 of the runbook and the matrix
 agree row for row. **No change needed.**
+
+### 6.1d — the 2026-09-01 refresh: three runs on the auditor's Mac, and the race has a second direction
+
+Base `9c48b0da` (ADIM 158). `scripts/a11y-audit-stack.sh up` on the auditor's own
+Mac — the machine class the SR-2 session used, where the Docker daemon exists —
+came up green (**9 passed / 0 failed**, transcript in
+`docs/releases/evidence/2026-09-01/a08_stack_validation.txt`) and was **left
+running** for the next human session. `specs/20-a11y-prechecks.spec.ts` was then
+run **three times** against it (per §"How these counts were obtained": at least
+twice, discard the cold run). Raw reports:
+`docs/releases/evidence/2026-09-01/a08_precheck_results_run{1,2,3}.json`.
+
+| Class | run 1 (cold) | run 2 (warm) | run 3 (warm) | Verdict |
+|---|---:|---:|---:|---|
+| skip link (K-2, tripwire) | 0 | 0 | 0 | **silent** — no regression of PR #685 |
+| no `<h1>` (K-4, tripwire) | 0 | 0 | 0 | **silent** — no regression of PR #685 |
+| `contentinfo` (K-3, D-11) | 23 | 23 | 23 | **stable**, unchanged |
+| heading outline (K-5) | 21 | **22** | **22** | **re-confirms 22 / 23** — same set as 2026-08-12: `/user-manual` in, `/` the only route out |
+| focus indicator (K-6a) | 1 | 1 | 1 | **stable**, unchanged |
+| `aria-live` (K-7) | 15 | **19** | **16** | ⚠ **NOT settled on this host** — see below |
+| **total advisories** | 60 | 65 | 62 | blocking failures **0** in all three |
+
+**What settled:** K-5's `22 / 23` is warm-stable here and byte-identical in
+membership to the 2026-08-12 set — the K-table's figure holds. K-3 and K-6a are
+rock-stable as always, and the two fixed-class tripwires stayed silent, which is
+their whole job.
+
+**What did not settle, and why that is the finding:** K-7 read 15 / 19 / 16 —
+a spread of **five routes between two warm runs**, far wider than the recorded
+"±1 on three named routes". The mechanism was traced to source, not guessed:
+`components/Loading.tsx` renders `role="status" aria-live="polite"`, so a route
+the probe catches **mid-load carries an initial live region and drops OUT of
+K-7's set**. The methodology note above documents the race in one direction
+(mid-load hides section headings and status regions); this measurement shows it
+**also runs the other way** — the loading state itself satisfies the probe. The
+routes flipping between the warm runs (`/packages/create`, `/packages/embedded`,
+`/packages/pre-check`, `/trade-log`, `/trading-signal`) are Loading-bearing
+pages, not the three previously-named flaky routes. On a fast local machine the
+probe's sampling instant is simply less deterministic relative to first data
+render than on a CI-class runner.
+
+**Consequence — deliberately NOT a rewrite:** the K-table's K-7 reach stays at
+its 2026-08-12, runner-class provenance (`21 / 23`), now bounded by today's
+host envelope (15–19). Publishing 19 — or 16 — as "the" fresh figure would
+silently redefine the observation with a number that two consecutive warm runs
+on the same commit could not reproduce. And either way it is a DOM count: the
+question K-7 exists for (B-3 / B-4 / B-6 — is the verdict, the state change,
+the 409 *announced*?) is untouched and still belongs to the human auditor.
+
+**None of this is a screen-reader result**, none of it fills a cell, and the
+session log above gained no row for it.
 

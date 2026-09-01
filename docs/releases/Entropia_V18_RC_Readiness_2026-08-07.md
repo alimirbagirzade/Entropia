@@ -34,6 +34,18 @@
 > kapanması **P11-1'i (branch protection) kapatmaz**: bir *required status check* kuralı
 > olmadan kırmızı bir check merge'i fiilen durduramaz ve bu bir depo ayarı + insan
 > kararıdır.
+>
+> **2026-09-01 (ADIM 158) — blocker DEĞİŞMEDİ (1 — yalnız A-08), verdict BLOCKED
+> kalır.** Yukarıdaki paragrafın *"Defter hâlâ boştur"* cümlesi 2026-08-12'den beri
+> **bayattır**: SR-2'nin ilk oturumu aynı gün 184 Section A hücresinin **2**'sini
+> doldurdu — defter artık boş değil, ama **bitmiş hiç değil** (**0/46** rota tam ·
+> **0/20** akış · çıkış kriterleri **0/4**; **SR-1 hiç başlamadı**, bulgu kaydı **0**).
+> 46 rota oturumu + 20 akış koşusunun tarihli muhasebesi ve ortam yeniden doğrulaması
+> (stack `9c48b0da`'da 9/9 yeşil, denetçi için AYAKTA bırakıldı; precheck ×3, 0 blocking):
+> [`docs/releases/evidence/2026-09-01/A08_acceptance_evidence_bundle.md`](evidence/2026-09-01/A08_acceptance_evidence_bundle.md).
+> **#514 AÇIK**, yeniden açılıştan beri sıfır etkinlik; kanıt ile issue durumu arasında
+> **ayrışma YOK**. İnsan kanıtı eklenmedi ve eklenemezdi — D-10/D-11 imzalı sapmaları
+> aynen duruyor, hiçbiri uygunluğa çevrilmedi.
 > **2026-08-12 (ADIM 44) — blocker sayısı 3 → 2.** Eski blocker **(4) react-router
 > `GHSA-qwww-vcr4-c8h2` imzasız dondurulmuş** **KAPANDI**, ve **imzayla değil,
 > kaldırmayla**: advisory upstream'de yeniden kapsamlandırıldı (`first_patched` 7.x hattı

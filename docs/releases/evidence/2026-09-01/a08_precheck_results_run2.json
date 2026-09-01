@@ -1,0 +1,1188 @@
+{
+  "disclaimer": "AUTOMATED PRECHECKS ONLY. Playwright reads the DOM; it hears nothing. No record in this file is a screen-reader result and none may be transcribed into docs/audit/a11y_screen_reader_audit_results.md sections 1 or 2. A-08 stays HUMAN-BLOCKED (GitHub #514) until a person completes the audit with NVDA/Firefox and VoiceOver/Safari.",
+  "screen_reader_verified": false,
+  "routes_checked": 23,
+  "tab_order_probe": "DOM order vs tabindex-derived order, computed in-page. Tab is NEVER pressed. Detects positive-tabindex reordering only; cannot detect focus traps, unreachable controls or roving-tabindex widgets. Advisory-only: no route can fail this test. The physical Tab walk is specs/14-keyboard-flow.spec.ts (/login and / only).",
+  "tab_order_routes_total": 23,
+  "tab_order_routes_walked": [
+    "/",
+    "/strategy",
+    "/outsource-signal",
+    "/trading-signal",
+    "/trade-log",
+    "/packages/create",
+    "/packages/pre-check",
+    "/packages/library",
+    "/packages/embedded",
+    "/rationale-families",
+    "/market-data",
+    "/research-data",
+    "/portfolio",
+    "/backtest/ready-check",
+    "/backtest/run",
+    "/backtest/history",
+    "/backtest/metrics",
+    "/analysis-lab",
+    "/panel/management",
+    "/panel/logs",
+    "/trash",
+    "/user-manual",
+    "/future-dev"
+  ],
+  "tab_order_routes_NOT_walked": [],
+  "blocking_failures": [],
+  "advisories": [
+    {
+      "route": "/",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/strategy",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/strategy",
+      "check": "heading outline",
+      "observed": "h1 \"Strategy Details\" -> h3 \"Create strategy\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/strategy",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/outsource-signal",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/outsource-signal",
+      "check": "heading outline",
+      "observed": "h1 \"Add Outsource Signal\" -> h3 \"Choose the external object type\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/outsource-signal",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/trading-signal",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/trading-signal",
+      "check": "heading outline",
+      "observed": "h1 \"Trading Signal\" -> h3 \"1. Trading Signal Identity\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/trading-signal",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/trade-log",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/trade-log",
+      "check": "heading outline",
+      "observed": "h1 \"Trade Log\" -> h3 \"1. Trade Log Identity\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/trade-log",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/packages/create",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/packages/create",
+      "check": "heading outline",
+      "observed": "h1 \"Create Package\" -> h3 \"My requests\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/packages/create",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/packages/pre-check",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/packages/pre-check",
+      "check": "heading outline",
+      "observed": "h1 \"Pre-Check\" -> h3 \"My requests\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/packages/pre-check",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/packages/library",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/packages/library",
+      "check": "heading outline",
+      "observed": "h1 \"Package Library\" -> h3 \"Catalog\" ; h2 \"Import package\" -> h5 \"Recent imports\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/packages/embedded",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/packages/embedded",
+      "check": "heading outline",
+      "observed": "h1 \"Embedded System Packages\" -> h3 \"Resolver registry\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/rationale-families",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/rationale-families",
+      "check": "heading outline",
+      "observed": "h1 \"Rationale Families\" -> h3 \"RATIONALE FAMILY LIST\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/market-data",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/market-data",
+      "check": "heading outline",
+      "observed": "h1 \"Market Data\" -> h4 \"1. Bu sayfaya hangi veriler gelir?\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/market-data",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/research-data",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/research-data",
+      "check": "heading outline",
+      "observed": "h1 \"Research Data\" -> h3 \"Research data workflow\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/research-data",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/portfolio",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/portfolio",
+      "check": "heading outline",
+      "observed": "h1 \"Portfolio / Equity Allocation\" -> h3 \"Composition\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/portfolio",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/backtest/ready-check",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/backtest/ready-check",
+      "check": "heading outline",
+      "observed": "h1 \"Backtest Ready Check\" -> h3 \"Composition\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/backtest/ready-check",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/backtest/run",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/backtest/run",
+      "check": "heading outline",
+      "observed": "h1 \"RUN & Backtest Results\" -> h3 \"Composition\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/backtest/run",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/backtest/history",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/backtest/history",
+      "check": "heading outline",
+      "observed": "h1 \"Results History\" -> h3 \"No backtest results yet\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/backtest/history",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/backtest/metrics",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/backtest/metrics",
+      "check": "heading outline",
+      "observed": "h1 \"Arrange Metrics\" -> h3 \"Resolved profile\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/backtest/metrics",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/analysis-lab",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/analysis-lab",
+      "check": "heading outline",
+      "observed": "h1 \"Agent Workspace / Analysis Lab\" -> h3 \"No conversation yet\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/analysis-lab",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/panel/management",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/panel/management",
+      "check": "heading outline",
+      "observed": "h1 \"PANEL / MANAGEMENT\" -> h3 \"Registered users\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/panel/management",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/panel/logs",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/panel/logs",
+      "check": "heading outline",
+      "observed": "h1 \"PANEL / LOGS\" -> h3 \"All User Backtest Logs\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/panel/logs",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/trash",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/trash",
+      "check": "heading outline",
+      "observed": "h1 \"Panel / Trash\" -> h3 \"Recoverable entries(0 recoverable)\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/trash",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/user-manual",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/user-manual",
+      "check": "heading outline",
+      "observed": "h1 \"User Manual\" -> h3 \"ENTROPIA USER MANUAL\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/future-dev",
+      "check": "contentinfo landmark",
+      "observed": "absent",
+      "wcag": "1.3.1 Info and Relationships (A) / 2.4.1 Bypass Blocks (A)",
+      "note": "checklist A-2 expects three landmarks — banner, navigation, main — and deliberately not contentinfo: signed decision D-11 (2026-08-13) records that Entropia ships no <footer> and that no WCAG success criterion requires one (a11y_ci_ratchet_and_adjudication.md §4b). D-11 fixed the disposition, not the measurement, so the absence is still reported and still counted here; real footer content would be a new decision."
+    },
+    {
+      "route": "/future-dev",
+      "check": "heading outline",
+      "observed": "h1 \"Future Dev\" -> h3 \"Capabilities\"",
+      "wcag": "1.3.1 Info and Relationships (A)",
+      "note": "checklist A-3 no longer asks for an unbroken h1→h2→h3 sequence; it was rewritten 2026-08-13 to ask whether the outline misleads — does a heading sit under one it does not belong to, is a group read as missing. Counting skipped levels is this probe's job, not the auditor's (checklist §A-3 note): 'there is a skip' and 'I did not notice one' are both non-answers. The rewrite does not close K-5, and this advisory keeps counting."
+    },
+    {
+      "route": "/future-dev",
+      "check": "aria-live inventory",
+      "observed": "no live region in the initial DOM",
+      "wcag": "4.1.3 Status Messages (AA)",
+      "note": "not a defect by itself — many live regions on this product mount only with the status they carry. Recorded so the auditor knows which routes have nothing to listen to until they act."
+    },
+    {
+      "route": "/",
+      "check": "focus indicator",
+      "observed": "computed style unchanged on focus (button): outline:none 0px rgb(0, 0, 0) | box-shadow:none",
+      "wcag": "2.4.7 Focus Visible (AA) / 1.4.11 Non-text Contrast (AA)",
+      "note": "the UA default ring may still paint; a computed-style probe cannot see it. Confirm visually during the audit — this is exactly the class of thing the machine cannot settle."
+    }
+  ],
+  "records": [
+    {
+      "route": "/",
+      "slug": "mainboard",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Mainboard",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        2,
+        2,
+        3
+      ],
+      "headingSkips": [],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/strategy",
+      "slug": "strategy-details",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Strategy Details",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Strategy Details\" -> h3 \"Create strategy\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/outsource-signal",
+      "slug": "outsource-signal",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Add Outsource Signal",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Add Outsource Signal\" -> h3 \"Choose the external object type\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/trading-signal",
+      "slug": "trading-signal",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Trading Signal",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        4,
+        3,
+        3,
+        4,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Trading Signal\" -> h3 \"1. Trading Signal Identity\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/trade-log",
+      "slug": "trade-log",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Trade Log",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        4,
+        3,
+        3,
+        4,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Trade Log\" -> h3 \"1. Trade Log Identity\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/packages/create",
+      "slug": "create-package",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Create Package",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Create Package\" -> h3 \"My requests\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/packages/pre-check",
+      "slug": "pre-check",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Pre-Check",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Pre-Check\" -> h3 \"My requests\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/packages/library",
+      "slug": "package-library",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Package Library",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        2,
+        5
+      ],
+      "headingSkips": [
+        "h1 \"Package Library\" -> h3 \"Catalog\"",
+        "h2 \"Import package\" -> h5 \"Recent imports\""
+      ],
+      "ariaLive": [
+        {
+          "politeness": "polite",
+          "role": "status",
+          "text": "Loading catalog…"
+        },
+        {
+          "politeness": "polite",
+          "role": "status",
+          "text": "Loading…"
+        }
+      ],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/packages/embedded",
+      "slug": "embedded-packages",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Embedded System Packages",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Embedded System Packages\" -> h3 \"Resolver registry\""
+      ],
+      "ariaLive": [
+        {
+          "politeness": "polite",
+          "role": "status",
+          "text": "Loading resolver registry…"
+        }
+      ],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/rationale-families",
+      "slug": "rationale-families",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Rationale Families",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Rationale Families\" -> h3 \"RATIONALE FAMILY LIST\""
+      ],
+      "ariaLive": [
+        {
+          "politeness": "polite",
+          "role": "status",
+          "text": "Loading families…"
+        },
+        {
+          "politeness": "polite",
+          "role": "div",
+          "text": "Select a family card on the left to focus its assigned packages."
+        },
+        {
+          "politeness": "polite",
+          "role": "status",
+          "text": "Loading assignments…"
+        }
+      ],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/market-data",
+      "slug": "market-data",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Market Data",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        4,
+        4,
+        4,
+        4,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Market Data\" -> h4 \"1. Bu sayfaya hangi veriler gelir?\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/research-data",
+      "slug": "research-data",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Research Data",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Research Data\" -> h3 \"Research data workflow\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/portfolio",
+      "slug": "portfolio",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Portfolio / Equity Allocation",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        3,
+        4,
+        3,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Portfolio / Equity Allocation\" -> h3 \"Composition\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/backtest/ready-check",
+      "slug": "ready-check",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Backtest Ready Check",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Backtest Ready Check\" -> h3 \"Composition\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/backtest/run",
+      "slug": "run-results",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "RUN & Backtest Results",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"RUN & Backtest Results\" -> h3 \"Composition\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/backtest/history",
+      "slug": "results-history",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Results History",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Results History\" -> h3 \"No backtest results yet\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/backtest/metrics",
+      "slug": "arrange-metrics",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Arrange Metrics",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Arrange Metrics\" -> h3 \"Resolved profile\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/analysis-lab",
+      "slug": "analysis-lab",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Agent Workspace / Analysis Lab",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Agent Workspace / Analysis Lab\" -> h3 \"No conversation yet\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/panel/management",
+      "slug": "panel-management",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "PANEL / MANAGEMENT",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"PANEL / MANAGEMENT\" -> h3 \"Registered users\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/panel/logs",
+      "slug": "panel-logs",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "PANEL / LOGS",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"PANEL / LOGS\" -> h3 \"All User Backtest Logs\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/trash",
+      "slug": "trash",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Panel / Trash",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Panel / Trash\" -> h3 \"Recoverable entries(0 recoverable)\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/user-manual",
+      "slug": "user-manual",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "User Manual",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        4,
+        5,
+        6,
+        6,
+        6,
+        6
+      ],
+      "headingSkips": [
+        "h1 \"User Manual\" -> h3 \"ENTROPIA USER MANUAL\""
+      ],
+      "ariaLive": [
+        {
+          "politeness": "polite",
+          "role": "status",
+          "text": ""
+        }
+      ],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    },
+    {
+      "route": "/future-dev",
+      "slug": "future-dev",
+      "screen_reader_verified": false,
+      "h1Count": 1,
+      "h1Text": "Future Dev",
+      "landmarks": {
+        "banner": 1,
+        "navigation": 1,
+        "main": 1,
+        "contentinfo": 0
+      },
+      "navAccessibleNames": [
+        "Primary"
+      ],
+      "headingOutline": [
+        1,
+        3,
+        3,
+        4,
+        3
+      ],
+      "headingSkips": [
+        "h1 \"Future Dev\" -> h3 \"Capabilities\""
+      ],
+      "ariaLive": [],
+      "skipLinkFirstTabbable": "a[href=#main-content] \"Skip to main content\"",
+      "positiveTabindex": 0
+    }
+  ]
+}

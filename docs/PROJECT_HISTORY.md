@@ -20675,3 +20675,88 @@ pin **İKİ dünyada da kırmızıydı** = hiç kontrol değildi (ADIM 104/105 s
   (üçü de bu slice'ın dokunmadığı dosyalar; ADIM 145'in şekli) → stack durdurulup
   `--no-file-parallelism` ile yeniden koşuldu, sonucu kapanış commit'inden önce doğrulandı.
 * Üretilmiş olgular tazelendi: frontend unit call sites **733 → 737 / 73 dosya**.
+
+## ADIM 152 — RD-09.c4'ÜN KANITI ÜRETİMİN YAZDIĞI REF'E TAŞINDI; VE "TAVAN OYNATIR" ÖNCÜLÜ DEFTERİN KENDİSİNDE ÇÜRÜDÜ
+
+**PR #892** · taban `origin/main` @ `4581c281` (ADIM 151). **MIGRATION YOK** · `ENGINE_VERSION`
+**değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **ÜRÜN KODUNDA SIFIR SATIR**
+(`backend/src` el değmedi — NC yamaları bayt bayt geri alındı, her turda **sha256 ile doğrulandı**) ·
+`frontend/` **sıfır satır**. Diff **iki dosya**: bir integration test harness'ı + semantik harita notu.
+**A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+
+### Önce (a): post-merge Lighthouse OKUNDU — #677'nin ölçüm tarafı TAMAM
+
+Devir prompt'unun (a) kalemi koşuldu: ADIM 151'in post-merge CI'ı (run `33469911470`, job
+*"Lighthouse — score ratchet"*) **23/23 rotada üç kategori de 100, spread 100–100**. Dört CLS
+rotasının dördü de 100'e çıktı (tavanlar: create-package 99 · package-library 98 ·
+panel-management 93). Kapının `tightened` önerisi **üç çiftte** çıktı ve **REDDEDİLDİ** — tek
+koşuyla sıkıştırma yok (`stability`; ADIM 150'nin `do_not_tighten` gerekçesi korunur). Baseline'a
+**dokunulmadı**. **#677'yi kapatmak İNSAN kararıdır** — ölçüm artık eksiksiz.
+
+### ASIL BULGU 1 — devir öncülü DEFTERİN KENDİSİNDE çürüdü: RD-09.c4 hiç `partial` DEĞİLDİ
+
+ADIM 151 kickoff'u (b)'yi *"kabul borcu slice'ı (tavan oynatır)"* diye çerçeveliyordu; ADIM
+138/140/149'un kayıtları ve i703 §Karar 3'ün kendi metni de *"`RD-09.c4` `partial` KALIR"* diyordu.
+**Ölçüldü: harita `RD-09.c4`'ü ADIM 68'den (batch 05) beri `covered` tutuyor**, defterde RD-09
+satırı yok ve hiçbir tavan onu taşımıyor. Dört slice'lık *"partial"* cümlesi defter durumu değil,
+**yeniden ölçülmemiş bir inançtı** — kimse haritayı tekrar grep'lememişti (ADIM 88'in dersinin
+karar-belgesi tarafındaki ikizi). Sonuç: bu kapanış **hiçbir tavanı oynatmaz ve oynatamazdı**;
+ratchet ölçümü **54 partial / 6 uncovered · A1 B21 C6 D32 — bayt bayt aynı**.
+
+### ASIL BULGU 2 — ama §Karar 3'ün KISITI ayaktaydı: covered atıfı elle kurulmuş bir dünyadaydı
+
+İmzanın gerçek içeriği (*"kriter ancak üretimin ürettiği bir ref üzerinde kapatılabilir"*)
+çürümedi: `RD-09.c4`'ü cite eden `test_research_successor_manifest_immutability.py`'nin harness'ı
+`instrument_mapping_ref`'i **elle** set ediyordu (`map_rd11_c3`, `:118`) ve ADIM 149'un yazıcısı
+indiğinden beri o satır `create_research_dataset`'in kopyaladığı değerin **ÜZERİNE** yazıyordu —
+ADIM 149'un üçlemesinin dördüncü örneği (*ADIM 138 fazladan · ADIM 140 eksik · ADIM 149 üzerine ·
+burası ÜZERİNE, atıf dosyasının kendisinde*). ADIM 149 aynı dosyaya `market_instrument_id="BTCUSDT"`
+eklemiş ama hand-set'i bırakmıştı: `(b2)` kapısını geçmek için gereken market kimliği gelmiş,
+üretimin yazdığı ref yine hiç okunmamıştı.
+
+### Sevk edilen
+
+* Hand-set **kaldırıldı**; yerine iki eksenli dürüst-harness assertion'ı: **VARLIK** (üretim bir ref
+  yazdı) + **KİMLİK** (yazdığı şey linkli market revizyonunun **kendi** `instrument_id`'si — satırdan
+  okunur, literal değil). Link için `:100`'de duran dürüstlük assertion'ının birebir kardeşi.
+* İki test de manifest feed'inin `instrument_mapping_ref`'ini üretimin yazdığı değere **pinler**
+  (finished + QUEUED). Modül docstring'i artık `RD-09.c4`'ü **adıyla** taşıyor — önceden `RD-09`
+  test ağacında **0 hit**'ti (ADIM 88: kriter id'sini test ağacında grep'lenebilir kıl).
+* Harita notuna kapanış paragrafı; üretilmiş defter/rapor **değişmedi** (`--check-generated` yeşil,
+  covered satır defterde görünmez).
+
+### DÖRT NC — dördü tek noktalı, dördü FARKLI assertion satırında, her restore sha256-doğrulamalı
+
+1. **NC-1** tarihsel hand-set geri kondu → kırmızı **feed** assertion'ında
+   (`'map_rd11_c3' == 'BTCUSDT'`). Hand-set harness assert'lerinden SONRA çalıştığı için onları
+   geçer ve manifest'te yakalanır ⇒ feed assertion'ı harness assertion'ının **gölgesinde değil**
+   (ADIM 101/110 kuralı, kurulumla kanıtlı). Boşluğun ölçüsü de bu: eski dünyada taban koşusu
+   hand-set'le **yeşildi** — eski dosya üzerine-yazmayı yapısal olarak göremezdi.
+2. **NC-2** yazıcı `None` geçirir → kırmızı **varlık** ekseninde (`assert None`).
+3. **NC-3** `_instrument_mapping_ref_for` sabit döner → kırmızı **kimlik** ekseninde
+   (`'map_wrong' == 'BTCUSDT'`).
+4. **NC-4** `as_manifest_revision` ref'i boşaltır → kırmızı **feed** assertion'ında
+   (`None == 'BTCUSDT'`); harness eksenleri geçti ve **koşu tamamlandı** — yani worker manifest
+   bloğundaki ref değerini yeniden doğrulamıyor (kaydedildi, üzerine gidilmedi).
+
+### Ortam / tuzak
+
+* NC koşucusunun daraltılmış `env.PATH`'i `~/.local/bin`'i taşımıyordu → `uv` bulunamadı; koşu
+  düştü ama `finally` restore'u **sha256 OK** verdi — ADIM 149'un *"yamalayan harness geri
+  yüklemeyi hash ile doğrular"* kuralı ilk gerçek sınavını geçti.
+* Oturum başında `.git/refs/remotes/origin/main.lock` **bayat** çıktı (0 bayt, 29 dk, çalışan git
+  süreci yok) → silindi; fetch tamamlandı.
+
+### DÜRÜST SINIR
+
+* **`RD-09.c4`'ün STATÜSÜ DEĞİŞMEDİ** — `covered` idi, `covered` kaldı; değişen **kanıtın
+  dünyası**. Hiçbir tavan oynamadı (ölçüldü, yukarıda).
+* **#677 KAPATILMADI** — ölçüm tamam, karar insan.
+* Frontend'e **sıfır satır** → frontend kapıları koşulmadı.
+* Tam backend suite uçtan uca **koşulmadı**: hedef aile **39 passed**, bekçiler **76 passed**,
+  ruff/format/`mypy src` temiz, `generate_repository_facts --check` yeşil (test fonksiyonu
+  eklenmedi → toplanan sayı **değişmedi**), acceptance ratchet yeşil → geçen sayı ve coverage
+  **CI'ın otoritesinde**.
+* **PRE-1 hâlâ koşulamaz** (0 tag / 0 release / 0 deploy workflow) — `(b2)` "doğrulanmış"
+  sayılamaz; bu slice o sınırı **taşımadı**.
+* İzole DB: `entropia_test_adim152` (worktree'ye özel, `postgresql+asyncpg`).

@@ -10,6 +10,14 @@ That is the gap this module closes, and the reason it needs a genuinely complete
 rather than a compiled bundle — the artefact under test is
 ``backtest_run_manifest`` / ``result_manifest_snapshot``, which only a run produces.
 
+This module is also RD-09.c4's citation ("an existing run or result stays bound to
+v1.0 after v1.1 is approved" — batch 05 cited these nodes rather than writing new
+ones). i703 §Karar 3 (signed 2026-08-31) allows that closure only on a ref PRODUCTION
+produced: until ADIM 152 the harness below hand-set ``instrument_mapping_ref``, and
+once ADIM 149's writer landed that hand-set silently OVERWROTE what the shipped
+command copies from the linked market revision. The harness now asserts the copy
+instead of writing one, so the run under test pins a production-written ref.
+
 Why the assertions are shaped the way they are: the manifest is persisted at admission
 and the snapshot is copied at result time, so "the stored row did not change" is nearly
 tautological on its own. The defect this criterion actually guards against is a READ
@@ -44,6 +52,7 @@ from entropia.infrastructure.postgres.models import (
     ResearchNativeAsset,
 )
 from entropia.infrastructure.postgres.repositories import backtest as bt_repo
+from entropia.infrastructure.postgres.repositories import market_data as md_repo
 from entropia.infrastructure.postgres.repositories import research_data as rd_repo
 from tests.integration.test_backtest_persistence import (
     USER1,
@@ -82,7 +91,11 @@ async def _approved_funding_revision(
         readiness' ``_research_market_compatibility_issues``. Pinned by the shipped
         command from ``market_entity_id``, not written here;
       * ``instrument_mapping_ref`` non-empty — ``instrument_mapping_is_valid`` requires
-        the link and the mapping ref to be present together or absent together.
+        the link and the mapping ref to be present together or absent together. Since
+        ADIM 149 the shipped command writes it itself (GH #703 §Karar 1 = ``(b)``: a
+        COPY of the linked market revision's own ``instrument_id``), so it is ASSERTED
+        below, never written here — writing it would overwrite production's value and
+        re-open the world i703 §Karar 3 refused to close RD-09.c4 in.
     """
     root, _revision = await rd_cmd.create_research_dataset(
         session,
@@ -98,6 +111,13 @@ async def _approved_funding_revision(
     # satisfied by construction rather than by a hand-written column — and asserting it
     # here keeps the harness honest if that pinning ever changes.
     assert revision.linked_market_dataset_revision_id == market_revision_id
+    # The same command copies the mapping ref from that market revision (GH #703
+    # §Karar 1 = `(b)`). Two axes, two asserts: PRESENCE (production wrote one at all)
+    # and IDENTITY (it wrote the market revision's own instrument_id, not a constant).
+    assert revision.instrument_mapping_ref, "production wrote no instrument_mapping_ref"
+    market_revision = await md_repo.get_revision(session, market_revision_id)
+    assert market_revision is not None
+    assert revision.instrument_mapping_ref == market_revision.instrument_id
 
     session.add(
         ResearchNativeAsset(
@@ -115,7 +135,6 @@ async def _approved_funding_revision(
     revision.available_time_policy = AvailableTimePolicy.FIXED_DELAY
     revision.available_delay_seconds = 120
     revision.source_timezone_mode = ResearchTimezoneMode.UTC
-    revision.instrument_mapping_ref = "map_rd11_c3"
     revision.revision_state = ResearchRevisionState.VERIFIED
     await session.flush()
     await rd_cmd.approve_research_dataset_revision(
@@ -240,6 +259,10 @@ async def test_a_successor_approval_leaves_a_finished_runs_manifest_unchanged(se
     # be asserting that an absent pin stayed absent.
     assert feed_before["revision_id"] == pinned["source_revision_id"]
     assert feed_before["revision"]["available_delay_seconds"] == 120
+    # RD-09.c4's closure condition (i703 §Karar 3): the manifest pins the ref
+    # PRODUCTION wrote — the market revision's own instrument_id, named once at the
+    # `_ready_composition` call above — not a harness constant.
+    assert feed_before["revision"]["instrument_mapping_ref"] == "BTCUSDT"
 
     # --- the event the criterion names -------------------------------------------- #
     successor_id = await _approve_successor(
@@ -321,6 +344,9 @@ async def test_a_successor_approval_leaves_a_RUNNING_runs_manifest_unchanged(ses
     hash_before = before.manifest_hash
     feed_before = _research_feed(before.manifest)
     assert feed_before["revision_id"] == pinned["source_revision_id"]
+    # Same production-ref condition as the finished case: the QUEUED manifest's pinned
+    # block carries the ref the shipped command copied, not a harness constant.
+    assert feed_before["revision"]["instrument_mapping_ref"] == "BTCUSDT"
 
     successor_id = await _approve_successor(
         session, pinned["source_root_id"], pinned["market_entity_id"]

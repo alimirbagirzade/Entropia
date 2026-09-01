@@ -271,6 +271,21 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **ÜRÜN KODUNDA SIFIR SATIR**
+> (diff: bir test harness'ı + harita notu). **Son dalga — ADIM 152 (RD-09.c4'ün kanıtı üretimin
+> yazdığı ref'e taşındı; "tavan oynatır" öncülü DEFTERİN KENDİSİNDE çürüdü).** Harita c4'ü ADIM
+> 68'den beri `covered` tutuyordu — dört slice'ın "partial KALIR" cümlesi yeniden ölçülmemiş bir
+> inançtı; ratchet **54/6 · A1 B21 C6 D32 bayt bayt aynı**. i703 §Karar 3'ün kısıtı yine de
+> ayaktaydı: atıf harness'ı ref'i **elle** set ediyor, ADIM 149'dan beri üretimin yazdığının
+> **üzerine** yazıyordu → hand-set kaldırıldı, iki eksenli dürüst-harness assertion'ı (varlık +
+> kimlik) + manifest-feed pinleri; **4 NC, dördü farklı assertion satırında, restore'lar sha256**.
+> Ayrıca (a): post-merge Lighthouse okundu — **23/23 rota × 3 kategori 100**, `tightened` önerisi
+> REDDEDİLDİ; **#677'nin ölçüm tarafı tamam, kapatmak İNSAN kararı**. Testle kapanabilir sınıf-B
+> satır KALMADI. Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 152 · `docs/ADIM152_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **backend'de SIFIR SATIR** ·
 > Lighthouse `floors`/`armed` **el değmedi**. **Son dalga — ADIM 151 (oturum açık CLS dört
 > rotada KAYNAĞINDA düzeltildi).** ADIM 148'in 244px rezervi oturumsuz settled değeriydi —

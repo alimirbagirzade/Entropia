@@ -20853,6 +20853,21 @@ ajan kaydetti"* şeffaflığını taşır); belgesiz yedi kalemde imza düzlemi 
 dispozisyon yorumudur** (ürün sahibinin hesabından, ajan-kaydı notuyla; ADIM 90'ın üç düzlemi
 her kapatılan issue'da hizalı). Dokuz yorum: #854 #534 #547 #582 #535 #542 #543 #545 #546.
 
+**ON BİRİNCİ–ON ÜÇÜNCÜ KARAR — #536, DELEGE İMZAYLA (`A-Z`):** ürün sahibi seçimi açıkça
+ajana delege etti ve imza dizesini `A-Z` olarak belirledi (2026-09-01, oturum kaydı; bu
+delegasyonun kendisi bir meta-karardır ve burada şeffafça yazılıdır). Ajanın bu delegasyonla
+imzaladığı üç eksen: **(1) Gap C kalanı** — altı alan `_SCHEMA_FIELDS`'e GİRMEZ (her literal
+bir sınıflandırma icadı isterdi); issue'nun kendi önerdiği alternatif muhafız (*yeni conflict
+literal'i ya matris'te ya açık allow-list'te*) onaylandı ve **#546 matrix slice'ına katlandı**
+(slice ikisini birden kapatır). **(2) md. 4** (vacuity'nin kullanıcı yüzeyi) — **post-V1**,
+#535'in aynı gün imzalanan ertelemesiyle tutarlı; ADIM 141/142'nin pin+tripwire'ı disclosure'ı
+zorlamaya devam eder. **(3) `record_all_execute_highest` ikizi** (ADIM 142 bulgusu) — **V1
+için RATIFIED**: şemanın vaadi her dalda karşılanıyor, `_stop_fingerprint` tripwire'ı ayrışma
+gününde kararı zorlar; sıfır kod. **Sınır:** issue'ya dispozisyon yorumu ajandan GÖNDERİLEMEDİ
+(otomatik izin sınıflandırıcısı "başkası adına imza" gönderimini iki kez blokladı — bilinçli
+olarak zorlanmadı); yorum düzlemini ürün sahibi kendi elinden tamamlar, karar düzlemi bu
+kayıttır.
+
 **REDDEDİLEN: #514 (A-08) imzayla kapatılmaz.** O bir karar değil yapılmamış bir denetimdir
 (2/184 hücre · 0/10 akış · 0/4 çıkış kriteri); kanıtsız kapanış iki kez geri alınmıştı,
 üçüncüsü yazılmadı. Ürün sahibinin toptan yetkisi bu kalemi **kapsamaz** sayıldı ve bu ona

@@ -31,10 +31,11 @@ denetim karar değildir.
    `tests/integration/test_external_import_pin_stability.py` **kasıtlı** ters çevrilir (yeni
    dünyayı pinler — pin N'de KALIR, kompozisyon READY kalır; N+1 repin edilirse blocker oraya
    taşınır, bu da bir case olarak pinlenir). Slice #854'ü kapatır (Closes #854).
-2. **#546 matrix slice'ı:** `restrictions_filters.filters.action` capability matrix'e →
+2. **#546+#536 matrix slice'ı:** `restrictions_filters.filters.action` capability matrix'e →
    structured provenance'ta görünür; ADIM 139'un iki muhafız ekseni hazır; TS aynası
    `backend/tools/export_capability_matrix.py` ile yeniden üretilir. Davranış DEĞİŞMEZ.
-   Slice #546'yı kapatır.
+   **#536 Gap C muhafızı da bu slice'ta** (delege imzayla onaylı, §ADIM 154: yeni conflict
+   literal'i ya matris'te ya açık allow-list'te). Slice **#546'yı VE #536'yı** kapatır.
 3. **#547 feature slice'ı:** Increasing Timeframe by Layer — issue'nun "Required work" listesi
    madde madde (`layer_timeframe`/`layer_bucket` yeniden kullanımı · exhaustion =
    custom_sequence emsali · matrix satırı `active_v1` + TS aynası · bayat remediation cümlesi

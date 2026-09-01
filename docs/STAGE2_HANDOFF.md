@@ -10892,8 +10892,9 @@ sağlanmadı, tavanlar yerinde. Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 154
 
 1. **#854 set-once slice'ı (en küçük):** `link_batch_to_revision` + `link_normalized_to_revision`
    koşullu atamaya döner; `test_external_import_pin_stability.py` **kasıtlı** ters çevrilir.
-2. **#546 matrix slice'ı:** `restrictions_filters.filters.action` capability matrix'e; TS aynası
-   yeniden üretilir; davranış DEĞİŞMEZ. Slice #546'yı kapatır.
+2. **#546+#536 matrix slice'ı:** `restrictions_filters.filters.action` capability matrix'e; TS
+   aynası yeniden üretilir; davranış DEĞİŞMEZ. **#536 Gap C muhafızı da burada** (delege imza
+   `A-Z`, §ADIM 154). Slice #546'yı VE #536'yı kapatır.
 3. **#547 feature slice'ı:** Increasing Timeframe by Layer — `CANONICAL_TIMEFRAMES[index+N]`,
    ladder exhaustion = custom_sequence emsali; `ENGINE_VERSION` PR'da açıkça değerlendirilir.
 4. **Tavan takibi:** 4. ardışık kusursuz post-fix koşu inince sıkıştırma slice'ı (tavanlar o

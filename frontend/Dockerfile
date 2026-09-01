@@ -56,15 +56,20 @@ FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 # only alternatives were waiving it in .github/security-allowlist.json (an
 # exception needs a named owner and an expiry; nothing is currently waived and
 # that is the goal state) or pinning a digest we would then have to chase.
-# `apk upgrade` is scoped to the two openssl packages so it cannot quietly pull
+# `apk upgrade` is scoped to the named packages so it cannot quietly pull
 # an unrelated version bump into the runtime layer.
+# libexpat joined the list 2026-09-01 for the same reason and under the same
+# rule: the base tag ships 2.8.3-r0, which carries CVE-2026-66046 and
+# CVE-2026-76641 (both HIGH, both fixed in 2.8.4-r0) — a published fix exists,
+# so waiving it in .github/security-allowlist.json is not an option, and the
+# line self-heals the moment upstream rebuilds the floating tag.
 #
 # This is the ONE root step in this stage and it exists only for the duration of
 # the upgrade: `USER 101` is restored immediately, because running wholly as
 # uid 101 is the entire reason this image is the `-unprivileged` variant (see
 # the note above). Do not let a later edit leave the stage as root.
 USER root
-RUN apk upgrade --no-cache libcrypto3 libssl3
+RUN apk upgrade --no-cache libcrypto3 libssl3 libexpat
 USER 101
 # Deliberately NOT under conf.d/. The stock nginx.conf globs
 # `include /etc/nginx/conf.d/*.conf` inside its `http` block, so a header file

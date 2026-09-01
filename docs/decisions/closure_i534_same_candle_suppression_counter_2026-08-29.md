@@ -82,9 +82,12 @@ uygulanmadığı bu slice'ta **aranmadı ve bulunmadı** — `output.py`'de bir 
       golden digest'i oynatır)
 - [ ] **(b) TAŞI** — yeni sayaç eklensin ve A yolu `suppressed_entries`'ten **çıkarılsın**
       (sevk edilmiş bir sayının değeri değişir; bump gerekir)
-- [ ] **(c) HİÇBİRİ** — sayaç olduğu gibi kalsın; §5.9'un etkisi `entry_exit_collision`
+- [x] **(c) HİÇBİRİ** — sayaç olduğu gibi kalsın; §5.9'un etkisi `entry_exit_collision`
       olaylarından okunur (kod yok, `#534` md. 3 *"karar verildi: gerekmiyor"* olarak kapanır)
 - [ ] **Başka:** ______________________________________________
 
-**İmza:** ______________________  **Tarih:** ____________
+**İmza:** `alimirbagirzade`  **Tarih:** 2026-09-01 — ürün sahibi şıkkı oturum içinde seçti,
+ajan kaydetti (ADIM 66 emsali; kayıt: ADIM 154). Bu imzayla #534'ün ÜÇ düzlemi hizalanır:
+issue durumu (CLOSED, 2026-08-30) · yazılı karar (issue'ya dispozisyon yorumu, 2026-09-01) ·
+imza kutusu (burada) — ADIM 90 gereği kapanış artık KAYITLIDIR.
 

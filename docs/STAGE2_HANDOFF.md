@@ -10868,3 +10868,34 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 153 · `docs/ADIM153_LANDED_KICKOFF
    koşulu yeniden ölçülür; sağlanırsa tavanlar o PR'ın KENDİ CI artefaktından sıkıştırılır.
 3. **Testle kapanabilir sınıf-B satır KALMADI**; ADIM 152 NC-4 bulgusu dahil sıradaki kod işi
    bir imzanın arkasından çıkar.
+
+## Stage 154 — on karar tek oturumda imzalandı; beş issue kapandı, üç kod işi imzalı kuyruğa girdi landed (bu PR)
+
+**DOCS + GitHub dispozisyonları + tek satır CVE yaması** — backend/test/migration'da sıfır
+satır; `frontend/Dockerfile` kapsamlı `apk upgrade` listesine `libexpat` aldı (2 yeni HIGH:
+CVE-2026-66046 · CVE-2026-76641, fix 2.8.4-r0 — openssl satırının emsali, fix varken
+allowlist yazılmaz). Ratchet el değmedi (54/6 · A1 B21 C6 D32). Blocker DEĞİŞMEDİ (1 — A-08)
+→ BLOCKED.
+
+Ürün sahibi on kararı interaktif imzaladı (toptan yetki ≠ imza, ADIM 66 emsali — şıklar tek
+tek soruldu): **#854 = (b) set-once** · **#534 md.3 = (c) hiçbiri** · **#547 = custom_sequence
+emsali** · **#582 kapat** · **#535 V1 ratified** · **#542 sevk edilen eksen** · **#543 ikisi
+post-V1** · **#545 ikinci pin yok** · **#546 = filtreler post-V1 + action alanı matrix'e**.
+Kapanan: #582 #535 #542 #543 #545 (+#534 üç düzlemi hizalandı). Açık kalan (kod bekliyor):
+#854 · #547 · #546. **#514 imzayla kapatılMADI** — denetim karar değildir, red kayıtlı.
+
+Tavan korpusu: post-fix **3 ardışık koşu, 69/69 skor 100** (artefaktlardan okundu); 4+ eşiği
+sağlanmadı, tavanlar yerinde. Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 154 ·
+`docs/ADIM154_LANDED_KICKOFF.md`.
+
+## Next: **imzalı kod kuyruğu — (1) #854 set-once · (2) #546 matrix alanı · (3) #547 timeframe-by-layer**
+
+1. **#854 set-once slice'ı (en küçük):** `link_batch_to_revision` + `link_normalized_to_revision`
+   koşullu atamaya döner; `test_external_import_pin_stability.py` **kasıtlı** ters çevrilir.
+2. **#546+#536 matrix slice'ı:** `restrictions_filters.filters.action` capability matrix'e; TS
+   aynası yeniden üretilir; davranış DEĞİŞMEZ. **#536 Gap C muhafızı da burada** (delege imza
+   `A-Z`, §ADIM 154). Slice #546'yı VE #536'yı kapatır.
+3. **#547 feature slice'ı:** Increasing Timeframe by Layer — `CANONICAL_TIMEFRAMES[index+N]`,
+   ladder exhaustion = custom_sequence emsali; `ENGINE_VERSION` PR'da açıkça değerlendirilir.
+4. **Tavan takibi:** 4. ardışık kusursuz post-fix koşu inince sıkıştırma slice'ı (tavanlar o
+   PR'ın KENDİ CI artefaktından). **A-08 (#514) tek blocker, human-only.**

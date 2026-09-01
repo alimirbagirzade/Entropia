@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 153 landed — GH #677 insan eliyle kapandı; kayıt düşüldü, tavan takibi koşula bağlı kaldı
 
 ## Nerede duruyoruz

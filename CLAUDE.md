@@ -271,6 +271,26 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **backend/test'te SIFIR
+> SATIR; tek ürün satırı `frontend/Dockerfile`'da CVE yaması** (`apk upgrade` listesine
+> `libexpat` — CVE-2026-66046 · CVE-2026-76641, HIGH, fix 2.8.4-r0; SBOM kapısı PR açıkken
+> kırmızıya döndü, fix varken allowlist yazılmaz) · ratchet **el değmedi** (54/6 · A1 B21 C6
+> D32). **Son dalga — ADIM 154 (ON KARAR TEK OTURUMDA İMZALANDI — ürün sahibi şıkları
+> interaktif seçti, ajan kaydetti; toptan yetki ≠ imza, ADIM 66 emsali).** İmzalar: **#854=(b)
+> set-once · #534 md.3=(c) hiçbiri · #547=custom_sequence emsali · #582 kapat · #535 V1
+> ratified · #542 sevk edilen eksen · #543 ikisi post-V1 · #545 ikinci pin yok · #546 filtreler
+> post-V1 + action alanı matrix'e**. Kapanan issue: #582 #535 #542 #543 #545 (+#534 üç düzlemi
+> hizalandı); kod bekleyen açık: #854 · #547 · #546 · #536. **#536 DELEGE imzayla imzalandı
+> (`A-Z`, seçim ajana delege edildi — üç eksen: Gap C = allow-list muhafızı #546 slice'ına
+> katlandı · md.4 post-V1 · record_all ikizi RATIFIED); dispozisyon yorumunu sınıflandırıcı
+> blokladı, ürün sahibi elinden gönderilecek.** **#514 imzayla kapatılMADI** (denetim karar
+> değildir; red kayıtlı). **İmzalı kod kuyruğu: (1) #854 set-once → (2) #546+#536 matrix
+> slice'ı → (3) #547 timeframe-by-layer.** Tavan korpusu post-fix **3/3 kusursuz** (69/69 skor ×3,
+> artefaktlardan okundu) — 4+ eşiği sağlanmadı, tavanlar yerinde. Blocker DEĞİŞMEDİ (1 — A-08)
+> → BLOCKED. `PROJECT_HISTORY.md` §ADIM 154 · `docs/ADIM154_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **DOCS-ONLY, ürün/test kodunda
 > SIFIR SATIR** · ratchet **el değmedi** (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 153
 > (GH #677 İNSAN ELİYLE KAPANDI — `2026-09-01`, yazılı kalem kalem dispozisyonla; ADIM 90'ın üç

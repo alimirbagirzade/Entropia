@@ -20815,3 +20815,80 @@ issue'su (#535 #542 #543 #545 #546) imza bekliyor · **#514 / A-08 — TEK BLOCK
 edilmiyor (otorite CI). Tavan takibi **KAPANMADI** — koşulu ileride bir koşu korpusu sağlar.
 #677'nin kapanışı **A-08'e kanıt DEĞİLDİR** (kapanış yorumu bunu kendisi yazıyor: Lighthouse
 `accessibility` kapalı; otorite axe + insan denetimi, #514 açık kalır).
+
+## ADIM 154 — ON KARAR TEK OTURUMDA İMZALANDI; BEŞ ISSUE KAPANDI, ÜÇ KOD İŞİ İMZALI KUYRUĞA GİRDİ
+
+**DOCS + GitHub dispozisyonları + TEK SATIR CVE yaması** — backend'de, testte, migration'da
+sıfır satır; ratchet el değmedi (54/6 · A1 B21 C6 D32); blocker DEĞİŞMEDİ (**1 — yalnız
+A-08**) → BLOCKED. **CVE yaması PR açıkken eklendi:** SBOM kapısı taze veritabanıyla
+`libexpat 2.8.3-r0`'da iki YENİ HIGH buldu (CVE-2026-66046 · CVE-2026-76641, fix 2.8.4-r0)
+→ `frontend/Dockerfile`'ın **zaten var olan** kapsamlı `apk upgrade` satırına (openssl
+emsali) `libexpat` eklendi. **Fix varken allowlist yazılmaz** (ADIM 44 kuralının pozitif
+yüzü); satır, üstyapı floating tag'i yeniden build'lenince kendiliğinden gereksizleşir ve
+yorumunda bunu yazar.
+
+**Bağlam:** ürün sahibi oturum içinde toptan yetki verdi (*"imzaları kabul ediyorum, ne
+gerekiyse yap"*). **Toptan kabul bir imza DEĞİLDİR** (ADIM 66 emsali: birlikte imzalanamayan
+şıklar düzeltilerek imzalanır) — her karar, şıkları ve **ölçülmüş bedelleriyle** tek tek ürün
+sahibine soruldu; on kararın onu da ürün sahibince interaktif seçildi, ajan kaydetti.
+
+**İmzalanan on karar:**
+
+| Kalem | Karar | Sonuç |
+|---|---|---|
+| #854 Karar 1 | **(b) SET-ONCE** — eski revision kazanır; `link_*_to_revision` yalnız `None` iken yazar | Kod işi kuyruğa; Karar 2 **konusuz** (belgeye yazıldı) |
+| #534 md. 3 | **(c) HİÇBİRİ** — sayaç eklenmez; etki `entry_exit_collision` olaylarından okunur | Üç düzlem hizalandı, kapanış artık KAYITLI |
+| #547 merdiven tepesi | **custom_sequence emsali** ("runs out of ladder") | Implementasyon İMZALI olarak açıldı |
+| #582 | **KAPAT** — öncül bayat (containment ADIM 132'de kalktı) | Kalem kalem dispozisyonla CLOSED |
+| #535 | **V1 ratified** — 3 sapan varsayılan onaylandı, 6 temsilsiz satır post-V1 | CLOSED |
+| #542 | **Sevk edilen eksen kanonik** — kanon düzeltmesi post-V1 docs işi | CLOSED |
+| #543 | **İkisi de post-V1** — correlation donuk kalır, regime kanonik boşluk | CLOSED |
+| #545 | **İkinci pin V1'de YOK** — stale-quote eşiği konusuz | CLOSED |
+| #546 yarı 1 | **Hiçbir filtre koşulu V1'de sevk edilmez** | Fail-closed statüko korunur |
+| #546 yarı 2 | **`restrictions_filters.filters.action` capability matrix'e girer** | Kod işi kuyruğa |
+
+**İmzanın yeri iki türlü:** kutulu belgesi olan iki kalem (#854, #534) belgelerinde işaretlendi
+(`closure_i854_…`, `closure_i534_…` — imza satırı *"ürün sahibi şıkkı oturum içinde seçti,
+ajan kaydetti"* şeffaflığını taşır); belgesiz yedi kalemde imza düzlemi **issue'daki yazılı
+dispozisyon yorumudur** (ürün sahibinin hesabından, ajan-kaydı notuyla; ADIM 90'ın üç düzlemi
+her kapatılan issue'da hizalı). Dokuz yorum: #854 #534 #547 #582 #535 #542 #543 #545 #546.
+
+**ON BİRİNCİ–ON ÜÇÜNCÜ KARAR — #536, DELEGE İMZAYLA (`A-Z`):** ürün sahibi seçimi açıkça
+ajana delege etti ve imza dizesini `A-Z` olarak belirledi (2026-09-01, oturum kaydı; bu
+delegasyonun kendisi bir meta-karardır ve burada şeffafça yazılıdır). Ajanın bu delegasyonla
+imzaladığı üç eksen: **(1) Gap C kalanı** — altı alan `_SCHEMA_FIELDS`'e GİRMEZ (her literal
+bir sınıflandırma icadı isterdi); issue'nun kendi önerdiği alternatif muhafız (*yeni conflict
+literal'i ya matris'te ya açık allow-list'te*) onaylandı ve **#546 matrix slice'ına katlandı**
+(slice ikisini birden kapatır). **(2) md. 4** (vacuity'nin kullanıcı yüzeyi) — **post-V1**,
+#535'in aynı gün imzalanan ertelemesiyle tutarlı; ADIM 141/142'nin pin+tripwire'ı disclosure'ı
+zorlamaya devam eder. **(3) `record_all_execute_highest` ikizi** (ADIM 142 bulgusu) — **V1
+için RATIFIED**: şemanın vaadi her dalda karşılanıyor, `_stop_fingerprint` tripwire'ı ayrışma
+gününde kararı zorlar; sıfır kod. **Sınır:** issue'ya dispozisyon yorumu ajandan GÖNDERİLEMEDİ
+(otomatik izin sınıflandırıcısı "başkası adına imza" gönderimini iki kez blokladı — bilinçli
+olarak zorlanmadı); yorum düzlemini ürün sahibi kendi elinden tamamlar, karar düzlemi bu
+kayıttır.
+
+**REDDEDİLEN: #514 (A-08) imzayla kapatılmaz.** O bir karar değil yapılmamış bir denetimdir
+(2/184 hücre · 0/10 akış · 0/4 çıkış kriteri); kanıtsız kapanış iki kez geri alınmıştı,
+üçüncüsü yazılmadı. Ürün sahibinin toptan yetkisi bu kalemi **kapsamaz** sayıldı ve bu ona
+açıkça söylendi. **Tek blocker değişmedi.**
+
+**İmzayla açılan kod kuyruğu (önerilen sıra):** (1) #854 set-once düzeltmesi — iki tek satırlık
+koşullu atama + `test_external_import_pin_stability.py`'nin **kasıtlı** ters çevrilmesi
+(yeni dünyayı pinler); (2) #546 matrix alanı — `restrictions_filters.filters.action`
+(ADIM 139'un iki ekseni hazır; TS aynası yeniden üretilir); (3) #547 Increasing Timeframe by
+Layer — `layer_timeframe`/`layer_bucket` yeniden kullanımı, ladder-exhaustion custom_sequence
+emsali, `ENGINE_VERSION` sorusu PR'da açıkça değerlendirilir (issue md. "Required work").
+
+**Tavan takibi (yan ölçüm):** post-fix korpus **3 ardışık koşu** (`33469911470` ·
+`33482001704` · `33488190681`), üçünde de 23 rota × 3 kategori = **69/69 skor 100[100–100]**
+(artefaktlar indirilip okundu, devir notuna güvenilmedi). 4+ eşiği sağlanmadı → tavanlara
+DOKUNULMADI. **İzleyici dersi:** ilk koşu-izleyicisi *"son id ≠ bilinen id"* karşılaştırması
+yüzünden bir API bayat-liste anında ESKİ bir koşuyu (id KÜÇÜK) "yeni" sanıp yanlış pozitif
+verdi — doğrulama koşu listesiyle yapıldı, izleyici **yalnız sayısal olarak BÜYÜK id** kabul
+edecek şekilde yeniden kuruldu. *Fark bir yenilik kanıtı değildir; yön de ölçülmelidir.*
+
+**DÜRÜST SINIR:** ürün/test kodunda sıfır satır → suite'ler KOŞULMADI, otorite CI ·
+üç kod işi **imzalı ama SEVK EDİLMEMİŞ** — #854/#546/#547 o slice'lar inene kadar açık ·
+#542'nin kanon düzeltmesi ve #543'ün regime şeması **post-V1 borcu olarak kayıtlı, takvimsiz** ·
+tavan korpusu izleniyor, sıkıştırma slice'ı 4. kusursuz koşu inene kadar AÇILMADI.

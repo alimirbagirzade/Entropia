@@ -1,0 +1,219 @@
+========== A-08 AUDIT STACK — UP ==========
+  project=entropia-a11y-audit  env=.env.a11y-audit  web=http://127.0.0.1:18280  api=http://127.0.0.1:18200/api/v1
+— build + start
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-web:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Building 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-web:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Image entropia-backend:local Built 
+ Network entropia-a11y-audit_default Creating 
+ Network entropia-a11y-audit_default Created 
+ Volume entropia-a11y-audit_redisdata Creating 
+ Volume entropia-a11y-audit_redisdata Created 
+ Volume entropia-a11y-audit_miniodata Creating 
+ Volume entropia-a11y-audit_miniodata Created 
+ Volume entropia-a11y-audit_pgdata Creating 
+ Volume entropia-a11y-audit_pgdata Created 
+ Container entropia-a11y-audit-postgres-1 Creating 
+ Container entropia-a11y-audit-minio-1 Creating 
+ Container entropia-a11y-audit-redis-1 Creating 
+ Container entropia-a11y-audit-minio-1 Created 
+ Container entropia-a11y-audit-minio-setup-1 Creating 
+ Container entropia-a11y-audit-redis-1 Created 
+ Container entropia-a11y-audit-postgres-1 Created 
+ Container entropia-a11y-audit-migrate-1 Creating 
+ Container entropia-a11y-audit-minio-setup-1 Created 
+ Container entropia-a11y-audit-migrate-1 Created 
+ Container entropia-a11y-audit-provision-1 Creating 
+ Container entropia-a11y-audit-provision-1 Created 
+ Container entropia-a11y-audit-worker-data-1 Creating 
+ Container entropia-a11y-audit-worker-backtest-1 Creating 
+ Container entropia-a11y-audit-worker-default-1 Creating 
+ Container entropia-a11y-audit-api-1 Creating 
+ Container entropia-a11y-audit-scheduler-1 Creating 
+ Container entropia-a11y-audit-worker-agent-executor-1 Creating 
+ Container entropia-a11y-audit-agent-coordinator-1 Creating 
+ Container entropia-a11y-audit-worker-agent-1 Creating 
+ Container entropia-a11y-audit-worker-data-1 Created 
+ Container entropia-a11y-audit-agent-coordinator-1 Created 
+ Container entropia-a11y-audit-worker-default-1 Created 
+ Container entropia-a11y-audit-worker-backtest-1 Created 
+ Container entropia-a11y-audit-worker-agent-executor-1 Created 
+ Container entropia-a11y-audit-api-1 Created 
+ Container entropia-a11y-audit-web-1 Creating 
+ Container entropia-a11y-audit-scheduler-1 Created 
+ Container entropia-a11y-audit-worker-agent-1 Created 
+ Container entropia-a11y-audit-web-1 Created 
+ Container entropia-a11y-audit-minio-1 Starting 
+ Container entropia-a11y-audit-postgres-1 Starting 
+ Container entropia-a11y-audit-redis-1 Starting 
+ Container entropia-a11y-audit-minio-1 Started 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Started 
+ Container entropia-a11y-audit-postgres-1 Started 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-minio-setup-1 Starting 
+ Container entropia-a11y-audit-minio-setup-1 Started 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-migrate-1 Starting 
+ Container entropia-a11y-audit-migrate-1 Started 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-migrate-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-migrate-1 Exited 
+ Container entropia-a11y-audit-provision-1 Starting 
+ Container entropia-a11y-audit-provision-1 Started 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-redis-1 Waiting 
+ Container entropia-a11y-audit-minio-1 Waiting 
+ Container entropia-a11y-audit-provision-1 Waiting 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-postgres-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-redis-1 Healthy 
+ Container entropia-a11y-audit-minio-1 Healthy 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-worker-agent-executor-1 Starting 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-worker-agent-1 Starting 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-scheduler-1 Starting 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-agent-coordinator-1 Starting 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-api-1 Starting 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-worker-default-1 Starting 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-worker-data-1 Starting 
+ Container entropia-a11y-audit-provision-1 Exited 
+ Container entropia-a11y-audit-worker-backtest-1 Starting 
+ Container entropia-a11y-audit-agent-coordinator-1 Started 
+ Container entropia-a11y-audit-worker-agent-1 Started 
+ Container entropia-a11y-audit-worker-default-1 Started 
+ Container entropia-a11y-audit-worker-data-1 Started 
+ Container entropia-a11y-audit-worker-backtest-1 Started 
+ Container entropia-a11y-audit-api-1 Started 
+ Container entropia-a11y-audit-worker-agent-executor-1 Started 
+ Container entropia-a11y-audit-scheduler-1 Started 
+ Container entropia-a11y-audit-web-1 Starting 
+ Container entropia-a11y-audit-web-1 Started 
+  waiting for the API and web app (first build + migrate can take minutes)
+  PASS  stack is up
+— seed the audit fixture (idempotent: SEED_E2E_GOLDEN + SEED_ESP_TA + SEED_RATIONALE)
+{"entity_id": "mds_01M1EZBBGMA5G34B3Y9GWBVWPJ", "revision_id": "mrev_01M1EZBBGXJ8HZAKXHRERPPAY1", "object_key": "market/processed/mds_01M1EZBBGMA5G34B3Y9GWBVWPJ/5b5e72a8478c852e84f773c94e11bce4d0a7d027044a4605c0543da9e6a05e46.parquet", "event": "seed.e2e_golden_market_created", "level": "info", "timestamp": "2026-09-01T17:12:58.872913Z"}
+{"entity_id": "pkg_01M1EZBD98SF9SGH3FMT88ACCC", "revision_id": "pkgrev_01M1EZBD9MW6BPXESA3GJ7DVAK", "event": "seed.e2e_golden_indicator_created", "level": "info", "timestamp": "2026-09-01T17:12:58.935043Z"}
+{"entity_id": "rf_01M1EZBDB5PVP5V89AB8R2EWFB", "event": "seed.rationale_family_created", "level": "info", "timestamp": "2026-09-01T17:12:59.005355Z"}
+{"entity_id": "rf_01M1EZBDBZJY1GYGFHXE5Q1442", "event": "seed.rationale_family_created", "level": "info", "timestamp": "2026-09-01T17:12:59.009779Z"}
+{"entity_id": "rf_01M1EZBDC33HRR2103NJ6EC017", "event": "seed.rationale_family_created", "level": "info", "timestamp": "2026-09-01T17:12:59.015268Z"}
+{"entity_id": "rf_01M1EZBDCAKVX81MJVQ6JXFZMY", "event": "seed.rationale_family_created", "level": "info", "timestamp": "2026-09-01T17:12:59.023582Z"}
+{"entity_id": "rf_01M1EZBDCHYQNTXH9XF19VCF8J", "event": "seed.rationale_family_created", "level": "info", "timestamp": "2026-09-01T17:12:59.028815Z"}
+{"entity_id": "rf_01M1EZBDCP615K40MZ4CHZ03KS", "event": "seed.rationale_family_created", "level": "info", "timestamp": "2026-09-01T17:12:59.034081Z"}
+{"canonical_key": "ta.sma", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.048513Z"}
+{"canonical_key": "ta.ema", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.076633Z"}
+{"canonical_key": "ta.rma", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.088999Z"}
+{"canonical_key": "ta.atr", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.098660Z"}
+{"canonical_key": "ta.rsi", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.108024Z"}
+{"canonical_key": "ta.wma", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.115832Z"}
+{"canonical_key": "ta.vwap", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.122475Z"}
+{"canonical_key": "cond.above", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.129237Z"}
+{"canonical_key": "cond.below", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.132635Z"}
+{"canonical_key": "cond.crosses_above", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.135748Z"}
+{"canonical_key": "cond.crosses_below", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.139622Z"}
+{"canonical_key": "cond.between", "event": "seed.esp_resolver_created", "level": "info", "timestamp": "2026-09-01T17:12:59.142483Z"}
+{"event": "seed.done", "level": "info", "timestamp": "2026-09-01T17:12:59.152922Z"}
+  PASS  seed exit 0
+========== A-08 AUDIT STACK — FIXTURE VALIDATION ==========
+— [1] stack reachable
+  PASS  API ready at http://127.0.0.1:18200/api/v1
+  PASS  web app served at http://127.0.0.1:18280
+— [2] session profile (the profile a real user logs into)
+  PASS  /meta.auth_mode=session
+— [3] Admin session
+  PASS  Admin session obtained for e2e_admin (token withheld)
+  PASS  /me reports is_admin=true (Admin-only pages will render)
+— [4] seeded fixtures — the three the checklist names
+  PASS  SEED_E2E_GOLDEN — market datasets present (1 row marker(s))
+  PASS  SEED_E2E_GOLDEN/SEED_ESP_TA — Package Library populated (13 row marker(s))
+  PASS  SEED_RATIONALE — rationale families present (6 row marker(s))
+— [5] every audit route is served (no 404 mid-session)
+  PASS  23/23 routes served by http://127.0.0.1:18280 (shell only — per-page reads are spec 17's job)
+========== RESULT ==========
+  9 passed, 0 failed
+Audit stack is ready.
+  Web (auditor navigates here) : http://127.0.0.1:18280
+  API                          : http://127.0.0.1:18200/api/v1
+  Admin username               : e2e_admin
+  Admin password               : <redacted>
+  Compose project              : entropia-a11y-audit
+  Worksheet  : docs/audit/a11y_screen_reader_audit_results.md
+  Checklist  : docs/implementation/a11y_screen_reader_audit_checklist.md
+  Tracking   : GitHub #514  (human-only — an agent must not close it)
+A-08 is HUMAN-BLOCKED. This script prepared an environment. It did not
+audit anything, and no output of it may be recorded as a screen-reader PASS.
+EXIT=0

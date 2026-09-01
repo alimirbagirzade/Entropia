@@ -270,6 +270,20 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · ratchet **el değmedi**
+> (54/6 · A1 B21 C6 D32) · **ÜRÜN/TEST KODUNDA SIFIR SATIR**. **Son dalga — ADIM 158
+> (A-08 muhasebesi: İNSAN KANITI EKLENMEDİ, kanıt paketi üretildi).** #514 OPEN (sıfır
+> etkinlik) ↔ defter 2/184 · 0/10 · 0/4 — **ayrışma YOK**; 46 rota oturumu + 20 akış tek
+> tek hesaplandı (0/46 tam · 1/46 kısmî · 0/20) → `docs/releases/evidence/2026-09-01/`.
+> Stack `9c48b0da`'da denetçinin Mac'inde **9/9 yeniden doğrulandı ve AYAKTA bırakıldı**
+> (`:18280`; indirme insan komutu). Precheck ×3: K-5 **22/23 yeniden doğrulandı**, K-2/K-4
+> tripwire sessiz, **K-7 bu host'ta 15–19 KARARSIZ** — mekanizma `Loading.tsx`'in kendisi
+> canlı bölge (ilk-DOM yarışının TERS YÖNÜ); runner-class 21/23 bilerek korundu (§6.1d).
+> D-10/D-11 imzalı sapma olarak duruyor, uygunluğa çevrilmedi. Blocker DEĞİŞMEDİ (1 —
+> A-08) → BLOCKED. `PROJECT_HISTORY.md` §ADIM 158 · `docs/ADIM158_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
 > DEĞİŞTİ** → `backtest-engine-v18-increasing-tf-ladder` · OpenAPI **değişmedi** · **golden
 > yeniden üretildi — 50 digest'ten YALNIZ `contract.execution_key` oynadı (ölçüldü)** ·

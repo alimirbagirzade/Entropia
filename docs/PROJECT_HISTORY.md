@@ -21111,3 +21111,78 @@ tuzağı bir kez daha (addopts zaten -q taşırken elle -q eklendi; özet sustu,
 exit code + coverage okundu). Collected 3913 → 3917.
 Frontend: lint + typecheck temiz · coverage kapısı yeşil (73 dosya / 748 passed).
 OpenAPI `--check` exit 0 · repository_facts regen (ENGINE_VERSION · 43/25 · 3917).
+
+## ADIM 158 — A-08 İNSAN KABULÜNÜN MUHASEBESİ: KANIT PAKETİ ÜRETİLDİ, STACK DENETÇİ İÇİN AYAKTA, İNSAN KANITI EKLENMEDİ
+
+**Tarih:** 2026-09-01 · **Taban:** `9c48b0da` (ADIM 157) · **ÜRÜN/TEST KODUNDA SIFIR
+SATIR** — diff yalnız docs + kanıt artefaktları. Migration yok · `ENGINE_VERSION`
+değişmedi · OpenAPI değişmedi · golden el değmedi · ratchet el değmedi (54/6 · A1 B21
+C6 D32). Blocker DEĞİŞMEDİ (1 — yalnız A-08) → **RC verdict BLOCKED**.
+
+### Görev ve dürüst cevabı
+
+Görev A-08 için *"gerçek insan kanıtını tamamla"* idi ve kendi kuralını taşıyordu:
+*"Never fabricate human evidence."* Checklist'in hükmüyle aynı yöne bakar (*"bu denetim
+bir İNSANA düşer; bir agent bunu yaptığını iddia edemez"*). **Bir ajan bu kanıtı üretemez
+ve ÜRETMEDİ** — tek bir defter hücresi doldurulmadı, tek bir oturum satırı eklenmedi,
+tek bir bulgu yazılmadı. Yapılan: kanıtın YOKLUĞUNUN tarihli, eksiksiz muhasebesi + bir
+insanın hemen oturum açabileceği ortamın yeniden doğrulanması.
+
+### Ölçümler
+
+1. **#514 ↔ defter uzlaştırması:** `gh` ile OPEN / `human-only` / `updatedAt =
+   2026-08-12T11:08:58Z` (yeniden açılıştan beri SIFIR etkinlik) ölçüldü; defter aynı
+   anda 2/184 · 0/10 · 0 bulgu · 0/4 okuyor → **ayrışma YOK** (iki önceki kanıtsız
+   kapanışın tarihi paket §6'da korundu).
+2. **Stack güncel main'de yeniden doğrulandı — denetçinin KENDİ Mac'inde:** `up` = build
+   + seed + validate **9 passed / 0 failed** (son doğrulama `7dd1dfe`/2026-08-12 idi).
+   §6.1a'nın 2026-08-25 daemon engeli bu makinede YOK (Docker 29.4.0 canlı). Stack
+   **bilerek AYAKTA bırakıldı** — script'in tasarımı teardown'u açık insan komutu yapar
+   (`scripts/a11y-audit-stack.sh down`); sıradaki SR-2 oturumu `http://127.0.0.1:18280`.
+3. **Precheck ×3** (kural: en az iki, soğuk atılır): blocking **0/0/0** · K-3 **23**
+   kararlı · K-6a **1** kararlı · **K-2/K-4 tripwire'ları üç koşuda da SESSİZ** (PR #685
+   regresyonu yok) · **K-5 ılık ×2 = 22/23** — 2026-08-12 kümesiyle üye üye aynı
+   (`/user-manual` içeride, yalnız `/` dışarıda) → kayıtlı sayı yeniden doğrulandı.
+4. **ASIL BULGU — K-7 bu host'ta KARARSIZ (15/19/16), ve yarışın İKİNCİ YÖNÜ ölçüldü:**
+   kayıtlı ±1'den çok geniş; ılık↔ılık farkı 5 rota ve beşi de Loading taşıyan sayfalar
+   (`/packages/create` · `/packages/embedded` · `/packages/pre-check` · `/trade-log` ·
+   `/trading-signal`), bilinen üç flaky rota DEĞİL. Mekanizma kaynağa kadar izlendi:
+   `components/Loading.tsx` **kendisi** `role="status" aria-live="polite"` render eder →
+   probe rotayı YÜKLEME ânında yakalarsa ilk DOM'da canlı bölge VARDIR ve rota K-7
+   kümesinden **ÇIKAR** — metodoloji notunun belgelediği ilk-DOM yarışının **ters yönü**.
+   **K-tablosu yeniden YAZILMADI:** runner-class 21/23 (2026-08-12) bilerek korundu,
+   bugünkü host zarfı (15–19) defter §6.1d'ye kaydedildi. İki ardışık ılık koşunun aynı
+   commit'te yeniden üretemediği bir sayıyı "taze rakam" diye basmak gözlemi sessizce
+   yeniden tanımlamak olurdu.
+5. **Kanıt paketi üretildi:** `docs/releases/evidence/2026-09-01/` — bundle + ANSI'siz/
+   parolası redakte stack transkripti + 3 ham precheck JSON. **46 rota oturumunun 46'sı
+   ve 20 akış koşusunun 20'si tek tek hesaplandı:** 0/46 tam · 1/46 kısmî (SR-2 rota 1,
+   2/8 hücre) · 45/46 hiç · 0/20 akış. D-10 + D-11 paket §5'te İMZALI SAPMA olarak açık
+   bırakıldı (hiçbiri uygunluğa çevrilmedi); A-08 kapsamında imzalı sapma YOK ve ajan
+   inisiyatifiyle yazılamaz.
+
+### Değişen belgeler
+
+- `docs/audit/a11y_screen_reader_audit_results.md`: §STATUS'a dated yeniden-doğrulama
+  bloğu · §5 oturum notuna üçüncü non-audit slice cümlesi · §6.1a'ya supersede işareti ·
+  K-5/K-7 reach hücrelerine dated işaret · **YENİ §6.1d**. Yapısal kapı koştu:
+  `test_a11y_audit_prep_contract.py` **21 passed / exit 0**.
+- `docs/releases/Entropia_V18_RC_Readiness_2026-08-07.md`: banner'a 2026-09-01 notu —
+  *"Defter hâlâ boştur"* cümlesi **bayat** olarak işaretlendi (2026-08-12'den beri 2/184),
+  verdict **BLOCKED kalır**; eski metin silinmedi.
+- Kanıt paketi: beş yeni dosya (yukarıda).
+
+### Dürüst sınır
+
+- **İNSAN KANITI EKLENMEDİ** — SR-1 hâlâ hiç başlamadı, SR-2 hâlâ 1 oturum/2 hücre;
+  çıkış kriterleri 0/4. Bu slice'ın hiçbir çıktısı ekran okuyucu sonucu değildir
+  (precheck raporlarının kendi damgası `screen_reader_verified: false`).
+- Backend'de YALNIZ sözleşme test dosyası koşuldu (21 passed, `--no-cov`); tam suite
+  koşulmadı → geçen sayı ve coverage **CI'ın otoritesinde**. Frontend kapıları koşulmadı
+  (frontend/src'te sıfır satır; e2e'de yalnız `npm ci` + mevcut spec'in koşusu).
+- K-7 için YENİ yerleşik sayı iddia edilmiyor — yalnız bu host'taki kararsızlığı ve
+  mekanizması ölçüldü; CI-class bir tazeleme ayrı iştir.
+- Stack AYAKTA ve kaynak tüketir — indirmek insanın kararı ve komutu
+  (`scripts/a11y-audit-stack.sh down`).
+- Çıplak worktree venv tuzağı bir kez daha yaşandı (`uv run pytest` → "Failed to spawn"
+  → önce `uv sync --all-extras`).

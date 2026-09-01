@@ -13743,7 +13743,20 @@ criteria:
     callback + _completed_funded_run), and the test written there for RD-11.c3 asserts this clause
     literally: after v1.1 is approved the run manifest, the RESULT snapshot and the read surface all
     still name v1.0. No new test was written here; the existing node was cited. The analysis above
-    stands as written — it was closable only through a funding-enabled run, and that is what changed.'
+    stands as written — it was closable only through a funding-enabled run, and that is what changed.
+    PRODUCTION-REF CONDITION MET (ADIM 152): i703 §Karar 3 (signed 2026-08-31) barred this closure
+    from resting on a hand-set instrument_mapping_ref — and the cited harness DID hand-set one
+    (map_rd11_c3), which after ADIM 149''s writer landed silently OVERWROTE the value production
+    copies from the linked market revision. The hand-set is removed; the harness now asserts the
+    copy on two axes (presence + identity against the market revision''s own instrument_id) and both
+    tests additionally pin the manifest feed''s instrument_mapping_ref to the production-written
+    value. Four single-point negative controls, each red on a DIFFERENT assertion (historical
+    hand-set reinstated -> feed mismatch; writer passes None -> presence; writer returns a wrong
+    constant -> identity; manifest projection blanked -> feed None), restores sha256-verified each
+    round. REFUTED PREMISE, measured: the ADIM 138/140/149/151 records say c4 "stays partial" in
+    the ledger — it never did; batch 05 marked it covered and no ceiling ever carried it, so this
+    closure moves NO ceiling. What §Karar 3 actually constrained — a production-produced ref — is
+    what this slice delivers.'
 - id: RD-10
   document: docs/spec/12_Entropia_V18_Research_Data_Page_Documentation_v1_1.md
   section: '14'

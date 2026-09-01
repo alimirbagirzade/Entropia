@@ -10805,3 +10805,38 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 151 · `docs/ADIM151_LANDED_KICKOFF
 2. **`RD-09.c4`** — kapatılabilir kabul borcu slice'ı (tavan oynatır, ratchet yeniden dondurulur).
 3. **İmza kalemleri:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · #582 (öncülü bayat) ·
    **#514 A-08 — tek blocker, `human-only`**.
+
+## Stage 152 — RD-09.c4 kanıtı üretimin yazdığı ref'e taşındı landed (PR #892)
+
+Migration YOK · `ENGINE_VERSION` değişmedi · OpenAPI değişmedi · golden el değmedi ·
+**ÜRÜN KODUNDA SIFIR SATIR** (NC yamaları sha256-doğrulamalı geri alındı) · frontend sıfır satır.
+Diff iki dosya: `test_research_successor_manifest_immutability.py` + `acceptance_semantic_map.yaml`.
+
+**Önce (a) koşuldu:** ADIM 151'in post-merge Lighthouse'u okundu (run `33469911470`) —
+**23/23 rota × 3 kategori hepsi 100 (spread 100–100)**; `tightened` önerisi üç çiftte çıktı ve
+**REDDEDİLDİ** (tek koşuyla sıkıştırma yok). #677'nin ölçüm tarafı tamam; kapatmak **insan kararı**.
+
+**Öncül defterin kendisinde çürüdü:** kickoff'un *"RD-09.c4 tavan oynatır"* öncülü yanlıştı —
+harita c4'ü **ADIM 68'den beri `covered`** tutuyor; ADIM 138/140/149/151'in *"partial KALIR"*
+cümlesi yeniden ölçülmemiş bir inançtı. Ratchet **54/6 · A1 B21 C6 D32 bayt bayt aynı**.
+Ama i703 §Karar 3'ün kısıtı ayaktaydı: covered atıfının harness'ı ref'i **elle** set ediyordu ve
+ADIM 149'dan beri üretimin yazdığının **üzerine** yazıyordu. Hand-set kaldırıldı; iki eksenli
+dürüst-harness assertion'ı (varlık + kimlik, market satırından) + iki testte manifest-feed ref
+pini + docstring'e `RD-09.c4` adı (test ağacında önceden 0 hit). **Dört NC, dördü farklı
+assertion satırında kırmızı, restore'lar sha256-doğrulamalı**; NC-4 yan bulgusu: worker manifest
+bloğundaki ref değerini yeniden doğrulamıyor (kaydedildi).
+
+**DÜRÜST SINIR:** statü değişmedi (covered→covered; değişen kanıtın dünyası) · tam suite
+koşulmadı (hedef aile 39 + bekçi 76 + ruff/mypy/facts/ratchet yeşil; otorite CI) · frontend
+kapıları koşulmadı · PRE-1 hâlâ koşulamaz · **blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED**.
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 152 · `docs/ADIM152_LANDED_KICKOFF.md`.
+
+## Next: **#677 kapanış kararı (insan) + imza kalemleri; testle kapanabilir borç kalmadı**
+
+1. **#677 — kapatmak için her şey hazır, karar İNSAN.** Dört kesintinin dördü ele alındı ve
+   post-merge CI 23/23 rotada üç kategoriyi de 100 ölçtü. `tightened` önerisi çıkarsa REDDET.
+2. **İmza kalemleri:** #854 (9 kutu) · #534 (4 kutu) · #547 (0 yorum) · #582 (öncülü bayat) ·
+   **#514 A-08 — tek blocker, `human-only`.**
+3. **Testle kapanabilir sınıf-B satır KALMADI** (ADIM 113'ün toplamı + bu slice'ın ölçümü):
+   defterdeki 21 sınıf-B satırın hepsi kayıtlı bulgu taşıyor; sıradaki kod işi ancak bir ürün
+   kararının (imzanın) arkasından çıkar.

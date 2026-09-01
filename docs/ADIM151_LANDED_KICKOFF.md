@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 151 landed — oturum açık CLS dört rotada kaynağında düzeltildi; ADIM 148'in rezervi yeni dünyada kusurun kendisiydi
 
 ## Nerede duruyoruz

@@ -156,8 +156,8 @@
     ]
   },
   "capabilities": {
-    "active_v1": 42,
-    "future_dev": 26,
+    "active_v1": 43,
+    "future_dev": 25,
     "total": 68
   },
   "contains": "working-tree facts only — no commit sha, no timestamp, no GitHub state, and no test pass count; regenerate with the generator, never by hand",
@@ -694,7 +694,7 @@
     "visual_deviation_rows": 38
   },
   "engine": {
-    "engine_version": "backtest-engine-v18-policy-provenance-completed",
+    "engine_version": "backtest-engine-v18-increasing-tf-ladder",
     "shared_allocation_status": "active_v1"
   },
   "frontend": {
@@ -974,7 +974,7 @@
   },
   "schema_version": 1,
   "tests": {
-    "backend_collected_test_functions": 3913,
+    "backend_collected_test_functions": 3917,
     "backend_test_files": 373,
     "backend_xfail_markers": 0,
     "backend_xfail_strict_markers": 0,

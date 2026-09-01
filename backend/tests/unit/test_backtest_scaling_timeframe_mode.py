@@ -9,11 +9,14 @@ slice:
   ``custom_timeframe_sequence`` is REQUIRED, non-empty and STRICTLY INCREASING under
   ``custom_sequence``, and DROPPED under every other mode (the disabled-subtree
   convention, mirroring ``RestrictionsFilters.min_true_count``);
-* **predicate** — logic-based scaling and ``custom_sequence`` leave the fail-closed L4
-  set, while ``increasing_by_layer`` and an UNBOUNDED logic ladder deliberately stay in it;
+* **predicate** — logic-based scaling, ``custom_sequence`` and (since GH #547)
+  ``increasing_by_layer`` leave the fail-closed L4 set, while an UNBOUNDED logic ladder
+  deliberately stays in it;
 * **engine BEHAVIOUR** — not merely that the fields parse, but that they change which bars
-  fill layers: the same signal path under ``same_strategy`` and under a coarse
-  ``custom_sequence`` produces different ladders, and the sequence length bounds one;
+  fill layers: the same signal path under ``same_strategy``, under a coarse
+  ``custom_sequence`` and under ``increasing_by_layer`` produces different ladders; the
+  sequence length bounds one and the canonical ladder's remaining rungs bound the other
+  (the signed GH #547 exhaustion decision — past 1D the ladder runs out);
 * **manifest** — the ENGINE_VERSION bump shifts the ``execution_key`` namespace.
 
 ADJUDICATION (doc 02 §5.7 table vs. §6.1 ⓘ panel). The §5.7 table lists
@@ -47,7 +50,11 @@ import pytest
 from pydantic import ValidationError
 
 from entropia.domain.backtest.engine import EngineOutput, run_engine, scaling_is_modelled
-from entropia.domain.backtest.execution.scaling import layer_bucket, layer_timeframe
+from entropia.domain.backtest.execution.scaling import (
+    increasing_ladder_depth,
+    layer_bucket,
+    layer_timeframe,
+)
 from entropia.domain.backtest.indicators import (
     IndicatorPlan,
     IndicatorSpec,
@@ -192,9 +199,11 @@ def _config(*, scaling: dict[str, Any] | None = None) -> StrategyConfig:
     )
 
 
-def _bar(index: int, o: str, h: str, low: str, c: str) -> dict[str, Any]:
-    """One 15m bar, ``index`` slots after 2024-01-01T00:00Z."""
-    ts = _START + timedelta(minutes=_BASE_TF_MINUTES * index)
+def _bar(
+    index: int, o: str, h: str, low: str, c: str, *, minutes: int = _BASE_TF_MINUTES
+) -> dict[str, Any]:
+    """One bar, ``index`` slots of ``minutes`` after 2024-01-01T00:00Z (default 15m)."""
+    ts = _START + timedelta(minutes=minutes * index)
     return {
         "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "open": o,
@@ -220,7 +229,9 @@ _OSCILLATION: list[tuple[str, str, str, str]] = [
 ]
 
 
-def _long_then(followups: list[tuple[str, str, str, str]]) -> list[dict[str, Any]]:
+def _long_then(
+    followups: list[tuple[str, str, str, str]], *, minutes: int = _BASE_TF_MINUTES
+) -> list[dict[str, Any]]:
     """20 flat look-back bars at 90, an upside breakout (long @102), then the follow-ups.
 
     Same real ``ta.sma`` cross entry the F-07d fixtures use (F-24: the breakout proxy is
@@ -243,6 +254,7 @@ def _run(
     *,
     plan: IndicatorPlan | None = None,
     batch: int = 8,
+    timeframe: str | None = None,
 ) -> EngineOutput:
     def batched() -> Iterator[list[dict[str, Any]]]:
         for start in range(0, len(bars), batch):
@@ -253,6 +265,10 @@ def _run(
         bar_batches=batched(),
         execution_key="exec_key_s5c",
         indicator_plan=plan if plan is not None else _scale_plan(),
+        # GH #547: increasing_by_layer resolves its rungs from the RUN's pinned bar
+        # timeframe (a run-level fact, not a config field), so the tests that drive that
+        # mode pass it the way the worker does. ``None`` reproduces every pre-#547 call.
+        timeframe=timeframe,
     )
 
 
@@ -355,13 +371,22 @@ def test_predicate_logic_based_scaling_and_custom_sequence_leave_the_fail_closed
     )
 
 
-def test_predicate_increasing_by_layer_stays_fail_closed() -> None:
-    """Doc 02 §5.7 names the mode but declares NO step increment.
+def test_predicate_increasing_by_layer_is_modelled() -> None:
+    """GH #547 lifted the mode: doc 02 §6.1 fixes the rung (index + 1) and the signed
+    exhaustion decision fixes the top (the ladder runs out at 1D, custom_sequence
+    precedent) — nothing is guessed any more.
 
-    Next-canonical-rung and doubling are different ladders; guessing one would be exactly
-    the silent wrongness this predicate exists to prevent, so it stays an L4 blocker.
+    DELIBERATE INVERSION of ``test_predicate_increasing_by_layer_stays_fail_closed``:
+    that test's own docstring said the blocker existed because the rung and the top were
+    undeclared; both are now declared and shipped, so keeping it red-pinned would pin the
+    absence of the feature. The mode also counts as a DECLARED depth for the logic ladder
+    (second assertion): the canonical ladder is finite, so like a custom sequence it
+    bounds what ``max_scaling_layers`` alone otherwise must.
     """
-    assert not scaling_is_modelled(_config(scaling=_scaling(timeframe_mode="increasing_by_layer")))
+    assert scaling_is_modelled(_config(scaling=_scaling(timeframe_mode="increasing_by_layer")))
+    assert scaling_is_modelled(
+        _config(scaling=_scaling(timeframe_mode="increasing_by_layer", max_layers=None))
+    )
 
 
 def test_predicate_unbounded_logic_ladder_stays_fail_closed() -> None:
@@ -406,6 +431,50 @@ def test_layer_timeframe_walks_the_sequence_and_runs_out_rather_than_ungating() 
     assert layer_timeframe(config, 2) is None
     # same_strategy is ungated at every index.
     assert layer_timeframe(_config(scaling=_scaling()), 0) is None
+
+
+def test_layer_timeframe_walks_the_canonical_ladder_from_the_run_base() -> None:
+    """GH #547: layer N is decided on ``CANONICAL_TIMEFRAMES[index(base) + N]``.
+
+    Doc 02 §6.1's own worked example — base 15m, then 30m, then 1h. The base is the RUN's
+    pinned bar timeframe, passed by the caller; layer 0 filled means the NEXT layer is
+    layer 1, one rung above the base.
+    """
+    config = _config(scaling=_scaling(timeframe_mode="increasing_by_layer"))
+    assert layer_timeframe(config, 0, base_timeframe="15m") == "30m"
+    assert layer_timeframe(config, 1, base_timeframe="15m") == "1h"
+    assert layer_timeframe(config, 2, base_timeframe="15m") == "2h"
+    # The top of the ladder: base 4h has exactly one rung above it. Past it: no ladder
+    # left (the signed exhaustion decision) — the engine's depth cap makes this branch
+    # unreachable, and like custom_sequence it is re-checked here anyway.
+    assert layer_timeframe(config, 0, base_timeframe="4h") == "1D"
+    assert layer_timeframe(config, 1, base_timeframe="4h") is None
+    # No pinned bar timeframe / a base off the canonical ladder: no rung resolves. The
+    # engine never consults this branch either (``increasing_ladder_depth`` is 0 there).
+    assert layer_timeframe(config, 0) is None
+    assert layer_timeframe(config, 0, base_timeframe="7m") is None
+    # The base being passed changes NOTHING for the other two modes.
+    assert layer_timeframe(_config(scaling=_scaling()), 0, base_timeframe="15m") is None
+    seq_config = _config(
+        scaling=_scaling(timeframe_mode="custom_sequence", custom_timeframe_sequence=["1h"])
+    )
+    assert layer_timeframe(seq_config, 0, base_timeframe="15m") == "1h"
+
+
+def test_increasing_ladder_depth_counts_the_rungs_above_the_base() -> None:
+    """The increasing_by_layer analogue of ``len(custom_timeframe_sequence)``.
+
+    This is the number the engine caps the ladder at, so exhaustion is enforced by the
+    same mechanism custom_sequence uses (layer count bound, past-the-end unreachable).
+    Depth 0 — the top rung itself, an unknown base, an off-ladder base — means the
+    position still opens and trades; it just never scales.
+    """
+    assert increasing_ladder_depth("1m") == len(CANONICAL_TIMEFRAMES) - 1
+    assert increasing_ladder_depth("15m") == 5
+    assert increasing_ladder_depth("4h") == 1
+    assert increasing_ladder_depth("1D") == 0
+    assert increasing_ladder_depth(None) == 0
+    assert increasing_ladder_depth("7m") == 0
 
 
 def test_layer_bucket_matches_the_multi_timeframe_indicator_convention() -> None:
@@ -507,17 +576,75 @@ def test_price_distance_ladder_ignores_the_sequence() -> None:
     ]
 
 
-def test_increasing_by_layer_opens_no_position_at_all() -> None:
-    """Fail closed: the engine must not silently run an unspecified ladder.
+def test_increasing_by_layer_gates_each_layer_one_rung_above_the_base() -> None:
+    """GH #547 BEHAVIOUR proof: same bars, same signals, different fills.
 
-    The backstop to the Ready Check STRATEGY_SCALING_UNSUPPORTED blocker — a stale
-    readiness state reaching the worker must produce no position, never an un-scaled run.
+    DELIBERATE INVERSION of ``test_increasing_by_layer_opens_no_position_at_all`` — that
+    test pinned the fail-closed refusal of an unspecified ladder, and the ladder is now
+    specified (rung signed by canon, top signed by the product owner), so the mode must
+    TRADE. With 15m base bars the up-cross at bar 22 (5:30, a fresh 30m candle) fills
+    layer 1 on ``30m``; the ladder then re-anchors in 1h buckets, so the next fill waits
+    for bar 24 (6:00) and states ``1h``; layer 3 would need a fresh 2h candle and the
+    remaining up-crosses (6:30, 7:00) sit inside the 6:00 bucket — so the coarsening rung
+    itself is what suppresses them, not the layer cap.
     """
+    bars = _long_then(_OSCILLATION)
+    gated = _run(
+        _config(scaling=_scaling(timeframe_mode="increasing_by_layer")), bars, timeframe="15m"
+    )
+    ungated = _run(_config(scaling=_scaling()), bars, timeframe="15m")
+
+    gated_added = _events(gated, "scale_layer_added")
+    ungated_added = _events(ungated, "scale_layer_added")
+    assert len(ungated_added) == 4, "the same signal path proposes four layers ungated"
+    # Each fill states the rung whose closed candle authorized it — one rung per layer
+    # above the 15m base, doc 02 §6.1's own 15m -> 30m -> 1h walk.
+    assert [e["layer_timeframe"] for e in gated_added] == ["30m", "1h"]
+    assert len(gated_added) < len(ungated_added), (
+        "the coarsening per-layer timeframe must fill FEWER layers over the same signals"
+    )
+
+
+def test_increasing_by_layer_ladder_runs_out_at_the_top_rung() -> None:
+    """The signed GH #547 exhaustion decision, as behaviour: past 1D there is NO ladder.
+
+    A 1D-based run has zero rungs above it, so with the SAME signal path that fills four
+    layers under same_strategy, the increasing ladder fills none — and the position still
+    opens and closes normally (this is exhaustion, not the fail-closed capability gate:
+    nothing else about the run is inert). No layer is rejected either — a rung that does
+    not exist is never a candidate, which is exactly how custom_sequence runs out.
+    """
+    daily = _long_then(_OSCILLATION, minutes=24 * 60)
+    # Close the position at the end so the round trip is observable in ``trades``: a bar
+    # back under the entry MA is an opposite signal (the §9 rule closes on it).
+    daily.append(_bar(29, "100", "100", "60", "60", minutes=24 * 60))
     out = _run(
-        _config(scaling=_scaling(timeframe_mode="increasing_by_layer")), _long_then(_OSCILLATION)
+        _config(scaling=_scaling(timeframe_mode="increasing_by_layer")), daily, timeframe="1D"
     )
     assert _events(out, "scale_layer_added") == []
-    assert out.trades == []
+    assert _events(out, "scale_layer_rejected") == []
+    assert len(out.trades) == 1, "exhaustion must not stop the position itself from trading"
+
+    # The control: the same daily bars under same_strategy DO scale — proving the empty
+    # ladder above is the rung bound at work, not a signal path that never proposed.
+    control = _run(_config(scaling=_scaling()), daily, timeframe="1D")
+    assert len(_events(control, "scale_layer_added")) == 4
+
+
+def test_increasing_by_layer_without_a_pinned_bar_timeframe_never_scales() -> None:
+    """HONEST BOUNDARY: an un-timeframed revision resolves no rung — depth 0, no layers.
+
+    ``get_base_timeframe_for_revision`` returns None for an event-based or
+    resolution-less revision, and the mode's rung is DEFINED relative to the base, so
+    there is nothing to gate on. The run is NOT fail-closed (the position trades); the
+    ladder is simply exhausted from layer 1. Readiness cannot see this — the predicate
+    reads only the StrategyConfig — so the engine's depth cap is the load-bearing guard.
+    """
+    bars = _long_then(_OSCILLATION)
+    bars.append(_bar(29, "100", "100", "60", "60"))
+    out = _run(_config(scaling=_scaling(timeframe_mode="increasing_by_layer")), bars)
+    assert _events(out, "scale_layer_added") == []
+    assert len(out.trades) == 1
 
 
 def test_logic_ladder_requires_a_signal_edge_not_a_held_signal() -> None:

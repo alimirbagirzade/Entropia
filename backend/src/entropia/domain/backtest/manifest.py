@@ -182,7 +182,18 @@ from entropia.shared.manifest import manifest_hash
 # non-``portfolio.*`` digests; A13's partition test pins group sizes, not values, so it
 # stays green — a reader comparing this regeneration against A13's "only portfolio.* may
 # move" sentence should read that sentence as scoped to the lift it was written for.
-ENGINE_VERSION = "backtest-engine-v18-policy-provenance-completed"
+#
+# GH #547 bumps it again, and this one IS an executed-behaviour change of the S5c class:
+# ``timeframe_mode="increasing_by_layer"`` was a fail-closed selection (the engine opened
+# NO position for it), and now it executes — layer N gated on the closed candle one
+# canonical rung per layer above the run's base timeframe, the ladder ending at 1D (the
+# signed exhaustion decision, custom_sequence precedent). A pinned revision carrying that
+# mode replayed under this engine produces trades where the old engine produced an inert
+# Result, so the two engines must never share an ``execution_key`` namespace — the exact
+# reason the S5c lift bumped. Measured on the golden matrix: NO scenario configures the
+# mode, so every behavioural digest is byte-identical and the only digest that moves is
+# ``contract.execution_key``, which hashes this string.
+ENGINE_VERSION = "backtest-engine-v18-increasing-tf-ladder"
 
 # K1 (Master Ref Modul 6 §8: "komisyon dagilimi engine manifestinde acik olmalidir"),
 # satisfied by Karar 1's mandatory rider (GH #552, signed 2026-08-25). Until now the

@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 156 landed — #546+#536 tek slice'ta: action matrise, conflict literalleri muhafıza
 
 ## Nerede duruyoruz

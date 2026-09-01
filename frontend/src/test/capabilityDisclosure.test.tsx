@@ -96,10 +96,17 @@ describe("#539 — StrategyGraphForm scaling fields disclose future_dev", () => 
     expect(blocked?.textContent).toContain("not available in this build");
   });
 
-  it("discloses increasing_by_layer on the timeframe mode field", () => {
+  it("treats increasing_by_layer as an ordinary executable mode (GH #547)", () => {
+    // DELIBERATE INVERSION: this test used to pin the "is saved but will not run"
+    // disclosure. GH #547 flipped the matrix row to active_v1 (the engine now executes
+    // the mode), so the field must advertise NO refusal — a lingering note here would be
+    // the #533 false-positive shape, warning about a mode that trades. The saved flat
+    // `timeframe: "1h"` override on the SAME fixture stays future_dev and keeps its own
+    // note on its own field, which the test above already covers.
     render(<ScalingCard payload={enabledScaling} pending={false} onApply={noop} />);
     expect(select(/Timeframe mode/).value).toBe("increasing_by_layer");
-    expect(noteFor(/Timeframe mode/)?.textContent).toMatch(/is saved but will not run/);
+    expect(noteFor(/Timeframe mode/)).toBeNull();
+    expect(disabledValues(/Timeframe mode/)).toEqual([]);
   });
 
   it("says NOTHING while scaling is disabled — the engine never reads these fields", () => {

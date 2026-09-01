@@ -270,8 +270,29 @@ Before stopping a working session, produce **ALL** of the following:
 > dokunulmadı. **`PROJECT_HISTORY.md` kaydı ve kickoff'u YOK, bilerek** — bu bir ADIM
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
+> DEĞİŞTİ** → `backtest-engine-v18-increasing-tf-ladder` · OpenAPI **değişmedi** · **golden
+> yeniden üretildi — 50 digest'ten YALNIZ `contract.execution_key` oynadı (ölçüldü)** ·
+> ratchet **el değmedi** (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 157 (#547 SEVK EDİLDİ;
+> Closes #547).** `timeframe_mode=increasing_by_layer` artık custom_sequence mekanizması
+> üzerinde EXECUTE ediyor: layer N = `CANONICAL_TIMEFRAMES[index(base)+N]` (doc 02 §6.1'in
+> 15m→30m→1h yürüyüşü; base RUN olgusu, `layer_timeframe`'e yeni opsiyonel kwarg),
+> exhaustion = imzalı custom_sequence emsali — `increasing_ladder_depth` motor kelepçesi
+> tepe rung'da (1D) ladder'ı bitirir. **NC-2'nin bulgusu: "runs out"u taşıyan şey resolver
+> DEĞİL, kelepçenin kendisi** (kelepçesiz dünyada past-the-top `None` UNGATE ediyordu).
+> Matrix 43/25 + TS aynası regen; Ready Check remediation'ı artık düz `timeframe` alanını
+> da adlandırıyor (#547 md. 4'ün iki yarısı). Altı version-pin tripwire + iki test + bir FE
+> disclosure testi KASITLI taşındı/ters çevrildi. Beş NC, beşi ayırt edici; NC-4'te
+> readiness+matrix suite'leri YEŞİL kaldı (boşluğun ölçüsü). Dürüst sınır: timeframe'siz
+> revizyon increasing altında HİÇ scale etmez — readiness bunu GÖREMEZ (predicate yalnız
+> config okur), muhafız motor kelepçesi, testle pinli. ADIM 144'ün çift `-q` tuzağı BİR KEZ
+> DAHA yaşandı (özet satırı yok; kırmızı listesi + exit code okundu). **İmzalı kod kuyruğu
+> BOŞALDI.** Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 157 · `docs/ADIM157_LANDED_KICKOFF.md`.
+>
+>
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
-> **değişmedi** · OpenAPI **değişmedi** · **golden bayt bayt aynı** · ratchet **el değmedi**
+> **değişmedi (o gün)** · OpenAPI **değişmedi** · **golden bayt bayt aynı** · ratchet **el değmedi**
 > (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 156 (#546+#536 TEK SLICE'TA; Closes #546 + #536).**
 > `restrictions_filters.filters.action` capability matrix'e girdi (block/block_entries
 > active_v1 = motor kümesi; reduce/close/disable/warn future_dev, iki yönlü motor-parite
@@ -805,8 +826,8 @@ Before stopping a working session, produce **ALL** of the following:
 >
 >
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · **`ENGINE_VERSION`
-> DEĞİŞTİ** → `backtest-engine-v18-policy-provenance-completed` · **golden YENİDEN ÜRETİLDİ
-> (46/50 digest oynadı)** · OpenAPI **değişmedi** (`--check` exit 0) ·
+> DEĞİŞTİ** → (o gün) `backtest-engine-v18-policy-provenance-completed` · **golden YENİDEN
+> ÜRETİLDİ (46/50 digest oynadı)** · OpenAPI **değişmedi** (`--check` exit 0) ·
 > `SHARED_ALLOCATION_STATUS` **el değmedi** · `frontend/src` **sıfır satır**. **Son dalga —
 > ADIM 137 (GH #534: diagnostics provenance bloğunun sekiz deliği kapatıldı).** Oturum üç
 > adayla açıldı, **ikisi ölçümde kapandı** (#854'ün dokuz kutusu **BOŞ** → girilmedi; A-08

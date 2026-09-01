@@ -25,6 +25,7 @@ from entropia.domain.backtest.execution.costs import _effective_fill
 from entropia.domain.backtest.execution.fills import _trail_pct
 from entropia.domain.backtest.execution.state import _Position
 from entropia.domain.backtest.indicators import timeframe_seconds
+from entropia.domain.strategy.config import CANONICAL_TIMEFRAMES
 
 if TYPE_CHECKING:
     from entropia.domain.strategy.config import ScalingLogic, StrategyConfig
@@ -81,27 +82,27 @@ def scaling_is_modelled(config: StrategyConfig) -> bool:
     layer on the signal's EDGE), and with it the per-layer TIMEFRAME sequence that doc 02
     §6.1 names as its ONLY consumer: ``same_strategy`` (every layer on the base timeframe)
     and ``custom_sequence`` (layer N on sequence entry N under the closed-bar rule —
-    ``layer_timeframe`` / ``layer_bucket``) are both modelled.
+    ``layer_timeframe`` / ``layer_bucket``) are both modelled. GH #547 lifted the third
+    mode, ``increasing_by_layer``: doc 02 §6.1 fixes the rung (each layer steps ONE
+    canonical timeframe up from the run's base — 15m -> 30m -> 1h, i.e.
+    ``CANONICAL_TIMEFRAMES`` index + 1), and the signed top-of-ladder decision follows the
+    custom_sequence precedent — past the last rung (``1D``) the ladder simply runs out, no
+    repeat-the-last or fall-back-to-base rule is invented.
 
     Still UNMODELLED, on purpose:
-    * ``increasing_by_layer`` — doc 02 §5.7 names the mode but declares no step increment,
-      and next-rung vs. doubling are different ladders; guessing one would be exactly the
-      silent wrongness this predicate exists to prevent;
     * a flat ``timeframe`` override — that field picks ONE evaluation timeframe for the
       whole ladder and honouring it needs resampled bars the replay does not build (the
       per-layer sequence needs none: it only gates WHICH base bars are decision points);
     * an UNBOUNDED logic ladder — logic-based scaling has no ``layers`` field of its own
       (§5.7 gives ladder depth to the price method only), so with neither
-      ``max_scaling_layers`` nor a custom sequence to bound it there is no declared depth,
-      and a ladder that adds a layer on every signal edge for the life of the position is
-      not something to run on a guess.
+      ``max_scaling_layers`` nor a per-layer timeframe structure to bound it there is no
+      declared depth, and a ladder that adds a layer on every signal edge for the life of
+      the position is not something to run on a guess.
     """
     scaling = config.scaling_logic
     if scaling is None or not scaling.enabled:
         return True
     if scaling.timeframe != "same_as_base_tf":
-        return False
-    if scaling.timeframe_mode == "increasing_by_layer":
         return False
     if scaling.timeframe_mode == "custom_sequence" and not scaling.custom_timeframe_sequence:
         return False
@@ -127,12 +128,19 @@ def _logic_scaling_is_modelled(scaling: ScalingLogic) -> bool:
     resolvable blocks and a DECLARED DEPTH (it has no ``layers`` field of its own), where
     the price ladder needs a distance and a subtree. Keeping them in one flat chain made
     it read as though ``layers`` bounded both.
+
+    GH #547: ``increasing_by_layer`` counts as a declared depth the same way a custom
+    sequence does — the canonical ladder is finite and the mode ends at its top rung
+    (``increasing_ladder_depth``), so the ladder can never exceed the rungs above the
+    run's base timeframe.
     """
     if scaling.logic_scaling is None or not scaling.logic_scaling.indicator_blocks:
         return False
     limits = scaling.scaling_limits
-    bounded = (limits is not None and limits.max_scaling_layers is not None) or bool(
-        scaling.timeframe_mode == "custom_sequence" and scaling.custom_timeframe_sequence
+    bounded = (
+        (limits is not None and limits.max_scaling_layers is not None)
+        or bool(scaling.timeframe_mode == "custom_sequence" and scaling.custom_timeframe_sequence)
+        or scaling.timeframe_mode == "increasing_by_layer"
     )
     if not bounded:
         return False
@@ -146,24 +154,56 @@ def _logic_scaling_is_modelled(scaling: ScalingLogic) -> bool:
     return True
 
 
-def layer_timeframe(config: StrategyConfig, layers_filled: int) -> str | None:
+def layer_timeframe(
+    config: StrategyConfig, layers_filled: int, *, base_timeframe: str | None = None
+) -> str | None:
     """The timeframe the NEXT scaling layer is decided on, or ``None`` when every base bar
     is a decision point (S5c, doc 02 §5.7).
 
     ``None`` is the same_strategy answer — the ladder is ungated and behaves exactly as it
     did before S5c. Under custom_sequence, layer N (1-based) is decided on sequence entry N,
-    so the next layer's timeframe is ``sequence[layers_filled]``. Past the end of the
-    sequence is UNREACHABLE: the engine caps its layer count at the sequence length
-    precisely so that no "what happens after the last entry" rule has to be invented; the
-    bound is re-checked here so a future caller that forgets the cap gets no free ungated
-    layer either — it simply runs out of ladder."""
+    so the next layer's timeframe is ``sequence[layers_filled]``. Under increasing_by_layer
+    (GH #547) layer N is decided one canonical rung per layer above the RUN's base
+    timeframe — ``CANONICAL_TIMEFRAMES[index(base) + N]``, doc 02 §6.1's
+    "15m -> 30m -> 1h" — so the caller must pass ``base_timeframe`` (the run-level pinned
+    bar timeframe; it is not a config field). A missing or non-canonical base resolves no
+    rung at all: the engine's ladder-depth cap (``increasing_ladder_depth``) is 0 there, so
+    no candidate is ever evaluated. Past the end of either ladder is UNREACHABLE: the
+    engine caps its layer count at the sequence length / the remaining rung count precisely
+    so that no "what happens after the last entry" rule has to be invented — the ladder
+    simply runs out (the signed GH #547 exhaustion decision is exactly the custom_sequence
+    precedent)."""
     scaling = config.scaling_logic
-    if scaling is None or scaling.timeframe_mode != "custom_sequence":
+    if scaling is None:
+        return None
+    if scaling.timeframe_mode == "increasing_by_layer":
+        if base_timeframe is None or base_timeframe not in CANONICAL_TIMEFRAMES:
+            return None
+        rung = CANONICAL_TIMEFRAMES.index(base_timeframe) + layers_filled + 1
+        if rung >= len(CANONICAL_TIMEFRAMES):
+            return None
+        return CANONICAL_TIMEFRAMES[rung]
+    if scaling.timeframe_mode != "custom_sequence":
         return None
     sequence = scaling.custom_timeframe_sequence
     if not sequence or layers_filled >= len(sequence):
         return None
     return sequence[layers_filled]
+
+
+def increasing_ladder_depth(base_timeframe: str | None) -> int:
+    """How many rungs the canonical ladder holds ABOVE the run's base timeframe (GH #547).
+
+    This is the increasing_by_layer analogue of custom_sequence's ``len(sequence)`` bound:
+    the engine caps the ladder's layer count at this depth, so a layer past the top rung
+    (``1D``) is never a candidate — the ladder runs out rather than repeating the last
+    rung, falling back to the base, or ungating (the signed exhaustion decision). A run
+    with no pinned bar timeframe, or one off the canonical ladder, has no rung above it —
+    depth 0: the position still opens and trades, it just never scales (fail closed for
+    the ladder, inert for nothing else)."""
+    if base_timeframe is None or base_timeframe not in CANONICAL_TIMEFRAMES:
+        return 0
+    return len(CANONICAL_TIMEFRAMES) - 1 - CANONICAL_TIMEFRAMES.index(base_timeframe)
 
 
 def layer_bucket(epoch_ms: int | None, layer_timeframe_: str | None) -> int | None:

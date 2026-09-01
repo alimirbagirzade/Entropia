@@ -21014,3 +21014,100 @@ otoritesi CI'dır.** Test collection sayısı DEĞİŞMEDİ (2 test yeniden adla
 (o yol K3 gereği kullanıcı eylemidir ve bu slice'ın imzası onu kapsamıyor) · frontend'de sıfır
 satır → frontend kapıları koşulmadı · `_require_ready_import` hâlâ "zaten pinli mi" diye
 SORMUYOR (Karar 1'de (c) REDDEDİLDİ — reddetmek değil, sessizce korumak imzalandı).
+
+
+## ADIM 157 — GH #547 SEVK EDİLDİ: Increasing Timeframe by Layer, custom_sequence mekanizması üzerinde (Closes #547)
+
+**Taban:** `origin/main` @ `1d7c7e7e` (ADIM 156). **Dal:** `feat/stage-157-i547-increasing-tf-ladder`.
+**alembic head `0044_drop_net_conflict_policy` (MIGRATION YOK)** · **`ENGINE_VERSION` DEĞİŞTİ**
+→ `backtest-engine-v18-increasing-tf-ladder` · **golden yeniden üretildi — 50 digest'ten
+YALNIZ `contract.execution_key` oynadı (ölçüldü, iddia edilmedi)** · OpenAPI **değişmedi**
+(`--check` exit 0) · ratchet/kabul defteri **el değmedi** · blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+
+### Ne sevk edildi
+
+İmzalı kuyruğun son kalemi. #547'nin "Required work" listesi madde madde:
+
+1. **Rung çözümü** — `execution/scaling.py::layer_timeframe` opsiyonel `base_timeframe`
+   kwarg'ı aldı (mevcut çağıranlar bayt bayt aynı): `increasing_by_layer` altında layer N
+   (1-based) = `CANONICAL_TIMEFRAMES[index(base) + N]` (doc 02 §6.1'in kendi yürüyüşü,
+   15m → 30m → 1h). Base bir RUN olgusudur, config alanı değil — worker'ın
+   `get_base_timeframe_for_revision` ile pinlediği değer motor closure'larına zaten
+   `timeframe` olarak iniyordu; üç `layer_timeframe` çağrısının üçü de onu geçirir.
+   **Paralel yol YAZILMADI** (issue'nun kendi kısıtı): custom_sequence'in
+   `layer_bucket` kapısı ve re-anchor mekaniği olduğu gibi yeniden kullanıldı.
+2. **Exhaustion = custom_sequence emsali (imza: 2026-09-01, #547 yorumu).** Yeni
+   `increasing_ladder_depth(base)` = base'in ÜSTÜNDE kalan kanonik rung sayısı; motor
+   `scale_max_layers`'ı custom_sequence'in `len(sequence)` şekliyle birebir aynı biçimde
+   bununla kelepçeler. 1D-bazlı bir koşuda depth 0 → pozisyon açılır ve trade eder,
+   ladder hiç katman doldurmaz; `layer_timeframe`'in past-the-top dalı motor için
+   ULAŞILMAZ kalır (custom_sequence'teki aynı çift-katmanlı savunma).
+3. **Matrix satırı `future_dev` → `active_v1`** (42→43 / 26→25), dependency metni artık
+   rung + exhaustion kuralını anlatıyor; TS aynası regen (68 satır, 2 satır diff).
+   `test_capability_matrix.py`'nin increasing overlay'i kaldırıldı (active_v1 bir değer
+   için fail-closed proof taşınamaz); FUTURE_DEV parametrizasyonları kendiliğinden daraldı.
+4. **Bayat metinler:** Ready Check remediation'ının *"'Increasing Timeframe by Layer' is
+   not yet supported"* cümlesi kalktı VE issue md. 4'ün ikinci yarısı da kapandı — aynı
+   remediation artık düz `timeframe` alanını da adlandırıyor ("Keep the 'Scaling
+   timeframe' field on 'Same as base timeframe'"; `timeframe='1h'` kaydetmiş kullanıcı
+   ilk kez eyleme dönüştürülebilir bir işaret alıyor). `config.py` alan description'ı,
+   `engine.py`/`scaling.py` "NOT modelled" blokları, `capabilities.py` gerekçe yorumu ve
+   FE `strategyGraph.ts` yorumu aynı dünyaya çekildi.
+5. **Testler** — `test_backtest_scaling_timeframe_mode.py` 20 → 24: iki test KASITLI ters
+   çevrildi (ikisinin de eski docstring'i gerekçenin "rung/top imzasız" olduğunu yazıyordu;
+   ikisi de imzalandı) — predicate artık modelled (max_scaling_layers'sız da: kanonik
+   merdiven kendisi bir declared depth), fail-closed testi yerine üç davranış testi:
+   rung yürüyüşü (`["30m","1h"]` — katman bastıran şey CAP DEĞİL, kabalaşan rung'ın
+   kendisi), tepe-rung exhaustion (1D: 0 katman + 1 trade + kontrol koşusu 4 katman) ve
+   timeframe'siz revizyon sınırı. `_logic_scaling_is_modelled.bounded` ekseni ayrı pinli.
+
+### ENGINE_VERSION — açıkça değerlendirildi (issue'nun talebi)
+
+S5c sınıfı bir bump: daha önce fail-closed (İNERT) bir seçim artık EXECUTE ediyor — aynı
+pinli revizyon eski motorda pozisyonsuz Result, yenisinde trade üretir; iki motor aynı
+`execution_key` uzayını paylaşamaz (S5c'nin custom_sequence lift'iyle aynı gerekçe,
+`manifest.py` yorumuna yazıldı). Golden ölçümü: hiçbir senaryo modu konfigüre etmiyor →
+davranışsal digest 0 oynadı, yalnız `contract.execution_key` (version dizesini hash'ler).
+Altı version-pin tripwire'ı KASITLI taşındı (literal insan eliyle; yük taşıyan
+assertion'lar el değmedi — kendi kural metinlerinin istediği ritüel).
+
+### Beş NC, beşi ayırt edici (restore'lar ters-yama + sha256; git checkout KULLANILMADI)
+
+- **NC-1** resolver'ın increasing dalı `None`'a çevrildi (pre-#547 resolver) → **tam 2**
+  kırmızı (walk + gating), kalan 22 yeşil.
+- **NC-2** motor kelepçesi silindi → **tam 2** kırmızı (exhaustion + timeframe'siz sınır).
+  **CAP YÜK TAŞIYOR:** cap'siz dünyada resolver'ın past-the-top `None`'ı ladder'ı
+  UNGATE ediyor ve 1D koşusu 4 katman dolduruyordu — "runs out" davranışını taşıyan şey
+  resolver değil kelepçenin kendisi.
+- **NC-3** off-by-one (`+1` düştü — layer 1 base rung'ında) → **tam 2** kırmızı, NC-1'den
+  FARKLI assertion değerleriyle (`["15m","30m"]`).
+- **NC-4** predicate'e fail-closed satırı geri kondu → 4 kırmızı (predicate + üç davranış)
+  ve **`test_readiness_validators.py` + `test_capability_matrix.py` YEŞİL KALDI** —
+  önceden var olan hiçbir suite bu regresyonu göremiyor; boşluğun ölçüsü.
+- **NC-5** `bounded`'dan increasing kolu düştü → **tam 1** kırmızı (predicate'in
+  max_layers'sız assertion'ı) — eksen bağımsız.
+
+### Dürüst sınırlar
+
+- **Timeframe'siz (event-based / resolution'sız) revizyon + increasing = HİÇ katman.**
+  Readiness bunu GÖREMEZ — `scaling_is_modelled` yalnız StrategyConfig okur, base ise
+  market revizyonunun olgusudur; yük taşıyan muhafız motorun depth-cap'i ve sınır
+  TESTLE pinli. Market-farkındalıklı bir readiness blocker'ı eklemek imzasız kapsam
+  genişletmesi olurdu — eklenmedi, kaydedildi.
+- **Depth cap HER İKİ metoda uygulanır, timing kapısı yalnız logic ladder'a** —
+  custom_sequence'in sevk edilmiş şeklinin birebir aynası (doc 02 §6.1: price-distance
+  diziyi kullanmaz; S5c kelepçeyi yine de iki metoda da uygulamıştı).
+- Suite'in tamamı yerelde İLK koşuda izole DB migrate edilmeden başladı → o koşu ATILDI,
+  temiz koşu nihai ağaçta (sayılar aşağıda). Otorite CI.
+- E2E/a11y kapıları koşulmadı (frontend'de yalnız 1 test hizalaması + 2 yorum + üretilmiş ayna).
+
+### Sayılar (yerel; otorite CI)
+
+Backend: ruff / ruff format / mypy temiz · tam suite (izole migrate edilmiş DB, nihai kod
+ağacı): exit 1 — TEK kırmızı docs-truth gate'in canlı testiydi (CLAUDE.md:808 bayat
+ENGINE_VERSION literali; `(o gün)` hedge'iyle kapandı, gate sonrasında exit 0), davranışsal
+kırmızı SIFIR, coverage %94.05 (kapı ≥90). GEÇEN SAYISI BASILMADI — ADIM 144'ün çift `-q`
+tuzağı bir kez daha (addopts zaten -q taşırken elle -q eklendi; özet sustu, kırmızı listesi +
+exit code + coverage okundu). Collected 3913 → 3917.
+Frontend: lint + typecheck temiz · coverage kapısı yeşil (73 dosya / 748 passed).
+OpenAPI `--check` exit 0 · repository_facts regen (ENGINE_VERSION · 43/25 · 3917).

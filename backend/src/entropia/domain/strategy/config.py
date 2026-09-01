@@ -843,10 +843,12 @@ class ScalingLogic(BaseModel):
             "Scaling Timeframe Structure / Timeframe Mode (doc 02 §5.7). same_strategy: "
             "every layer is decided on the strategy's own base timeframe. custom_sequence: "
             "layer N is decided on the Nth entry of ``custom_timeframe_sequence`` under the "
-            "closed-bar rule. increasing_by_layer: each layer steps to a coarser timeframe "
-            "— the spec declares NO step increment (next rung vs. doubling are different "
-            "ladders), so it is accepted by the schema and fails closed at the engine "
-            "(STRATEGY_SCALING_UNSUPPORTED) rather than inventing a rung size."
+            "closed-bar rule. increasing_by_layer (GH #547): layer N is decided one "
+            "canonical rung per layer above the run's base timeframe — doc 02 §6.1's "
+            "'15m -> 30m -> 1h', i.e. CANONICAL_TIMEFRAMES index + N — under the same "
+            "closed-bar rule; the ladder's depth is capped at the rungs remaining above "
+            "the base, so it runs out at the top rung (1D) exactly as a custom sequence "
+            "runs out at its last entry."
         ),
     )
 

@@ -3,8 +3,11 @@
 
 ## Nerede duruyoruz
 
-Taban `origin/main` @ `1ac56232` (ADIM 153). **DOCS-ONLY + GitHub dispozisyonları** — ürün
-kodunda sıfır satır · ratchet el değmedi (54/6 · A1 B21 C6 D32) · **A-08 (#514) AÇIK, blocker
+Taban `origin/main` @ `1ac56232` (ADIM 153). **DOCS + GitHub dispozisyonları + tek satır CVE
+yaması** — backend/test/migration'da sıfır satır; `frontend/Dockerfile` kapsamlı `apk upgrade`
+listesine `libexpat` aldı (CVE-2026-66046 · CVE-2026-76641, HIGH, fix 2.8.4-r0 — SBOM kapısı
+PR açıkken kırmızıya döndü, openssl satırının emsaliyle kapatıldı; fix varken allowlist
+yazılmaz) · ratchet el değmedi (54/6 · A1 B21 C6 D32) · **A-08 (#514) AÇIK, blocker
 DEĞİŞMEDİ (1) → BLOCKED.**
 
 Ürün sahibi 2026-09-01'de on kararı interaktif imzaladı (toptan yetki ≠ imza; şıklar bedelleriyle

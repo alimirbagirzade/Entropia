@@ -10871,8 +10871,11 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 153 · `docs/ADIM153_LANDED_KICKOFF
 
 ## Stage 154 — on karar tek oturumda imzalandı; beş issue kapandı, üç kod işi imzalı kuyruğa girdi landed (bu PR)
 
-**DOCS-ONLY + GitHub dispozisyonları** — ürün kodunda sıfır satır; ratchet el değmedi
-(54/6 · A1 B21 C6 D32). Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+**DOCS + GitHub dispozisyonları + tek satır CVE yaması** — backend/test/migration'da sıfır
+satır; `frontend/Dockerfile` kapsamlı `apk upgrade` listesine `libexpat` aldı (2 yeni HIGH:
+CVE-2026-66046 · CVE-2026-76641, fix 2.8.4-r0 — openssl satırının emsali, fix varken
+allowlist yazılmaz). Ratchet el değmedi (54/6 · A1 B21 C6 D32). Blocker DEĞİŞMEDİ (1 — A-08)
+→ BLOCKED.
 
 Ürün sahibi on kararı interaktif imzaladı (toptan yetki ≠ imza, ADIM 66 emsali — şıklar tek
 tek soruldu): **#854 = (b) set-once** · **#534 md.3 = (c) hiçbiri** · **#547 = custom_sequence

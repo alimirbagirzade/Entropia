@@ -20818,8 +20818,14 @@ edilmiyor (otorite CI). Tavan takibi **KAPANMADI** — koşulu ileride bir koşu
 
 ## ADIM 154 — ON KARAR TEK OTURUMDA İMZALANDI; BEŞ ISSUE KAPANDI, ÜÇ KOD İŞİ İMZALI KUYRUĞA GİRDİ
 
-**DOCS-ONLY + GitHub dispozisyonları** — ürün kodunda, testte, migration'da sıfır satır;
-ratchet el değmedi (54/6 · A1 B21 C6 D32); blocker DEĞİŞMEDİ (**1 — yalnız A-08**) → BLOCKED.
+**DOCS + GitHub dispozisyonları + TEK SATIR CVE yaması** — backend'de, testte, migration'da
+sıfır satır; ratchet el değmedi (54/6 · A1 B21 C6 D32); blocker DEĞİŞMEDİ (**1 — yalnız
+A-08**) → BLOCKED. **CVE yaması PR açıkken eklendi:** SBOM kapısı taze veritabanıyla
+`libexpat 2.8.3-r0`'da iki YENİ HIGH buldu (CVE-2026-66046 · CVE-2026-76641, fix 2.8.4-r0)
+→ `frontend/Dockerfile`'ın **zaten var olan** kapsamlı `apk upgrade` satırına (openssl
+emsali) `libexpat` eklendi. **Fix varken allowlist yazılmaz** (ADIM 44 kuralının pozitif
+yüzü); satır, üstyapı floating tag'i yeniden build'lenince kendiliğinden gereksizleşir ve
+yorumunda bunu yazar.
 
 **Bağlam:** ürün sahibi oturum içinde toptan yetki verdi (*"imzaları kabul ediyorum, ne
 gerekiyse yap"*). **Toptan kabul bir imza DEĞİLDİR** (ADIM 66 emsali: birlikte imzalanamayan

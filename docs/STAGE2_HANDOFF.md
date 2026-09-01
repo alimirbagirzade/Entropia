@@ -10840,3 +10840,31 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 152 · `docs/ADIM152_LANDED_KICKOFF
 3. **Testle kapanabilir sınıf-B satır KALMADI** (ADIM 113'ün toplamı + bu slice'ın ölçümü):
    defterdeki 21 sınıf-B satırın hepsi kayıtlı bulgu taşıyor; sıradaki kod işi ancak bir ürün
    kararının (imzanın) arkasından çıkar.
+
+## Stage 153 — GH #677 insan eliyle kapandı; kayıt ve canlı belgeler uzlaştırıldı landed (PR #893)
+
+**DOCS-ONLY** — ürün kodunda, testte, migration'da sıfır satır; ratchet el değmedi
+(54/6 · A1 B21 C6 D32). Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+
+**Kapanan şey bekleyen karardı:** #677 `2026-09-01T05:56:44Z`'de ürün sahibi tarafından
+CLOSED/COMPLETED + **yazılı** kalem kalem dispozisyonla kapatıldı (dört kesinti: ADIM 145 ·
+harness artefaktı ADIM 146/147/150 · CLS ×2 ADIM 148/151). ADIM 90'ın üç ölçümü ayrışmıyor →
+kapanış geçerli; karşıt emsal #534 (kapalı ama yazılı karar yok) **açık sayılmaya devam eder**.
+
+**Kapanışın koşullu takip işi ölçüldü, koşul SAĞLANMADI:** üç performance tavanı bilerek
+sıkıştırılmadı; koşul *"repeat runs show a stable 100 median"* ve main'de tamamlanmış post-fix
+koşu **tam olarak BİR** (`33469911470`) → tavanlar yerinde. ADIM 152'nin NC-4 yan bulgusu
+(worker ref'i yeniden doğrulamıyor) **imza-kapılı** sınıflandı — i703 imzası o kuralı taşımıyor
+(ADIM 149 emsali). Açık kalemler yeniden ölçüldü: hepsi imza/insan bekliyor.
+
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 153 · `docs/ADIM153_LANDED_KICKOFF.md`.
+
+## Next: **imza kalemleri; imzasız ilerlenebilir kod işi YOK**
+
+1. **İmza kalemleri (ölçmeden girme):** #854 (9 kutu boş) · #534 (4 kutu boş, ADIM 90 gereği
+   açık) · #547 (0 yorum) · #582 (öncülü bayat, kapatmak insan kararı) · beş `product-decision`
+   issue'su (#535 #542 #543 #545 #546) · **#514 A-08 — TEK BLOCKER, `human-only`**.
+2. **Tavan takibi koşula bağlı:** post-fix Lighthouse koşuları biriktikçe *"stable 100 median"*
+   koşulu yeniden ölçülür; sağlanırsa tavanlar o PR'ın KENDİ CI artefaktından sıkıştırılır.
+3. **Testle kapanabilir sınıf-B satır KALMADI**; ADIM 152 NC-4 bulgusu dahil sıradaki kod işi
+   bir imzanın arkasından çıkar.

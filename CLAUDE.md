@@ -271,6 +271,18 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **DOCS-ONLY, ürün/test kodunda
+> SIFIR SATIR** · ratchet **el değmedi** (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 153
+> (GH #677 İNSAN ELİYLE KAPANDI — `2026-09-01`, yazılı kalem kalem dispozisyonla; ADIM 90'ın üç
+> ölçümü ayrışmıyor → kapanış geçerli, karşıt emsal #534 AÇIK kalır).** Kapanışın koşullu takip
+> işi ölçüldü: üç performance tavanı bilerek sıkıştırılmadı, koşul *"repeat runs show a stable
+> 100 median"* ve post-fix koşu sayısı **1** → koşul SAĞLANMADI, tavanlar yerinde. ADIM 152'nin
+> NC-4 bulgusu **imza-kapılı** sınıflandı (i703 imzası o kuralı taşımıyor; ADIM 149 emsali).
+> **İmzasız ilerlenebilir kod işi YOK.** Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 153 · `docs/ADIM153_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **ÜRÜN KODUNDA SIFIR SATIR**
 > (diff: bir test harness'ı + harita notu). **Son dalga — ADIM 152 (RD-09.c4'ün kanıtı üretimin
 > yazdığı ref'e taşındı; "tavan oynatır" öncülü DEFTERİN KENDİSİNDE çürüdü).** Harita c4'ü ADIM

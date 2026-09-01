@@ -20576,3 +20576,102 @@ Provenance metnini yazarken **tırnaksız heredoc** kullandım (`<<PY`), kabuk m
 * Lighthouse spec'i **yerelde koşulmadı**; mekanizma yerelde ölçüldü, **skorların otoritesi CI**.
 * Ürün kodunda sıfır satır → backend kapıları **koşulmadı** (CI'da yeşil).
 * **A-08 (#514) AÇIK** — tek blocker, `human-only`, el değmedi.
+
+## ADIM 151 — OTURUM AÇIK CLS DÖRT ROTADA KAYNAĞINDA DÜZELTİLDİ; ADIM 148'İN REZERVİ YENİ DÜNYADA KUSURUN KENDİSİYDİ
+
+**PR: bu slice** · taban `ac749c2a` (ADIM 150) · **MIGRATION YOK** · `ENGINE_VERSION` **değişmedi** ·
+OpenAPI **değişmedi** · golden **el değmedi** · **backend'de SIFIR SATIR** · `floors`/`armed`/`policy`
+**EL DEĞMEDİ** (yalnız `provenance.cls_reserves_2026_09_01` eklendi). Dokunulan ürün dosyaları:
+`frontend/src/styles/global.css` · `PanelManagement.tsx` · `Library.tsx` · `CreatePackage.tsx` ·
+`FutureDev.tsx` (hepsi **yalnız loading dalları**, presentation-only). Testler:
+`clsReserves.test.tsx` (YENİ, 4 test) + `panelManagement.test.tsx` muhafızı genişledi.
+**A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → BLOCKED.**
+
+### Neden bu slice
+
+ADIM 150 kapıyı oturum açık dünyaya taşıyıp dört rotanın CLS'ini İLK KEZ görünür kılmıştı
+(panel-management **0.165** · package-library 0.096 · create-package 0.068 · future-dev 0.059)
+ve düzeltmeyi bırakmıştı. Bu o slice. Devir notunun iki tuzağı da doğrulandı: özet artefakt
+`layout-shifts`'i (ağırlık 0) **hiç taşımıyor** — `evidence` yalnız CLS değerini yankılıyor —
+→ yerel harness kuruldu.
+
+### Harness: CI'ın kendi dünyası, İLK KEZ yerelde — ve İKİ enstrüman
+
+Bu Mac'te Docker var; **CI'ın birebir reçetesi** koşuldu (`cp .env.example .env` + iki sed →
+`docker compose up -d --build` → CI'ın seed komutu). İki teşhis aracı yazıldı (untracked,
+commit edilmedi): (1) spec'in birebir konfigürasyonuyla Lighthouse koşup **tam LHR'yi saklayan**
+harness — ağırlığı 0 olan `layout-shifts` görünür oldu; (2) **Layout Instability API probe'u**
+(`entry.sources` + previousRect/currentRect) — kurbanı değil **boyut değiştiren elemanı** adlandırır.
+**Harness doğrulandı, varsayılmadı:** yerel maks geçişler CI'a denk — 0.1475↔0.165 ·
+**0.0949↔0.096** · **0.0680↔0.068** · **0.0581↔0.059**; kontrol rotası mainboard 0.0265↔0.027.
+
+### ASIL BULGU: dört rota TEK kusur sınıfı, İKİ yön — ve ADIM 148'in düzeltmesi yeni dünyada kusurun kendisi
+
+* **panel-management (KÜÇÜLME):** üç kartın 244px loading rezervi **oturumsuz settled**
+  yüksekliğiydi (ErrorState); oturum açık dünyada kartlar **daha kısa** oturuyor
+  (306→174 / 306→118 / 306→237 ölçüldü) → her settle kartı küçültüp alttakileri yukarı çekiyordu.
+  **Dünya değişince düzeltmenin kendisi shift kaynağı oldu.** ADIM 148 GERİ ALINMADI — mekanizma
+  doğruydu, DEĞER dünyaya aitti.
+* **package-library (BÜYÜME):** liste kartı loading(~230)'dan **910px'lik settled**'a büyüyüp
+  Import kartını fold altına itiyordu (`y 620→viewport dışı`, tek shift = 0.0947).
+* **future-dev (BÜYÜME):** capabilities kartı +156px büyüyüp artifacts kartını itiyordu.
+* **create-package (TERS YÖN):** "My requests" şeridinin loading'i (~230) settled boş nottan
+  (~83) BÜYÜKTÜ → `min-height` yapısal olarak çare OLAMAZ; düzeltme kompakt markup.
+
+### Sevk edilen: kart başına ÖLÇÜLMÜŞ rezervler + tek satırlık loading
+
+`.panel-card-async` taban mekanizma kaldı (flex ortalama + kompakt `.state` padding'i eklendi);
+beş modifier ölçülen oturum açık settled gövde yüksekliklerini taşır: `--users 112` ·
+`--actors 56` · `--matrix 175` · `--capabilities 322` · `--library-pool 610`. CreatePackage
+şeridi loading'de `p.cp-note[role=status]` (settled notla aynı geometri). **Sonrası, aynı
+harness'ta:** dört rota **≤ 0.0021**, kontrol rotası mainboard **bayt bayt aynı**
+(0.0265/0.0001/0.0265).
+
+### Kapı bu düzeltmeyi KORUYAMAZ → dört muhafız + kaynak-düzeyi pin
+
+Tavanlar düzeltme-sonrası skorların ALTINDA donmuş (panel-management 93, do_not_tighten) →
+revert kapıyı yeşil bırakır. `clsReserves.test.tsx`: üç DOM muhafızı (rota başına, loading'de
+sınıf var / settle'da yok; CP'de spinner bloğu YOK) + **kaynak-düzeyi değer pini** (jsdom
+stylesheet uygulamaz → sınıf-varlığı muhafızları min-height DEĞERİNE kör; pin global.css
+metnini okur, beş değeri pinler). `panelManagement.test.tsx` muhafızı üç modifier'ı pinler.
+
+### BEŞ NC, beşi ayırt edici — ve BİR NC REDDEDİLDİ (bozuk enstrüman)
+
+revert→koş→restore döngüsü, geri yükleme **sha256 ile** doğrulandı (ADIM 149 kuralı). Sonuç:
+beş turda beşinde **tam 1 hedeflenen kırmızı**, mevcut suite yeşil (NC-1'de library.test 16/16 ·
+NC-2'de createPackage.test 33/33 · NC-4'te eski assertion'lar yeşil = eski muhafızın körlüğü
+ölçüldü · NC-5 yalnız pin = bağımsız eksen). **REDDEDİLEN:** pinin ilk yazımı
+`global.css?raw` import'uyla kuruldu ve vitest'in css boru hattı onu **boş dizeye** çevirdi →
+pin **İKİ dünyada da kırmızıydı** = hiç kontrol değildi (ADIM 104/105 sınıfının yeni kılığı:
+**iki dünyada da kırmızı olan bir kontrol, yanlış sebeple kırmızıdır**). fs-metin okumasına
+çevrildi; ikinci tuzak: jsdom ortamında `import.meta.url` **http** şemasıdır, file değil.
+
+### Ortam dersleri (birinci elden)
+
+* **Docker VM'i 12 container altında CPU açlığına düştü** (login POST 60s'te bile dönmedi,
+  postgres %156); worker/scheduler durdurulunca 2.5s'e indi. Teşhis dünyası **bilinçli
+  inceltildi** — salt-okuma rotaları worker istemez; yerel sayılar zaten tavan değil.
+* **`| tail` exit-code tuzağına bir kez daha düşüldü** (compose'un ilk koşusu `.env` yokken
+  "başarılı" göründü) — yakalandı, exit code ayrı okundu.
+* `claude-mem` plugin hook'u oturum ortasında Read aracını bloklamaya başladı → okuma `sed`,
+  yama Bash-python ile sürdürüldü; işin kendisi etkilenmedi.
+
+### DÜRÜST SINIR
+
+* **Skorların otoritesi CI** — yerel sayılar teşhistir; tavan **oynatılmadı** ve
+  oynatılmamalı: CI iyileşince `tightened` önerisi çıkacak, **tek koşuyla sıkıştırma reddi**
+  aynen geçerli (`stability`: sıfır spread koşuya aittir).
+* **Oturumsuz kabuk dünyasında takas var, ölçülmedi:** rezervler küçülünce o dünyanın
+  loading→ErrorState geçişi küçülme yerine **büyüme** shift'i verir; kapı o dünyayı artık
+  puanlamıyor ve bu takas CSS yorumunda yazılı.
+* **mainboard'un kendi 0.0265'i ölçüldü, ALINMADI** (`summary-h` kartı; performance 100
+  medyanlıyor — kesinti yok).
+* Rezerv değerleri **bu Mac'in font metrikleriyle** ölçüldü; CI (Linux, Arial yerine
+  Liberation) birkaç px ayrışabilir — kalan artık CI'da görünür, tavanlar zaten korur.
+* **#677 KAPATILMADI** — kalan tek kalemi (oturum açık CLS) bu slice düzeltti; kapatmak
+  **insan kararı**.
+* Backend'de sıfır satır → backend kapıları **koşulmadı** (otorite CI). Frontend: lint ·
+  typecheck · e2e-tsc yeşil; tam suite ilk koşuda **3 dosyada 12 yük-timeout'u** verdi
+  (üçü de bu slice'ın dokunmadığı dosyalar; ADIM 145'in şekli) → stack durdurulup
+  `--no-file-parallelism` ile yeniden koşuldu, sonucu kapanış commit'inden önce doğrulandı.
+* Üretilmiş olgular tazelendi: frontend unit call sites **733 → 737 / 73 dosya**.

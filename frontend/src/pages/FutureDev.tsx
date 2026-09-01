@@ -91,7 +91,13 @@ function RegistryCard({
         Capabilities
       </h3>
       {capabilities.isLoading ? (
-        <Loading label="Loading capability registry…" />
+        // Reserves the signed-in settled registry height (measured 322px for
+        // the 7 baseline capabilities) so the table landing does not push the
+        // Analysis Artifacts card down - that push was the whole logged-in CLS
+        // of this route (0.059). See .panel-card-async in global.css.
+        <div className="panel-card-async panel-card-async--capabilities">
+          <Loading label="Loading capability registry…" />
+        </div>
       ) : capabilities.isError ? (
         <ErrorState error={capabilities.error} onRetry={() => void capabilities.refetch()} />
       ) : capabilities.data ? (

@@ -271,6 +271,18 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **backend'de SIFIR SATIR** ·
+> Lighthouse `floors`/`armed` **el değmedi**. **Son dalga — ADIM 151 (oturum açık CLS dört
+> rotada KAYNAĞINDA düzeltildi).** ADIM 148'in 244px rezervi oturumsuz settled değeriydi —
+> oturum açık dünyada **rezervin kendisi shift kaynağı olmuştu**; kart başına ölçülmüş
+> rezervler + CP şeridinde kompakt loading sevk edildi. Doğrulanmış yerel harness'ta dört
+> rota 0.165/0.096/0.068/0.059 → **≤ 0.0021**, kontrol (mainboard) bayt bayt aynı; otorite
+> CI. Kapı koruyamaz → muhafızlar `clsReserves.test.tsx` + `panelManagement.test.tsx`.
+> **#677'nin dört kaleminin dördü ele alındı, kapatmak İNSAN kararı.** Blocker DEĞİŞMEDİ
+> (1 — A-08) → BLOCKED. `PROJECT_HISTORY.md` §ADIM 151 · `docs/ADIM151_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **ÜRÜN KODUNDA SIFIR SATIR**
 > (backend ve `frontend/src` el değmedi). **Son dalga — ADIM 150 (Lighthouse artık OTURUM AÇIK
 > ölçüyor; #677'nin baş kesintisi bir HARNESS ARTEFAKTI çıktı, PR #890).** ADIM 147 kusuru ölçüp

@@ -174,7 +174,15 @@ function RequestSwitcher({
         ) : null}
       </div>
       {requests.isLoading ? (
-        <Loading label="Loading requests…" />
+        // Text-only on purpose: this strip sits ABOVE the whole workspace, and
+        // the big spinner block (~168px) settling into the one-line "No requests
+        // yet" note (~24px) pulled the entire page up 142px - the whole
+        // logged-in CLS of this route (0.068). A status line with the note's own
+        // geometry makes loading and settled the same height; a min-height
+        // reserve cannot shrink the spinner, so the fix is the compact markup.
+        <p className="cp-note" style={{ marginTop: 10 }} role="status">
+          Loading requests…
+        </p>
       ) : requests.isError ? (
         <ErrorState error={requests.error} onRetry={() => void requests.refetch()} />
       ) : requests.data && requests.data.data.length > 0 ? (

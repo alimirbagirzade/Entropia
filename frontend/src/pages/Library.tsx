@@ -365,7 +365,13 @@ function CatalogCard() {
       </form>
 
       {packages.isLoading ? (
-        <Loading label="Loading catalog…" />
+        // Reserves the signed-in settled pool height (measured 610px) so the
+        // catalog landing does not shove the Import card below it off the fold
+        // - that push was the whole logged-in CLS of this route (0.096). See
+        // .panel-card-async in global.css.
+        <div className="panel-card-async panel-card-async--library-pool">
+          <Loading label="Loading catalog…" />
+        </div>
       ) : packages.isError ? (
         <ErrorState error={packages.error} onRetry={() => void packages.refetch()} />
       ) : packages.data ? (

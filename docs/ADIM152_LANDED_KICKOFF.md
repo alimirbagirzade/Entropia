@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 152 landed — RD-09.c4'ün kanıtı üretimin yazdığı ref'e taşındı; "tavan oynatır" öncülü defterin kendisinde çürüdü
 
 ## Nerede duruyoruz

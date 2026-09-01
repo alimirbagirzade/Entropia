@@ -20760,3 +20760,58 @@ eklemiş ama hand-set'i bırakmıştı: `(b2)` kapısını geçmek için gereken
 * **PRE-1 hâlâ koşulamaz** (0 tag / 0 release / 0 deploy workflow) — `(b2)` "doğrulanmış"
   sayılamaz; bu slice o sınırı **taşımadı**.
 * İzole DB: `entropia_test_adim152` (worktree'ye özel, `postgresql+asyncpg`).
+
+## ADIM 153 — GH #677 İNSAN ELİYLE KAPANDI (YAZILI DİSPOZİSYONLA); KAYIT DÜŞÜLDÜ, TAVAN TAKİBİ KOŞULA BAĞLI KALDI
+
+**PR #893** · taban `origin/main` @ `c30a390d` (ADIM 152). **DOCS-ONLY** — ürün kodunda,
+testte, migration'da **SIFIR SATIR**; `ENGINE_VERSION` değişmedi · OpenAPI değişmedi · golden
+el değmedi · ratchet **el değmedi** (54/6 · A1 B21 C6 D32).
+**A-08 (#514) AÇIK, blocker DEĞİŞMEDİ (1) → RC verdict BLOCKED.**
+
+### Kapanan şey bir kusur değil, BEKLEYEN BİR KARARDI
+
+GH #677 `2026-09-01T05:56:44Z`'de ürün sahibi (`alimirbagirzade`) tarafından
+**CLOSED / COMPLETED** kapatıldı ve kapanış **YAZILI**: dört donmuş kesintinin dördü için kalem
+kalem dispozisyon tablosu — `meta-description` + `robots-txt` = ADIM 145 (#884) ·
+`errors-in-console` = **harness artefaktı, ürün kusuru değil** (ADIM 146 kanıtı okunur kıldı,
+ADIM 147 oturumun taşınmadığını ölçtü, ADIM 150/#890 harness'ı düzeltti) · CLS = **iki ayrı
+kusur**, oturumsuz (ADIM 148/#888) + oturum açık (ADIM 151/#891) — her satırda CI koşu kanıtı.
+**ADIM 90'ın üç ölçümü uygulandı ve AYRIŞMIYOR:** issue durumu `CLOSED` ✓ · yazılı karar
+issue'nun kendisinde ✓ · ayrı imza kutusu #677 için hiç var olmadı (sicili issue'ydu) → kapanış
+**geçerli** sayılır. Karşıt emsal bilerek yan yana yazıldı: **#534 hâlâ açık sayılır** — orada
+issue kapalı ama yazılı karar YOK, dört kutu boş (aynı kural, iki zıt sonuç).
+
+### Kapanışın içindeki KOŞULLU TAKİP İŞİ ölçüldü — koşul SAĞLANMADI, tavan OYNATILMADI
+
+Kapanış yorumu üç performance tavanını (`panel-management` 93 · `package-library` 98 ·
+`create-package` 99) **bilerek** sıkıştırılmamış bırakıyor ve takibi bir koşula bağlıyor:
+*"repeat runs show a stable 100 median"*. Ölçüldü: ADIM 151'in düzeltmesinden sonra main'de
+**tamamlanmış post-fix Lighthouse koşusu tam olarak BİR** (`33469911470`, 23/23 × 3 = 100);
+ikincisi (`33482001704`, ADIM 152 merge koşusu) bu kayıt yazılırken **hâlâ koşuyordu**. Tek koşu
+bir medyan kurmaz → **koşul sağlanmadı, üç tavan da yerinde**. Tarihsel *"98–100 varyansı
+ölçüldü"* uyarısı (ADIM 43) flapping riskini hatırlatmaya devam ediyor; düzeltmeleri koruyan şey
+zaten tavanlar değil, yapısal muhafızlar (`clsReserves.test.tsx` + `panelManagement.test.tsx`).
+Koşul bir gün sağlanırsa tavanlar **o PR'ın kendi CI artefaktından** alınır, yerel koşudan ASLA.
+
+### ADIM 152'nin NC-4 yan bulgusu İMZA-KAPILI olarak sınıflandı
+
+Worker'ın manifest bloğundaki `instrument_mapping_ref` DEĞERİNİ yeniden doğrulamaması için kod
+yazılMADI: i703 imzası (§1=(b) · §1a · §2 · §3) worker'da bir yeniden doğrulama kuralı
+**taşımıyor**; eklemek imzanın taşımadığı bir kural icat etmek olurdu — ADIM 149'un aynı
+gerekçeyle reddettiği hamle. Bulgu kayıtlı kalır; ele almak bir **ürün kararıdır**.
+
+### Kalan açık kalemler YENİDEN ölçüldü (2026-09-01)
+
+**#854** karar belgesinde işaretli kutu **0** (dokuz kutu boş) → açık · **#534** issue CLOSED
+ama kapanış yorumu YOK, dört kutu boş → ADIM 90 gereği **açık sayılır** · **#547** 0 yorum,
+imza bekliyor · **#582** 0 yorum, öncülü bayat (containment ADIM 132'de kalktı) → kapatmak
+insan kararı · **#536** açık ama imzasız KOD işi ADIM 144'te TÜKENDİ · beş `product-decision`
+issue'su (#535 #542 #543 #545 #546) imza bekliyor · **#514 / A-08 — TEK BLOCKER, `human-only`**.
+**Sonuç: imzasız ilerlenebilir kod işi YOK; bu slice o taramanın kendisinin kaydıdır.**
+
+### DÜRÜST SINIR
+
+Ürün/test kodunda sıfır satır → **hiçbir suite koşulmadı**, hiçbir geçen/coverage sayısı iddia
+edilmiyor (otorite CI). Tavan takibi **KAPANMADI** — koşulu ileride bir koşu korpusu sağlar.
+#677'nin kapanışı **A-08'e kanıt DEĞİLDİR** (kapanış yorumu bunu kendisi yazıyor: Lighthouse
+`accessibility` kapalı; otorite axe + insan denetimi, #514 açık kalır).

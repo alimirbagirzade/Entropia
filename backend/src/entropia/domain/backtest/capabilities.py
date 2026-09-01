@@ -554,6 +554,76 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
             ),
         )
     ),
+    # -- Restriction filter ACTION (engine `_parse_restriction`, GH #546 / D-4) --
+    # The saved ``config`` dict is free-form, so no pydantic ``Literal`` pins this
+    # vocabulary — the matrix itself is the pin, and the literals are the engine's own:
+    # ``_MODELLED_FILTER_ACTIONS = {"block", "block_entries"}`` executes (an ABSENT
+    # action is accepted as block and is therefore not a selection), while the engine
+    # docstring names the refused canon actions "(reduce / close / disable / warn)"
+    # (doc 02 §5.8's action lists, Master Ref §12.4). Before these rows a saved
+    # ``action: "reduce"`` failed closed correctly but was INVISIBLE in structured
+    # provenance — ``capability_not_in_build`` stayed empty while the run was inert,
+    # the D-4 finding of the capability-matrix adjudication.
+    CapabilityOption(
+        field_path="restrictions_filters.filters.action",
+        value="block",
+        status="active_v1",
+        label="Block",
+    ),
+    CapabilityOption(
+        field_path="restrictions_filters.filters.action",
+        value="block_entries",
+        status="active_v1",
+        label="Block New Entries",
+    ),
+    CapabilityOption(
+        field_path="restrictions_filters.filters.action",
+        value="reduce",
+        status="future_dev",
+        label="Reduce New Position Size",
+        dependency=(
+            "Needs a canonical size-reduction rule (factor and basis) doc 02 does not "
+            "define; the modelled restriction surface is a binary entry-eligibility "
+            "veto, not a sizing input."
+        ),
+        blocker_code="STRATEGY_RESTRICTIONS_UNSUPPORTED",
+    ),
+    CapabilityOption(
+        field_path="restrictions_filters.filters.action",
+        value="close",
+        status="future_dev",
+        label="Close All Open Positions",
+        dependency=(
+            "Needs a forced-close path at filter-activation time; the modelled "
+            "restriction surface only vetoes NEW entries and never touches an open "
+            "position."
+        ),
+        blocker_code="STRATEGY_RESTRICTIONS_UNSUPPORTED",
+    ),
+    CapabilityOption(
+        field_path="restrictions_filters.filters.action",
+        value="disable",
+        status="future_dev",
+        label="Disable Strategy for the Day",
+        dependency=(
+            "Needs day-scoped strategy state (disable-until-boundary) the replay does "
+            "not carry; the modelled restriction surface decides per-bar entry "
+            "eligibility only."
+        ),
+        blocker_code="STRATEGY_RESTRICTIONS_UNSUPPORTED",
+    ),
+    CapabilityOption(
+        field_path="restrictions_filters.filters.action",
+        value="warn",
+        status="future_dev",
+        label="Warning Only",
+        dependency=(
+            "Needs a non-blocking advisory surface: a warn-only filter must admit the "
+            "entry while reporting, and silently treating it as block would invert the "
+            "saved intent."
+        ),
+        blocker_code="STRATEGY_RESTRICTIONS_UNSUPPORTED",
+    ),
     # -- Opposite-direction hedge (conflict_handling_is_modelled) ----------
     *(
         CapabilityOption(
@@ -666,6 +736,38 @@ def _read_filter_types(config: StrategyConfig) -> tuple[str, ...]:
     return tuple(rf.filter_type for rf in config.restrictions_filters.filters if rf.enabled)
 
 
+# The three filter types the engine's ``_parse_restriction`` parses at all — derived
+# from the matrix's own active_v1 filter-type rows rather than imported from the engine
+# (capabilities must not import engine: engine imports capabilities). The filter-type
+# exhaustiveness axis plus the fail-closed parity tests keep this derivation honest.
+_ACTIVE_FILTER_TYPES: frozenset[str] = frozenset(
+    option.value
+    for option in CAPABILITY_MATRIX
+    if option.field_path == "restrictions_filters.filters.filter_type"
+    and option.status == "active_v1"
+)
+
+
+def _read_filter_actions(config: StrategyConfig) -> tuple[str, ...]:
+    """Explicit ``action`` strings the engine would actually consult (GH #546 / D-4).
+
+    Mirrors ``_parse_restriction``'s read order exactly: a DISABLED filter is inert
+    (the ``_read_filter_types`` rule), a filter whose TYPE is not modelled bails
+    before the action is ever read (its filter_type row already reports the refusal,
+    so reporting the unreachable action too would be a #533-class false claim), and
+    an ABSENT action is the modelled block default — not a saved selection. A
+    non-string action is not a literal and is left to the fail-closed per-domain
+    predicate."""
+    actions: list[str] = []
+    for rf in config.restrictions_filters.filters:
+        if not rf.enabled or rf.filter_type not in _ACTIVE_FILTER_TYPES:
+            continue
+        action = (rf.config or {}).get("action")
+        if isinstance(action, str):
+            actions.append(action)
+    return tuple(actions)
+
+
 def _read_opposite_hedge(config: StrategyConfig) -> tuple[str, ...]:
     """``exit_on_opposite_signal`` ON closes the position before the hedge branch is
     reached, so the saved hedge value is inert and NOT a selection — exactly the rule
@@ -690,6 +792,7 @@ _FIELD_READERS: dict[str, Callable[[StrategyConfig], tuple[str, ...]]] = {
     "scaling_logic.timeframe": _read_scaling_timeframe,
     "scaling_logic.timeframe_mode": _read_scaling_timeframe_mode,
     "restrictions_filters.filters.filter_type": _read_filter_types,
+    "restrictions_filters.filters.action": _read_filter_actions,
     "conflict_position_handling.opposite_direction_hedge": _read_opposite_hedge,
 }
 

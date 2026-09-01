@@ -20893,6 +20893,86 @@ edecek şekilde yeniden kuruldu. *Fark bir yenilik kanıtı değildir; yön de �
 #542'nin kanon düzeltmesi ve #543'ün regime şeması **post-V1 borcu olarak kayıtlı, takvimsiz** ·
 tavan korpusu izleniyor, sıkıştırma slice'ı 4. kusursuz koşu inene kadar AÇILMADI.
 
+## ADIM 156 — #546 + #536 TEK SLICE'TA: EYLEM UZAYI MATRİSE GİRDİ, CONFLICT LİTERALLERİ MUHAFIZ ALTINA ALINDI
+
+**ÜRÜN KODU DEĞİŞTİ (tek dosya: `capabilities.py` — 6 matris satırı + 1 okuyucu); HİÇBİR
+FİNANSAL SAYI OYNAMADI** — golden 50 digest bayt bayt aynı (dosya el değmedi, golden testi
+yeşil) → `ENGINE_VERSION` bump GEREKMEDİ · migration YOK · OpenAPI değişmedi (`--check` exit 0;
+yeni readiness kodu yok — satırlar mevcut `STRATEGY_RESTRICTIONS_UNSUPPORTED`'ı taşıyor) ·
+ratchet el değmedi (54/6 · A1 B21 C6 D32) · blocker DEĞİŞMEDİ (**1 — yalnız A-08**) → BLOCKED.
+**Closes #546 + #536** (imzalar: #546 dispozisyon yorumu 2026-09-01; #536 delege `A-Z`,
+ADIM 154).
+
+**Sevk edilen — #546 yarı 2:** `restrictions_filters.filters.action` CAPABILITY_MATRIX'e girdi:
+`block`/`block_entries` **active_v1** (= motorun `_MODELLED_FILTER_ACTIONS` kümesi, ölçülerek),
+`reduce`/`close`/`disable`/`warn` **future_dev** (motor docstring'inin kanon kısaltması "(reduce
+/ close / disable / warn)"; etiketler v18 mockup'ın max-daily-loss Action seçicisinden — doc 02
+:1208). Yeni okuyucu `_read_filter_actions` motorun `_parse_restriction` okuma SIRASINI birebir
+aynalar: disabled filtre inert · tip modellenmemişse action HİÇ OKUNMAZ (yalnız filter_type
+satırı raporlar — action'ı da raporlamak #533 sınıfı yanlış iddia olurdu) · absent action =
+modellenmiş block varsayılanı, seçim DEĞİL. `_ACTIVE_FILTER_TYPES` motordan İMPORT EDİLMEDİ
+(motor capabilities'i import eder — döngü); matrisin kendi active_v1 filter_type
+satırlarından türetildi.
+
+**Sevk edilen — #536 Gap C:** altı conflict/protection alanı `_SCHEMA_FIELDS`'e GİRMEDİ (imza
+gereği: her literal bir sınıflandırma icadı isterdi); issue'nun kendi md. 4 alternatifi sevk
+edildi — `test_new_conflict_literals_must_be_classified_or_allowlisted` +
+`_UNGATED_CONFLICT_LITERALS` (test-sahipli açık allow-list, 6 alan × bugünkü literaller).
+**TAM EŞİTLİK iki yönde keser:** yeni literal → listeye ya matrise girmeden kırmızı · silinen
+literal → bayat liste satırı kırmızı · matrise sonradan giren literal → disjointness yarısı
+kırmızı. **Serbest-biçim alan makinesi:** `action` hiçbir pydantic `Literal` taşımıyor (config
+serbest JSONB) → eksen 1 koşamaz; `_FREE_FORM_FIELDS` kaydı + eksen 2 güncellemesi + alanın
+kendi sözlük pini `test_action_vocabulary_matches_the_engine` (matris ↔ motor İKİ YÖNDE).
+**FE #539-tripwire'ı genişledi:** `CAPABILITY_CONFIG_ONLY_FIELDS` — hiçbir formun render
+ETMEDİĞİ matris alanı (select yok → #539 riski doğamaz; disclosure yüzeyi Ready Check +
+engine diagnostics). TS aynası 62 → 68 satır.
+
+**DAVRANIŞ DEĞİŞMEZLİĞİ (imzanın cümlesi, hassas):** gate SONUCU hiçbir konfig için oynamadı —
+enumerated bir unmodelled action taşıyan her konfig ZATEN `restrictions_are_modelled=False` ile
+bloklu ve motor zaten pozisyon açmıyordu. Değişen, refüzün artık YAPILANDIRILMIŞ görünmesi:
+Ready Check `STRATEGY_CAPABILITY_NOT_IN_BUILD` kodunu DA verir, diagnostics
+`capability_not_in_build` action'ı adlandırır — issue'nun istediği tam bu.
+`test_unmodelled_action_was_the_invisible_refusal` iki yarıyı birlikte pinler (per-domain kod
+DURUYOR + yapılandırılmış satır VAR).
+
+**Ölçümler (iddia edilmedi, koşuldu):** NC-0a (dokunulmamış ağaç): `action:"reduce"` →
+`restrictions_are_modelled=False` AMA `capabilities_are_modelled=True` +
+`future_dev_selections=[]` — D-4 birebir. NC-0b (dokunulmamış ağaç): `same_candle_entry_exit`'e
+sahte literal → **85 test, exit 0, TÜMÜ YEŞİL** = boşluğun ölçüsü. **NC-1:** "warn" satırı
+silindi → tam 2 kırmızı (sözlük pini + TS byte-parity); **ilk deneme REDDEDİLDİ** — splice
+8-boşluklu `),`'nin alt dizesini yakalayıp dosyayı bozdu, SyntaxError = yanlış sebeple kırmızı
+(ADIM 105), `ast.parse` doğrulamalı yeniden kuruldu. **NC-2:** okuyucu `()` döndürür → tam 5
+kırmızı (4 action parametresi + D-4 regresyonu), hepsi seçim-tespit assertion'ında. **NC-3:**
+NC-0b'nin aynı enjeksiyonu → artık tam 1 kırmızı — NC-0b'nin ayna görüntüsü. **NC-4:** motor
+`warn`'ı modellemeye başlar → 2 kırmızı (yeni parite + mevcut predicate testi); **NC-4b keskin
+ölçü:** motor YEPYENİ literal (`pause`) kazanır → tam 1 kırmızı, YALNIZ yeni sözlük testi — bu
+eksen eskiden tamamen kördü. **NC-FE:** muafiyet listesi boşaltıldı → tam 1 kırmızı ("leaves no
+future_dev row on an unwired field") = eski dünyanın kırmızısı, muhafız hâlâ silahlı.
+
+**TUZAK — ADIM 155'İN UYARISINA RAĞMEN BİR KEZ DAHA:** NC-FE restore'unda `git checkout --
+<file>` commit'lenmemiş slice düzenlemesini de sildi (ADIM 155 kickoff'u tam bu tuzağı
+yazmıştı). sha256 kontrolü yakaladı; düzenleme yeniden uygulandı ve sha256 doğrulandı.
+**İKİNCİ TUZAK, KENDİ HATAM:** tam suite koşarken `repository_facts` yeniden üretildi →
+dokümantasyon-gerçeklik kapısı testi o pencerede bayat ağacı gördü, 3913'ün 1'i düştü —
+"suite koşarken dosya değiştirme" dersinin birebir kendisi; koşu atıldı, nihai ağaçta tek
+çağrılık temiz koşu yapıldı.
+
+**Yerel kapılar (nihai ağaçta):** ruff + format + mypy yeşil · backend tam suite tek çağrı
+(sonuç kapanış PR'ında; **geçen sayının ve coverage'ın otoritesi CI**) · frontend **lint +
+typecheck + coverage yeşil, 748 passed / 73 dosya, FE_EXIT=0** · `make openapi-check` exit 0 ·
+`repository_facts --check` exit 0 · golden testi yeşil, digest dosyası el değmedi.
+
+**DÜRÜST SINIR:** v18 mockup'ın per-tip Action seçicileri (blackout: "Block New Entries +
+Block New Scaling" / "Allow Exit Only" / "Close Open Positions at Start Date";
+consecutive-loss: "Pause Strategy for N Candles") **ENUMERATE EDİLMEDİ** — sevk edilmiş
+literalleri yok, form render etmiyor; sözlük pini o seçiciler bir gün sevk edilirse
+sınıflandırmayı ZORLAR · enumerate edilmemiş herhangi bir action dizesi (ör. `"reduce_size"`)
+matriste görünmez — per-domain predicate onda da fail-closed (DEĞİŞMEDİ), "matris izin
+verileni değil kapılananı sayar" sözleşmesi bozulmadı · form'a action seçicisi EKLENMEDİ,
+bilerek — imza yalnız "matrix'e girer" diyor, #546 yarı 1 fail-closed statükoyu koruyor,
+per-tip UI ayrı ürün işi · #547 el değmedi (imzalı kuyruğun son kalemi).
+
+
 ## ADIM 155 — #854 SET-ONCE SEVK EDİLDİ: İKİ TEK-SATIRLIK KOŞUL, KASITLI TERS ÇEVRİLEN TEST, PİNLENEN BEDEL
 
 **ÜRÜN KODU DEĞİŞTİ (iki dosya, ikisinde tek satır)** — migration YOK · `ENGINE_VERSION`

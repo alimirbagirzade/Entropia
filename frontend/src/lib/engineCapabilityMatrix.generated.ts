@@ -506,6 +506,54 @@ export const ENGINE_CAPABILITY_MATRIX: readonly CapabilityOption[] = [
     "blockerCode": "STRATEGY_RESTRICTIONS_UNSUPPORTED"
   },
   {
+    "fieldPath": "restrictions_filters.filters.action",
+    "value": "block",
+    "status": "active_v1",
+    "label": "Block",
+    "dependency": "",
+    "blockerCode": "STRATEGY_CAPABILITY_NOT_IN_BUILD"
+  },
+  {
+    "fieldPath": "restrictions_filters.filters.action",
+    "value": "block_entries",
+    "status": "active_v1",
+    "label": "Block New Entries",
+    "dependency": "",
+    "blockerCode": "STRATEGY_CAPABILITY_NOT_IN_BUILD"
+  },
+  {
+    "fieldPath": "restrictions_filters.filters.action",
+    "value": "reduce",
+    "status": "future_dev",
+    "label": "Reduce New Position Size",
+    "dependency": "Needs a canonical size-reduction rule (factor and basis) doc 02 does not define; the modelled restriction surface is a binary entry-eligibility veto, not a sizing input.",
+    "blockerCode": "STRATEGY_RESTRICTIONS_UNSUPPORTED"
+  },
+  {
+    "fieldPath": "restrictions_filters.filters.action",
+    "value": "close",
+    "status": "future_dev",
+    "label": "Close All Open Positions",
+    "dependency": "Needs a forced-close path at filter-activation time; the modelled restriction surface only vetoes NEW entries and never touches an open position.",
+    "blockerCode": "STRATEGY_RESTRICTIONS_UNSUPPORTED"
+  },
+  {
+    "fieldPath": "restrictions_filters.filters.action",
+    "value": "disable",
+    "status": "future_dev",
+    "label": "Disable Strategy for the Day",
+    "dependency": "Needs day-scoped strategy state (disable-until-boundary) the replay does not carry; the modelled restriction surface decides per-bar entry eligibility only.",
+    "blockerCode": "STRATEGY_RESTRICTIONS_UNSUPPORTED"
+  },
+  {
+    "fieldPath": "restrictions_filters.filters.action",
+    "value": "warn",
+    "status": "future_dev",
+    "label": "Warning Only",
+    "dependency": "Needs a non-blocking advisory surface: a warn-only filter must admit the entry while reporting, and silently treating it as block would invert the saved intent.",
+    "blockerCode": "STRATEGY_RESTRICTIONS_UNSUPPORTED"
+  },
+  {
     "fieldPath": "conflict_position_handling.opposite_direction_hedge",
     "value": "close_existing",
     "status": "active_v1",

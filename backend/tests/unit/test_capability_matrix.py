@@ -234,6 +234,14 @@ def _literal_values(model: type, field_name: str) -> set[str]:
     raise AssertionError(f"{model.__name__}.{field_name} is not a Literal field")
 
 
+# Matrix fields whose values live in a FREE-FORM config dict rather than a pydantic
+# ``Literal`` — no schema enumeration exists, so axis 1 cannot run over them. Each one
+# must instead carry its own vocabulary pin (for the action field:
+# :func:`test_action_vocabulary_matches_the_engine`, which compares the matrix rows
+# against the engine's ``_MODELLED_FILTER_ACTIONS`` in both directions).
+_FREE_FORM_FIELDS: frozenset[str] = frozenset({"restrictions_filters.filters.action"})
+
+
 def test_the_registry_covers_every_matrix_field_path() -> None:
     """The exhaustiveness guard is only as wide as ``_SCHEMA_FIELDS`` — so pin the width.
 
@@ -245,12 +253,43 @@ def test_the_registry_covers_every_matrix_field_path() -> None:
 
     This is the second axis. Axis 1 (above) asks "are this field's literals classified?";
     this one asks "is every gated field being asked at all?" — a drifting registry fails
-    here even when every registered field still agrees.
+    here even when every registered field still agrees. A free-form field (no schema
+    ``Literal`` to enumerate) is registered in ``_FREE_FORM_FIELDS`` instead, and must
+    carry a dedicated vocabulary pin.
     """
-    assert set(_SCHEMA_FIELDS) == {o.field_path for o in CAPABILITY_MATRIX}, (
-        "the exhaustiveness registry and the capability matrix disagree. Every matrix "
-        "field_path must be registered in _SCHEMA_FIELDS (so its literals are checked), "
-        "and _SCHEMA_FIELDS must not name a path the matrix does not classify."
+    assert set(_SCHEMA_FIELDS) | _FREE_FORM_FIELDS == {o.field_path for o in CAPABILITY_MATRIX}, (
+        "the exhaustiveness registries and the capability matrix disagree. Every matrix "
+        "field_path must be registered in _SCHEMA_FIELDS (so its literals are checked) or, "
+        "when its values live in a free-form config dict, in _FREE_FORM_FIELDS (with its "
+        "own vocabulary pin); neither registry may name a path the matrix does not classify."
+    )
+    assert not (set(_SCHEMA_FIELDS) & _FREE_FORM_FIELDS), (
+        "a field cannot be both schema-enumerated and free-form"
+    )
+
+
+def test_action_vocabulary_matches_the_engine() -> None:
+    """The action field's vocabulary pin — the free-form analogue of axis 1 (GH #546).
+
+    ``RestrictionFilter.config`` is a free-form JSONB dict, so no pydantic ``Literal``
+    exists for ``action`` and the schema-diff guard cannot see it. The drift risk lives in
+    the ENGINE instead: ``_MODELLED_FILTER_ACTIONS`` growing or shrinking without the
+    matrix following. Both directions are pinned — an engine literal the matrix does not
+    mark ``active_v1`` fails here, and so does a matrix ``active_v1`` action the engine
+    does not execute. The refused half is pinned to the engine docstring's own canon
+    shorthand "(reduce / close / disable / warn)" (doc 02 §5.8, Master Ref §12.4)."""
+    from entropia.domain.backtest.engine import _MODELLED_FILTER_ACTIONS
+
+    action_rows = {
+        o.value: o.status
+        for o in CAPABILITY_MATRIX
+        if o.field_path == "restrictions_filters.filters.action"
+    }
+    assert set(action_rows) == {"block", "block_entries", "reduce", "close", "disable", "warn"}
+    active = {value for value, status in action_rows.items() if status == "active_v1"}
+    assert active == set(_MODELLED_FILTER_ACTIONS), (
+        "the matrix's active_v1 action rows and the engine's _MODELLED_FILTER_ACTIONS "
+        "diverged — classify the change on both surfaces together."
     )
 
 
@@ -266,6 +305,91 @@ def test_matrix_enumerates_every_schema_literal(field_path: str) -> None:
     assert matrix_values == _literal_values(model, field_name), (
         f"{field_path}: the capability matrix and the saved schema disagree. Classify new "
         f"options in domain/backtest/capabilities.py as active_v1 or future_dev."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 1b. Conflict-field literal guard (GH #536 Gap C, signed 2026-09-01 `A-Z`).
+#
+# Six conflict/protection fields deliberately do NOT join ``_SCHEMA_FIELDS``: every
+# value they accept executes (ADIM 141-144 pinned the behaviours one by one), so
+# forcing matrix rows for each literal would invent a classification per value
+# without adding a decision any surface can act on. But that left the silent hole
+# #536 names: a literal ADDED to one of these fields reached the UI with no
+# classification and no guard failure — measured on the untouched tree, injecting a
+# fake ``same_candle_entry_exit`` literal left this whole file green. The signed
+# alternative (the issue's own item 4): a new literal on a conflict field must be
+# either matrix-enumerated or EXPLICITLY allow-listed here. Exact equality cuts both
+# ways — a removed literal must leave the list, and a literal that later gains a
+# matrix row must leave it too (the disjointness half).
+# ---------------------------------------------------------------------------
+
+_UNGATED_CONFLICT_LITERALS: dict[str, tuple[tuple[type, str], frozenset[str]]] = {
+    "conflict_position_handling.same_direction_stacking": (
+        (config_module.ConflictPositionHandling, "same_direction_stacking"),
+        frozenset({"allow_stacking", "replace_existing", "scale_existing", "ignore"}),
+    ),
+    "conflict_position_handling.overlapping_signal_policy": (
+        (config_module.ConflictPositionHandling, "overlapping_signal_policy"),
+        frozenset({"queue_sequential", "cancel_pending", "merge_signals", "ignore_if_active"}),
+    ),
+    "conflict_position_handling.stop_exit_conflict": (
+        (config_module.ConflictPositionHandling, "stop_exit_conflict"),
+        frozenset(
+            {"stop_has_priority", "exit_has_priority", "record_both_reasons", "first_trigger_wins"}
+        ),
+    ),
+    "conflict_position_handling.same_candle_entry_exit": (
+        (config_module.ConflictPositionHandling, "same_candle_entry_exit"),
+        frozenset(
+            {
+                "use_intrabar_data_if_available",
+                "exit_first",
+                "stop_first",
+                "ignore_trade",
+                "conservative_rule",
+            }
+        ),
+    ),
+    "protection_stop_logic.stop_trigger_requirement": (
+        (config_module.ProtectionStopLogic, "stop_trigger_requirement"),
+        frozenset({"any_active", "all_active"}),
+    ),
+    "protection_stop_logic.stop_conflict_resolution": (
+        (config_module.ProtectionStopLogic, "stop_conflict_resolution"),
+        frozenset(
+            {
+                "first_trigger_wins",
+                "most_conservative",
+                "priority_order",
+                "record_all_execute_highest",
+            }
+        ),
+    ),
+}
+
+
+@pytest.mark.parametrize("field_path", sorted(_UNGATED_CONFLICT_LITERALS))
+def test_new_conflict_literals_must_be_classified_or_allowlisted(field_path: str) -> None:
+    """A new conflict-field literal cannot ship silently unclassified (GH #536 Gap C).
+
+    Every literal a conflict field accepts must be either a capability-matrix row or an
+    entry in ``_UNGATED_CONFLICT_LITERALS`` above. Adding a literal to ``config.py``
+    without touching either surface turns this red — the reviewer then decides whether
+    the new value is a capability decision (matrix row) or another uniformly-executing
+    value (allow-list entry with the ADIM 141-144 class of behavioural pin)."""
+    (model, field_name), allowlisted = _UNGATED_CONFLICT_LITERALS[field_path]
+    matrix_values = {o.value for o in CAPABILITY_MATRIX if o.field_path == field_path}
+    schema_values = _literal_values(model, field_name)
+    assert schema_values - matrix_values == allowlisted, (
+        f"{field_path}: schema literals outside the matrix and the explicit allow-list "
+        f"disagree. New literal? Classify it (matrix row in capabilities.py) or "
+        f"allow-list it here with a behavioural pin. Removed literal? Drop it from the "
+        f"allow-list."
+    )
+    assert not (allowlisted & matrix_values), (
+        f"{field_path}: a literal is both matrix-enumerated and allow-listed — the "
+        f"allow-list entry is stale, remove it."
     )
 
 
@@ -383,6 +507,28 @@ _FUTURE_DEV_OVERLAYS.update(
         if option.field_path == "restrictions_filters.filters.filter_type"
     }
 )
+# GH #546 / D-4: each unmodelled ACTION rides an otherwise fully-modelled loss filter
+# (modelled type, valid limit) so the action itself is the only unexecutable part of
+# the selection — the free-form config key is what the row must detect.
+_FUTURE_DEV_OVERLAYS.update(
+    {
+        ("restrictions_filters.filters.action", option.value): {
+            "restrictions_filters": {
+                "rule": "any",
+                "filters": [
+                    {
+                        "filter_type": "max_daily_loss_filter",
+                        "enabled": True,
+                        "filter_id": "flt_act_1",
+                        "config": {"limit_percent": "2", "action": option.value},
+                    }
+                ],
+            }
+        }
+        for option in FUTURE_DEV_OPTIONS
+        if option.field_path == "restrictions_filters.filters.action"
+    }
+)
 
 
 def test_every_future_dev_option_has_a_proof_overlay() -> None:
@@ -454,6 +600,49 @@ def test_historical_slippage_was_the_silent_hole() -> None:
     assert _run(config).trades == []
 
 
+def test_unmodelled_action_was_the_invisible_refusal() -> None:
+    """Regression pin for the D-4 finding (GH #546).
+
+    Before this slice a saved ``action: "reduce"`` failed closed CORRECTLY —
+    ``restrictions_are_modelled`` returned False, Ready Check blocked, the engine opened
+    nothing — but the refusal was invisible in structured provenance: measured on the
+    untouched tree, ``capabilities_are_modelled`` stayed True and
+    ``future_dev_selections`` stayed empty, so ``capability_not_in_build`` was an empty
+    list on an inert run and the reason survived only in a free-text warning. Both
+    surfaces must now name the action; the per-domain blocker stays — the GATE outcome
+    was already correct and must not move."""
+    overlay = {
+        "restrictions_filters": {
+            "rule": "any",
+            "filters": [
+                {
+                    "filter_type": "max_daily_loss_filter",
+                    "enabled": True,
+                    "filter_id": "flt_d4",
+                    "config": {"limit_percent": "2", "action": "reduce"},
+                }
+            ],
+        }
+    }
+    config = _config(**overlay)
+    assert [(o.field_path, o.value) for o in future_dev_selections(config)] == [
+        ("restrictions_filters.filters.action", "reduce")
+    ]
+    assert not capabilities_are_modelled(config)
+
+    codes = _readiness_codes(_payload(**overlay))
+    # The structured disclosure is NEW; the per-domain fail-closed blocker is UNCHANGED.
+    assert Code.STRATEGY_CAPABILITY_NOT_IN_BUILD.value in codes
+    assert Code.STRATEGY_RESTRICTIONS_UNSUPPORTED.value in codes
+
+    out = _run(config)
+    assert out.diagnostics["capabilities_modelled"] is False
+    assert (
+        "restrictions_filters.filters.action=reduce" in out.diagnostics["capability_not_in_build"]
+    )
+    assert out.trades == []
+
+
 # ---------------------------------------------------------------------------
 # 3. Executability — active_v1 really executes.
 # ---------------------------------------------------------------------------
@@ -503,6 +692,62 @@ def test_full_close_ignores_partial_aftermath() -> None:
         position_exit_logic={"close_percentage": "100", "partial_aftermath": "trailing_stop"}
     )
     assert future_dev_selections(config) == ()
+
+
+def test_action_reader_mirrors_the_engine_parse_order() -> None:
+    """The three skip arms of ``_read_filter_actions`` agree with ``_parse_restriction``.
+
+    (1) An ABSENT action is the modelled block default — the engine's ``action is None``
+    arm — so it is not a saved selection and must never gate. (2) A DISABLED filter is
+    inert (the ``_read_filter_types`` rule). (3) A filter whose TYPE is unmodelled bails
+    in the engine before the action is ever read, so only the filter_type row reports —
+    reporting the unreachable action too would be the #533 class of false claim."""
+    absent = {
+        "restrictions_filters": {
+            "rule": "any",
+            "filters": [
+                {
+                    "filter_type": "max_daily_loss_filter",
+                    "enabled": True,
+                    "filter_id": "flt_r1",
+                    "config": {"limit_percent": "2"},
+                }
+            ],
+        }
+    }
+    assert future_dev_selections(_config(**absent)) == ()
+    assert Code.STRATEGY_CAPABILITY_NOT_IN_BUILD.value not in _readiness_codes(_payload(**absent))
+
+    disabled = {
+        "restrictions_filters": {
+            "rule": "any",
+            "filters": [
+                {
+                    "filter_type": "max_daily_loss_filter",
+                    "enabled": False,
+                    "filter_id": "flt_r2",
+                    "config": {"limit_percent": "2", "action": "warn"},
+                }
+            ],
+        }
+    }
+    assert future_dev_selections(_config(**disabled)) == ()
+
+    unmodelled_type = {
+        "restrictions_filters": {
+            "rule": "any",
+            "filters": [
+                {
+                    "filter_type": "volatility_filter",
+                    "enabled": True,
+                    "filter_id": "flt_r3",
+                    "config": {"action": "warn"},
+                }
+            ],
+        }
+    }
+    selected = [(o.field_path, o.value) for o in future_dev_selections(_config(**unmodelled_type))]
+    assert selected == [("restrictions_filters.filters.filter_type", "volatility_filter")]
 
 
 @pytest.mark.parametrize(

@@ -179,16 +179,37 @@ const CAPABILITY_WIRED_FIELDS: readonly string[] = [
   "scaling_logic.timeframe_mode",
 ];
 
+// GH #546 — matrix fields NO form renders at all. The restriction filter `action` lives
+// in the free-form `config` dict; the shipped filter panels write date_ranges /
+// limit_percent / max_losses and carry every unknown config key verbatim (`raw.config`),
+// so no select exists that could offer an unexecutable action to a user — the #539 risk
+// this guard exists for cannot arise. The value reaches a config only via API/import
+// passthrough, and its disclosure surface is Ready Check's STRATEGY_CAPABILITY_NOT_IN_BUILD
+// blocker plus the engine's structured `capability_not_in_build` diagnostics. If a form
+// ever ships the v18 action selects, move the path to CAPABILITY_WIRED_FIELDS and wire it.
+const CAPABILITY_CONFIG_ONLY_FIELDS: readonly string[] = ["restrictions_filters.filters.action"];
+
 describe("every future_dev row is claimed by a form", () => {
   const fieldPaths = [...new Set(ENGINE_CAPABILITY_MATRIX.map((o) => o.fieldPath))];
 
   it("registers no field the matrix does not have", () => {
-    expect(fieldPaths).toEqual(expect.arrayContaining([...CAPABILITY_WIRED_FIELDS]));
+    expect(fieldPaths).toEqual(
+      expect.arrayContaining([...CAPABILITY_WIRED_FIELDS, ...CAPABILITY_CONFIG_ONLY_FIELDS]),
+    );
+  });
+
+  it("keeps the wired and config-only registries disjoint", () => {
+    expect(
+      CAPABILITY_WIRED_FIELDS.filter((f) => CAPABILITY_CONFIG_ONLY_FIELDS.includes(f)),
+    ).toEqual([]);
   });
 
   it("leaves no future_dev row on an unwired field", () => {
     const orphaned = ENGINE_CAPABILITY_MATRIX.filter(
-      (o) => o.status === "future_dev" && !CAPABILITY_WIRED_FIELDS.includes(o.fieldPath),
+      (o) =>
+        o.status === "future_dev" &&
+        !CAPABILITY_WIRED_FIELDS.includes(o.fieldPath) &&
+        !CAPABILITY_CONFIG_ONLY_FIELDS.includes(o.fieldPath),
     ).map((o) => `${o.fieldPath}=${o.value}`);
 
     expect(orphaned).toEqual([]);

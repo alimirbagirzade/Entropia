@@ -10921,3 +10921,26 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 155 · `docs/ADIM155_LANDED_KICKOFF
    emsali; `ENGINE_VERSION` PR'da açıkça değerlendirilir). Slice #547'yi kapatır.
 3. **Tavan takibi:** 4. ardışık kusursuz post-fix koşu inince sıkıştırma slice'ı (tavanlar o
    PR'ın KENDİ CI artefaktından). **A-08 (#514) tek blocker, human-only.**
+
+## Stage 156 — #546+#536 tek slice'ta: action matrise, conflict literalleri muhafıza landed (bu PR)
+
+**ÜRÜN KODU: tek dosya (`capabilities.py` — 6 matris satırı + `_read_filter_actions`).**
+`restrictions_filters.filters.action` capability matrix'e girdi (block/block_entries
+active_v1 = motor kümesi; reduce/close/disable/warn future_dev). Gate SONUCU hiçbir konfig
+için oynamadı — değişen, refüzün yapılandırılmış provenance'ta görünmesi. #536 Gap C:
+altı alan `_SCHEMA_FIELDS`'e girmedi; `_UNGATED_CONFLICT_LITERALS` allow-list muhafızı
+(tam eşitlik + disjointness). Golden bayt bayt aynı → `ENGINE_VERSION` yok · migration yok ·
+OpenAPI değişmedi · TS aynası 62→68. Yedi NC (ikisi reddedildi/keskinleştirildi); ADIM 155'in
+git-checkout tuzağı BİR KEZ DAHA yaşandı, sha256 yakaladı. **Closes #546 + #536.**
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 156 · `docs/ADIM156_LANDED_KICKOFF.md`.
+
+## Next: **imzalı kuyruğun SON kalemi — #547 timeframe-by-layer**
+
+1. **#547 feature slice'ı:** Increasing Timeframe by Layer — issue'nun "Required work"
+   listesi madde madde (`layer_timeframe`/`layer_bucket` yeniden kullanımı · exhaustion =
+   custom_sequence emsali · matrix satırı `active_v1` + TS aynası · bayat remediation
+   cümlesi kalkar · `test_backtest_scaling_timeframe_mode.py` aynası). `ENGINE_VERSION`
+   PR'da açıkça değerlendirilir (golden oynarsa bump + yeniden üretim AYNI commit'te).
+   Slice #547'yi kapatır.
+2. **Tavan takibi:** 4. ardışık kusursuz post-fix koşu inince sıkıştırma slice'ı (tavanlar o
+   PR'ın KENDİ CI artefaktından). **A-08 (#514) tek blocker, human-only.**

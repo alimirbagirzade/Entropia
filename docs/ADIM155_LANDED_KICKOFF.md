@@ -1,4 +1,4 @@
-<!-- doc-status: current -->
+<!-- doc-status: historical -->
 # ADIM 155 landed — #854 set-once sevk edildi; test kasıtlı ters çevrildi, bedel pinlendi
 
 ## Nerede duruyoruz

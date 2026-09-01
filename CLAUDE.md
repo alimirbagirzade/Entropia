@@ -271,6 +271,22 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · **golden bayt bayt aynı** · ratchet **el değmedi**
+> (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 156 (#546+#536 TEK SLICE'TA; Closes #546 + #536).**
+> `restrictions_filters.filters.action` capability matrix'e girdi (block/block_entries
+> active_v1 = motor kümesi; reduce/close/disable/warn future_dev, iki yönlü motor-parite
+> sözlük piniyle — serbest-biçim alan deseni `_FREE_FORM_FIELDS`). Gate SONUCU hiçbir konfig
+> için oynamadı; değişen, refüzün yapılandırılmış provenance'ta görünmesi (D-4 kapandı).
+> #536 Gap C: altı alan `_SCHEMA_FIELDS`'e girmedi, `_UNGATED_CONFLICT_LITERALS` allow-list
+> muhafızı sevk edildi (NC-0b: sahte literal 85 testi yeşil bırakıyordu → şimdi tam 1 kırmızı).
+> FE tripwire'ı `CAPABILITY_CONFIG_ONLY_FIELDS` ile genişledi; TS aynası 62→68. Yedi NC;
+> ADIM 155'in git-checkout tuzağı BİR KEZ DAHA yaşandı (sha256 yakaladı) + suite koşarken
+> facts üretme hatası ölçüldü (koşu atıldı, temiz koşu nihai ağaçta). **İmzalı kuyrukta TEK
+> kalem: #547.** Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED.
+> `PROJECT_HISTORY.md` §ADIM 156 · `docs/ADIM156_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · ratchet **el değmedi**
 > (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 155 (#854 SET-ONCE SEVK EDİLDİ; Closes #854).**
 > İki pin yazıcısı (`link_batch_to_revision` · `link_normalized_to_revision`) yalnız kolon

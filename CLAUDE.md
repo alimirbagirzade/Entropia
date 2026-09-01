@@ -271,6 +271,21 @@ Before stopping a working session, produce **ALL** of the following:
 > slice'ı değil, izin yapılandırması (insan kararı: kısa not yeterli).
 
 > **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
+> **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **DOCS-ONLY + GitHub
+> dispozisyonları, ürün/test kodunda SIFIR SATIR** · ratchet **el değmedi** (54/6 · A1 B21 C6
+> D32). **Son dalga — ADIM 154 (ON KARAR TEK OTURUMDA İMZALANDI — ürün sahibi şıkları
+> interaktif seçti, ajan kaydetti; toptan yetki ≠ imza, ADIM 66 emsali).** İmzalar: **#854=(b)
+> set-once · #534 md.3=(c) hiçbiri · #547=custom_sequence emsali · #582 kapat · #535 V1
+> ratified · #542 sevk edilen eksen · #543 ikisi post-V1 · #545 ikinci pin yok · #546 filtreler
+> post-V1 + action alanı matrix'e**. Kapanan issue: #582 #535 #542 #543 #545 (+#534 üç düzlemi
+> hizalandı); kod bekleyen açık: #854 · #547 · #546. **#514 imzayla kapatılMADI** (denetim karar
+> değildir; red kayıtlı). **İmzalı kod kuyruğu: (1) #854 set-once → (2) #546 matrix alanı →
+> (3) #547 timeframe-by-layer.** Tavan korpusu post-fix **3/3 kusursuz** (69/69 skor ×3,
+> artefaktlardan okundu) — 4+ eşiği sağlanmadı, tavanlar yerinde. Blocker DEĞİŞMEDİ (1 — A-08)
+> → BLOCKED. `PROJECT_HISTORY.md` §ADIM 154 · `docs/ADIM154_LANDED_KICKOFF.md`.
+>
+>
+> **alembic head `0044_drop_net_conflict_policy`** (**MIGRATION YOK**) · `ENGINE_VERSION`
 > **değişmedi** · OpenAPI **değişmedi** · golden **el değmedi** · **DOCS-ONLY, ürün/test kodunda
 > SIFIR SATIR** · ratchet **el değmedi** (54/6 · A1 B21 C6 D32). **Son dalga — ADIM 153
 > (GH #677 İNSAN ELİYLE KAPANDI — `2026-09-01`, yazılı kalem kalem dispozisyonla; ADIM 90'ın üç

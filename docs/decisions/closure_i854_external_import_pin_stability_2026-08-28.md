@@ -126,9 +126,13 @@ niyet beyanıdır ve hiçbir şey onu zorlamaz.
 *Bedeli:* Ölçüm 3'ün dizisi **kalıcı olur**; kullanıcı bir görünen adı düzenleyerek READY bir
 kompozisyonu BLOCKED edebilir ve nedenini gösteren hiçbir şey yoktur.
 
-☐ **(b) SET-ONCE — eski revision kazanır.** `link_*_to_revision` yalnız kolon `None` iken yazar.
+☑ **(b) SET-ONCE — eski revision kazanır.** `link_*_to_revision` yalnız kolon `None` iken yazar.
 *Bedeli:* kırılma N+1'e taşınır (Ölçüm 6). *Lehine:* modellerin **zaten yazdığı** niyeti
 (`# Set once at Save time`) doğru yapar ve tek satırdır.
+
+☑ **İmza:** `alimirbagirzade`   ☑ **Tarih:** 2026-09-01 — ürün sahibi şıkkı oturum içinde
+seçti, ajan kaydetti (ADIM 66 emsali; kayıt: ADIM 154). Bedel — kırılmanın N+1'e taşınması —
+şıkkın kendi metninde yazılıydı ve seçimle birlikte kabul edildi.
 
 ☐ **(c) REDDET — zaten pinli bir batch ikinci kez pinlenemez.** `_require_ready_import`'a
 fail-closed bir kapı (O-02 zarfı, yeni hata kodu).
@@ -145,6 +149,9 @@ değiştirir (bugün *"bu revision'ı taşıyan satır"*, yarın *"bu revision'�
 ☐ **Başka:** ______________________________________________
 
 ### Karar 2 — (d) veya (e) seçilirse: `G15`/Karar 4'ün konusuz kalması kabul mü?
+
+> **KONUSUZ (2026-09-01):** Karar 1 = (b) seçildi — (d)/(e) seçilmedi, bu kararın ön koşulu
+> hiç doğmadı. Kutular **bilerek boş**; boşluk imzasızlık değil, sorunun düşmesidir.
 
 ☐ **A — KABUL.** `G15`/Karar 4 tarihsel olur; belgesi `historical` işaretlenir, kaldırılmaz.
 

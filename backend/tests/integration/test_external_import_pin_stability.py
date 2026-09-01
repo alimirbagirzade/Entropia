@@ -1,40 +1,27 @@
-"""The import pin is NOT stable when a revision reuses its batch (GH #854).
+"""The import pin is SET-ONCE: reusing a batch keeps the first pin (GH #854).
 
 Auto-skips without PostgreSQL (see tests/integration/conftest.py).
 
-CHARACTERIZATION of a SHIPPED DEFECT. Every assertion below states what the build
-does TODAY, not what it ought to do. Nothing here blesses the behaviour.
+PINS THE SIGNED FIX. Karar 1 = (b) SET-ONCE was signed 2026-09-01
+(``docs/decisions/closure_i854_external_import_pin_stability_2026-08-28.md``), and
+``link_batch_to_revision`` / ``link_normalized_to_revision`` now write only while
+``work_object_revision_id`` is None. This file previously CHARACTERIZED the defect
+(the pin moved to N+1 and BLOCKED the untouched item); its own docstring demanded
+that a fix rewrite it deliberately rather than let a silent green carry the old
+behaviour forward — this rewrite is that act (ADIM 155).
 
 What doc 05 requires. K3 (Pinned Revision) fixes the rule: *"Yeni revision
 olustugunda otomatik gecmez; acik pin gerekir."* The pin is the USER's decision and
-never a side effect of a write path. G15 SS"Olcum 4" measured that this is violated.
+never a side effect of a write path. Under set-once that now holds for the batch
+column too: saving a new revision that names the SAME canonical batch leaves the
+batch pinned to the FIRST revision, the Mainboard item (also pinned to the first
+revision, per K3) still resolves, and a READY composition STAYS ready when the user
+only edits a display name.
 
-The mechanism. ``repositories/trade_log.py::link_batch_to_revision`` is an
-UNCONDITIONAL assignment, and ``commands/trade_log.py::_require_ready_import`` gates
-only status / accepted_count / time zone -- it never asks whether the batch is
-ALREADY pinned. So saving a new revision that names the SAME canonical batch
-repoints that batch's ``work_object_revision_id`` at N+1 and leaves N with no
-backing row at all. ``commands/readiness_check.py::_resolve_external`` resolves in
-the REVERSE direction (pinned revision id -> the batch carrying it), so exactly one
-revision can ever resolve: the column is single-valued.
-
-Why the suite never caught it (measured, not argued). Every existing second-revision
-case in ``test_external_object_run_provenance.py`` re-imports ``_SECOND_CSV`` -- a
-DIFFERENT batch -- so same-batch reuse is exercised nowhere in the tree. The models
-carry a ``# Set once at Save time`` comment on the very column that moves; a comment
-is an intent, and nothing enforces it.
-
-The consequence pinned here is the one that matters, and it is not a column value:
-the Mainboard item is still pinned to N because K3 forbids auto-repin, so a
-composition that was READY becomes BLOCKED with ``EXTERNAL_IMPORT_UNRESOLVED``
-although no import changed and the user only edited a display name.
-
-A FIX WILL TURN THIS TEST RED, and that is the point. The single-valued column
-cannot let both revisions resolve, so every candidate repair is either incomplete
-(set-once merely moves the breakage onto N+1) or a product decision (refusing the
-save, a link table, or resolving forward from the payload -- the last of which would
-moot the SIGNED G15/Karar 4). Whoever lands the fix must rewrite this test
-deliberately rather than let a silent green carry the old behaviour forward.
+The signed cost is pinned here too, not hidden: the column is single-valued, so the
+NEW revision has no backing row. A user who explicitly repins the item to N+1 (K3's
+own act) moves the breakage there — ``§Ölçüm 6``'s "the breakage moves, it does not
+vanish". The assertion that no row backs N+1 is that cost, stated as a fact.
 """
 
 from __future__ import annotations
@@ -44,6 +31,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
 from entropia.application.commands import readiness_check as readiness_cmd
 from entropia.application.commands import trade_log as tl_cmd
@@ -94,14 +82,14 @@ def _codes(result: dict[str, Any]) -> set[str]:
     return {issue["code"] for issue in result["issues"]}
 
 
-async def test_reusing_the_same_batch_moves_the_pin_and_blocks_the_untouched_item(
+async def test_reusing_the_same_batch_keeps_the_pin_and_the_item_stays_ready(
     session, fake_object_store
 ) -> None:
-    """GH #854: editing a display name re-points the batch and BLOCKS revision N.
+    """GH #854 FIXED: editing a display name no longer re-points the batch.
 
-    The composition is proved READY first. Without that guard the closing assertion
-    is vacuous: a blocker that was already present before the second save would
-    satisfy it just as well.
+    The composition is proved READY first. Without that guard the closing
+    "still no blocker" assertion would be vacuous — a composition that never
+    resolved would satisfy it just as well.
     """
     await _seed_principals(session)
     workspace_id = (await _ready_composition(session, USER1))[0]
@@ -138,19 +126,30 @@ async def test_reusing_the_same_batch_moves_the_pin_and_blocks_the_untouched_ite
     batch = await session.get(CanonicalTradeRecordBatch, batch_id)
     assert batch is not None
 
-    # The import itself is intact -- this is a pin defect, not a data defect.
+    # The import itself is intact.
     assert batch.status == status_before
     assert batch.accepted_count == accepted_before
 
-    # SHIPPED DEFECT: the pin MOVED off revision N.
-    assert batch.work_object_revision_id == revised["revision_id"]
-    assert batch.work_object_revision_id != first["revision_id"]
+    # SET-ONCE: the pin STAYS on revision N. This is the line NC-1 turns red.
+    assert batch.work_object_revision_id == first["revision_id"]
+    assert batch.work_object_revision_id != revised["revision_id"]
 
-    # And the user-visible consequence: the item was never repinned (K3), so the
-    # composition that was READY above now carries a BLOCKER.
+    # The signed cost, stated as a fact: the NEW revision has no backing row, so an
+    # explicit user repin to N+1 would move the breakage there (Karar 1(b)'s price).
+    stranded = (
+        await session.execute(
+            select(CanonicalTradeRecordBatch).where(
+                CanonicalTradeRecordBatch.work_object_revision_id == revised["revision_id"]
+            )
+        )
+    ).scalar_one_or_none()
+    assert stranded is None
+
+    # And the user-visible consequence of the fix: the item (pinned to N, K3) still
+    # resolves — the READY composition STAYS ready after a display-name edit.
     after = await readiness_cmd.run_readiness_check(session, USER1, composition_id=workspace_id)
-    assert _UNRESOLVED in _codes(after)
-    assert after["state"] == "not_ready"
+    assert _UNRESOLVED not in _codes(after)
+    assert after["state"] == before["state"]
 
 
 async def _seed_signal_import(session, actor: Actor) -> dict[str, str]:
@@ -194,21 +193,20 @@ async def _seed_signal_import(session, actor: Actor) -> dict[str, str]:
     }
 
 
-async def test_the_trading_signal_twin_moves_its_pin_the_same_way(session) -> None:
+async def test_the_trading_signal_twin_keeps_its_pin_the_same_way(session) -> None:
     """The sibling surface named in GH #854, driven through the REAL save commands.
 
     ``repositories/trading_signal.py::link_normalized_to_revision`` is the exact twin
-    of the Trade Log writer -- an unconditional assignment reached from two call sites
-    in ``commands/trading_signal.py`` -- so the defect is one class, not two bugs.
-    Pinning only the Trade Log half would let a fix repair one surface and silently
-    leave the other.
+    of the Trade Log writer — both went set-once in the same change because the
+    defect was one class, not two bugs. Pinning only the Trade Log half would let a
+    regression repair one surface and silently leave the other; NC-2 proves the two
+    cases discriminate (reverting only this writer reddens only this test).
 
     Note this case does NOT reuse ``_attach_trading_signal``: that helper hand-writes
     the pin with ``ts_repo.link_normalized_to_revision`` after ``create_work_object``,
     so it would prove the test harness rather than the shipped command. The real
     ``create_trading_signal_and_attach`` -> ``create_trading_signal_revision`` pair is
-    driven instead -- the same pair whose own docstring states K3 ("the Mainboard item
-    is NEVER auto-repinned"), which is precisely why the stranded revision matters.
+    driven instead.
     """
     await _seed_principals(session)
     workspace_id = (await _ready_composition(session, USER1))[0]
@@ -249,10 +247,20 @@ async def test_the_trading_signal_twin_moves_its_pin_the_same_way(session) -> No
     row = await session.get(NormalizedSignalEventRevision, normalized_id)
     assert row is not None
 
-    # SHIPPED DEFECT, identical shape to the Trade Log half.
-    assert row.work_object_revision_id == revised["revision_id"]
-    assert row.work_object_revision_id != first["revision_id"]
+    # SET-ONCE, identical shape to the Trade Log half. NC-2's red line.
+    assert row.work_object_revision_id == first["revision_id"]
+    assert row.work_object_revision_id != revised["revision_id"]
+
+    # The signed cost on this surface too: nothing backs the new revision.
+    stranded = (
+        await session.execute(
+            select(NormalizedSignalEventRevision).where(
+                NormalizedSignalEventRevision.work_object_revision_id == revised["revision_id"]
+            )
+        )
+    ).scalar_one_or_none()
+    assert stranded is None
 
     after = await readiness_cmd.run_readiness_check(session, USER1, composition_id=workspace_id)
-    assert _UNRESOLVED in _codes(after)
-    assert after["state"] == "not_ready"
+    assert _UNRESOLVED not in _codes(after)
+    assert after["state"] == before["state"]

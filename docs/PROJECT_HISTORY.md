@@ -20892,3 +20892,45 @@ edecek şekilde yeniden kuruldu. *Fark bir yenilik kanıtı değildir; yön de �
 üç kod işi **imzalı ama SEVK EDİLMEMİŞ** — #854/#546/#547 o slice'lar inene kadar açık ·
 #542'nin kanon düzeltmesi ve #543'ün regime şeması **post-V1 borcu olarak kayıtlı, takvimsiz** ·
 tavan korpusu izleniyor, sıkıştırma slice'ı 4. kusursuz koşu inene kadar AÇILMADI.
+
+## ADIM 155 — #854 SET-ONCE SEVK EDİLDİ: İKİ TEK-SATIRLIK KOŞUL, KASITLI TERS ÇEVRİLEN TEST, PİNLENEN BEDEL
+
+**ÜRÜN KODU DEĞİŞTİ (iki dosya, ikisinde tek satır)** — migration YOK · `ENGINE_VERSION`
+değişmedi · OpenAPI değişmedi · golden el değmedi · ratchet el değmedi (54/6 · A1 B21 C6 D32) ·
+blocker DEĞİŞMEDİ (**1 — yalnız A-08**) → BLOCKED. **Closes #854** (imza: Karar 1 = (b),
+2026-09-01, ADIM 154).
+
+**Sevk edilen:** `repositories/trade_log.py::link_batch_to_revision` +
+`repositories/trading_signal.py::link_normalized_to_revision` — koşulsuz atama → **set-once**
+(yalnız `work_object_revision_id is None` iken yazar). Modellerin `# Set once at Save time`
+yorumu artık beyan değil, zorlanan kural. Üretimde yüzey başına iki çağrı yeri (create +
+revision); create yolu taze satırla (kolon `None`) aynen çalışır, aynı batch'i yeniden
+adlandıran revision artık pini KIPIRDATMAZ.
+
+**Test kasıtlı ters çevrildi** — eski dosyanın KENDİ docstring'i bunu talep ediyordu (*"A FIX
+WILL TURN THIS TEST RED, and that is the point"*). Yeni eksenler: pin N'de KALIR · import
+sağlam · READY kompozisyon display-name düzenlemesinden sonra READY KALIR (`state` before ==
+after) · **imzalı bedel gerçek olarak pinli**: N+1'i taşıyan satır YOKTUR (`select … == revised
+→ None`) — kırılma yok olmadı, kullanıcının açık repin'ine taşındı (§Ölçüm 6, imzayla kabul).
+
+**İki NC, ikisi ayırt edici:** NC-1 (trade_log yazıcısı koşulsuza döner) → **yalnız** trade-log
+testi, tam pin-kalır satırında kırmızı, signal testi YEŞİL; NC-2 (signal yazıcısı döner) →
+**yalnız** signal testi kırmızı. İki yüzeyin bağımsız pinlendiğinin ölçümü. Fix altında **53
+komşu test yeşil** (provenance + iki persistence + manifest-pinning + readiness-signal) —
+`_SECOND_CSV` deseni (farklı batch) etkilenmedi.
+
+**TUZAK, ATILMADAN YAKALANDI:** NC restore'u için ilk refleks çalışma ağacını git'ten geri
+almaktı — ama fix henüz COMMIT'LENMEMİŞTİ, o geri alma fix'i de silerdi (ADIM 100/149 restore
+derslerinin yeni şekli: **rollback hedefi HEAD değil, fix'in kendi sha256'sıdır**). Restore
+ters-yamayla yapıldı ve her turda `shasum -c` ile doğrulandı.
+
+**Yerel kapılar:** ruff + format + mypy yeşil · hedef dosya 2/2 · komşular 53/53. Çıplak
+worktree tuzağı yine yaşandı (`uv run pytest` → `Failed to spawn`; çare `uv sync --all-extras`,
+ADIM 59). Tam suite yerelde koşuldu (sonuç kapanış PR'ında); **geçen sayının ve coverage'ın
+otoritesi CI'dır.** Test collection sayısı DEĞİŞMEDİ (2 test yeniden adlandı, eklenmedi) →
+`repository_facts` bayatlamadı.
+
+**DÜRÜST SINIR:** N+1'e açık repin'in UI/komut yolu SÜRÜLMEDİ — bedel DB düzleminde pinli
+(o yol K3 gereği kullanıcı eylemidir ve bu slice'ın imzası onu kapsamıyor) · frontend'de sıfır
+satır → frontend kapıları koşulmadı · `_require_ready_import` hâlâ "zaten pinli mi" diye
+SORMUYOR (Karar 1'de (c) REDDEDİLDİ — reddetmek değil, sessizce korumak imzalandı).

@@ -92,9 +92,10 @@ export const BLOCK_TIMEFRAME_OPTIONS: SelectOption[] = [
   { value: "1D", label: "1D" },
 ];
 
-// ScalingLogic.timeframe_mode — the Scaling Timeframe Structure (doc 02 §5.7). The
-// engine executes same_strategy and custom_sequence; increasing_by_layer is future_dev
-// (no step increment is specified) and the capability matrix disables it in the form.
+// ScalingLogic.timeframe_mode — the Scaling Timeframe Structure (doc 02 §5.7). All three
+// modes are active_v1: same_strategy, custom_sequence, and (since GH #547)
+// increasing_by_layer — each layer one canonical rung above the run's base timeframe,
+// the ladder running out at 1D.
 export const SCALING_TIMEFRAME_MODE_OPTIONS: SelectOption[] = [
   { value: "same_strategy", label: "Same as Strategy Timeframe" },
   { value: "increasing_by_layer", label: "Increasing Timeframe by Layer" },

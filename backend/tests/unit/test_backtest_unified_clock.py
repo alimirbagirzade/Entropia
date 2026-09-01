@@ -600,7 +600,7 @@ def test_no_clock_field_ships_in_the_manifest_yet_and_the_engine_version_stands(
     # did as the act of lifting, and GH #532 did again to register ``entry_exit_collision``
     # in the decision trace. The tripwire is unchanged by any of them: it still fails the
     # moment a namespace shift happens, because it would have to move this line to do so.
-    assert ENGINE_VERSION == "backtest-engine-v18-policy-provenance-completed"
+    assert ENGINE_VERSION == "backtest-engine-v18-increasing-tf-ladder"
     for field in (
         "clock_policy_version",
         "arbitration_policy_version",

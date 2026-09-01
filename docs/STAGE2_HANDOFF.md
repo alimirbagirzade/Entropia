@@ -10944,3 +10944,28 @@ Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 156 · `docs/ADIM156_LANDED_KICKOFF
    Slice #547'yi kapatır.
 2. **Tavan takibi:** 4. ardışık kusursuz post-fix koşu inince sıkıştırma slice'ı (tavanlar o
    PR'ın KENDİ CI artefaktından). **A-08 (#514) tek blocker, human-only.**
+
+## Stage 157 — #547 Increasing Timeframe by Layer landed (bu PR)
+
+**ÜRÜN KODU: 6 dosya.** `layer_timeframe` opsiyonel `base_timeframe` kwarg'ı aldı
+(increasing: layer N = `CANONICAL_TIMEFRAMES[index(base)+N]`, doc 02 §6.1'in 15m→30m→1h
+yürüyüşü); yeni `increasing_ladder_depth` motor kelepçesi imzalı exhaustion kararını
+uygular (custom_sequence emsali — 1D'de ladder biter, NC-2: "runs out"u taşıyan şey
+kelepçe, resolver değil). Matrix satırı `active_v1` (43/25) + TS aynası regen; Ready Check
+remediation'ı yeniden yazıldı (bayat cümle kalktı + düz `timeframe` alanı ilk kez
+adlandırıldı). **`ENGINE_VERSION` DEĞİŞTİ** (`backtest-engine-v18-increasing-tf-ladder`,
+S5c sınıfı bump; golden'da yalnız `contract.execution_key` oynadı, altı tripwire kasıtlı
+taşındı). Migration yok · OpenAPI değişmedi · ratchet el değmedi. Beş NC, beşi ayırt
+edici; iki backend testi + bir FE disclosure testi kasıtlı ters çevrildi. Dürüst sınır:
+timeframe'siz revizyon increasing altında hiç scale etmez — readiness göremez, muhafız
+motor kelepçesi (testle pinli). Blocker DEĞİŞMEDİ (1 — A-08) → BLOCKED. **Closes #547.**
+Tam kayıt: `docs/PROJECT_HISTORY.md` §ADIM 157 · `docs/ADIM157_LANDED_KICKOFF.md`.
+
+## Next: **imzalı kod kuyruğu BOŞ — kalan hatlar insan/koşullu**
+
+1. **A-08 (#514):** TEK blocker, human-only (SR-1 hiç başlamadı; 2/184 hücre). Ajan ne
+   kapatabilir ne ilerletebilir.
+2. **Tavan takibi (koşullu):** post-fix Lighthouse korpusu 3/3 kusursuz; 4. kusursuz main
+   koşusu inince sıkıştırma slice'ı (tavanlar o PR'ın KENDİ CI artefaktından, yerelden ASLA).
+3. Yeni imza/karar inerse: `docs/decisions/` kutusunu ADIM 90'ın üç ölçümüyle doğrula;
+   imzasız karar kalemine kod yazılmaz.

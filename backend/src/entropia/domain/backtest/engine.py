@@ -130,6 +130,7 @@ from entropia.domain.backtest.execution.rules import (
 )
 from entropia.domain.backtest.execution.scaling import (
     apply_partial_aftermath,
+    increasing_ladder_depth,
     layer_bucket,
     layer_timeframe,
     partial_close_is_modelled,
@@ -438,17 +439,23 @@ _VALIDITY_BARS: dict[str, int | None] = {
 # Distance Based Scaling doğrudan fiyat mesafesiyle tetiklendiğinden bu timeframe dizisini
 # kullanmaz" — a price comparison evaluates no indicator, so it has no candle to close on.
 #
+# S5c lifted ``timeframe_mode="custom_sequence"``: layer N is gated on the closed candle of
+# sequence entry N (``layer_timeframe`` / ``layer_bucket``, the same bucketing the multi-TF
+# indicator path uses), which needs no resampling because the gate only restricts WHICH
+# base bars are decision points. GH #547 lifted ``timeframe_mode="increasing_by_layer"`` on
+# the same mechanism: doc 02 §6.1 fixes the rung — each layer steps ONE canonical timeframe
+# up from the run's base ("15m -> 30m -> 1h", ``CANONICAL_TIMEFRAMES`` index + 1) — and the
+# signed exhaustion decision follows the custom_sequence precedent: the ladder's depth is
+# capped at the rungs remaining above the base (``increasing_ladder_depth``), so a layer
+# past the top rung (1D) is never a candidate; nothing repeats the last rung or falls back
+# to the base timeframe.
+#
 # NOT modelled (fail closed):
 #   * a scaling ``timeframe`` other than ``same_as_base_tf`` — that field picks ONE
 #     evaluation timeframe for the whole ladder and honouring it needs resampled bars;
-#   * ``timeframe_mode="increasing_by_layer"`` — doc 02 §5.7 names the mode but declares no
-#     step increment (next rung vs. doubling are different ladders), so it fails closed
-#     rather than being guessed. S5c DID lift ``timeframe_mode="custom_sequence"``: layer N
-#     is gated on the closed candle of sequence entry N (``layer_timeframe`` /
-#     ``layer_bucket``, the same bucketing the multi-TF indicator path uses), which needs no
-#     resampling because the gate only restricts WHICH base bars are decision points;
 #   * an UNBOUNDED logic ladder — logic-based scaling has no ``layers`` field of its own, so
-#     without ``max_scaling_layers`` or a custom sequence it has no declared depth;
+#     without ``max_scaling_layers`` or a per-layer timeframe structure it has no declared
+#     depth;
 #   * a missing / non-positive ``add_size_value`` (no layer size is derivable);
 #   * a negative ``max_scaling_layers`` or a non-positive ``max_total_position_size``
 #     (misconfigurations the schema does not reject — spec §11.4 requires int >= 0).
@@ -1115,6 +1122,17 @@ def _build_stepper(
             scale_max_layers = (
                 min(scale_max_layers, len(tf_sequence)) if scale_max_layers else len(tf_sequence)
             )
+        # GH #547: under increasing_by_layer the CANONICAL LADDER's remaining rungs are the
+        # bound, exactly the custom_sequence shape above — the signed exhaustion decision
+        # says the ladder runs out at the top rung (1D) rather than repeating, falling back
+        # or ungating. A run with no pinned bar timeframe (or one off the canonical ladder)
+        # has 0 rungs above it: the position opens and trades, it just never scales, and
+        # ``layer_timeframe``'s past-the-end branch stays unreachable here too.
+        if scaling_cfg.timeframe_mode == "increasing_by_layer":
+            ladder_rungs = increasing_ladder_depth(timeframe)
+            scale_max_layers = (
+                min(scale_max_layers, ladder_rungs) if scale_max_layers else ladder_rungs
+            )
         scale_max_total = scale_limits.max_total_position_size if scale_limits is not None else None
         scale_add_basis = scaling_cfg.add_size
         scale_add_value = scaling_cfg.add_size_value or _ZERO
@@ -1670,7 +1688,8 @@ def _build_stepper(
             # bar's own layer-TF candle has not closed yet, so the first candidate must
             # wait for the next bucket — the no-lookahead half of §5.7's alignment rule.
             scale_layer_bucket=layer_bucket(
-                _bar_epoch_ms(bar.timestamp), layer_timeframe(config, 0)
+                _bar_epoch_ms(bar.timestamp),
+                layer_timeframe(config, 0, base_timeframe=timeframe),
             ),
             peak_notional=(entry_eff * size).quantize(_MONEY),
         )
@@ -3302,7 +3321,9 @@ def _build_stepper(
             # ``next_layer_tf`` is None under same_strategy, leaving even the logic
             # ladder ungated (every base bar is a decision point).
             next_layer_tf = (
-                layer_timeframe(config, position.layers_filled) if scale_logic_mode else None
+                layer_timeframe(config, position.layers_filled, base_timeframe=timeframe)
+                if scale_logic_mode
+                else None
             )
             this_bucket = layer_bucket(_bar_epoch_ms(bar.timestamp), next_layer_tf)
             layer_bar_ready = next_layer_tf is None or (
@@ -3402,7 +3423,7 @@ def _build_stepper(
                     # layer waits for a full candle of its own (coarser) timeframe.
                     position.scale_layer_bucket = layer_bucket(
                         _bar_epoch_ms(bar.timestamp),
-                        layer_timeframe(config, position.layers_filled),
+                        layer_timeframe(config, position.layers_filled, base_timeframe=timeframe),
                     )
                     led.scale_layers_added += 1
                     # The layer's own entry fill pays its commission NOW; the close

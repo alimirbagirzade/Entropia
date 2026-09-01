@@ -1,6 +1,6 @@
 {
   "digests": {
-    "contract.execution_key": "ee63cbfc8069c4f81163da52620a714187f0e4b33bd93ae5303ef747ef761753",
+    "contract.execution_key": "ae83164caddd94a9f8c518d458ae51b1734fe9e24256daa3e3afc0c5204c2dd0",
     "costs.commission_round_trip": "b31080815ada73ddc577202fb62e7ffbc2940dc03d83957bc2f648aa59264f70",
     "costs.commission_scale_ladder": "e9cc23fd7b4072742fc3c0ed19416f074889afe01ffd5a1bf300be5183a0def7",
     "costs.funding_batch_2": "eb5a77d9033b78dd9ae109708ea38c7e6f86af17b314ebec8556b618bf6eedfa",
@@ -51,5 +51,5 @@
     "sizing.risk_based": "9e02a7d9e4987e0e297502a76512ee8cfe54ab691f005fabd377ca2e642afd60",
     "sizing.unsupported_method": "044cee32a2ef5d449f5872739fd0748d584488a757a6c11a89ab1ce80aa816fc"
   },
-  "engine_version": "backtest-engine-v18-policy-provenance-completed"
+  "engine_version": "backtest-engine-v18-increasing-tf-ladder"
 }

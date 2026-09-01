@@ -748,14 +748,16 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
             )
         )
 
-    # F-07d / S5c: an unsupported SCALING configuration must BLOCK RUN — the engine fails
-    # closed (opens no position) for it. Both methods are now modelled: Price-Distance with
-    # a positive add size, and Logic-Based with resolvable blocks plus a DECLARED depth
-    # (S5c) — each on the strategy's own timeframe, under either the same_strategy or the
-    # custom_sequence per-layer timeframe structure. The increasing_by_layer mode (doc 02
-    # §5.7 specifies no step increment), a flat ``timeframe`` override, an unbounded logic
-    # ladder, a missing/non-positive add size and a negative/non-positive cap are deferred
-    # or misconfigured. Shares the single ``scaling_is_modelled`` predicate with the engine
+    # F-07d / S5c / GH #547: an unsupported SCALING configuration must BLOCK RUN — the
+    # engine fails closed (opens no position) for it. Both methods are modelled:
+    # Price-Distance with a positive add size, and Logic-Based with resolvable blocks plus
+    # a DECLARED depth — each on the strategy's own timeframe, under any of the three
+    # per-layer timeframe structures (same_strategy, custom_sequence, and since GH #547
+    # increasing_by_layer, whose depth the canonical ladder itself bounds). A flat
+    # ``timeframe`` override (a single evaluation timeframe for the whole ladder — needs
+    # resampled bars the replay does not build), an unbounded logic ladder, a
+    # missing/non-positive add size and a negative/non-positive cap are deferred or
+    # misconfigured. Shares the single ``scaling_is_modelled`` predicate with the engine
     # so the two never diverge. Disabled (or absent) scaling raises nothing.
     if not scaling_is_modelled(config):
         issues.append(
@@ -765,12 +767,12 @@ def _strategy_issues(item: ReadinessItemInput, *, allocation_enabled: bool) -> l
                 Scope.STRATEGY,
                 "The strategy's scaling (additional layer) configuration is not supported "
                 "by the backtest engine and would open no position.",
-                remediation="Use Price-Distance Based or Logic-Based scaling on the "
-                "strategy timeframe with a positive add size, or disable scaling. "
-                "Logic-Based scaling also needs a declared depth — set Max Additional "
-                "Layers or a Custom Timeframe Sequence. The scaling timeframe structure "
-                "may be 'Same as Strategy Timeframe' or a Custom Timeframe Sequence; "
-                "'Increasing Timeframe by Layer' is not yet supported.",
+                remediation="Use Price-Distance Based or Logic-Based scaling with a "
+                "positive add size, or disable scaling. Keep the 'Scaling timeframe' "
+                "field on 'Same as base timeframe' — a fixed timeframe override there "
+                "is not yet supported. Logic-Based scaling also needs a declared depth "
+                "— set Max Additional Layers, a Custom Timeframe Sequence, or the "
+                "'Increasing Timeframe by Layer' structure (its ladder ends at 1D).",
                 field_path="scaling_logic",
                 scope_id=item.item_id,
             )

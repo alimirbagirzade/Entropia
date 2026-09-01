@@ -423,9 +423,10 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
     #    rung size is undeclared and offered "next canonical timeframe vs. doubling" as live
     #    alternatives. Doubling is not an alternative: doc 02 §6.1 states the mode steps
     #    "bir üst timeframe'e" and works it through as 15m -> 30m -> 1h, which is exactly
-    #    `CANONICAL_TIMEFRAMES` index + 1. The genuine remainder is the TOP of the ladder —
-    #    canon says nothing about a layer past `1D`, and clamping there, stopping the ladder
-    #    and refusing the config are three different products.
+    #    `CANONICAL_TIMEFRAMES` index + 1. The genuine remainder was the TOP of the ladder —
+    #    the product owner signed it on GH #547 (2026-09-01): past `1D` the ladder RUNS OUT
+    #    (the custom_sequence precedent — no clamp, no refusal), and the row below flipped
+    #    to active_v1 when that shipped (GH #547).
     #
     # Neither row's `status`, `value`, `field_path`, `label` or `blocker_code` was touched;
     # only the reason text moved. Regenerate the TS mirror after any edit here
@@ -490,12 +491,13 @@ CAPABILITY_MATRIX: tuple[CapabilityOption, ...] = (
     CapabilityOption(
         field_path="scaling_logic.timeframe_mode",
         value="increasing_by_layer",
-        status="future_dev",
+        status="active_v1",
         label="Increasing Timeframe by Layer",
         dependency=(
-            "Needs a declared top-of-ladder rule. Doc 02 §6.1 fixes the rung — each layer "
-            "steps one canonical timeframe up — but not what a layer past the last rung (1D) "
-            "evaluates on, and clamping, stopping and refusing are different ladders."
+            "Each layer is gated on the closed candle one canonical timeframe further up "
+            "from the run's base (doc 02 §6.1: 15m -> 30m -> 1h). The ladder ends at the "
+            "top rung (1D) — a layer past it is never a candidate, exactly as a custom "
+            "sequence runs out at its last entry (GH #547)."
         ),
         blocker_code="STRATEGY_SCALING_UNSUPPORTED",
     ),

@@ -479,22 +479,12 @@ _FUTURE_DEV_OVERLAYS.update(
         if option.field_path == "scaling_logic.timeframe"
     }
 )
-# S5c: the per-layer timeframe STRUCTURE. Only ``increasing_by_layer`` is future_dev —
-# doc 02 §5.7 names the mode but declares no step increment — so this overlay is
-# deliberately NOT a comprehension over the field's options the way the block above is:
-# ``same_strategy`` and ``custom_sequence`` are active_v1 and must never acquire a
-# fail-closed proof (a comprehension would silently start proving them if their status
-# ever regressed, instead of failing the parity test).
-_FUTURE_DEV_OVERLAYS[("scaling_logic.timeframe_mode", "increasing_by_layer")] = {
-    "scaling_logic": {
-        "enabled": True,
-        "timeframe": "same_as_base_tf",
-        "timeframe_mode": "increasing_by_layer",
-        "method": "price_distance_scaling",
-        "price_scaling": {"retracement_distance": "1", "layers": 1},
-        "add_size_value": "1",
-    }
-}
+# S5c introduced the per-layer timeframe STRUCTURE with ``increasing_by_layer`` as its
+# one future_dev value; GH #547 lifted it (rung fixed by doc 02 §6.1, exhaustion signed
+# to the custom_sequence precedent), so all three ``timeframe_mode`` values are active_v1
+# and the field carries NO overlay here — an overlay for an active_v1 value would be a
+# fail-closed proof for a mode that must trade. Its behavioural coverage lives in
+# ``test_backtest_scaling_timeframe_mode.py``.
 _FUTURE_DEV_OVERLAYS.update(
     {
         ("restrictions_filters.filters.filter_type", option.value): {

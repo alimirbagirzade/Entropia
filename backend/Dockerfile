@@ -13,7 +13,7 @@
 # `uv pip install --upgrade` could not clear them (PR #660 tried it in a later
 # layer and again in the same layer): there was no installed package to upgrade.
 # The only thing that removes embedded metadata is not shipping the binary.
-FROM python:3.13-slim AS builder
+FROM python:3.15-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -74,7 +74,7 @@ RUN uv sync --locked
 # pyvenv.cfg and console-script shebangs point at (/usr/local) is identical here,
 # and the builder apt-installs nothing, so there is no system library present
 # there and missing here. Every dependency resolves to a manylinux wheel.
-FROM python:3.13-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 # UV_* are deliberately absent — nothing in this stage runs uv. PATH still leads
 # with the venv, which is how compose's `alembic` / `python` / `uvicorn` commands
